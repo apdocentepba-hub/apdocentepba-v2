@@ -139,3 +139,44 @@ document.addEventListener("DOMContentLoaded", () => {
   cargarUsuarios();
 
 });
+'use strict';
+
+// ================================
+// CONFIG
+// ================================
+
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
+
+const SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
+
+// ================================
+// TEST SUPABASE
+// ================================
+
+async function cargarUsuarios() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    });
+
+    const data = await res.json();
+    console.log("🔥 USUARIOS DESDE SUPABASE:", data);
+
+  } catch (error) {
+    console.error("❌ Error Supabase:", error);
+  }
+}
+
+// ================================
+// INIT
+// ================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("APP INICIADA");
+
+  cargarUsuarios();
+});
