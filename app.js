@@ -584,3 +584,19 @@ document.addEventListener("DOMContentLoaded", () => {
   actualizarNav();
   if (obtenerToken()) { cargarDashboard(); } else { mostrarSeccion("inicio"); }
 });
+async function cargarUsuarios() {
+  try {
+    const res = await fetch("https://vvgkinkvojqwfuqaxijh.supabase.co/rest/v1/users", {
+      headers: {
+        apikey: "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT",
+        Authorization: "Bearer sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT"
+      }
+    });
+
+    const data = await res.json();
+    console.log("USUARIOS DESDE SUPABASE:", data);
+
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
