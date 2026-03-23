@@ -6,7 +6,6 @@
 ══════════════════════════════════════════ */
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
-
 const SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
 
