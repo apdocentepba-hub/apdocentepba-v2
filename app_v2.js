@@ -126,13 +126,7 @@ async function supabaseFetch(path) {
   return res.json();
 }
 
-async function obtenerSesionPorToken(token) {
-  const safeToken = encodeURIComponent(token);
-  const rows = await supabaseFetch(
-    `sessions?token=eq.${safeToken}&activo=eq.true&select=token,user_id,created_at,expires_at,activo`
-  );
-  return rows[0] || null;
-}
+
 
 async function obtenerDocentePorId(userId) {
   const safeUserId = encodeURIComponent(userId);
