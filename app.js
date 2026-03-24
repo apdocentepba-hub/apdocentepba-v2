@@ -9,6 +9,9 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn
 const SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
 
+// 🔥 ESTE ES EL IMPORTANTE
+const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
+
 /* ──────────────────────────────────────────
    NAVEGACIÓN
 ────────────────────────────────────────── */
