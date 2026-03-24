@@ -317,29 +317,49 @@ async function handleGoogleLogin(response) {
 
 async function cargarDashboard() {
   const token = obtenerToken();
-  if (!token) { actualizarNav(); mostrarSeccion("inicio"); return; }
+
+  if (!token) {
+    actualizarNav();
+    mostrarSeccion("inicio");
+    return;
+  }
 
   mostrarSeccion("panel-docente");
   setPanelLoading(true);
 
   try {
-    const data = await construirDashboardDesdeSupabase(token);
+    // 🔥 BUSCAR USUARIO DIRECTO POR ID (token)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${token}`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    });
 
-    if (!data.ok) {
-      alert(data.message || "Sesión inválida.");
+    const data = await res.json();
+
+    if (!data.length) {
+      alert("Sesión inválida o no encontrada en Supabase");
       logout();
       return;
     }
 
-    console.log("Dashboard desde Supabase:", data);
+    const user = data[0];
 
-    renderDashboard(data);
-    cargarPrefsEnFormulario(data);
+    // 👉 armar estructura como antes
+    renderDashboard({
+      docente: user,
+      preferencias: {},
+      alertas: [],
+      historial: [],
+      estadisticas: {}
+    });
+
     actualizarNav();
 
-  } catch(err) {
+  } catch (err) {
     console.error(err);
-    alert("No se pudo cargar el panel desde Supabase.");
+    alert("Error cargando panel");
     logout();
   } finally {
     setPanelLoading(false);
