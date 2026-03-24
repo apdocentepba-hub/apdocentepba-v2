@@ -183,19 +183,11 @@ function adaptarPreferencias(prefRaw) {
 async function construirDashboardDesdeSupabase(token) {
   const docente = await obtenerDocentePorId(token);
 
-if (!docente) {
-  alert("Usuario no encontrado en Supabase");
-  logout();
-  return;
-}
-
-  const docente = await obtenerDocentePorId(sesion.user_id);
-
   if (!docente) {
     return { ok: false, message: "Usuario no encontrado en Supabase" };
   }
 
-  const preferenciasRaw = await obtenerPreferenciasPorUserId(sesion.user_id);
+  const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
   const preferencias = adaptarPreferencias(preferenciasRaw);
 
   return {
