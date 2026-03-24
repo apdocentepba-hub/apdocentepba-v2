@@ -483,6 +483,55 @@ function renderAlertasAPD(alertas) {
     </div>
   `).join("");
 }
+async function obtenerMisAlertas(userId) {
+  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
+  const data = await res.json();
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
+  }
+
+  return Array.isArray(data.resultados) ? data.resultados : [];
+}
+
+function renderAlertasAPD(alertas) {
+  const box = document.getElementById("panel-alertas");
+  const badge = document.getElementById("alertas-badge");
+
+  if (!box) return;
+
+  const lista = Array.isArray(alertas) ? alertas : [];
+
+  if (badge) {
+    badge.textContent = lista.length ? String(lista.length) : "";
+  }
+
+  if (!lista.length) {
+    box.innerHTML = `
+      <div class="empty-state">
+        <p>No hay alertas compatibles todavía.</p>
+        <p class="empty-hint">Asegurate de configurar tu distrito y cargo/materia.</p>
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = lista.map(a => `
+    <div style="border:1px solid #ddd; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff;">
+      <p><strong>${a.cargo || "-"}</strong></p>
+      <p><strong>Distrito:</strong> ${a.distrito || "-"}</p>
+      <p><strong>Nivel / modalidad:</strong> ${a.nivel_modalidad || "-"}</p>
+      <p><strong>Turno:</strong> ${a.turno || "-"}</p>
+      <p><strong>Escuela:</strong> ${a.escuela || "-"}</p>
+      <p><strong>Curso / división:</strong> ${a.cursodivision || "-"}</p>
+      <p><strong>Módulos:</strong> ${a.hsmodulos || "-"}</p>
+      <p><strong>Desde:</strong> ${a.supl_desde || "-"}</p>
+      <p><strong>Hasta:</strong> ${a.supl_hasta || "-"}</p>
+      <p><strong>Cierre:</strong> ${a.finoferta || "-"}</p>
+      ${a.observaciones ? `<p><strong>Observaciones:</strong> ${a.observaciones}</p>` : ""}
+    </div>
+  `).join("");
+}
 
 /* ──────────────────────────────────────────
    DASHBOARD
@@ -516,8 +565,8 @@ async function cargarDashboard() {
     try {
       alertas = await obtenerMisAlertas(token);
       console.log("ALERTAS APD:", alertas);
-    } catch (errAlertas) {
-      console.error("ERROR CARGANDO ALERTAS:", errAlertas);
+    } catch (e) {
+      console.error("ERROR ALERTAS:", e);
       alertas = [];
     }
 
@@ -538,7 +587,7 @@ async function cargarDashboard() {
     actualizarNav();
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
     logout();
   } finally {
@@ -553,7 +602,6 @@ function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
   const alts = Array.isArray(data.alertas) ? data.alertas : [];
-  const hist = Array.isArray(data.historial) ? data.historial : [];
   const stats = data.estadisticas || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
@@ -561,24 +609,22 @@ function renderDashboard(data) {
   setText("panel-subtitulo", doc.email ? `Sesión: ${doc.email}` : "Panel docente");
 
   setHTML("panel-datos-docente", `
-    <p><strong>ID:</strong> ${esc(doc.id || "-")}</p>
-    <p><strong>Nombre:</strong> ${esc(nombre || "-")}</p>
-    <p><strong>Email:</strong> ${esc(doc.email || "-")}</p>
-    <p><strong>Celular:</strong> ${esc(doc.celular || "-")}</p>
-    <p><strong>Estado:</strong> ${doc.activo
-      ? '<span class="badge-ok">● Activo</span>'
-      : '<span class="badge-off">● Inactivo</span>'}</p>
+    <p><strong>ID:</strong> ${doc.id || "-"}</p>
+    <p><strong>Nombre:</strong> ${nombre || "-"}</p>
+    <p><strong>Email:</strong> ${doc.email || "-"}</p>
+    <p><strong>Celular:</strong> ${doc.celular || "-"}</p>
+    <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Activo"}</p>
   `);
 
   const cargosDisplay = pref.cargos_csv || pref.materias_csv || "-";
 
   setHTML("panel-preferencias-resumen", `
-    <p><strong>Distrito:</strong> ${esc(pref.distrito_principal || "-")}</p>
-    ${pref.segundo_distrito ? `<p><strong>2° distrito:</strong> ${esc(pref.segundo_distrito)}</p>` : ""}
-    ${pref.tercer_distrito ? `<p><strong>3° distrito:</strong> ${esc(pref.tercer_distrito)}</p>` : ""}
-    <p><strong>Cargos/Mat.:</strong> ${esc(cargosDisplay)}</p>
-    <p><strong>Nivel:</strong> ${esc(pref.nivel_modalidad || "(cualquiera)")}</p>
-    <p><strong>Turno:</strong> ${esc(turnoTexto(pref.turnos_csv) || "(cualquiera)")}</p>
+    <p><strong>Distrito:</strong> ${pref.distrito_principal || "-"}</p>
+    ${pref.segundo_distrito ? `<p><strong>2° distrito:</strong> ${pref.segundo_distrito}</p>` : ""}
+    ${pref.tercer_distrito ? `<p><strong>3° distrito:</strong> ${pref.tercer_distrito}</p>` : ""}
+    <p><strong>Cargos/Mat.:</strong> ${cargosDisplay}</p>
+    <p><strong>Nivel:</strong> ${pref.nivel_modalidad || "(cualquiera)"}</p>
+    <p><strong>Turno:</strong> ${pref.turnos_csv || "(cualquiera)"}</p>
     <p><strong>Alertas:</strong> ${pref.alertas_activas ? "🔔 Activas" : "⏸ Pausadas"}</p>
     <p><strong>Email:</strong> ${pref.alertas_email ? "✓ Sí" : "✗ No"}</p>
   `);
@@ -589,15 +635,12 @@ function renderDashboard(data) {
       <div class="stat-box"><span class="stat-n">${stats.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
       <div class="stat-box"><span class="stat-n">${stats.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
     </div>
-    <p class="stat-acceso">Último acceso: ${fmtFecha(stats.ultimo_acceso || "-")}</p>
+    <p class="stat-acceso">Último acceso: ${stats.ultimo_acceso || "-"}</p>
   `);
 
   renderAlertasAPD(alts);
 
-  setHTML("panel-historial", hist.length
-    ? hist.map(h => `<p>${esc(JSON.stringify(h))}</p>`).join("")
-    : `<p class="ph">Sin historial todavía.</p>`
-  );
+  setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
 }
 
 function renderAlertaCard(a) {
