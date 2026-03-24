@@ -274,29 +274,44 @@ async function loginPassword(e) {
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const data = await post({
-      action: "login_password",
-      email: val("login-email"),
-      password: val("login-password")
+    const email = val("login-email");
+    const password = val("login-password");
+
+    console.log("LOGIN INPUT:", { email, password });
+
+    const res = await fetch(`${API_URL}/api/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
     });
 
-    if (!data.ok || !data.token) {
+    const data = await res.json();
+    console.log("LOGIN RESPONSE:", data);
+
+    if (!res.ok || !data.ok || !data.token) {
       showMsg("login-msg", data.message || "Login incorrecto", "error");
       return;
     }
 
-    guardarToken(data.token);
-    actualizarNav();
+    localStorage.setItem("apd_token_v2", String(data.token));
+    console.log("TOKEN GUARDADO AHORA:", localStorage.getItem("apd_token_v2"));
+
     showMsg("login-msg", "✓ Ingresando...", "ok");
-    await cargarDashboard();
+    actualizarNav();
+
+    setTimeout(() => {
+      cargarDashboard();
+    }, 300);
+
   } catch (err) {
-    console.error(err);
+    console.error("ERROR LOGIN:", err);
     showMsg("login-msg", "Error de conexión. Intentá de nuevo.", "error");
   } finally {
     btnRestore(btn);
   }
 }
-
 async function handleGoogleLogin(response) {
   showMsg("login-msg", "Validando con Google...", "info");
 
