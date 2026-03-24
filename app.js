@@ -329,7 +329,7 @@ async function cargarDashboard() {
 
   try {
     // 🔥 BUSCAR USUARIO DIRECTO POR ID (token)
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${token}`, {
+   const res = await fetch(`${SUPABASE_URL}/rest/v1/users?uuid=eq.${token}`, {
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`
