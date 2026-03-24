@@ -2,9 +2,12 @@
 
 /* ══════════════════════════════════════════
    APDocentePBA — app_v2.js
-   Login/registro/autocomplete por Google Script
-   Dashboard por Supabase
+   Login: Cloudflare Worker
+   Dashboard: Supabase directo por user.id
+   Preferencias: Supabase
+   Sugerencias/autocomplete: Google Script
 ══════════════════════════════════════════ */
+
 const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
 const APD_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 const APD_SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
@@ -26,7 +29,7 @@ function mostrarSeccion(id) {
 ────────────────────────────────────────── */
 
 const TOKEN_KEY = "apd_token_v2";
-const guardarToken = t => localStorage.setItem(TOKEN_KEY, t);
+const guardarToken = t => localStorage.setItem(TOKEN_KEY, String(t));
 const obtenerToken = () => localStorage.getItem(TOKEN_KEY);
 const borrarToken = () => localStorage.removeItem(TOKEN_KEY);
 
@@ -86,7 +89,7 @@ function btnRestore(btn) {
 }
 
 /* ──────────────────────────────────────────
-   HTTP (Google backend actual)
+   HTTP GOOGLE (solo sugerencias / registro / google login viejo)
 ────────────────────────────────────────── */
 
 async function post(payload) {
@@ -110,11 +113,14 @@ async function post(payload) {
    SUPABASE HELPERS
 ────────────────────────────────────────── */
 
-async function supabaseFetch(path) {
+async function supabaseFetch(path, options = {}) {
   const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
     headers: {
       apikey: APD_SUPABASE_KEY,
-      Authorization: `Bearer ${APD_SUPABASE_KEY}`
+      Authorization: `Bearer ${APD_SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {})
     }
   });
 
@@ -123,17 +129,16 @@ async function supabaseFetch(path) {
     throw new Error(`Supabase ${res.status}: ${txt}`);
   }
 
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
-
-
 
 async function obtenerDocentePorId(userId) {
   const safeUserId = encodeURIComponent(userId);
   const rows = await supabaseFetch(
     `users?id=eq.${safeUserId}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
   );
-  return rows[0] || null;
+  return rows?.[0] || null;
 }
 
 async function obtenerPreferenciasPorUserId(userId) {
@@ -141,7 +146,29 @@ async function obtenerPreferenciasPorUserId(userId) {
   const rows = await supabaseFetch(
     `user_preferences?user_id=eq.${safeUserId}&select=*`
   );
-  return rows[0] || null;
+  return rows?.[0] || null;
+}
+
+async function upsertPreferencias(userId, payload) {
+  return supabaseFetch("user_preferences", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      distrito_principal: payload.distrito_principal || null,
+      otros_distritos: payload.otros_distritos || [],
+      cargos: payload.cargos || [],
+      materias: payload.materias || [],
+      niveles: payload.niveles || [],
+      turnos: payload.turnos || [],
+      alertas_activas: !!payload.alertas_activas,
+      alertas_email: !!payload.alertas_email,
+      alertas_whatsapp: !!payload.alertas_whatsapp,
+      updated_at: new Date().toISOString()
+    })
+  });
 }
 
 function adaptarPreferencias(prefRaw) {
@@ -204,6 +231,7 @@ async function construirDashboardDesdeSupabase(token) {
     }
   };
 }
+
 /* ──────────────────────────────────────────
    PANEL LOADING
 ────────────────────────────────────────── */
@@ -282,8 +310,8 @@ async function loginPassword(e) {
       return;
     }
 
-    localStorage.setItem("apd_token_v2", String(data.token));
-    console.log("TOKEN GUARDADO AHORA:", localStorage.getItem("apd_token_v2"));
+    guardarToken(data.token);
+    console.log("TOKEN GUARDADO AHORA:", obtenerToken());
 
     showMsg("login-msg", "✓ Ingresando...", "ok");
     actualizarNav();
@@ -299,6 +327,7 @@ async function loginPassword(e) {
     btnRestore(btn);
   }
 }
+
 async function handleGoogleLogin(response) {
   showMsg("login-msg", "Validando con Google...", "info");
 
@@ -322,11 +351,10 @@ async function handleGoogleLogin(response) {
   }
 }
 
-/* IMPORTANTE: exponer callback para Google */
 window.handleGoogleLogin = handleGoogleLogin;
 
 /* ──────────────────────────────────────────
-   DASHBOARD (DESDE SUPABASE)
+   DASHBOARD
 ────────────────────────────────────────── */
 
 async function cargarDashboard() {
@@ -342,27 +370,16 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
-    // 🔥 AHORA USA DIRECTAMENTE EL ID
-    const docente = await obtenerDocentePorId(token);
+    const data = await construirDashboardDesdeSupabase(token);
 
-    if (!docente) {
-      alert("Usuario no encontrado en Supabase");
+    if (!data.ok) {
+      alert(data.message || "Usuario no encontrado en Supabase");
       logout();
       return;
     }
 
-    const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
-    const preferencias = adaptarPreferencias(preferenciasRaw);
-
-    renderDashboard({
-      docente,
-      preferencias,
-      alertas: [],
-      historial: [],
-      estadisticas: {}
-    });
-
-    cargarPrefsEnFormulario({ preferencias });
+    renderDashboard(data);
+    cargarPrefsEnFormulario(data);
     actualizarNav();
 
   } catch (err) {
@@ -373,6 +390,7 @@ async function cargarDashboard() {
     setPanelLoading(false);
   }
 }
+
 /* ──────────────────────────────────────────
    RENDER DASHBOARD
 ────────────────────────────────────────── */
@@ -488,7 +506,6 @@ function arow(key, val) {
 
 /* ──────────────────────────────────────────
    PREFERENCIAS — GUARDAR
-   (SIGUE CON GOOGLE POR AHORA)
 ────────────────────────────────────────── */
 
 async function guardarPreferencias(e) {
@@ -507,37 +524,38 @@ async function guardarPreferencias(e) {
   const cargo1 = val("pref-cargo-1").toUpperCase().trim();
   const cargo2 = val("pref-cargo-2").toUpperCase().trim();
   const cargo3 = val("pref-cargo-3").toUpperCase().trim();
-  const cargoCSV = [cargo1, cargo2, cargo3].filter(Boolean).join(",");
+  const cargos = [cargo1, cargo2, cargo3].filter(Boolean);
 
   const segundo = val("pref-segundo-distrito").toUpperCase().trim();
   const tercero = val("pref-tercer-distrito").toUpperCase().trim();
-  const otrosDistritos = [segundo, tercero].filter(Boolean).join(",");
+  const otrosDistritos = [segundo, tercero].filter(Boolean);
+
+  const niveles = Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
+    .map(el => el.value.trim().toUpperCase())
+    .filter(Boolean);
+
+  const turno = val("pref-turnos").trim().toUpperCase();
+  const turnos = turno ? [turno] : [];
 
   try {
-    const data = await post({
-      action: "save_preferences",
-      token,
+    await upsertPreferencias(token, {
       distrito_principal: val("pref-distrito-principal").toUpperCase().trim(),
-      otros_distritos_c: otrosDistritos,
-      materias_csv: cargoCSV,
-      cargos_csv: cargoCSV,
-      nivel_modalidad: getNivelCSV(),
-      turnos_csv: val("pref-turnos"),
+      otros_distritos: otrosDistritos,
+      cargos,
+      materias: cargos,
+      niveles,
+      turnos,
       alertas_activas: checked("pref-alertas-activas"),
       alertas_email: checked("pref-alertas-email"),
       alertas_whatsapp: checked("pref-alertas-whatsapp")
     });
 
-    if (!data.ok) {
-      showMsg("preferencias-msg", data.message || "No se pudieron guardar", "error");
-      return;
-    }
-
-    showMsg("preferencias-msg", "✓ " + (data.message || "Preferencias guardadas"), "ok");
+    showMsg("preferencias-msg", "✓ Preferencias guardadas", "ok");
     await cargarDashboard();
+
   } catch (err) {
     console.error(err);
-    showMsg("preferencias-msg", "Error de conexión al guardar", "error");
+    showMsg("preferencias-msg", "Error guardando preferencias", "error");
   } finally {
     btnRestore(btn);
   }
@@ -591,19 +609,24 @@ function getNivelCSV() {
 ────────────────────────────────────────── */
 
 const val = id => (document.getElementById(id)?.value || "").trim();
+
 const setVal = (id, v) => {
   const el = document.getElementById(id);
   if (el) el.value = v;
 };
+
 const checked = id => !!(document.getElementById(id)?.checked);
+
 const setCheck = (id, v) => {
   const el = document.getElementById(id);
   if (el) el.checked = !!v;
 };
+
 const setText = (id, t) => {
   const el = document.getElementById(id);
   if (el) el.textContent = t;
 };
+
 const setHTML = (id, h) => {
   const el = document.getElementById(id);
   if (el) el.innerHTML = h;
@@ -644,7 +667,6 @@ function fmtFecha(v) {
 
 /* ──────────────────────────────────────────
    AUTOCOMPLETE
-   (SIGUE CON GOOGLE POR AHORA)
 ────────────────────────────────────────── */
 
 function debounce(fn, ms = 320) {
@@ -716,7 +738,7 @@ function activarAC(inputId, listaId, tipo) {
 }
 
 /* ──────────────────────────────────────────
-   MOSTRAR/OCULTAR CONTRASEÑA
+   MOSTRAR / OCULTAR CONTRASEÑA
 ────────────────────────────────────────── */
 
 function initPwToggles() {
