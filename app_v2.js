@@ -413,6 +413,77 @@ async function handleGoogleLogin() {
 
 window.handleGoogleLogin = handleGoogleLogin;
 
+async function obtenerMisAlertas(userId) {
+  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error("El Worker no devolvió JSON válido en /api/mis-alertas");
+  }
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
+  }
+
+  return Array.isArray(data.resultados) ? data.resultados : [];
+}
+
+function renderAlertasAPD(alertas) {
+  const box = document.getElementById("panel-alertas");
+  const badge = document.getElementById("alertas-badge");
+
+  if (!box) return;
+
+  const lista = Array.isArray(alertas) ? alertas : [];
+
+  if (badge) {
+    if (lista.length > 0) {
+      badge.textContent = String(lista.length);
+      badge.classList.remove("hidden");
+    } else {
+      badge.textContent = "";
+      badge.classList.add("hidden");
+    }
+  }
+
+  if (!lista.length) {
+    box.innerHTML = `
+      <div class="empty-state">
+        <p>No hay alertas compatibles todavía.</p>
+        <p class="empty-hint">Asegurate de configurar tu distrito y cargo/materia. Si dejás el turno en “Cualquier turno” se aceptan todos los turnos.</p>
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = lista.map(a => `
+    <div class="alerta-item" style="border:1px solid #e5e7eb; border-radius:14px; padding:14px; margin-bottom:12px; background:#fff;">
+      <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+        <strong>${esc(a.cargo || "-")}</strong>
+        <span style="font-size:12px; opacity:.8;">ID ${esc(a.iddetalle || "-")}</span>
+      </div>
+
+      <p><strong>Distrito:</strong> ${esc(a.distrito || "-")}</p>
+      <p><strong>Nivel / modalidad:</strong> ${esc(a.nivel_modalidad || "-")}</p>
+      <p><strong>Turno:</strong> ${esc(a.turno || "-")}</p>
+      <p><strong>Escuela:</strong> ${esc(a.escuela || "-")}</p>
+      <p><strong>Curso / división:</strong> ${esc(a.cursodivision || "-")}</p>
+      <p><strong>Módulos:</strong> ${esc(a.hsmodulos || "-")}</p>
+      <p><strong>Desde:</strong> ${fmtFecha(a.supl_desde || "-")}</p>
+      <p><strong>Hasta:</strong> ${fmtFecha(a.supl_hasta || "-")}</p>
+      <p><strong>Cierre:</strong> ${fmtFecha(a.finoferta || "-")}</p>
+      ${a.observaciones ? `<p><strong>Observaciones:</strong> ${esc(a.observaciones)}</p>` : ""}
+    </div>
+  `).join("");
+}
+
 /* ──────────────────────────────────────────
    DASHBOARD
 ────────────────────────────────────────── */
