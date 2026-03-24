@@ -206,6 +206,28 @@ async function upsertPreferencias(userId, payload) {
     })
   });
 }
+async function supabaseUpsert(table, row, onConflict = "user_id") {
+  const res = await fetch(
+    `${APD_SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: APD_SUPABASE_KEY,
+        Authorization: `Bearer ${APD_SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
+      body: JSON.stringify(row)
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Supabase UPSERT ${table} ${res.status}: ${txt}`);
+  }
+
+  return res.json();
+}
 
 function adaptarPreferencias(prefRaw) {
   if (!prefRaw) {
