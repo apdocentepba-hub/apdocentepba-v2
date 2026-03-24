@@ -355,26 +355,42 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
-    const data = await construirDashboardDesdeSupabase(token);
+    const docente = await obtenerDocentePorId(token);
 
-    if (!data.ok) {
-      alert(data.message || "Sesión inválida.");
+    if (!docente) {
+      alert("Usuario no encontrado en Supabase");
       logout();
       return;
     }
 
+    const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
+    const preferencias = adaptarPreferencias(preferenciasRaw);
+
+    const data = {
+      docente,
+      preferencias,
+      alertas: [],
+      historial: [],
+      estadisticas: {
+        total_alertas: 0,
+        alertas_leidas: 0,
+        alertas_no_leidas: 0,
+        ultimo_acceso: docente.ultimo_login || new Date().toISOString()
+      }
+    };
+
     renderDashboard(data);
     cargarPrefsEnFormulario(data);
     actualizarNav();
+
   } catch (err) {
     console.error(err);
-    alert("No se pudo cargar el panel desde Supabase.");
+    alert("Error cargando panel");
     logout();
   } finally {
     setPanelLoading(false);
   }
 }
-
 /* ──────────────────────────────────────────
    RENDER DASHBOARD
 ────────────────────────────────────────── */
