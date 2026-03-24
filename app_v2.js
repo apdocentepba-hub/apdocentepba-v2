@@ -181,11 +181,13 @@ function adaptarPreferencias(prefRaw) {
 }
 
 async function construirDashboardDesdeSupabase(token) {
-  const sesion = await obtenerSesionPorToken(token);
+  const docente = await obtenerDocentePorId(token);
 
-  if (!sesion || !sesion.user_id) {
-    return { ok: false, message: "Sesión inválida o no encontrada en Supabase" };
-  }
+if (!docente) {
+  alert("Usuario no encontrado en Supabase");
+  logout();
+  return;
+}
 
   const docente = await obtenerDocentePorId(sesion.user_id);
 
