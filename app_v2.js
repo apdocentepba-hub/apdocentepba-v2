@@ -31,9 +31,43 @@ function mostrarSeccion(id) {
 ────────────────────────────────────────── */
 
 const TOKEN_KEY = "apd_token_v2";
-const guardarToken = t => localStorage.setItem(TOKEN_KEY, String(t));
-const obtenerToken = () => localStorage.getItem(TOKEN_KEY);
-const borrarToken = () => localStorage.removeItem(TOKEN_KEY);
+let tokenMem = null;
+
+function esUUID(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+}
+
+function guardarToken(token) {
+  const limpio = String(token || "").trim();
+  if (!limpio) {
+    console.warn("guardarToken recibió vacío");
+    return false;
+  }
+
+  tokenMem = limpio;
+  localStorage.setItem(TOKEN_KEY, limpio);
+
+  const leido = localStorage.getItem(TOKEN_KEY);
+  const ok = leido === limpio;
+
+  console.log("guardarToken()", { token: limpio, persistido: leido, ok });
+  return ok;
+}
+
+function obtenerToken() {
+  const ls = localStorage.getItem(TOKEN_KEY);
+  if (ls && String(ls).trim()) {
+    tokenMem = String(ls).trim();
+    return tokenMem;
+  }
+  return tokenMem || null;
+}
+
+function borrarToken() {
+  tokenMem = null;
+  localStorage.removeItem(TOKEN_KEY);
+  console.log("borrarToken(): token eliminado");
+}
 
 /* ──────────────────────────────────────────
    NAV
