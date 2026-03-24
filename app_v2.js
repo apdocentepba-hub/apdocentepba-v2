@@ -349,6 +349,7 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
+    // 🔥 AHORA USA DIRECTAMENTE EL ID
     const docente = await obtenerDocentePorId(token);
 
     if (!docente) {
@@ -360,21 +361,15 @@ async function cargarDashboard() {
     const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
     const preferencias = adaptarPreferencias(preferenciasRaw);
 
-    const data = {
+    renderDashboard({
       docente,
       preferencias,
       alertas: [],
       historial: [],
-      estadisticas: {
-        total_alertas: 0,
-        alertas_leidas: 0,
-        alertas_no_leidas: 0,
-        ultimo_acceso: docente.ultimo_login || new Date().toISOString()
-      }
-    };
+      estadisticas: {}
+    });
 
-    renderDashboard(data);
-    cargarPrefsEnFormulario(data);
+    cargarPrefsEnFormulario({ preferencias });
     actualizarNav();
 
   } catch (err) {
