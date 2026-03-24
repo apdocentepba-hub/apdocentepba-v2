@@ -135,9 +135,11 @@ async function supabaseFetch(path, options = {}) {
 
 async function obtenerDocentePorId(userId) {
   const safeUserId = encodeURIComponent(userId);
+
   const rows = await supabaseFetch(
     `users?id=eq.${safeUserId}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
   );
+
   return rows?.[0] || null;
 }
 
