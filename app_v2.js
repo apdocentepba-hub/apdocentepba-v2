@@ -592,33 +592,12 @@ function renderDashboard(data) {
     <p class="stat-acceso">Último acceso: ${fmtFecha(stats.ultimo_acceso || "-")}</p>
   `);
 
-  const badge = document.getElementById("alertas-badge");
-  if (badge) {
-    badge.textContent = String(alts.length);
-    badge.classList.toggle("hidden", alts.length === 0);
-  }
+  renderAlertasAPD(alts);
 
-  const panelAlts = document.getElementById("panel-alertas");
-  if (panelAlts) {
-    if (alts.length > 0) {
-      panelAlts.innerHTML = `
-        <p class="alertas-count">${alts.length} oferta${alts.length > 1 ? "s" : ""} compatible${alts.length > 1 ? "s" : ""}</p>
-        <div class="alertas-grid">${alts.map(renderAlertaCard).join("")}</div>`;
-    } else {
-      panelAlts.innerHTML = `
-        <div class="empty-state">
-          <p>No hay alertas compatibles todavía.</p>
-          <p class="empty-hint">Asegurate de configurar tu distrito y cargo/materia. Si dejás el turno en "Cualquier turno" se aceptan todos los turnos.</p>
-        </div>`;
-    }
-  }
-
-  const panelHist = document.getElementById("panel-historial");
-  if (panelHist) {
-    panelHist.innerHTML = hist.length > 0
-      ? `<ul class="hist-list">${hist.map(h => `<li>${esc(String(h))}</li>`).join("")}</ul>`
-      : `<p class="empty-hint">Sin historial todavía.</p>`;
-  }
+  setHTML("panel-historial", hist.length
+    ? hist.map(h => `<p>${esc(JSON.stringify(h))}</p>`).join("")
+    : `<p class="ph">Sin historial todavía.</p>`
+  );
 }
 
 function renderAlertaCard(a) {
