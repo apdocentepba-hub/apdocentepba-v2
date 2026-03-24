@@ -254,25 +254,39 @@ async function registrarDocente(e) {
 
 async function loginPassword(e) {
   e.preventDefault();
+
   const btn = e.submitter || document.querySelector("#form-login button[type='submit']");
   btnLoad(btn, "Ingresando...");
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const data = await post({
-      action:   "login_password",
-      email:    val("login-email"),
-      password: val("login-password")
+    const res = await fetch(`${API_URL}/api/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: val("login-email"),
+        password: val("login-password")
+      })
     });
-    if (!data.ok || !data.token) {
+
+    const data = await res.json();
+
+    console.log("LOGIN RESPONSE:", data);
+
+    if (!res.ok || !data.ok || !data.token) {
       showMsg("login-msg", data.message || "Login incorrecto", "error");
       return;
     }
+
     guardarToken(data.token);
     actualizarNav();
     showMsg("login-msg", "✓ Ingresando...", "ok");
+
     await cargarDashboard();
-  } catch(err) {
+
+  } catch (err) {
     console.error(err);
     showMsg("login-msg", "Error de conexión. Intentá de nuevo.", "error");
   } finally {
