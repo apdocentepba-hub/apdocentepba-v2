@@ -325,10 +325,10 @@ async function loginPassword(e) {
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const email = val("login-email");
+    const email = val("login-email").trim();
     const password = val("login-password");
 
-    console.log("LOGIN INPUT:", { email, password });
+    console.log("LOGIN INPUT:", { email });
 
     const res = await fetch(`${API_URL}/api/login`, {
       method: "POST",
@@ -338,23 +338,43 @@ async function loginPassword(e) {
       body: JSON.stringify({ email, password })
     });
 
-    const data = await res.json();
-    console.log("LOGIN RESPONSE:", data);
-
-    if (!res.ok || !data.ok || !data.token) {
-      showMsg("login-msg", data.message || "Login incorrecto", "error");
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (jsonErr) {
+      console.error("LOGIN JSON INVÁLIDO:", jsonErr);
+      showMsg("login-msg", "El Worker no devolvió JSON válido", "error");
       return;
     }
 
-    guardarToken(data.token);
-    console.log("TOKEN GUARDADO AHORA:", obtenerToken());
+    console.log("LOGIN RESPONSE:", data);
 
-    showMsg("login-msg", "✓ Ingresando...", "ok");
+    if (!res.ok || !data?.ok || !data?.token) {
+      showMsg("login-msg", data?.message || "Login incorrecto", "error");
+      return;
+    }
+
+    const token = String(data.token).trim();
+
+    if (!esUUID(token)) {
+      console.error("TOKEN NO UUID:", token);
+      showMsg("login-msg", "El login devolvió un token inválido", "error");
+      return;
+    }
+
+    const persistido = guardarToken(token);
+
+    if (!persistido) {
+      showMsg("login-msg", "No se pudo guardar la sesión en el navegador", "error");
+      return;
+    }
+
+    console.log("TOKEN DESPUÉS DE GUARDAR:", obtenerToken());
+
     actualizarNav();
+    showMsg("login-msg", "✓ Ingresando...", "ok");
 
-    setTimeout(() => {
-      cargarDashboard();
-    }, 300);
+    await cargarDashboard();
 
   } catch (err) {
     console.error("ERROR LOGIN:", err);
@@ -363,7 +383,6 @@ async function loginPassword(e) {
     btnRestore(btn);
   }
 }
-
 async function handleGoogleLogin() {
   console.log("Google login desactivado temporalmente");
   showMsg("login-msg", "Ingreso con Google desactivado temporalmente.", "error");
@@ -379,11 +398,18 @@ window.handleGoogleLogin = handleGoogleLogin;
 async function cargarDashboard() {
   const token = obtenerToken();
 
-  console.log("TOKEN AL ENTRAR A DASHBOARD:", token);
+  console.log("cargarDashboard() token leído:", token);
 
-  if (!token || token === "null") {
+  if (!token) {
     actualizarNav();
     mostrarSeccion("inicio");
+    return;
+  }
+
+  if (!esUUID(token)) {
+    console.error("Token inválido en cargarDashboard:", token);
+    alert("La sesión guardada no es válida. Volvé a iniciar sesión.");
+    logout();
     return;
   }
 
@@ -391,21 +417,42 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
-    const data = await construirDashboardDesdeSupabase(token);
-    console.log("DATA DASHBOARD:", data);
+    const dashboard = await construirDashboardDesdeSupabase(token);
 
-    if (!data.ok) {
-      alert(data.message || "Usuario no encontrado en Supabase");
+    console.log("DASHBOARD DATA:", dashboard);
+
+    if (!dashboard?.ok) {
+      console.error("Dashboard inválido:", dashboard);
+      alert(dashboard?.message || "No se pudo cargar el panel");
+      logout();
       return;
     }
 
-    renderDashboard(data);
-    cargarPrefsEnFormulario(data);
+    renderDashboard(dashboard);
+    cargarPrefsEnFormulario(dashboard);
     actualizarNav();
+    limpiarMsgs();
 
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
-    alert("Error cargando panel");
+
+    // IMPORTANTE:
+    // si falla fetch/red/Supabase NO borramos token
+    showMsg(
+      "login-msg",
+      "La sesión sigue guardada, pero falló la carga del panel. Probá recargar.",
+      "error"
+    );
+
+    const panelDatos = document.getElementById("panel-datos-docente");
+    if (panelDatos) {
+      panelDatos.innerHTML = `
+        <div class="empty-state">
+          <p>No se pudo cargar el panel en este intento.</p>
+          <p class="empty-hint">La sesión no fue borrada. Probá con “↻ Recargar”.</p>
+        </div>
+      `;
+    }
   } finally {
     setPanelLoading(false);
   }
