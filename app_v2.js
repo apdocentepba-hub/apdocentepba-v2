@@ -613,37 +613,42 @@ async function guardarPreferencias(e) {
   const cargo1 = val("pref-cargo-1").toUpperCase().trim();
   const cargo2 = val("pref-cargo-2").toUpperCase().trim();
   const cargo3 = val("pref-cargo-3").toUpperCase().trim();
-  const cargos = [cargo1, cargo2, cargo3].filter(Boolean);
+  const cargoCSV = [cargo1, cargo2, cargo3].filter(Boolean).join(",");
 
-  const segundo = val("pref-segundo-distrito").toUpperCase().trim();
-  const tercero = val("pref-tercer-distrito").toUpperCase().trim();
-  const otrosDistritos = [segundo, tercero].filter(Boolean);
+  const distritoPrincipal = val("pref-distrito-principal").toUpperCase().trim();
+  const segundoDistrito = val("pref-segundo-distrito").toUpperCase().trim();
+  const tercerDistrito = val("pref-tercer-distrito").toUpperCase().trim();
+  const otrosDistritos = [segundoDistrito, tercerDistrito].filter(Boolean).join(",");
 
-  const niveles = Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
-    .map(el => el.value.trim().toUpperCase())
-    .filter(Boolean);
+  const turnos = val("pref-turnos").trim();
+  const nivelModalidad = getNivelCSV();
 
-  const turno = val("pref-turnos").trim().toUpperCase();
-  const turnos = turno ? [turno] : [];
+  const row = {
+    user_id: token,
+    distrito_principal: distritoPrincipal || null,
+    otros_distritos_c: otrosDistritos || null,
+    segundo_distrito: segundoDistrito || null,
+    tercer_distrito: tercerDistrito || null,
+    materias_csv: cargoCSV || null,
+    cargos_csv: cargoCSV || null,
+    turnos_csv: turnos || null,
+    nivel_modalidad: nivelModalidad || null,
+    alertas_activas: checked("pref-alertas-activas"),
+    alertas_email: checked("pref-alertas-email"),
+    alertas_whatsapp: checked("pref-alertas-whatsapp"),
+    updated_at: new Date().toISOString()
+  };
+
+  console.log("UPSERT user_preferences:", row);
 
   try {
-    await upsertPreferencias(token, {
-      distrito_principal: val("pref-distrito-principal").toUpperCase().trim(),
-      otros_distritos: otrosDistritos,
-      cargos,
-      materias: cargos,
-      niveles,
-      turnos,
-      alertas_activas: checked("pref-alertas-activas"),
-      alertas_email: checked("pref-alertas-email"),
-      alertas_whatsapp: checked("pref-alertas-whatsapp")
-    });
+    await supabaseUpsert("user_preferences", row, "user_id");
 
     showMsg("preferencias-msg", "✓ Preferencias guardadas", "ok");
     await cargarDashboard();
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR GUARDANDO PREFERENCIAS:", err);
     showMsg("preferencias-msg", "Error guardando preferencias", "error");
   } finally {
     btnRestore(btn);
