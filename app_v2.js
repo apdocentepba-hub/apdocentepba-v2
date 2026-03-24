@@ -491,18 +491,9 @@ function renderAlertasAPD(alertas) {
 async function cargarDashboard() {
   const token = obtenerToken();
 
-  console.log("cargarDashboard() token leído:", token);
-
   if (!token) {
     actualizarNav();
     mostrarSeccion("inicio");
-    return;
-  }
-
-  if (!esUUID(token)) {
-    console.error("Token inválido en cargarDashboard:", token);
-    alert("La sesión guardada no es válida. Volvé a iniciar sesión.");
-    logout();
     return;
   }
 
@@ -510,47 +501,50 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
-    const dashboard = await construirDashboardDesdeSupabase(token);
+    const docente = await obtenerDocentePorId(token);
 
-    console.log("DASHBOARD DATA:", dashboard);
-
-    if (!dashboard?.ok) {
-      console.error("Dashboard inválido:", dashboard);
-      alert(dashboard?.message || "No se pudo cargar el panel");
+    if (!docente) {
+      alert("Usuario no encontrado en Supabase");
       logout();
       return;
     }
 
-    renderDashboard(dashboard);
-    cargarPrefsEnFormulario(dashboard);
+    const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
+    const preferencias = adaptarPreferencias(preferenciasRaw);
+
+    let alertas = [];
+    try {
+      alertas = await obtenerMisAlertas(token);
+      console.log("ALERTAS APD:", alertas);
+    } catch (errAlertas) {
+      console.error("ERROR CARGANDO ALERTAS:", errAlertas);
+      alertas = [];
+    }
+
+    renderDashboard({
+      docente,
+      preferencias,
+      alertas,
+      historial: [],
+      estadisticas: {
+        total_alertas: alertas.length,
+        alertas_leidas: 0,
+        alertas_no_leidas: alertas.length,
+        ultimo_acceso: new Date().toISOString()
+      }
+    });
+
+    cargarPrefsEnFormulario({ preferencias });
     actualizarNav();
-    limpiarMsgs();
 
   } catch (err) {
-    console.error("ERROR CARGANDO PANEL:", err);
-
-    // IMPORTANTE:
-    // si falla fetch/red/Supabase NO borramos token
-    showMsg(
-      "login-msg",
-      "La sesión sigue guardada, pero falló la carga del panel. Probá recargar.",
-      "error"
-    );
-
-    const panelDatos = document.getElementById("panel-datos-docente");
-    if (panelDatos) {
-      panelDatos.innerHTML = `
-        <div class="empty-state">
-          <p>No se pudo cargar el panel en este intento.</p>
-          <p class="empty-hint">La sesión no fue borrada. Probá con “↻ Recargar”.</p>
-        </div>
-      `;
-    }
+    console.error(err);
+    alert("Error cargando panel");
+    logout();
   } finally {
     setPanelLoading(false);
   }
 }
-
 /* ──────────────────────────────────────────
    RENDER DASHBOARD
 ────────────────────────────────────────── */
