@@ -234,13 +234,16 @@ async function loginPassword(e) {
       return;
     }
 
-    guardarToken(data.token);
+    guardarToken(String(data.token));
+    console.log("TOKEN GUARDADO:", localStorage.getItem("apd_token_v2"));
+
     actualizarNav();
     showMsg("login-msg", "✓ Ingresando...", "ok");
+
     await cargarDashboard();
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR LOGIN:", err);
     showMsg("login-msg", "Error de conexión. Intentá de nuevo.", "error");
   } finally {
     btnRestore(btn);
