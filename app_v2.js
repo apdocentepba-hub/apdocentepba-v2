@@ -145,9 +145,11 @@ async function obtenerDocentePorId(userId) {
 
 async function obtenerPreferenciasPorUserId(userId) {
   const safeUserId = encodeURIComponent(userId);
+
   const rows = await supabaseFetch(
     `user_preferences?user_id=eq.${safeUserId}&select=*`
   );
+
   return rows?.[0] || null;
 }
 
