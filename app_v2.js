@@ -204,7 +204,6 @@ async function construirDashboardDesdeSupabase(token) {
     }
   };
 }
-
 /* ──────────────────────────────────────────
    PANEL LOADING
 ────────────────────────────────────────── */
