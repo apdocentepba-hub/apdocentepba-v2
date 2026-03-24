@@ -2,10 +2,12 @@
 
 /* ══════════════════════════════════════════
    APDocentePBA — app_v2.js
-   Login: Cloudflare Worker
-   Dashboard: Supabase directo por user.id
-   Preferencias: Supabase
-   Sugerencias/autocomplete: Google Script
+   Estado estable:
+   - Login: Cloudflare Worker
+   - Dashboard: Supabase directo por user.id
+   - Preferencias: Supabase
+   - Autocomplete: Google Script
+   - Google login: desactivado temporalmente
 ══════════════════════════════════════════ */
 
 const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
@@ -89,7 +91,7 @@ function btnRestore(btn) {
 }
 
 /* ──────────────────────────────────────────
-   HTTP GOOGLE (solo sugerencias / registro / google login viejo)
+   HTTP GOOGLE (solo registro y sugerencias)
 ────────────────────────────────────────── */
 
 async function post(payload) {
@@ -110,7 +112,7 @@ async function post(payload) {
 }
 
 /* ──────────────────────────────────────────
-   SUPABASE HELPERS
+   SUPABASE
 ────────────────────────────────────────── */
 
 async function supabaseFetch(path, options = {}) {
@@ -124,32 +126,28 @@ async function supabaseFetch(path, options = {}) {
     }
   });
 
+  const text = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Supabase ${res.status}: ${txt}`);
+    throw new Error(`Supabase ${res.status}: ${text}`);
   }
 
-  const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
 
 async function obtenerDocentePorId(userId) {
   const safeUserId = encodeURIComponent(userId);
-
   const rows = await supabaseFetch(
     `users?id=eq.${safeUserId}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
   );
-
   return rows?.[0] || null;
 }
 
 async function obtenerPreferenciasPorUserId(userId) {
   const safeUserId = encodeURIComponent(userId);
-
   const rows = await supabaseFetch(
     `user_preferences?user_id=eq.${safeUserId}&select=*`
   );
-
   return rows?.[0] || null;
 }
 
@@ -332,27 +330,10 @@ async function loginPassword(e) {
   }
 }
 
-async function handleGoogleLogin(response) {
-  showMsg("login-msg", "Validando con Google...", "info");
-
-  try {
-    const data = await post({
-      action: "login_google",
-      credential: response.credential
-    });
-
-    if (!data.ok || !data.token) {
-      showMsg("login-msg", data.message || "No se pudo iniciar con Google", "error");
-      return;
-    }
-
-    guardarToken(data.token);
-    actualizarNav();
-    await cargarDashboard();
-  } catch (err) {
-    console.error(err);
-    showMsg("login-msg", "Error de conexión con Google", "error");
-  }
+async function handleGoogleLogin() {
+  console.log("Google login desactivado temporalmente");
+  showMsg("login-msg", "Ingreso con Google desactivado temporalmente.", "error");
+  return;
 }
 
 window.handleGoogleLogin = handleGoogleLogin;
@@ -364,7 +345,9 @@ window.handleGoogleLogin = handleGoogleLogin;
 async function cargarDashboard() {
   const token = obtenerToken();
 
-  if (!token) {
+  console.log("TOKEN AL ENTRAR A DASHBOARD:", token);
+
+  if (!token || token === "null") {
     actualizarNav();
     mostrarSeccion("inicio");
     return;
@@ -375,10 +358,10 @@ async function cargarDashboard() {
 
   try {
     const data = await construirDashboardDesdeSupabase(token);
+    console.log("DATA DASHBOARD:", data);
 
     if (!data.ok) {
       alert(data.message || "Usuario no encontrado en Supabase");
-      logout();
       return;
     }
 
@@ -387,9 +370,8 @@ async function cargarDashboard() {
     actualizarNav();
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
-    logout();
   } finally {
     setPanelLoading(false);
   }
@@ -599,13 +581,6 @@ function cargarPrefsEnFormulario(data) {
   setCheck("pref-alertas-activas", !!p.alertas_activas);
   setCheck("pref-alertas-email", !!p.alertas_email);
   setCheck("pref-alertas-whatsapp", !!p.alertas_whatsapp);
-}
-
-function getNivelCSV() {
-  return Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
-    .map(el => el.value.trim().toUpperCase())
-    .filter(Boolean)
-    .join(",");
 }
 
 /* ──────────────────────────────────────────
