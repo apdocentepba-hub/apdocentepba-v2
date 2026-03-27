@@ -7,8 +7,11 @@ const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
 const GOOGLE_CLIENT_ID = "650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.googleusercontent.com";
 
 const TOKEN_KEY = "apd_token_v2";
+const AUTOCOMPLETE_DEBOUNCE_MS = 120;
+
 let tokenMem = null;
 let googleInitDone = false;
+let planActual = buildPlanFallback();
 
 const alertasState = {
   items: [],
@@ -16,6 +19,36 @@ const alertasState = {
 };
 
 const postulantesResumenCache = new Map();
+const suggestionCache = new Map();
+const autocompleteStates = new Map();
+
+function buildPlanFallback() {
+  return {
+    ok: true,
+    subscription: {
+      id: null,
+      user_id: null,
+      plan_code: "PLUS",
+      status: "beta",
+      source: "beta_abierta",
+      started_at: new Date().toISOString(),
+      trial_ends_at: null,
+      current_period_ends_at: null,
+      mercadopago_preapproval_id: null
+    },
+    plan: {
+      code: "PLUS",
+      nombre: "Plan Plus (Beta)",
+      descripcion: "Hasta 5 distritos y 5 cargos/materias mientras terminamos pagos y automatizaciones.",
+      price_ars: 0,
+      trial_days: 0,
+      max_distritos: 5,
+      max_cargos: 5,
+      beta: true,
+      public_visible: true
+    }
+  };
+}
 
 function mostrarSeccion(id) {
   document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
@@ -144,6 +177,33 @@ async function supabaseFetch(path, options = {}) {
   }
 }
 
+async function workerFetchJson(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (options.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers
+  });
+
+  const text = await res.text();
+
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error("El Worker no devolvió JSON válido");
+  }
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.message || data?.error || `Worker ${res.status}`);
+  }
+
+  return data;
+}
+
 async function obtenerDocentePorId(userId) {
   const rows = await supabaseFetch(
     `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
@@ -158,24 +218,21 @@ async function obtenerPreferenciasPorUserId(userId) {
   return rows?.[0] || null;
 }
 
-async function upsertPreferencias(userId, payload) {
-  return supabaseFetch("user_preferences?on_conflict=user_id", {
+async function obtenerMiPlan(userId) {
+  try {
+    return await workerFetchJson(`/api/mi-plan?user_id=${encodeURIComponent(userId)}`);
+  } catch (err) {
+    console.error("ERROR PLAN:", err);
+    return buildPlanFallback();
+  }
+}
+
+async function guardarPreferenciasServidor(userId, payload) {
+  return workerFetchJson("/api/guardar-preferencias", {
     method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
     body: JSON.stringify({
       user_id: userId,
-      distrito_principal: payload.distrito_principal || null,
-      otros_distritos: payload.otros_distritos || [],
-      cargos: payload.cargos || [],
-      materias: payload.materias || [],
-      niveles: payload.niveles || [],
-      turnos: payload.turnos || [],
-      alertas_activas: !!payload.alertas_activas,
-      alertas_email: !!payload.alertas_email,
-      alertas_whatsapp: !!payload.alertas_whatsapp,
-      updated_at: new Date().toISOString()
+      preferencias: payload
     })
   });
 }
@@ -735,7 +792,15 @@ async function cargarDashboard() {
   setPanelLoading(true);
 
   try {
-    const docente = await obtenerDocentePorId(token);
+    const [docente, prefRaw, planInfo, alertasResult] = await Promise.all([
+      obtenerDocentePorId(token),
+      obtenerPreferenciasPorUserId(token),
+      obtenerMiPlan(token),
+      obtenerMisAlertas(token).catch(err => {
+        console.error("ERROR ALERTAS:", err);
+        return [];
+      })
+    ]);
 
     if (!docente) {
       alert("Usuario no encontrado en Supabase");
@@ -743,30 +808,25 @@ async function cargarDashboard() {
       return;
     }
 
-    const preferencias = adaptarPreferencias(await obtenerPreferenciasPorUserId(token));
-
-    let alertas = [];
-    try {
-      alertas = await obtenerMisAlertas(token);
-    } catch (e) {
-      console.error("ERROR ALERTAS:", e);
-      alertas = [];
-    }
+    const preferencias = adaptarPreferencias(prefRaw);
+    planActual = planInfo || buildPlanFallback();
 
     renderDashboard({
       docente,
       preferencias,
-      alertas,
+      alertas: Array.isArray(alertasResult) ? alertasResult : [],
       historial: [],
+      planInfo: planActual,
       estadisticas: {
-        total_alertas: alertas.length,
+        total_alertas: Array.isArray(alertasResult) ? alertasResult.length : 0,
         alertas_leidas: 0,
-        alertas_no_leidas: alertas.length,
+        alertas_no_leidas: Array.isArray(alertasResult) ? alertasResult.length : 0,
         ultimo_acceso: docente.ultimo_login || new Date().toISOString()
       }
     });
 
     cargarPrefsEnFormulario({ preferencias });
+    renderPlanUI(planActual);
     actualizarNav();
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
@@ -780,6 +840,9 @@ async function cargarDashboard() {
 function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
+  const planInfo = data.planInfo || buildPlanFallback();
+  const plan = planInfo.plan || {};
+  const subscription = planInfo.subscription || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
   const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
@@ -794,6 +857,7 @@ function renderDashboard(data) {
   const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
+  const planNombre = planNombreHumano(plan, subscription);
 
   setText("panel-bienvenida", nombre ? `Bienvenido/a, ${nombre}` : "Bienvenido/a");
   setText("panel-subtitulo", doc.email ? `Sesión: ${doc.email}` : "Panel docente");
@@ -811,6 +875,7 @@ function renderDashboard(data) {
     <p><strong>Cargos/Materias:</strong> ${esc(cargos)}</p>
     <p><strong>Nivel:</strong> ${esc(niveles)}</p>
     <p><strong>Turno:</strong> ${esc(turnos)}</p>
+    <p><strong>Plan:</strong> ${esc(planNombre)}</p>
     <p><strong>Alertas:</strong> ${pref.alertas_activas ? "Activas" : "Pausadas"}</p>
     <p><strong>Email:</strong> ${pref.alertas_email ? "Sí" : "No"}</p>
   `);
@@ -826,6 +891,89 @@ function renderDashboard(data) {
 
   renderAlertasAPD(data.alertas || []);
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
+}
+
+function renderPlanUI(planInfo) {
+  const info = planInfo || buildPlanFallback();
+  const plan = info.plan || {};
+  const subscription = info.subscription || {};
+  const nombre = planNombreHumano(plan, subscription);
+  const estado = planEstadoHumano(subscription);
+  const precio = planPrecioHumano(plan, subscription);
+  const maxDistritos = Number(plan.max_distritos || 5);
+  const maxCargos = Number(plan.max_cargos || 5);
+  const descripcion = planDescripcionHumana(plan, subscription);
+
+  setHTML("panel-plan", `
+    <div class="plan-stack">
+      <div class="plan-title">${esc(nombre)}</div>
+      <div class="plan-pill-row">
+        <span class="plan-pill">${esc(estado)}</span>
+        <span class="plan-pill plan-pill-neutral">${esc(precio)}</span>
+      </div>
+      <div class="plan-pill-row">
+        <span class="plan-pill">Hasta ${maxDistritos} distrito(s)</span>
+        <span class="plan-pill">Hasta ${maxCargos} cargo(s)</span>
+      </div>
+      <p class="plan-note">${esc(descripcion)}</p>
+    </div>
+  `);
+
+  const hint = document.getElementById("prefs-plan-hint");
+  if (hint) {
+    hint.textContent = `${nombre}: hasta ${maxDistritos} distrito(s) y ${maxCargos} cargo(s)/materia(s).`;
+  }
+}
+
+function planNombreHumano(plan, subscription) {
+  const code = String(plan?.code || subscription?.plan_code || "").trim().toUpperCase();
+
+  if (subscription?.status === "beta" || plan?.beta) return "Plan Plus (Beta)";
+  if (code === "TRIAL_7D") return "Prueba gratis 7 días";
+  if (code === "BASIC") return "Plan Básico";
+  if (code === "PLUS") return "Plan Plus";
+  if (code === "PREMIUM") return "Plan Premium";
+
+  return String(plan?.nombre || "Plan").trim() || "Plan";
+}
+
+function planEstadoHumano(subscription) {
+  const status = String(subscription?.status || "").trim().toLowerCase();
+
+  if (status === "beta") return "Beta abierta";
+  if (status === "trialing") return "En prueba";
+  if (status === "active" || status === "authorized") return "Activo";
+  if (status === "paused") return "Pausado";
+  if (status === "pending") return "Pendiente";
+  if (status === "cancelled" || status === "canceled") return "Cancelado";
+
+  return "Disponible";
+}
+
+function planPrecioHumano(plan, subscription) {
+  if (subscription?.status === "beta" || plan?.beta) return "Gratis por ahora";
+  if (String(plan?.code || "").toUpperCase() === "TRIAL_7D") return "Gratis";
+  const n = Number(plan?.price_ars);
+  if (Number.isFinite(n) && n > 0) {
+    return n.toLocaleString("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      maximumFractionDigits: 0
+    });
+  }
+  return "Precio a definir";
+}
+
+function planDescripcionHumana(plan, subscription) {
+  if (subscription?.status === "beta" || plan?.beta) {
+    return "Durante la beta te dejamos con capacidad Plus mientras terminamos pagos, email y automatizaciones.";
+  }
+
+  if (String(plan?.code || "").toUpperCase() === "TRIAL_7D") {
+    return "Prueba gratis con 1 distrito y 1 cargo/materia por 7 días.";
+  }
+
+  return String(plan?.descripcion || "Plan configurado para alertas APD.").trim();
 }
 
 function getNivelArray() {
@@ -847,24 +995,47 @@ async function guardarPreferencias(e) {
   btnLoad(btn, "Guardando...");
   showMsg("preferencias-msg", "Guardando preferencias...", "info");
 
+  const payload = buildPreferenciasPayload();
+
+  try {
+    const data = await guardarPreferenciasServidor(token, payload);
+    if (data?.plan || data?.subscription) {
+      planActual = {
+        ok: true,
+        plan: data.plan || planActual.plan,
+        subscription: data.subscription || planActual.subscription
+      };
+      renderPlanUI(planActual);
+    }
+    showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");
+    await cargarDashboard();
+  } catch (err) {
+    console.error("ERROR GUARDANDO PREFERENCIAS:", err);
+    showMsg("preferencias-msg", err?.message || "Error guardando preferencias", "error");
+  } finally {
+    btnRestore(btn);
+  }
+}
+
+function buildPreferenciasPayload() {
   const cargos = [
-    val("pref-cargo-1").toUpperCase().trim(),
-    val("pref-cargo-2").toUpperCase().trim(),
-    val("pref-cargo-3").toUpperCase().trim(),
-    val("pref-cargo-4").toUpperCase().trim(),
-    val("pref-cargo-5").toUpperCase().trim()
-  ].filter(Boolean);
+    val("pref-cargo-1"),
+    val("pref-cargo-2"),
+    val("pref-cargo-3"),
+    val("pref-cargo-4"),
+    val("pref-cargo-5")
+  ].map(v => v.toUpperCase().trim()).filter(Boolean);
 
   const otrosDistritos = [
-    val("pref-segundo-distrito").toUpperCase().trim(),
-    val("pref-tercer-distrito").toUpperCase().trim(),
-    val("pref-cuarto-distrito").toUpperCase().trim(),
-    val("pref-quinto-distrito").toUpperCase().trim()
-  ].filter(Boolean);
+    val("pref-segundo-distrito"),
+    val("pref-tercer-distrito"),
+    val("pref-cuarto-distrito"),
+    val("pref-quinto-distrito")
+  ].map(v => v.toUpperCase().trim()).filter(Boolean);
 
   const turno = val("pref-turnos").trim();
 
-  const payload = {
+  return {
     distrito_principal: val("pref-distrito-principal").toUpperCase().trim() || null,
     otros_distritos: otrosDistritos,
     cargos,
@@ -875,17 +1046,6 @@ async function guardarPreferencias(e) {
     alertas_email: checked("pref-alertas-email"),
     alertas_whatsapp: checked("pref-alertas-whatsapp")
   };
-
-  try {
-    await upsertPreferencias(token, payload);
-    showMsg("preferencias-msg", "Preferencias guardadas", "ok");
-    await cargarDashboard();
-  } catch (err) {
-    console.error("ERROR GUARDANDO PREFERENCIAS:", err);
-    showMsg("preferencias-msg", "Error guardando preferencias", "error");
-  } finally {
-    btnRestore(btn);
-  }
 }
 
 function limpiarDistritos() {
@@ -903,7 +1063,7 @@ function limpiarDistritos() {
     "sug-distrito-3",
     "sug-distrito-4",
     "sug-distrito-5"
-  ].forEach(limpiarListaAC);
+  ].forEach(id => limpiarListaAC(id));
 }
 
 function limpiarCargos() {
@@ -921,7 +1081,7 @@ function limpiarCargos() {
     "sug-cargo-3",
     "sug-cargo-4",
     "sug-cargo-5"
-  ].forEach(limpiarListaAC);
+  ].forEach(id => limpiarListaAC(id));
 }
 
 function limpiarListaAC(id) {
@@ -944,7 +1104,10 @@ function turnoSelectValue(v) {
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
+    c.checked = false;
+  });
+
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -1056,10 +1219,10 @@ function normalizarNivelKey(v) {
     .trim();
 
   if (!s) return "";
+  if (s.includes("SUPERIOR") || s.includes("FORMACION DOCENTE") || s.includes("DOCENTE")) return "SUPERIOR";
   if (s.includes("INICIAL")) return "INICIAL";
   if (s.includes("PRIMAR")) return "PRIMARIO";
   if (s.includes("SECUNDAR")) return "SECUNDARIO";
-  if (s.includes("SUPERIOR") || s.includes("FORMACION DOCENTE") || s.includes("DOCENTE")) return "SUPERIOR";
   if (s.includes("ESPECIAL")) return "EDUCACION ESPECIAL";
   if (s.includes("JOVEN") || s.includes("ADULTO") || s.includes("CENS")) return "ADULTOS";
   if (s.includes("FISICA")) return "EDUCACION FISICA";
@@ -1213,38 +1376,171 @@ function fmtFecha(v) {
   return new Intl.DateTimeFormat("es-AR", options).format(d);
 }
 
-function debounce(fn, ms = 320) {
-  let timer;
-  return function (...args) {
+function debounce(fn, ms = AUTOCOMPLETE_DEBOUNCE_MS) {
+  let timer = null;
+
+  function wrapped(...args) {
     clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), ms);
+    timer = setTimeout(() => fn(...args), ms);
+  }
+
+  wrapped.flush = (...args) => {
+    clearTimeout(timer);
+    fn(...args);
   };
+
+  return wrapped;
+}
+
+function autocompleteMinChars(tipo) {
+  return tipo === "distrito" ? 1 : 2;
+}
+
+function normalizeCacheKey(tipo, q) {
+  return `${tipo}|${String(q || "").trim().toUpperCase()}`;
 }
 
 async function fetchSugerencias(tipo, q) {
   const url = `${APD_WEB_APP_URL}?accion=sugerencias&tipo=${encodeURIComponent(tipo)}&q=${encodeURIComponent(q)}`;
   const res = await fetch(url);
-  return res.json();
+  const text = await res.text();
+
+  try {
+    return text ? JSON.parse(text) : { ok: false, items: [] };
+  } catch {
+    return { ok: false, items: [] };
+  }
 }
 
-function renderAC(lista, items, input) {
+function hideAC(state) {
+  state.items = [];
+  state.activeIndex = -1;
+  state.lista.innerHTML = "";
+  state.lista.style.display = "none";
+}
+
+function renderACStatus(state, text) {
+  state.items = [];
+  state.activeIndex = -1;
+  state.lista.innerHTML = `<div class="ac-status">${esc(text)}</div>`;
+  state.lista.style.display = "block";
+}
+
+function setACActive(state, index) {
+  state.activeIndex = index;
+  state.lista.querySelectorAll(".ac-item").forEach((el, i) => {
+    el.classList.toggle("is-active", i === index);
+  });
+}
+
+function seleccionarAC(state, index) {
+  const item = state.items[index];
+  if (!item) return;
+  state.input.value = String(item.label || item.value || "").trim();
+  hideAC(state);
+}
+
+function renderACItems(state, items) {
   if (!items?.length) {
-    lista.innerHTML = "";
-    lista.style.display = "none";
+    renderACStatus(state, "Sin coincidencias");
     return;
   }
 
-  lista.innerHTML = items.map(it => `<div class="ac-item">${esc(it.label || "")}</div>`).join("");
-  lista.style.display = "block";
+  state.items = items;
+  state.activeIndex = 0;
+  state.lista.innerHTML = items.map((it, i) => `
+    <div class="ac-item ${i === 0 ? "is-active" : ""}" data-index="${i}">
+      ${esc(it.label || "")}
+    </div>
+  `).join("");
+  state.lista.style.display = "block";
 
-  lista.querySelectorAll(".ac-item").forEach(el => {
+  state.lista.querySelectorAll(".ac-item").forEach(el => {
+    const index = Number(el.dataset.index);
+
+    el.addEventListener("mouseenter", () => {
+      setACActive(state, index);
+    });
+
     el.addEventListener("mousedown", ev => {
       ev.preventDefault();
-      input.value = el.textContent.trim();
-      lista.innerHTML = "";
-      lista.style.display = "none";
+      seleccionarAC(state, index);
     });
   });
+}
+
+async function buscarSugerenciasState(state) {
+  const q = state.input.value.trim();
+  const minChars = autocompleteMinChars(state.tipo);
+
+  if (q.length < minChars) {
+    hideAC(state);
+    return;
+  }
+
+  const cacheKey = normalizeCacheKey(state.tipo, q);
+  if (suggestionCache.has(cacheKey)) {
+    renderACItems(state, suggestionCache.get(cacheKey));
+    return;
+  }
+
+  renderACStatus(state, "Buscando...");
+  const requestId = ++state.requestSeq;
+
+  try {
+    const data = await fetchSugerencias(state.tipo, q);
+
+    if (requestId !== state.requestSeq) return;
+    if (state.input.value.trim() !== q) return;
+
+    const items = data.ok ? (Array.isArray(data.items) ? data.items : []) : [];
+    suggestionCache.set(cacheKey, items);
+    renderACItems(state, items);
+  } catch {
+    if (requestId !== state.requestSeq) return;
+    renderACStatus(state, "No se pudo cargar");
+    setTimeout(() => {
+      if (state.lista.textContent.includes("No se pudo")) {
+        hideAC(state);
+      }
+    }, 900);
+  }
+}
+
+function handleACKeydown(ev, state) {
+  const visible = state.lista.style.display !== "none";
+
+  if (ev.key === "ArrowDown") {
+    ev.preventDefault();
+
+    if (!visible || !state.items.length) {
+      state.search.flush();
+      return;
+    }
+
+    const next = Math.min(state.activeIndex + 1, state.items.length - 1);
+    setACActive(state, next);
+    return;
+  }
+
+  if (ev.key === "ArrowUp") {
+    if (!visible || !state.items.length) return;
+    ev.preventDefault();
+    const next = Math.max(state.activeIndex - 1, 0);
+    setACActive(state, next);
+    return;
+  }
+
+  if (ev.key === "Enter") {
+    if (!visible || !state.items.length) return;
+    ev.preventDefault();
+    seleccionarAC(state, state.activeIndex >= 0 ? state.activeIndex : 0);
+    return;
+  }
+
+  if (ev.key === "Escape") {
+    hideAC(state);
+  }
 }
 
 function activarAC(inputId, listaId, tipo) {
@@ -1253,34 +1549,36 @@ function activarAC(inputId, listaId, tipo) {
 
   if (!input || !lista) return;
 
-  input.addEventListener("input", debounce(async () => {
-    const q = input.value.trim();
+  const state = {
+    input,
+    lista,
+    tipo,
+    items: [],
+    activeIndex: -1,
+    requestSeq: 0,
+    search: null
+  };
 
-    if (q.length < 2) {
-      lista.innerHTML = "";
-      lista.style.display = "none";
-      return;
-    }
+  state.search = debounce(() => buscarSugerenciasState(state), AUTOCOMPLETE_DEBOUNCE_MS);
+  autocompleteStates.set(inputId, state);
 
-    try {
-      const data = await fetchSugerencias(tipo, q);
-      renderAC(lista, data.ok ? data.items : [], input);
-    } catch {
-      lista.innerHTML = "";
-      lista.style.display = "none";
-    }
-  }));
+  input.addEventListener("input", () => {
+    state.search();
+  });
 
-  input.addEventListener("blur", () => {
-    setTimeout(() => {
-      lista.style.display = "none";
-    }, 150);
+  input.addEventListener("keydown", ev => {
+    handleACKeydown(ev, state);
   });
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) {
-      input.dispatchEvent(new Event("input"));
+    const minChars = autocompleteMinChars(tipo);
+    if (input.value.trim().length >= minChars) {
+      state.search.flush();
     }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => hideAC(state), 180);
   });
 }
 
@@ -1322,17 +1620,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
-  activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
-  activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
-  activarAC("pref-cuarto-distrito", "sug-distrito-4", "distrito");
-  activarAC("pref-quinto-distrito", "sug-distrito-5", "distrito");
-
-  activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
-  activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
-  activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
-  activarAC("pref-cargo-4", "sug-cargo-4", "cargo_area");
-  activarAC("pref-cargo-5", "sug-cargo-5", "cargo_area");
+  [
+    ["pref-distrito-principal", "sug-distrito-1", "distrito"],
+    ["pref-segundo-distrito", "sug-distrito-2", "distrito"],
+    ["pref-tercer-distrito", "sug-distrito-3", "distrito"],
+    ["pref-cuarto-distrito", "sug-distrito-4", "distrito"],
+    ["pref-quinto-distrito", "sug-distrito-5", "distrito"],
+    ["pref-cargo-1", "sug-cargo-1", "cargo_area"],
+    ["pref-cargo-2", "sug-cargo-2", "cargo_area"],
+    ["pref-cargo-3", "sug-cargo-3", "cargo_area"],
+    ["pref-cargo-4", "sug-cargo-4", "cargo_area"],
+    ["pref-cargo-5", "sug-cargo-5", "cargo_area"]
+  ].forEach(([inputId, listaId, tipo]) => activarAC(inputId, listaId, tipo));
 
   initPwToggles();
   initGoogleAuth();
