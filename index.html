@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -23,11 +22,11 @@
       </div>
       <nav class="top-nav">
         <div id="navPublico" class="nav-group">
-          <button id="btnLogin"    class="btn btn-ghost"           type="button">Ingresar</button>
+          <button id="btnLogin" class="btn btn-ghost" type="button">Ingresar</button>
           <button id="btnRegistro" class="btn btn-primary-outline" type="button">Registrarse</button>
         </div>
         <div id="navPrivado" class="nav-group hidden">
-          <button id="btnMiPanel"      class="btn btn-ghost"  type="button">Mi panel</button>
+          <button id="btnMiPanel" class="btn btn-ghost" type="button">Mi panel</button>
           <button id="btnCerrarSesion" class="btn btn-danger" type="button">Cerrar sesión</button>
         </div>
       </nav>
@@ -35,8 +34,6 @@
   </header>
 
   <main>
-
-    <!-- INICIO -->
     <section id="inicio" class="section">
       <div class="container">
         <div class="hero-card">
@@ -44,11 +41,11 @@
           <h2 class="hero-title">Nunca más te pierdas<br>un Acto Público Digital</h2>
           <p class="hero-desc">
             Configurá tus preferencias de distrito, materia, nivel y turno,
-            y recibí alertas automáticas por email cuando se publique un APD que te interese.
+            y recibí alertas automáticas cuando se publique un APD que te interese.
           </p>
           <div class="hero-actions">
             <button class="btn btn-primary btn-lg" onclick="mostrarSeccion('registro')">Registrarme gratis</button>
-            <button class="btn btn-outline  btn-lg" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
+            <button class="btn btn-outline btn-lg" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
           </div>
           <div class="hero-features">
             <div class="hfeat"><span class="hfeat-icon">⚡</span><span>APD en tiempo real</span></div>
@@ -60,7 +57,6 @@
       </div>
     </section>
 
-    <!-- REGISTRO -->
     <section id="registro" class="section hidden">
       <div class="container form-wrap">
         <div class="form-card">
@@ -108,7 +104,6 @@
       </div>
     </section>
 
-    <!-- LOGIN -->
     <section id="login" class="section hidden">
       <div class="container form-wrap">
         <div class="form-card">
@@ -136,22 +131,12 @@
             </div>
             <span id="login-msg" class="msg"></span>
           </form>
-          <div class="separator"><span>o ingresá con</span></div>
-          <div class="google-wrap">
-            <div id="g_id_onload"
-                 data-client_id="650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.googleusercontent.com"
-                 data-callback="handleGoogleLogin">
-            </div>
-            <div class="g_id_signin" data-type="standard" data-width="100%" data-logo_alignment="left"></div>
-          </div>
         </div>
       </div>
     </section>
 
-    <!-- PANEL DOCENTE -->
     <section id="panel-docente" class="section hidden">
       <div class="container">
-
         <div class="panel-header">
           <div>
             <h2 id="panel-bienvenida">Bienvenido/a</h2>
@@ -159,18 +144,16 @@
           </div>
           <div class="panel-actions">
             <button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button>
-            <button id="btn-logout"         class="btn btn-danger"    type="button">Cerrar sesión</button>
+            <button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button>
           </div>
         </div>
 
-        <!-- Loading overlay -->
         <div id="panel-loading" class="panel-loading hidden">
           <div class="spinner"></div>
           <span>Cargando panel...</span>
         </div>
 
         <div id="panel-content" class="cards-grid">
-
           <div class="panel-card span-4">
             <div class="card-lbl">👤 Mi cuenta</div>
             <div id="panel-datos-docente"><p class="ph">Cargando...</p></div>
@@ -198,17 +181,13 @@
             <div class="card-lbl">📋 Historial</div>
             <div id="panel-historial"><p class="ph">Cargando...</p></div>
           </div>
-
         </div>
 
-        <!-- PREFERENCIAS -->
         <div class="panel-card prefs-card">
           <div class="card-lbl">✏️ Configurar mis preferencias de alerta</div>
-          <p class="prefs-hint">Las alertas se envían cuando un APD coincide con tu distrito, cargo/materia, nivel y turno. Dejá un campo vacío para aceptar cualquier valor en ese filtro.</p>
+          <p class="prefs-hint">Las alertas se muestran cuando un APD coincide con tu distrito, cargo o materia, nivel y turno. Si dejás un campo vacío, ese filtro no se aplica.</p>
 
           <form id="form-preferencias">
-
-            <!-- Distritos -->
             <div class="sec-label">Distritos</div>
             <div class="grid-3">
               <div class="field">
@@ -228,7 +207,6 @@
               </div>
             </div>
 
-            <!-- Cargos / Materias — AHORA 3 CAMPOS -->
             <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 3 — dejá vacío para no filtrar)</span></div>
             <div class="grid-3">
               <div class="field">
@@ -248,13 +226,11 @@
               </div>
             </div>
 
-            <!-- Turno -->
             <div class="sec-label">Turno</div>
             <div class="grid-2">
               <div class="field">
                 <label for="pref-turnos">Turno preferido</label>
                 <select id="pref-turnos">
-                  <!-- value="" = cualquier turno, el backend lo interpreta como sin filtro -->
                   <option value="">Cualquier turno</option>
                   <option value="M">Mañana</option>
                   <option value="T">Tarde</option>
@@ -265,7 +241,6 @@
               </div>
             </div>
 
-            <!-- Nivel / Modalidad -->
             <div class="sec-label">Nivel / Modalidad <span class="hint-sm">(podés elegir más de uno — sin selección = cualquier nivel)</span></div>
             <div id="pref-nivel-modalidad-box" class="checks-grid">
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="INICIAL"><span class="chk-lbl">Inicial</span></label>
@@ -280,7 +255,6 @@
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION TECNICO-PROFESIONAL"><span class="chk-lbl">Técnico-Profesional</span></label>
             </div>
 
-            <!-- Notificaciones -->
             <div class="sec-label">Notificaciones</div>
             <div class="notif-grid">
               <label class="chk-card chk-notif">
@@ -303,15 +277,14 @@
             <span id="preferencias-msg" class="msg"></span>
           </form>
         </div>
-
       </div>
     </section>
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">APDocentePBA · Sistema gratuito de alertas para docentes PBA · 2025</div>
+    <div class="footer-inner">APDocentePBA · Sistema gratuito de alertas para docentes PBA · 2026</div>
   </footer>
 
-<script src="app_v2.js?v=6"></script>
+  <script src="app_v2.js?v=7"></script>
 </body>
 </html>
