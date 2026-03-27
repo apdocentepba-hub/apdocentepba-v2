@@ -10,7 +10,11 @@ const TOKEN_KEY = "apd_token_v2";
 let tokenMem = null;
 let googleInitDone = false;
 
-const alertasState = { items: [], index: 0 };
+const alertasState = {
+  items: [],
+  index: 0
+};
+
 const postulantesResumenCache = new Map();
 
 function mostrarSeccion(id) {
@@ -19,10 +23,13 @@ function mostrarSeccion(id) {
   if (dest) dest.classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
 window.mostrarSeccion = mostrarSeccion;
 
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
 }
 
 function guardarToken(token) {
@@ -152,7 +159,9 @@ async function obtenerPreferenciasPorUserId(userId) {
 async function upsertPreferencias(userId, payload) {
   return supabaseFetch("user_preferences?on_conflict=user_id", {
     method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
     body: JSON.stringify({
       user_id: userId,
       distrito_principal: payload.distrito_principal || null,
@@ -212,6 +221,7 @@ function setPanelLoading(activo) {
 
 async function registrarDocente(e) {
   e.preventDefault();
+
   const btn = e.submitter || document.querySelector("#form-registro button[type='submit']");
   btnLoad(btn, "Registrando...");
   showMsg("registro-msg", "Procesando...", "info");
@@ -243,6 +253,7 @@ async function registrarDocente(e) {
 
 async function loginPassword(e) {
   e.preventDefault();
+
   const btn = e.submitter || document.querySelector("#form-login button[type='submit']");
   btnLoad(btn, "Ingresando...");
   showMsg("login-msg", "Verificando credenciales...", "info");
@@ -298,7 +309,9 @@ function initGoogleAuth(retries = 20) {
   if (googleInitDone) return;
 
   if (!window.google?.accounts?.id) {
-    if (retries > 0) setTimeout(() => initGoogleAuth(retries - 1), 300);
+    if (retries > 0) {
+      setTimeout(() => initGoogleAuth(retries - 1), 300);
+    }
     return;
   }
 
@@ -357,7 +370,12 @@ async function handleGoogleCredential(response) {
     }
 
     actualizarNav();
-    showMsg(target, data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto", "ok");
+    showMsg(
+      target,
+      data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto",
+      "ok"
+    );
+
     await cargarDashboard();
   } catch (err) {
     console.error(err);
@@ -369,6 +387,7 @@ async function obtenerMisAlertas(userId) {
   const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
   let data = null;
+
   try {
     data = await res.json();
   } catch {
@@ -395,11 +414,25 @@ function moverAlerta(step) {
   renderAlertaActual();
 }
 
+function irAAlerta(index) {
+  const total = alertasState.items.length;
+  if (!total) return;
+  if (!Number.isInteger(index)) return;
+  if (index < 0 || index >= total) return;
+  alertasState.index = index;
+  renderAlertaActual();
+}
+
 function buildPostulantesUrl(alerta) {
   const params = new URLSearchParams();
 
-  if (alerta?.idoferta) params.set("oferta", String(alerta.idoferta).trim());
-  if (alerta?.iddetalle) params.set("detalle", String(alerta.iddetalle).trim());
+  if (alerta?.idoferta) {
+    params.set("oferta", String(alerta.idoferta).trim());
+  }
+
+  if (alerta?.iddetalle) {
+    params.set("detalle", String(alerta.iddetalle).trim());
+  }
 
   return params.toString()
     ? `http://servicios.abc.gov.ar/actos.publicos.digitales/postulantes/?${params.toString()}`
@@ -409,7 +442,10 @@ function buildPostulantesUrl(alerta) {
 function formatPuntaje(v) {
   const n = Number(v);
   return Number.isFinite(n)
-    ? n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? n.toLocaleString("es-AR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
     : "-";
 }
 
@@ -498,6 +534,59 @@ async function cargarResumenPostulantes(alerta) {
   }
 }
 
+function getAlertAtOffset(offset) {
+  const total = alertasState.items.length;
+  if (!total) return null;
+  const idx = (alertasState.index + offset + total) % total;
+  return alertasState.items[idx] || null;
+}
+
+function tituloAlerta(alerta) {
+  return [alerta?.cargo, alerta?.area]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(" · ") || "Oferta APD";
+}
+
+function renderStackPreview(alerta, depth, label, gotoIndex) {
+  if (!alerta) return "";
+
+  const titulo = tituloAlerta(alerta);
+  const sub = alerta.distrito || alerta.escuela || "Oferta compatible";
+
+  return `
+    <button
+      type="button"
+      class="alerta-stack-card alerta-stack-card-${depth}"
+      data-goto-index="${gotoIndex}"
+      aria-label="Ir a ${esc(titulo)}"
+    >
+      <div class="alerta-stack-content">
+        <span class="alerta-stack-label">${esc(label)}</span>
+        <strong class="alerta-stack-title">${esc(titulo)}</strong>
+        <span class="alerta-stack-sub">${esc(sub)}</span>
+      </div>
+    </button>
+  `;
+}
+
+function renderDots(total, current) {
+  if (total <= 1) return "";
+  return `
+    <div class="alerta-dots" aria-label="Navegación de alertas">
+      ${Array.from({ length: total }, (_, i) => `
+        <button
+          type="button"
+          class="alerta-dot ${i === current ? "is-active" : ""}"
+          data-dot-index="${i}"
+          aria-label="Ir a oferta ${i + 1}"
+          ${i === current ? 'aria-current="true"' : ""}
+        ></button>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -527,55 +616,76 @@ function renderAlertaActual() {
   }
 
   const a = items[alertasState.index];
-  const titulo = [a.cargo, a.area]
-    .filter(Boolean)
-    .filter((v, i, arr) => arr.indexOf(v) === i)
-    .join(" · ") || "Oferta APD";
-
+  const titulo = tituloAlerta(a);
   const abcUrl = buildPostulantesUrl(a);
 
+  const next1Index = total > 1 ? (alertasState.index + 1) % total : -1;
+  const next2Index = total > 2 ? (alertasState.index + 2) % total : -1;
+
+  const next1 = total > 1 ? items[next1Index] : null;
+  const next2 = total > 2 ? items[next2Index] : null;
+
   box.innerHTML = `
-    <div class="alerta-floating">
-      <div class="alerta-topbar">
-        <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
-        <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
-        <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
-      </div>
+    <div class="alerta-deck">
+      ${next2 ? renderStackPreview(next2, 2, "Después", next2Index) : ""}
+      ${next1 ? renderStackPreview(next1, 1, "Siguiente", next1Index) : ""}
 
-      <div class="alerta-tags">
-        ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
-        ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-        <span class="tag tag-estado">Activa</span>
-      </div>
+      <article class="alerta-floating alerta-main-card">
+        <div class="alerta-topbar">
+          <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+          <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
+          <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+        </div>
 
-      <div class="alerta-title">${esc(titulo)}</div>
-      <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
+        <div class="alerta-tags">
+          ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
+          ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+          <span class="tag tag-estado">Activa</span>
+        </div>
 
-      <div class="alerta-grid">
-        ${alertaRow("Distrito", a.distrito)}
-        ${alertaRow("Turno", turnoTexto(a.turno))}
-        ${alertaRow("Curso/Div.", normalizarCursoDivision(a.cursodivision))}
-        ${alertaRow("Jornada", a.jornada)}
-        ${alertaRow("Módulos", a.hsmodulos)}
-        ${alertaRow("Desde", fmtFecha(a.supl_desde))}
-        ${alertaRow("Hasta", fmtFecha(a.supl_hasta))}
-        ${alertaRow("Cierre", fmtFecha(a.finoferta))}
-        ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
-      </div>
+        <div class="alerta-title">${esc(titulo)}</div>
+        <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
 
-      <div id="alerta-postulantes-meta" class="alerta-meta-card">
-        <div class="alerta-meta-head">Referencia de postulantes</div>
-        <div class="alerta-meta-loading">Cargando postulantes...</div>
-      </div>
+        <div class="alerta-grid">
+          ${alertaRow("Distrito", a.distrito)}
+          ${alertaRow("Turno", turnoTexto(a.turno))}
+          ${alertaRow("Curso/Div.", normalizarCursoDivision(a.cursodivision))}
+          ${alertaRow("Jornada", a.jornada)}
+          ${alertaRow("Módulos", a.hsmodulos)}
+          ${alertaRow("Desde", fmtFecha(a.supl_desde))}
+          ${alertaRow("Hasta", fmtFecha(a.supl_hasta))}
+          ${alertaRow("Cierre", fmtFecha(a.finoferta))}
+          ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+        </div>
 
-      <div class="alerta-actions">
-        ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
-      </div>
+        <div id="alerta-postulantes-meta" class="alerta-meta-card">
+          <div class="alerta-meta-head">Referencia de postulantes</div>
+          <div class="alerta-meta-loading">Cargando postulantes...</div>
+        </div>
+
+        <div class="alerta-actions">
+          ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
+        </div>
+      </article>
     </div>
+
+    ${renderDots(total, alertasState.index)}
   `;
 
   box.querySelector("#alerta-prev")?.addEventListener("click", () => moverAlerta(-1));
   box.querySelector("#alerta-next")?.addEventListener("click", () => moverAlerta(1));
+
+  box.querySelectorAll("[data-goto-index]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      irAAlerta(Number(btn.dataset.gotoIndex));
+    });
+  });
+
+  box.querySelectorAll("[data-dot-index]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      irAAlerta(Number(btn.dataset.dotIndex));
+    });
+  });
 
   cargarResumenPostulantes(a);
 }
@@ -651,10 +761,7 @@ function renderDashboard(data) {
   const pref = data.preferencias || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
-
+  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
   const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
@@ -778,7 +885,10 @@ function turnoSelectValue(v) {
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
+    c.checked = false;
+  });
+
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -855,6 +965,7 @@ function normalizarCursoDivision(v) {
 
 function turnoTexto(v) {
   const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+
   if (!items.length) return "";
 
   return items.map(x => {
@@ -871,7 +982,10 @@ function parseFechaFlexible(v) {
   const raw = String(v || "").trim();
   if (!raw) return null;
 
-  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const dmy = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+
   if (dmy) {
     const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
     return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
@@ -890,7 +1004,10 @@ function fmtFecha(v) {
   if (!d) return raw;
   if (d.getFullYear() >= 9999) return "Sin fecha";
 
-  const onlyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const onlyDate =
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) ||
+    /^\d{4}-\d{2}-\d{2}$/.test(raw);
+
   const options = onlyDate
     ? { day: "2-digit", month: "2-digit", year: "numeric" }
     : { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" };
@@ -935,6 +1052,7 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
+
   if (!input || !lista) return;
 
   input.addEventListener("input", debounce(async () => {
@@ -955,10 +1073,16 @@ function activarAC(inputId, listaId, tipo) {
     }
   }));
 
-  input.addEventListener("blur", () => setTimeout(() => { lista.style.display = "none"; }, 150));
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      lista.style.display = "none";
+    }, 150);
+  });
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) input.dispatchEvent(new Event("input"));
+    if (input.value.trim().length >= 2) {
+      input.dispatchEvent(new Event("input"));
+    }
   });
 }
 
@@ -967,6 +1091,7 @@ function initPwToggles() {
     btn.addEventListener("click", () => {
       const target = document.getElementById(btn.dataset.target);
       if (!target) return;
+
       const show = target.type === "password";
       target.type = show ? "text" : "password";
       btn.textContent = show ? "🙈" : "👁";
@@ -981,9 +1106,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-logout")?.addEventListener("click", logout);
   document.getElementById("btnCerrarSesion")?.addEventListener("click", logout);
+
   document.getElementById("btnLogin")?.addEventListener("click", () => mostrarSeccion("login"));
   document.getElementById("btnRegistro")?.addEventListener("click", () => mostrarSeccion("registro"));
   document.getElementById("btnMiPanel")?.addEventListener("click", () => cargarDashboard());
+
   document.getElementById("btn-clear-distritos")?.addEventListener("click", limpiarDistritos);
   document.getElementById("btn-clear-cargos")?.addEventListener("click", limpiarCargos);
 
@@ -1002,6 +1129,7 @@ document.addEventListener("DOMContentLoaded", () => {
   activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
   activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
   activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
+
   activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
   activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
