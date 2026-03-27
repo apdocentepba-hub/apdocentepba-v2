@@ -42,10 +42,12 @@ function guardarToken(token) {
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
+
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
+
   return tokenMem || null;
 }
 
@@ -652,9 +654,9 @@ function renderAlertaActual() {
           ${alertaRow("Curso/Div.", normalizarCursoDivision(a.cursodivision))}
           ${alertaRow("Jornada", a.jornada)}
           ${alertaRow("Módulos", a.hsmodulos)}
-          ${alertaRow("Desde", fmtFecha(a.supl_desde))}
-          ${alertaRow("Hasta", fmtFecha(a.supl_hasta))}
-          ${alertaRow("Cierre", fmtFecha(a.finoferta))}
+          ${alertaRow("Desde", fmtFechaABC(a.supl_desde, "date"))}
+          ${alertaRow("Hasta", fmtFechaABC(a.supl_hasta, "date"))}
+          ${alertaRow("Cierre", fmtFechaABC(a.finoferta, "datetime"))}
           ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
         </div>
 
@@ -761,7 +763,10 @@ function renderDashboard(data) {
   const pref = data.preferencias || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
+  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito]
+    .filter(Boolean)
+    .join(" / ") || "(sin filtro)";
+
   const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
@@ -957,7 +962,7 @@ function esc(s) {
 function normalizarCursoDivision(v) {
   let s = String(v || "").trim();
   if (!s) return "-";
-  s = s.replace(/Â°/g, "°").replace(/º/g, "°").replace(/�/g, "°");
+  s = s.replace(/Â°/g, "°").replace(/º/g, "°").replace(/Ş/g, "°").replace(/�/g, "°");
   s = s.replace(/(\d)\s*°\s*(\d)\s*°?/g, "$1°$2°");
   s = s.replace(/\s+/g, " ").trim();
   return s || "-";
@@ -995,6 +1000,68 @@ function parseFechaFlexible(v) {
   return Number.isNaN(iso.getTime()) ? null : iso;
 }
 
+function pad2(v) {
+  return String(v).padStart(2, "0");
+}
+
+function parseAbcLiteralDate(v) {
+  const raw = String(v || "").trim();
+  if (!raw || raw.includes("9999")) return null;
+
+  const iso = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z)?$/
+  );
+
+  if (iso) {
+    const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = iso;
+    return {
+      dd,
+      mm,
+      yyyy,
+      hh,
+      mi,
+      ss,
+      hasTime: iso[4] != null
+    };
+  }
+
+  const dmy = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = dmy;
+    return {
+      dd: pad2(dd),
+      mm: pad2(mm),
+      yyyy,
+      hh: pad2(hh),
+      mi: pad2(mi),
+      ss: pad2(ss),
+      hasTime: dmy[4] != null
+    };
+  }
+
+  return null;
+}
+
+function fmtFechaABC(v, mode = "auto") {
+  const raw = String(v || "").trim();
+  if (!raw || raw === "-") return "-";
+  if (raw.includes("9999")) return "Sin fecha";
+
+  const parts = parseAbcLiteralDate(raw);
+  if (!parts) return raw;
+
+  const dateStr = `${parts.dd}/${parts.mm}/${parts.yyyy}`;
+  const hasRealTime = parts.hasTime && !(parts.hh === "00" && parts.mi === "00" && parts.ss === "00");
+
+  if (mode === "date") return dateStr;
+  if (mode === "datetime") return hasRealTime ? `${dateStr}, ${parts.hh}:${parts.mi}` : dateStr;
+
+  return hasRealTime ? `${dateStr}, ${parts.hh}:${parts.mi}` : dateStr;
+}
+
 function fmtFecha(v) {
   const raw = String(v || "").trim();
   if (!raw || raw === "-") return "-";
@@ -1017,6 +1084,7 @@ function fmtFecha(v) {
 
 function debounce(fn, ms = 320) {
   let timer;
+
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => fn.apply(this, args), ms);
