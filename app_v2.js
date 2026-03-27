@@ -186,10 +186,15 @@ function adaptarPreferencias(prefRaw) {
       distrito_principal: "",
       segundo_distrito: "",
       tercer_distrito: "",
+      otros_distritos_arr: [],
       cargos_csv: "",
+      cargos_arr: [],
       materias_csv: "",
+      materias_arr: [],
       nivel_modalidad: "",
+      niveles_arr: [],
       turnos_csv: "",
+      turnos_arr: [],
       alertas_activas: true,
       alertas_email: true,
       alertas_whatsapp: false
@@ -206,10 +211,15 @@ function adaptarPreferencias(prefRaw) {
     distrito_principal: prefRaw.distrito_principal || "",
     segundo_distrito: otros[0] || "",
     tercer_distrito: otros[1] || "",
+    otros_distritos_arr: otros,
     cargos_csv: cargos.join(", "),
+    cargos_arr: cargos,
     materias_csv: materias.join(", "),
-    nivel_modalidad: niveles.join(", "),
+    materias_arr: materias,
+    nivel_modalidad: formatNivelesResumen(niveles),
+    niveles_arr: niveles,
     turnos_csv: turnos.join(", "),
+    turnos_arr: turnos,
     alertas_activas: !!prefRaw.alertas_activas,
     alertas_email: !!prefRaw.alertas_email,
     alertas_whatsapp: !!prefRaw.alertas_whatsapp
@@ -808,7 +818,7 @@ function renderDashboard(data) {
 
 function getNivelArray() {
   return Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
-    .map(el => String(el.value || "").trim().toUpperCase())
+    .map(el => String(el.value || "").trim())
     .filter(Boolean);
 }
 
@@ -902,20 +912,29 @@ function cargarPrefsEnFormulario(data) {
   setVal("pref-segundo-distrito", p.segundo_distrito || "");
   setVal("pref-tercer-distrito", p.tercer_distrito || "");
 
-  const cargos = splitCSV(p.cargos_csv || p.materias_csv || "");
+  const cargosGuardados = [
+    ...(Array.isArray(p.cargos_arr) ? p.cargos_arr : []),
+    ...(Array.isArray(p.materias_arr) ? p.materias_arr : [])
+  ].filter(Boolean);
+
+  const cargos = cargosGuardados.length
+    ? cargosGuardados
+    : splitCSV(p.cargos_csv || p.materias_csv || "");
+
   setVal("pref-cargo-1", cargos[0] || "");
   setVal("pref-cargo-2", cargos[1] || "");
   setVal("pref-cargo-3", cargos[2] || "");
 
-  const turno = splitCSV(p.turnos_csv || "")[0] || "";
+  const turno = (Array.isArray(p.turnos_arr) ? p.turnos_arr[0] : "") || splitCSV(p.turnos_csv || "")[0] || "";
   setVal("pref-turnos", turnoSelectValue(turno));
 
-  if (p.nivel_modalidad) {
-    const niveles = p.nivel_modalidad.split(",").map(s => s.trim().toUpperCase());
-    document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(cb => {
-      cb.checked = niveles.includes(cb.value.trim().toUpperCase());
-    });
-  }
+  const nivelesGuardados = Array.isArray(p.niveles_arr) && p.niveles_arr.length
+    ? p.niveles_arr
+    : splitCSV(p.nivel_modalidad || "");
+
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(cb => {
+    cb.checked = nivelesGuardados.some(nivel => nivelCoincideConCheckbox(nivel, cb.value));
+  });
 
   setCheck("pref-alertas-activas", !!p.alertas_activas);
   setCheck("pref-alertas-email", !!p.alertas_email);
@@ -980,6 +999,84 @@ function turnoTexto(v) {
     if (x === "ALTERNADO" || x === "A") return "Alternado";
     return x;
   }).join(", ");
+}
+
+function normalizarNivelKey(v) {
+  const s = String(v || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!s) return "";
+  if (s.includes("INICIAL")) return "INICIAL";
+  if (s.includes("PRIMAR")) return "PRIMARIO";
+  if (s.includes("SECUNDAR")) return "SECUNDARIO";
+  if (s.includes("SUPERIOR") || s.includes("FORMACION DOCENTE") || s.includes("DOCENTE")) return "SUPERIOR";
+  if (s.includes("ESPECIAL")) return "EDUCACION ESPECIAL";
+  if (s.includes("JOVEN") || s.includes("ADULTO") || s.includes("CENS")) return "ADULTOS";
+  if (s.includes("FISICA")) return "EDUCACION FISICA";
+  if (s.includes("PSICOLOGIA") || s.includes("COMUNITARIA")) return "PSICOLOGIA";
+  if (s.includes("ARTISTICA") || s.includes("ARTE")) return "EDUCACION ARTISTICA";
+  if (s.includes("TECNIC")) return "TECNICO PROFESIONAL";
+  return s;
+}
+
+function nivelLabelHumana(v) {
+  switch (normalizarNivelKey(v)) {
+    case "INICIAL":
+      return "Inicial";
+    case "PRIMARIO":
+      return "Primaria";
+    case "SECUNDARIO":
+      return "Secundaria";
+    case "SUPERIOR":
+      return "Superior";
+    case "EDUCACION ESPECIAL":
+      return "Educación Especial";
+    case "ADULTOS":
+      return "Jóvenes y Adultos";
+    case "EDUCACION FISICA":
+      return "Educación Física";
+    case "PSICOLOGIA":
+      return "Psicología";
+    case "EDUCACION ARTISTICA":
+      return "Educación Artística";
+    case "TECNICO PROFESIONAL":
+      return "Técnico Profesional";
+    default:
+      return String(v || "").trim();
+  }
+}
+
+function formatNivelesResumen(source) {
+  const items = Array.isArray(source) ? source : splitCSV(source || "");
+  const out = [];
+  const seen = new Set();
+
+  items.forEach(item => {
+    const key = normalizarNivelKey(item) || String(item || "").trim().toUpperCase();
+    const label = nivelLabelHumana(item);
+
+    if (!key || !label || seen.has(key)) return;
+    seen.add(key);
+    out.push(label);
+  });
+
+  return out.join(", ");
+}
+
+function nivelCoincideConCheckbox(savedValue, checkboxValue) {
+  const savedRaw = String(savedValue || "").trim().toUpperCase();
+  const checkboxRaw = String(checkboxValue || "").trim().toUpperCase();
+
+  if (savedRaw && checkboxRaw && savedRaw === checkboxRaw) return true;
+
+  const savedKey = normalizarNivelKey(savedValue);
+  const checkboxKey = normalizarNivelKey(checkboxValue);
+
+  return !!savedKey && !!checkboxKey && savedKey === checkboxKey;
 }
 
 function parseFechaFlexible(v) {
