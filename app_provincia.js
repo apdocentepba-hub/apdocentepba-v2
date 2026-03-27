@@ -1,0 +1,437 @@
+'use strict';
+
+const PROVINCIA_DAYS_DEFAULT = 30;
+let radarRotationTimer = null;
+
+const escProvincia = typeof esc === 'function'
+  ? esc
+  : value => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+function fmtProvinciaNum(value, digits = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  return n.toLocaleString('es-AR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
+function fmtProvinciaFecha(value) {
+  if (typeof fmtFecha === 'function') return fmtFecha(value);
+  const raw = String(value || '').trim();
+  if (!raw) return '-';
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? raw : d.toLocaleString('es-AR');
+}
+
+function currentPlanProvincia() {
+  try {
+    if (typeof planActual !== 'undefined' && planActual) return planActual;
+  } catch {}
+
+  try {
+    if (typeof buildPlanFallback === 'function') return buildPlanFallback();
+  } catch {}
+
+  return { plan: {}, subscription: {} };
+}
+
+function stopRadarRotationProvincia() {
+  if (radarRotationTimer) clearInterval(radarRotationTimer);
+  radarRotationTimer = null;
+}
+
+function setPanelHTMLProvincia(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+function setButtonBusyProvincia(btn, busyText) {
+  if (!btn) return;
+  if (typeof btnLoad === 'function') {
+    btnLoad(btn, busyText);
+    return;
+  }
+  btn.dataset.orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = busyText;
+}
+
+function restoreButtonProvincia(btn) {
+  if (!btn) return;
+  if (typeof btnRestore === 'function') {
+    btnRestore(btn);
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = btn.dataset.orig || btn.textContent;
+}
+
+async function obtenerProvinciaResumen(days = PROVINCIA_DAYS_DEFAULT) {
+  return workerFetchJson(`/api/provincia/resumen?days=${encodeURIComponent(days)}`);
+}
+
+async function obtenerProvinciaBackfillStatus() {
+  return workerFetchJson('/api/provincia/backfill-status');
+}
+
+async function procesarProvinciaBackfill(force = false) {
+  return workerFetchJson('/api/provincia/backfill-step', {
+    method: 'POST',
+    body: JSON.stringify({ force })
+  });
+}
+
+async function resetearProvinciaBackfill() {
+  return workerFetchJson('/api/provincia/backfill-reset', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+}
+
+async function obtenerWhatsAppHealth() {
+  return workerFetchJson('/api/whatsapp/health');
+}
+
+async function crearCheckoutMercadoPago(userId, planCode) {
+  return workerFetchJson('/api/mercadopago/create-checkout-link', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: userId,
+      plan_code: planCode
+    })
+  });
+}
+
+function renderListProvincia(items, emptyMessage, labelFn = item => item.label) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<p class="ph">${escProvincia(emptyMessage)}</p>`;
+  }
+
+  return `
+    <ul class="historico-list">
+      ${items.map(item => `
+        <li class="historico-item">
+          <span>${escProvincia(labelFn(item))}</span>
+          <strong class="historico-count">${fmtProvinciaNum(item.value)}</strong>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
+
+function renderLatestProvincia(rows) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return `<p class="ph">Todavía no hay movimientos recientes para mostrar.</p>`;
+  }
+
+  return `
+    <ul class="soft-list">
+      ${rows.map(row => `
+        <li class="soft-item">
+          <div class="soft-title">${escProvincia([row.cargo, row.area].filter(Boolean).join(' · ') || 'Oferta APD')}</div>
+          <div class="soft-sub">${escProvincia(row.escuela || 'Sin escuela')} · ${escProvincia(row.distrito || '-')}</div>
+          <div class="soft-meta">Estado: ${escProvincia(row.estado || '-')} · Turno: ${escProvincia(row.turno || '-')} · Vista: ${escProvincia(fmtProvinciaFecha(row.last_seen_at || '-'))}</div>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
+
+function startRadarRotationProvincia(items) {
+  stopRadarRotationProvincia();
+
+  const host = document.getElementById('radar-banner-host');
+  if (!host) return;
+
+  const list = Array.isArray(items) && items.length
+    ? items
+    : [{ title: 'Radar provincial', text: 'Todavía no hay suficiente historial provincial para construir insights serios.' }];
+
+  let index = 0;
+
+  function paint() {
+    const item = list[index % list.length];
+    host.innerHTML = `
+      <div class="banner-rotator">
+        <article class="banner-card">
+          <div class="banner-title">${escProvincia(item.title || 'Radar provincial')}</div>
+          <div class="banner-text">${escProvincia(item.text || '')}</div>
+        </article>
+      </div>
+    `;
+    index += 1;
+  }
+
+  paint();
+
+  if (list.length > 1) {
+    radarRotationTimer = setInterval(paint, 8000);
+  }
+}
+
+function renderProvincia(data) {
+  const box = document.getElementById('panel-radar-provincia');
+  if (!box) return;
+
+  if (!data || data.empty) {
+    stopRadarRotationProvincia();
+    box.innerHTML = `
+      <div class="empty-state">
+        <p>Todavía no hay radar provincial suficiente.</p>
+        <p class="empty-hint">Empezá a procesar lotes para ir poblando el histórico global de la provincia.</p>
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = `
+    <div id="radar-banner-host"></div>
+
+    <div class="stats-grid">
+      <div class="stat-box"><span class="stat-n">${fmtProvinciaNum(data.total_ofertas)}</span><span class="stat-l">Radar total</span></div>
+      <div class="stat-box"><span class="stat-n">${fmtProvinciaNum(data.activas_estimadas)}</span><span class="stat-l">Activas</span></div>
+      <div class="stat-box"><span class="stat-n">${fmtProvinciaNum(data.cerradas_estimadas)}</span><span class="stat-l">No activas</span></div>
+      <div class="stat-box"><span class="stat-n">${fmtProvinciaNum(data.nuevas_7d)}</span><span class="stat-l">Nuevas 7d</span></div>
+    </div>
+
+    <div class="chip-row" style="margin-bottom:14px">
+      <span class="chip">Designadas: ${fmtProvinciaNum(data.state_breakdown?.designadas || 0)}</span>
+      <span class="chip">Anuladas: ${fmtProvinciaNum(data.state_breakdown?.anuladas || 0)}</span>
+      <span class="chip">Desiertas: ${fmtProvinciaNum(data.state_breakdown?.desiertas || 0)}</span>
+      <span class="chip">Cerradas: ${fmtProvinciaNum(data.state_breakdown?.cerradas || 0)}</span>
+    </div>
+
+    <div class="radar-columns">
+      <div class="radar-box">
+        <h4>Distritos con más movimiento</h4>
+        ${renderListProvincia(data.top_distritos, 'Todavía no hay ranking distrital.')}
+      </div>
+      <div class="radar-box">
+        <h4>Cargos / áreas con más publicaciones</h4>
+        ${renderListProvincia(data.top_cargos, 'Todavía no hay ranking de cargos.')}
+      </div>
+      <div class="radar-box">
+        <h4>Turnos dominantes</h4>
+        ${renderListProvincia(data.top_turnos, 'Todavía no hay ranking de turnos.')}
+      </div>
+    </div>
+
+    <div class="historico-box historico-box-latest" style="margin-top:14px">
+      <h4>Último movimiento provincial visible</h4>
+      ${renderLatestProvincia(data.latest_rows)}
+    </div>
+  `;
+
+  startRadarRotationProvincia(data.banner_items);
+}
+
+function renderBackfill(data) {
+  const box = document.getElementById('panel-backfill-provincia');
+  if (!box) return;
+
+  if (!data) {
+    box.innerHTML = `<p class="ph">No se pudo leer el backfill provincial.</p>`;
+    return;
+  }
+
+  const statusMap = {
+    idle: 'En espera',
+    running: 'Procesando',
+    finished: 'Completado'
+  };
+
+  box.innerHTML = `
+    <div class="progress-wrap">
+      <div class="progress">
+        <div class="progress-bar" style="width:${Math.min(100, Math.max(0, Number(data.progress_pct || 0)))}%"></div>
+      </div>
+      <div class="progress-legend">
+        <span>Estado: ${escProvincia(statusMap[data.status] || data.status || 'En espera')}</span>
+        <span>${fmtProvinciaNum(data.progress_pct || 0, 1)}%</span>
+      </div>
+    </div>
+
+    <div class="backfill-meta">
+      <div class="backfill-box">
+        <span class="backfill-k">Distrito actual</span>
+        <span class="backfill-v">${escProvincia(data.district_name || 'Pendiente')}</span>
+      </div>
+      <div class="backfill-box">
+        <span class="backfill-k">Página siguiente</span>
+        <span class="backfill-v">${fmtProvinciaNum((data.next_page || 0) + 1)}</span>
+      </div>
+      <div class="backfill-box">
+        <span class="backfill-k">Distritos completados</span>
+        <span class="backfill-v">${fmtProvinciaNum(data.districts_completed || 0)} / ${fmtProvinciaNum(data.total_districts || 0)}</span>
+      </div>
+      <div class="backfill-box">
+        <span class="backfill-k">Ofertas procesadas</span>
+        <span class="backfill-v">${fmtProvinciaNum(data.offers_processed || 0)}</span>
+      </div>
+      <div class="backfill-box">
+        <span class="backfill-k">Último lote</span>
+        <span class="backfill-v">${fmtProvinciaNum(data.last_batch_count || 0)} ofertas</span>
+      </div>
+      <div class="backfill-box">
+        <span class="backfill-k">Última corrida</span>
+        <span class="backfill-v">${escProvincia(fmtProvinciaFecha(data.last_run_at || '-'))}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderCanalesProvincia(whatsapp, planInfo) {
+  const box = document.getElementById('panel-canales');
+  if (!box) return;
+
+  const plan = planInfo?.plan || {};
+  const subscription = planInfo?.subscription || {};
+  const featureFlags = typeof plan.feature_flags === 'object' && plan.feature_flags ? plan.feature_flags : {};
+  const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
+  const planCode = String(plan.code || subscription.plan_code || 'PLUS').trim().toUpperCase();
+  const whatsappRequested = typeof checked === 'function' ? checked('pref-alertas-whatsapp') : false;
+
+  box.innerHTML = `
+    <div class="soft-list">
+      <article class="soft-item">
+        <div class="soft-title">WhatsApp</div>
+        <div class="soft-sub">${whatsapp?.configured ? 'Configuración lista para pruebas controladas.' : 'Todavía faltan variables del canal.'}</div>
+        <div class="soft-meta">Preferencia del usuario: ${whatsappRequested ? 'Solicitada' : 'Apagada'} · Plantilla: ${whatsapp?.template_ready ? 'Lista' : 'Pendiente'} · Access token: ${whatsapp?.access_token_ready ? 'OK' : 'Falta'}</div>
+      </article>
+
+      <article class="soft-item">
+        <div class="soft-title">Mercado Pago</div>
+        <div class="soft-sub">Podés dejar preparado el checkout del plan actual para probar el flujo de suscripciones.</div>
+        <div class="soft-meta">Plan: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'beta')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
+        <div class="soft-actions">
+          <button id="btn-checkout-plan-provincia" class="btn btn-primary soft-action" type="button"${token ? '' : ' disabled'}>Preparar checkout</button>
+        </div>
+      </article>
+    </div>
+  `;
+
+  const btn = document.getElementById('btn-checkout-plan-provincia');
+  btn?.addEventListener('click', async () => {
+    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+    if (!userId) return;
+
+    setButtonBusyProvincia(btn, 'Preparando...');
+    try {
+      const data = await crearCheckoutMercadoPago(userId, planCode);
+      if (data.checkout_url) {
+        window.open(data.checkout_url, '_blank', 'noopener');
+      } else {
+        window.alert(data.message || 'Se registró la sesión, pero todavía no hay checkout real configurado.');
+      }
+    } catch (err) {
+      console.error('ERROR CHECKOUT:', err);
+      window.alert(err?.message || 'No se pudo preparar el checkout');
+    } finally {
+      restoreButtonProvincia(btn);
+    }
+  });
+}
+
+async function cargarExtrasProvincia() {
+  const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
+
+  if (!token) {
+    stopRadarRotationProvincia();
+    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresá para ver el radar provincial.</p>');
+    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresá para ver el estado del backfill.</p>');
+    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresá para ver canales y checkout.</p>');
+    return;
+  }
+
+  const planInfo = currentPlanProvincia();
+
+  const [provincia, backfill, whatsapp] = await Promise.all([
+    obtenerProvinciaResumen().catch(err => {
+      console.error('ERROR RADAR PROVINCIAL:', err);
+      return null;
+    }),
+    obtenerProvinciaBackfillStatus().catch(err => {
+      console.error('ERROR BACKFILL STATUS:', err);
+      return null;
+    }),
+    obtenerWhatsAppHealth().catch(err => {
+      console.error('ERROR WHATSAPP HEALTH:', err);
+      return null;
+    })
+  ]);
+
+  renderProvincia(provincia);
+  renderBackfill(backfill);
+  renderCanalesProvincia(whatsapp, planInfo);
+}
+
+function bindProvinciaButtons() {
+  document.getElementById('btn-refresh-provincia')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-refresh-provincia');
+    setButtonBusyProvincia(btn, 'Refrescando...');
+    try {
+      await cargarExtrasProvincia();
+    } finally {
+      restoreButtonProvincia(btn);
+    }
+  });
+
+  document.getElementById('btn-provincia-step')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-provincia-step');
+    setButtonBusyProvincia(btn, 'Procesando...');
+    try {
+      await procesarProvinciaBackfill();
+      await cargarExtrasProvincia();
+    } catch (err) {
+      console.error('ERROR BACKFILL STEP:', err);
+      window.alert(err?.message || 'No se pudo procesar el lote provincial');
+    } finally {
+      restoreButtonProvincia(btn);
+    }
+  });
+
+  document.getElementById('btn-provincia-reset')?.addEventListener('click', async () => {
+    if (!window.confirm('Esto reinicia solo el cursor provincial. ¿Querés seguir?')) return;
+
+    const btn = document.getElementById('btn-provincia-reset');
+    setButtonBusyProvincia(btn, 'Reseteando...');
+    try {
+      await resetearProvinciaBackfill();
+      await cargarExtrasProvincia();
+    } catch (err) {
+      console.error('ERROR BACKFILL RESET:', err);
+      window.alert(err?.message || 'No se pudo reiniciar el cursor provincial');
+    } finally {
+      restoreButtonProvincia(btn);
+    }
+  });
+}
+
+if (typeof cargarDashboard === 'function') {
+  const cargarDashboardOriginal = cargarDashboard;
+  cargarDashboard = async function (...args) {
+    const result = await cargarDashboardOriginal.apply(this, args);
+    await cargarExtrasProvincia();
+    return result;
+  };
+}
+
+if (typeof logout === 'function') {
+  const logoutOriginal = logout;
+  logout = function (...args) {
+    stopRadarRotationProvincia();
+    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresá para ver el radar provincial.</p>');
+    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresá para ver el estado del backfill.</p>');
+    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresá para ver canales y checkout.</p>');
+    return logoutOriginal.apply(this, args);
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindProvinciaButtons();
+});
