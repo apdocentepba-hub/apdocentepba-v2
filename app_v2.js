@@ -24,10 +24,11 @@ const suggestionCache = new Map();
 const autocompleteStates = new Map();
 
 const catalogoAutocomplete = {
-  ready: false,
-  loading: null,
-  distritos: [],
-  cargos: []
+  distritos: {
+    ready: false,
+    loading: null,
+    items: []
+  }
 };
 
 function buildPlanFallback() {
@@ -183,52 +184,6 @@ async function supabaseFetch(path, options = {}) {
   } catch {
     throw new Error("Supabase devolvió JSON inválido");
   }
-}
-
-async function supabaseRangeFetch(path, from, to) {
-  const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
-    method: "GET",
-    headers: {
-      apikey: APD_SUPABASE_KEY,
-      Authorization: `Bearer ${APD_SUPABASE_KEY}`,
-      Range: `${from}-${to}`,
-      "Range-Unit": "items"
-    }
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    throw new Error(`Supabase ${res.status}: ${text}`);
-  }
-
-  try {
-    return text ? JSON.parse(text) : [];
-  } catch {
-    throw new Error("Supabase devolvió JSON inválido");
-  }
-}
-
-async function supabaseFetchAll(pathBase, pageSize = 1000, maxPages = 8) {
-  const out = [];
-
-  for (let page = 0; page < maxPages; page++) {
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
-    const rows = await supabaseRangeFetch(pathBase, from, to);
-
-    if (!Array.isArray(rows) || !rows.length) {
-      break;
-    }
-
-    out.push(...rows);
-
-    if (rows.length < pageSize) {
-      break;
-    }
-  }
-
-  return out;
 }
 
 async function workerFetchJson(path, options = {}) {
@@ -1474,26 +1429,21 @@ function labelsUnicos(rows) {
   return out.sort((a, b) => a.localeCompare(b, "es"));
 }
 
-async function cargarCatalogosAutocomplete() {
-  if (catalogoAutocomplete.ready) return catalogoAutocomplete;
-  if (catalogoAutocomplete.loading) return catalogoAutocomplete.loading;
+async function cargarCatalogoDistritosAutocomplete() {
+  if (catalogoAutocomplete.distritos.ready) return catalogoAutocomplete.distritos;
+  if (catalogoAutocomplete.distritos.loading) return catalogoAutocomplete.distritos.loading;
 
-  catalogoAutocomplete.loading = (async () => {
-    const [distritosRows, cargosRows] = await Promise.all([
-      supabaseFetch("catalogo_distritos?select=nombre,apd_nombre&order=nombre.asc"),
-      supabaseFetchAll("catalogo_cargos_areas?select=nombre,apd_nombre&order=nombre.asc", 1000, 8)
-    ]);
-
-    catalogoAutocomplete.distritos = labelsUnicos(distritosRows);
-    catalogoAutocomplete.cargos = labelsUnicos(cargosRows);
-    catalogoAutocomplete.ready = true;
-    return catalogoAutocomplete;
+  catalogoAutocomplete.distritos.loading = (async () => {
+    const distritosRows = await supabaseFetch("catalogo_distritos?select=nombre,apd_nombre&order=nombre.asc");
+    catalogoAutocomplete.distritos.items = labelsUnicos(distritosRows);
+    catalogoAutocomplete.distritos.ready = true;
+    return catalogoAutocomplete.distritos;
   })();
 
   try {
-    return await catalogoAutocomplete.loading;
+    return await catalogoAutocomplete.distritos.loading;
   } finally {
-    catalogoAutocomplete.loading = null;
+    catalogoAutocomplete.distritos.loading = null;
   }
 }
 
@@ -1509,8 +1459,8 @@ async function fetchSugerenciasRemotas(tipo, q) {
   }
 }
 
-function buscarSugerenciasLocales(tipo, q) {
-  const base = tipo === "distrito" ? catalogoAutocomplete.distritos : catalogoAutocomplete.cargos;
+function buscarSugerenciasLocalesDistritos(q) {
+  const base = catalogoAutocomplete.distritos.items;
   const needle = normalizarBusqueda(q);
 
   if (!needle) return [];
@@ -1541,6 +1491,47 @@ function buscarSugerenciasLocales(tipo, q) {
 
 function normalizeCacheKey(tipo, q) {
   return `${tipo}|${normalizarBusqueda(q)}`;
+}
+
+function mergeSuggestionItems(...groups) {
+  const out = [];
+  const seen = new Set();
+
+  groups.flat().forEach(item => {
+    const label = String(item?.label || "").trim();
+    const key = normalizarBusqueda(label);
+    if (!label || !key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ label });
+  });
+
+  return out;
+}
+
+async function buscarSugerenciasCargosSupabasePattern(pattern) {
+  const orFilter = encodeURIComponent(
+    `(nombre_norm.ilike.${pattern},apd_nombre_norm.ilike.${pattern})`
+  );
+
+  const rows = await supabaseFetch(
+    `catalogo_cargos_areas?select=nombre,apd_nombre,nombre_norm,apd_nombre_norm&or=${orFilter}&order=nombre.asc&limit=${AUTOCOMPLETE_LIMIT}`
+  );
+
+  return labelsUnicos(rows).slice(0, AUTOCOMPLETE_LIMIT).map(label => ({ label }));
+}
+
+async function buscarSugerenciasCargosSupabase(q) {
+  const needle = normalizarBusqueda(q);
+  if (!needle || needle.length < 2) return [];
+
+  const prefix = await buscarSugerenciasCargosSupabasePattern(`${needle}*`);
+
+  if (prefix.length >= AUTOCOMPLETE_LIMIT || needle.length < 3) {
+    return prefix;
+  }
+
+  const contains = await buscarSugerenciasCargosSupabasePattern(`*${needle}*`);
+  return mergeSuggestionItems(prefix, contains).slice(0, AUTOCOMPLETE_LIMIT);
 }
 
 function hideAC(state) {
@@ -1623,16 +1614,29 @@ async function buscarSugerenciasState(state) {
   try {
     let items = [];
 
-    try {
-      await cargarCatalogosAutocomplete();
-      items = buscarSugerenciasLocales(state.tipo, q);
-    } catch (err) {
-      console.error("ERROR CARGANDO CATALOGOS AC:", err);
-    }
+    if (state.tipo === "distrito") {
+      try {
+        await cargarCatalogoDistritosAutocomplete();
+        items = buscarSugerenciasLocalesDistritos(q);
+      } catch (err) {
+        console.error("ERROR CARGANDO CATALOGO DISTRITOS:", err);
+      }
 
-    if (!items.length) {
-      const data = await fetchSugerenciasRemotas(state.tipo, q);
-      items = data.ok && Array.isArray(data.items) ? data.items : [];
+      if (!items.length) {
+        const data = await fetchSugerenciasRemotas(state.tipo, q);
+        items = data.ok && Array.isArray(data.items) ? data.items : [];
+      }
+    } else {
+      try {
+        items = await buscarSugerenciasCargosSupabase(q);
+      } catch (err) {
+        console.error("ERROR BUSCANDO CARGOS EN SUPABASE:", err);
+      }
+
+      if (!items.length) {
+        const data = await fetchSugerenciasRemotas(state.tipo, q);
+        items = data.ok && Array.isArray(data.items) ? data.items : [];
+      }
     }
 
     if (requestId !== state.requestSeq) return;
@@ -1776,8 +1780,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ["pref-cargo-5", "sug-cargo-5", "cargo_area"]
   ].forEach(([inputId, listaId, tipo]) => activarAC(inputId, listaId, tipo));
 
-  cargarCatalogosAutocomplete().catch(err => {
-    console.error("ERROR PRELOAD AUTOCOMPLETE:", err);
+  cargarCatalogoDistritosAutocomplete().catch(err => {
+    console.error("ERROR PRELOAD DISTRITOS:", err);
   });
 
   initPwToggles();
