@@ -27,7 +27,9 @@ function mostrarSeccion(id) {
 window.mostrarSeccion = mostrarSeccion;
 
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
 }
 
 function guardarToken(token) {
@@ -40,10 +42,12 @@ function guardarToken(token) {
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
+
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
+
   return tokenMem || null;
 }
 
@@ -307,7 +311,9 @@ function initGoogleAuth(retries = 20) {
   if (googleInitDone) return;
 
   if (!window.google?.accounts?.id) {
-    if (retries > 0) setTimeout(() => initGoogleAuth(retries - 1), 300);
+    if (retries > 0) {
+      setTimeout(() => initGoogleAuth(retries - 1), 300);
+    }
     return;
   }
 
@@ -366,7 +372,12 @@ async function handleGoogleCredential(response) {
     }
 
     actualizarNav();
-    showMsg(target, data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto", "ok");
+    showMsg(
+      target,
+      data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto",
+      "ok"
+    );
+
     await cargarDashboard();
   } catch (err) {
     console.error(err);
@@ -378,6 +389,7 @@ async function obtenerMisAlertas(userId) {
   const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
   let data = null;
+
   try {
     data = await res.json();
   } catch {
@@ -521,20 +533,36 @@ function tituloAlerta(alerta) {
     .join(" · ") || "Oferta APD";
 }
 
-function renderPeekPreview(alerta, side, gotoIndex) {
+function renderWindowPreview(alerta, side, gotoIndex) {
   if (!alerta) return "";
 
   return `
     <button
       type="button"
-      class="alerta-peek alerta-peek-${side}"
+      class="alerta-window-preview alerta-window-preview-${side}"
       data-goto-index="${gotoIndex}"
       aria-label="Ir a ${esc(tituloAlerta(alerta))}"
     >
-      <div class="alerta-peek-chip">${side === "left" ? "Anterior" : "Siguiente"}</div>
-      <div class="alerta-peek-title">${esc(tituloAlerta(alerta))}</div>
-      <div class="alerta-peek-sub">${esc(alerta.escuela || alerta.distrito || "Oferta compatible")}</div>
+      <div class="alerta-windowbar alerta-windowbar-mini">
+        <span class="alerta-windowdot win-red"></span>
+        <span class="alerta-windowdot win-yellow"></span>
+        <span class="alerta-windowdot win-green"></span>
+      </div>
+      <div class="alerta-window-preview-side">${side === "left" ? "Anterior" : "Siguiente"}</div>
+      <div class="alerta-window-preview-title">${esc(tituloAlerta(alerta))}</div>
+      <div class="alerta-window-preview-sub">${esc(alerta.escuela || "Sin escuela")}</div>
+      <div class="alerta-window-preview-meta">${esc(alerta.distrito || "-")} · ${esc(turnoTexto(alerta.turno) || "-")}</div>
     </button>
+  `;
+}
+
+function renderProgress(total, current) {
+  const pct = total > 0 ? ((current + 1) / total) * 100 : 0;
+
+  return `
+    <div class="alerta-progress">
+      <span class="alerta-progress-bar" style="width:${pct}%"></span>
+    </div>
   `;
 }
 
@@ -595,50 +623,60 @@ function renderAlertaActual() {
   const next = total > 1 ? items[nextIndex] : null;
 
   box.innerHTML = `
-    <div class="alerta-stage">
-      ${prev ? renderPeekPreview(prev, "left", prevIndex) : ""}
-      ${next ? renderPeekPreview(next, "right", nextIndex) : ""}
+    <div class="alerta-carousel-shell">
+      <div class="alerta-stage">
+        ${prev ? renderWindowPreview(prev, "left", prevIndex) : ""}
+        ${next ? renderWindowPreview(next, "right", nextIndex) : ""}
 
-      <article class="alerta-floating alerta-main-card">
-        <div class="alerta-topbar">
-          <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
-          <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
-          <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
-        </div>
+        <article class="alerta-floating alerta-main-card">
+          <div class="alerta-windowbar">
+            <span class="alerta-windowdot win-red"></span>
+            <span class="alerta-windowdot win-yellow"></span>
+            <span class="alerta-windowdot win-green"></span>
+          </div>
 
-        <div class="alerta-tags">
-          ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
-          ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-          <span class="tag tag-estado">Activa</span>
-        </div>
+          <div class="alerta-topbar">
+            <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+            <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
+            <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+          </div>
 
-        <div class="alerta-title">${esc(titulo)}</div>
-        <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
+          ${renderProgress(total, alertasState.index)}
 
-        <div class="alerta-grid">
-          ${alertaRow("Distrito", a.distrito)}
-          ${alertaRow("Turno", turnoTexto(a.turno))}
-          ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
-          ${alertaRow("Jornada", a.jornada)}
-          ${alertaRow("Módulos", a.hsmodulos)}
-          ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
-          ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
-          ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
-          ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
-        </div>
+          <div class="alerta-tags">
+            ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
+            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+            <span class="tag tag-estado">Activa</span>
+          </div>
 
-        <div id="alerta-postulantes-meta" class="alerta-meta-card">
-          <div class="alerta-meta-head">Referencia de postulantes</div>
-          <div class="alerta-meta-loading">Cargando postulantes...</div>
-        </div>
+          <div class="alerta-title">${esc(titulo)}</div>
+          <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
 
-        <div class="alerta-actions">
-          ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
-        </div>
-      </article>
+          <div class="alerta-grid">
+            ${alertaRow("Distrito", a.distrito)}
+            ${alertaRow("Turno", turnoTexto(a.turno))}
+            ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
+            ${alertaRow("Jornada", a.jornada)}
+            ${alertaRow("Módulos", a.hsmodulos)}
+            ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
+            ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
+            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
+            ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+          </div>
+
+          <div id="alerta-postulantes-meta" class="alerta-meta-card">
+            <div class="alerta-meta-head">Referencia de postulantes</div>
+            <div class="alerta-meta-loading">Cargando postulantes...</div>
+          </div>
+
+          <div class="alerta-actions">
+            ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
+          </div>
+        </article>
+      </div>
+
+      ${renderDots(total, alertasState.index)}
     </div>
-
-    ${renderDots(total, alertasState.index)}
   `;
 
   box.querySelector("#alerta-prev")?.addEventListener("click", () => moverAlerta(-1));
@@ -931,6 +969,7 @@ function normalizarCursoDivision(v) {
 
 function turnoTexto(v) {
   const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+
   if (!items.length) return "";
 
   return items.map(x => {
@@ -947,7 +986,10 @@ function parseFechaFlexible(v) {
   const raw = String(v || "").trim();
   if (!raw) return null;
 
-  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const dmy = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+
   if (dmy) {
     const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
     return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
@@ -1065,6 +1107,7 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
+
   if (!input || !lista) return;
 
   input.addEventListener("input", debounce(async () => {
@@ -1085,10 +1128,16 @@ function activarAC(inputId, listaId, tipo) {
     }
   }));
 
-  input.addEventListener("blur", () => setTimeout(() => { lista.style.display = "none"; }, 150));
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      lista.style.display = "none";
+    }, 150);
+  });
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) input.dispatchEvent(new Event("input"));
+    if (input.value.trim().length >= 2) {
+      input.dispatchEvent(new Event("input"));
+    }
   });
 }
 
