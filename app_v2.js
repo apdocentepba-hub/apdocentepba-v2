@@ -2,12 +2,10 @@
 
 /* ══════════════════════════════════════════
    APDocentePBA — app_v2.js
-   Estado estable:
-   - Login: Cloudflare Worker
-   - Dashboard: Supabase directo por user.id
-   - Preferencias: Supabase
-   - Autocomplete: Google Script
-   - Google login: desactivado temporalmente
+   Versión alineada con:
+   - Cloudflare Worker
+   - Supabase user_preferences con arrays
+   - Google login desactivado temporalmente
 ══════════════════════════════════════════ */
 
 const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
@@ -22,7 +20,9 @@ const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
 function mostrarSeccion(id) {
   document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
   const dest = document.getElementById(id);
-  if (dest) dest.classList.remove("hidden");
+  if (dest) {
+    dest.classList.remove("hidden");
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -34,39 +34,38 @@ const TOKEN_KEY = "apd_token_v2";
 let tokenMem = null;
 
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
 }
 
 function guardarToken(token) {
   const limpio = String(token || "").trim();
+
   if (!limpio) {
-    console.warn("guardarToken recibió vacío");
     return false;
   }
 
   tokenMem = limpio;
   localStorage.setItem(TOKEN_KEY, limpio);
 
-  const leido = localStorage.getItem(TOKEN_KEY);
-  const ok = leido === limpio;
-
-  console.log("guardarToken()", { token: limpio, persistido: leido, ok });
-  return ok;
+  return localStorage.getItem(TOKEN_KEY) === limpio;
 }
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
+
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
+
   return tokenMem || null;
 }
 
 function borrarToken() {
   tokenMem = null;
   localStorage.removeItem(TOKEN_KEY);
-  console.log("borrarToken(): token eliminado");
 }
 
 /* ──────────────────────────────────────────
@@ -125,7 +124,7 @@ function btnRestore(btn) {
 }
 
 /* ──────────────────────────────────────────
-   HTTP GOOGLE (solo registro y sugerencias)
+   HTTP GOOGLE (registro y sugerencias)
 ────────────────────────────────────────── */
 
 async function post(payload) {
@@ -140,7 +139,6 @@ async function post(payload) {
   try {
     return JSON.parse(text);
   } catch {
-    console.error("No JSON:", text);
     throw new Error("El backend no devolvió JSON válido");
   }
 }
@@ -166,7 +164,11 @@ async function supabaseFetch(path, options = {}) {
     throw new Error(`Supabase ${res.status}: ${text}`);
   }
 
-  return text ? JSON.parse(text) : null;
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error("Supabase devolvió JSON inválido");
+  }
 }
 
 async function obtenerDocentePorId(userId) {
@@ -186,7 +188,7 @@ async function obtenerPreferenciasPorUserId(userId) {
 }
 
 async function upsertPreferencias(userId, payload) {
-  return supabaseFetch("user_preferences", {
+  return supabaseFetch("user_preferences?on_conflict=user_id", {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates,return=representation"
@@ -205,28 +207,6 @@ async function upsertPreferencias(userId, payload) {
       updated_at: new Date().toISOString()
     })
   });
-}
-async function supabaseUpsert(table, row, onConflict = "user_id") {
-  const res = await fetch(
-    `${APD_SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: APD_SUPABASE_KEY,
-        Authorization: `Bearer ${APD_SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=representation"
-      },
-      body: JSON.stringify(row)
-    }
-  );
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Supabase UPSERT ${table} ${res.status}: ${txt}`);
-  }
-
-  return res.json();
 }
 
 function adaptarPreferencias(prefRaw) {
@@ -255,38 +235,13 @@ function adaptarPreferencias(prefRaw) {
     distrito_principal: prefRaw.distrito_principal || "",
     segundo_distrito: otros[0] || "",
     tercer_distrito: otros[1] || "",
-    cargos_csv: cargos.join(","),
-    materias_csv: materias.join(","),
-    nivel_modalidad: niveles.join(","),
-    turnos_csv: turnos.join(","),
+    cargos_csv: cargos.join(", "),
+    materias_csv: materias.join(", "),
+    nivel_modalidad: niveles.join(", "),
+    turnos_csv: turnos.join(", "),
     alertas_activas: !!prefRaw.alertas_activas,
     alertas_email: !!prefRaw.alertas_email,
     alertas_whatsapp: !!prefRaw.alertas_whatsapp
-  };
-}
-
-async function construirDashboardDesdeSupabase(token) {
-  const docente = await obtenerDocentePorId(token);
-
-  if (!docente) {
-    return { ok: false, message: "Usuario no encontrado en Supabase" };
-  }
-
-  const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
-  const preferencias = adaptarPreferencias(preferenciasRaw);
-
-  return {
-    ok: true,
-    docente,
-    preferencias,
-    alertas: [],
-    historial: [],
-    estadisticas: {
-      total_alertas: 0,
-      alertas_leidas: 0,
-      alertas_no_leidas: 0,
-      ultimo_acceso: docente.ultimo_login || new Date().toISOString()
-    }
   };
 }
 
@@ -321,7 +276,7 @@ async function registrarDocente(e) {
     });
 
     if (data.ok) {
-      showMsg("registro-msg", data.message || "✓ Registro exitoso", "ok");
+      showMsg("registro-msg", data.message || "Registro exitoso", "ok");
       document.getElementById("form-registro")?.reset();
       setTimeout(() => mostrarSeccion("login"), 1200);
     } else {
@@ -350,8 +305,6 @@ async function loginPassword(e) {
     const email = val("login-email").trim();
     const password = val("login-password");
 
-    console.log("LOGIN INPUT:", { email });
-
     const res = await fetch(`${API_URL}/api/login`, {
       method: "POST",
       headers: {
@@ -361,15 +314,13 @@ async function loginPassword(e) {
     });
 
     let data = null;
+
     try {
       data = await res.json();
-    } catch (jsonErr) {
-      console.error("LOGIN JSON INVÁLIDO:", jsonErr);
+    } catch {
       showMsg("login-msg", "El Worker no devolvió JSON válido", "error");
       return;
     }
-
-    console.log("LOGIN RESPONSE:", data);
 
     if (!res.ok || !data?.ok || !data?.token) {
       showMsg("login-msg", data?.message || "Login incorrecto", "error");
@@ -379,7 +330,6 @@ async function loginPassword(e) {
     const token = String(data.token).trim();
 
     if (!esUUID(token)) {
-      console.error("TOKEN NO UUID:", token);
       showMsg("login-msg", "El login devolvió un token inválido", "error");
       return;
     }
@@ -391,13 +341,9 @@ async function loginPassword(e) {
       return;
     }
 
-    console.log("TOKEN DESPUÉS DE GUARDAR:", obtenerToken());
-
     actualizarNav();
-    showMsg("login-msg", "✓ Ingresando...", "ok");
-
+    showMsg("login-msg", "Ingresando...", "ok");
     await cargarDashboard();
-
   } catch (err) {
     console.error("ERROR LOGIN:", err);
     showMsg("login-msg", "Error de conexión. Intentá de nuevo.", "error");
@@ -405,26 +351,28 @@ async function loginPassword(e) {
     btnRestore(btn);
   }
 }
+
 async function handleGoogleLogin() {
-  console.log("Google login desactivado temporalmente");
   showMsg("login-msg", "Ingreso con Google desactivado temporalmente.", "error");
-  return;
 }
 
 window.handleGoogleLogin = handleGoogleLogin;
+window.mostrarSeccion = mostrarSeccion;
+
+/* ──────────────────────────────────────────
+   ALERTAS
+────────────────────────────────────────── */
 
 async function obtenerMisAlertas(userId) {
   const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json"
-    }
+    method: "GET"
   });
 
   let data = null;
+
   try {
     data = await res.json();
-  } catch (e) {
+  } catch {
     throw new Error("El Worker no devolvió JSON válido en /api/mis-alertas");
   }
 
@@ -433,6 +381,19 @@ async function obtenerMisAlertas(userId) {
   }
 
   return Array.isArray(data.resultados) ? data.resultados : [];
+}
+
+function alertaRow(label, value) {
+  if (!value) {
+    return "";
+  }
+
+  return `
+    <div class="alerta-row">
+      <span class="alerta-key">${esc(label)}</span>
+      <span class="alerta-val">${esc(String(value))}</span>
+    </div>
+  `;
 }
 
 function renderAlertasAPD(alertas) {
@@ -457,78 +418,32 @@ function renderAlertasAPD(alertas) {
     box.innerHTML = `
       <div class="empty-state">
         <p>No hay alertas compatibles todavía.</p>
-        <p class="empty-hint">Asegurate de configurar tu distrito y cargo/materia. Si dejás el turno en “Cualquier turno” se aceptan todos los turnos.</p>
+        <p class="empty-hint">Configurá distrito, cargo o materia, nivel y turno. Si dejás algo vacío, ese filtro no se aplica.</p>
       </div>
     `;
     return;
   }
 
   box.innerHTML = lista.map(a => `
-    <div class="alerta-item" style="border:1px solid #e5e7eb; border-radius:14px; padding:14px; margin-bottom:12px; background:#fff;">
-      <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
-        <strong>${esc(a.cargo || "-")}</strong>
-        <span style="font-size:12px; opacity:.8;">ID ${esc(a.iddetalle || "-")}</span>
+    <div class="alerta-card">
+      <div class="alerta-tags">
+        ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
+        ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+        <span class="tag tag-estado">Activa</span>
       </div>
-
-      <p><strong>Distrito:</strong> ${esc(a.distrito || "-")}</p>
-      <p><strong>Nivel / modalidad:</strong> ${esc(a.nivel_modalidad || "-")}</p>
-      <p><strong>Turno:</strong> ${esc(a.turno || "-")}</p>
-      <p><strong>Escuela:</strong> ${esc(a.escuela || "-")}</p>
-      <p><strong>Curso / división:</strong> ${esc(a.cursodivision || "-")}</p>
-      <p><strong>Módulos:</strong> ${esc(a.hsmodulos || "-")}</p>
-      <p><strong>Desde:</strong> ${fmtFecha(a.supl_desde || "-")}</p>
-      <p><strong>Hasta:</strong> ${fmtFecha(a.supl_hasta || "-")}</p>
-      <p><strong>Cierre:</strong> ${fmtFecha(a.finoferta || "-")}</p>
-      ${a.observaciones ? `<p><strong>Observaciones:</strong> ${esc(a.observaciones)}</p>` : ""}
-    </div>
-  `).join("");
-}
-async function obtenerMisAlertas(userId) {
-  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
-  const data = await res.json();
-
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
-  }
-
-  return Array.isArray(data.resultados) ? data.resultados : [];
-}
-
-function renderAlertasAPD(alertas) {
-  const box = document.getElementById("panel-alertas");
-  const badge = document.getElementById("alertas-badge");
-
-  if (!box) return;
-
-  const lista = Array.isArray(alertas) ? alertas : [];
-
-  if (badge) {
-    badge.textContent = lista.length ? String(lista.length) : "";
-  }
-
-  if (!lista.length) {
-    box.innerHTML = `
-      <div class="empty-state">
-        <p>No hay alertas compatibles todavía.</p>
-        <p class="empty-hint">Asegurate de configurar tu distrito y cargo/materia.</p>
+      <div class="alerta-titulo">${esc(a.cargo || a.area || "Oferta APD")}</div>
+      <div class="alerta-info">
+        ${alertaRow("Distrito", a.distrito)}
+        ${alertaRow("Área", a.area)}
+        ${alertaRow("Escuela", a.escuela)}
+        ${alertaRow("Curso/Div.", a.cursodivision)}
+        ${alertaRow("Jornada", a.jornada)}
+        ${alertaRow("Módulos", a.hsmodulos)}
+        ${alertaRow("Desde", fmtFecha(a.supl_desde))}
+        ${alertaRow("Hasta", fmtFecha(a.supl_hasta))}
+        ${alertaRow("Cierre", fmtFecha(a.finoferta))}
+        ${alertaRow("Observaciones", a.observaciones)}
       </div>
-    `;
-    return;
-  }
-
-  box.innerHTML = lista.map(a => `
-    <div style="border:1px solid #ddd; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff;">
-      <p><strong>${a.cargo || "-"}</strong></p>
-      <p><strong>Distrito:</strong> ${a.distrito || "-"}</p>
-      <p><strong>Nivel / modalidad:</strong> ${a.nivel_modalidad || "-"}</p>
-      <p><strong>Turno:</strong> ${a.turno || "-"}</p>
-      <p><strong>Escuela:</strong> ${a.escuela || "-"}</p>
-      <p><strong>Curso / división:</strong> ${a.cursodivision || "-"}</p>
-      <p><strong>Módulos:</strong> ${a.hsmodulos || "-"}</p>
-      <p><strong>Desde:</strong> ${a.supl_desde || "-"}</p>
-      <p><strong>Hasta:</strong> ${a.supl_hasta || "-"}</p>
-      <p><strong>Cierre:</strong> ${a.finoferta || "-"}</p>
-      ${a.observaciones ? `<p><strong>Observaciones:</strong> ${a.observaciones}</p>` : ""}
     </div>
   `).join("");
 }
@@ -562,9 +477,9 @@ async function cargarDashboard() {
     const preferencias = adaptarPreferencias(preferenciasRaw);
 
     let alertas = [];
+
     try {
       alertas = await obtenerMisAlertas(token);
-      console.log("ALERTAS APD:", alertas);
     } catch (e) {
       console.error("ERROR ALERTAS:", e);
       alertas = [];
@@ -579,13 +494,12 @@ async function cargarDashboard() {
         total_alertas: alertas.length,
         alertas_leidas: 0,
         alertas_no_leidas: alertas.length,
-        ultimo_acceso: new Date().toISOString()
+        ultimo_acceso: docente.ultimo_login || new Date().toISOString()
       }
     });
 
     cargarPrefsEnFormulario({ preferencias });
     actualizarNav();
-
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
@@ -594,9 +508,6 @@ async function cargarDashboard() {
     setPanelLoading(false);
   }
 }
-/* ──────────────────────────────────────────
-   RENDER DASHBOARD
-────────────────────────────────────────── */
 
 function renderDashboard(data) {
   const doc = data.docente || {};
@@ -609,24 +520,24 @@ function renderDashboard(data) {
   setText("panel-subtitulo", doc.email ? `Sesión: ${doc.email}` : "Panel docente");
 
   setHTML("panel-datos-docente", `
-    <p><strong>ID:</strong> ${doc.id || "-"}</p>
-    <p><strong>Nombre:</strong> ${nombre || "-"}</p>
-    <p><strong>Email:</strong> ${doc.email || "-"}</p>
-    <p><strong>Celular:</strong> ${doc.celular || "-"}</p>
-    <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Activo"}</p>
+    <p><strong>ID:</strong> ${esc(doc.id || "-")}</p>
+    <p><strong>Nombre:</strong> ${esc(nombre || "-")}</p>
+    <p><strong>Email:</strong> ${esc(doc.email || "-")}</p>
+    <p><strong>Celular:</strong> ${esc(doc.celular || "-")}</p>
+    <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Inactivo"}</p>
   `);
 
   const cargosDisplay = pref.cargos_csv || pref.materias_csv || "-";
 
   setHTML("panel-preferencias-resumen", `
-    <p><strong>Distrito:</strong> ${pref.distrito_principal || "-"}</p>
-    ${pref.segundo_distrito ? `<p><strong>2° distrito:</strong> ${pref.segundo_distrito}</p>` : ""}
-    ${pref.tercer_distrito ? `<p><strong>3° distrito:</strong> ${pref.tercer_distrito}</p>` : ""}
-    <p><strong>Cargos/Mat.:</strong> ${cargosDisplay}</p>
-    <p><strong>Nivel:</strong> ${pref.nivel_modalidad || "(cualquiera)"}</p>
-    <p><strong>Turno:</strong> ${pref.turnos_csv || "(cualquiera)"}</p>
-    <p><strong>Alertas:</strong> ${pref.alertas_activas ? "🔔 Activas" : "⏸ Pausadas"}</p>
-    <p><strong>Email:</strong> ${pref.alertas_email ? "✓ Sí" : "✗ No"}</p>
+    <p><strong>Distrito:</strong> ${esc(pref.distrito_principal || "-")}</p>
+    ${pref.segundo_distrito ? `<p><strong>2° distrito:</strong> ${esc(pref.segundo_distrito)}</p>` : ""}
+    ${pref.tercer_distrito ? `<p><strong>3° distrito:</strong> ${esc(pref.tercer_distrito)}</p>` : ""}
+    <p><strong>Cargos/Mat.:</strong> ${esc(cargosDisplay)}</p>
+    <p><strong>Nivel:</strong> ${esc(pref.nivel_modalidad || "(cualquiera)")}</p>
+    <p><strong>Turno:</strong> ${esc(turnoTexto(pref.turnos_csv) || "(cualquiera)")}</p>
+    <p><strong>Alertas:</strong> ${pref.alertas_activas ? "Activas" : "Pausadas"}</p>
+    <p><strong>Email:</strong> ${pref.alertas_email ? "Sí" : "No"}</p>
   `);
 
   setHTML("panel-estadisticas", `
@@ -635,59 +546,30 @@ function renderDashboard(data) {
       <div class="stat-box"><span class="stat-n">${stats.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
       <div class="stat-box"><span class="stat-n">${stats.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
     </div>
-    <p class="stat-acceso">Último acceso: ${stats.ultimo_acceso || "-"}</p>
+    <p class="stat-acceso">Último acceso: ${esc(fmtFecha(stats.ultimo_acceso || "-"))}</p>
   `);
 
   renderAlertasAPD(alts);
-
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
-}
-
-function renderAlertaCard(a) {
-  const turno = a.turno ? turnoTexto(a.turno) : "";
-  const cargoMat = a.cargo && a.materia && a.cargo !== a.materia
-    ? `${a.cargo} — ${a.materia}`
-    : (a.cargo || a.materia || "");
-
-  return `
-    <div class="alerta-card">
-      <div class="alerta-tags">
-        ${turno ? `<span class="tag tag-turno">${esc(turno)}</span>` : ""}
-        ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-        <span class="tag tag-estado">Publicada</span>
-      </div>
-      <div class="alerta-titulo">${esc(a.titulo || "APD")}</div>
-      <div class="alerta-info">
-        ${arow("Cargo/Mat.", cargoMat)}
-        ${arow("Distrito", a.distrito)}
-        ${arow("Escuela", a.escuela)}
-        ${a.domicilio ? arow("Domicilio", a.domicilio) : ""}
-        ${a.jornada ? arow("Jornada", a.jornada) : ""}
-        ${a.modulos ? arow("Módulos", a.modulos) : ""}
-        ${a.curso_division ? arow("Curso/Div.", a.curso_division) : ""}
-      </div>
-      ${a.fecha_cierre_fmt
-        ? `<div class="alerta-cierre">⏱ Cierre: ${esc(fmtFecha(a.fecha_cierre_fmt))}</div>`
-        : ""}
-    </div>`;
-}
-
-function arow(key, val) {
-  if (!val) return "";
-  return `<div class="alerta-row">
-    <span class="alerta-key">${esc(key)}</span>
-    <span class="alerta-val">${esc(String(val))}</span>
-  </div>`;
 }
 
 /* ──────────────────────────────────────────
    PREFERENCIAS — GUARDAR
 ────────────────────────────────────────── */
 
+function getNivelArray() {
+  return Array.from(
+    document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked')
+  )
+    .map(el => String(el.value || "").trim().toUpperCase())
+    .filter(Boolean);
+}
+
 async function guardarPreferencias(e) {
   e.preventDefault();
 
   const token = obtenerToken();
+
   if (!token) {
     showMsg("preferencias-msg", "Sesión no válida", "error");
     return;
@@ -697,43 +579,35 @@ async function guardarPreferencias(e) {
   btnLoad(btn, "Guardando...");
   showMsg("preferencias-msg", "Guardando preferencias...", "info");
 
-  const cargo1 = val("pref-cargo-1").toUpperCase().trim();
-  const cargo2 = val("pref-cargo-2").toUpperCase().trim();
-  const cargo3 = val("pref-cargo-3").toUpperCase().trim();
-  const cargoCSV = [cargo1, cargo2, cargo3].filter(Boolean).join(",");
+  const cargos = [
+    val("pref-cargo-1").toUpperCase().trim(),
+    val("pref-cargo-2").toUpperCase().trim(),
+    val("pref-cargo-3").toUpperCase().trim()
+  ].filter(Boolean);
 
-  const distritoPrincipal = val("pref-distrito-principal").toUpperCase().trim();
-  const segundoDistrito = val("pref-segundo-distrito").toUpperCase().trim();
-  const tercerDistrito = val("pref-tercer-distrito").toUpperCase().trim();
-  const otrosDistritos = [segundoDistrito, tercerDistrito].filter(Boolean).join(",");
+  const otrosDistritos = [
+    val("pref-segundo-distrito").toUpperCase().trim(),
+    val("pref-tercer-distrito").toUpperCase().trim()
+  ].filter(Boolean);
 
-  const turnos = val("pref-turnos").trim();
-  const nivelModalidad = getNivelCSV();
+  const turno = val("pref-turnos").trim();
 
-  const row = {
-    user_id: token,
-    distrito_principal: distritoPrincipal || null,
-    otros_distritos_c: otrosDistritos || null,
-    segundo_distrito: segundoDistrito || null,
-    tercer_distrito: tercerDistrito || null,
-    materias_csv: cargoCSV || null,
-    cargos_csv: cargoCSV || null,
-    turnos_csv: turnos || null,
-    nivel_modalidad: nivelModalidad || null,
+  const payload = {
+    distrito_principal: val("pref-distrito-principal").toUpperCase().trim() || null,
+    otros_distritos: otrosDistritos,
+    cargos,
+    materias: [],
+    niveles: getNivelArray(),
+    turnos: turno ? [turno] : [],
     alertas_activas: checked("pref-alertas-activas"),
     alertas_email: checked("pref-alertas-email"),
-    alertas_whatsapp: checked("pref-alertas-whatsapp"),
-    updated_at: new Date().toISOString()
+    alertas_whatsapp: checked("pref-alertas-whatsapp")
   };
 
-  console.log("UPSERT user_preferences:", row);
-
   try {
-    await supabaseUpsert("user_preferences", row, "user_id");
-
-    showMsg("preferencias-msg", "✓ Preferencias guardadas", "ok");
+    await upsertPreferencias(token, payload);
+    showMsg("preferencias-msg", "Preferencias guardadas", "ok");
     await cargarDashboard();
-
   } catch (err) {
     console.error("ERROR GUARDANDO PREFERENCIAS:", err);
     showMsg("preferencias-msg", "Error guardando preferencias", "error");
@@ -746,10 +620,23 @@ async function guardarPreferencias(e) {
    PREFERENCIAS — CARGAR EN FORMULARIO
 ────────────────────────────────────────── */
 
+function turnoSelectValue(v) {
+  const t = String(v || "").trim().toUpperCase();
+  if (t === "MANANA") return "M";
+  if (t === "TARDE") return "T";
+  if (t === "VESPERTINO") return "V";
+  if (t === "NOCHE") return "N";
+  if (t === "ALTERNADO") return "ALTERNADO";
+  return t;
+}
+
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
+    c.checked = false;
+  });
+
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -764,7 +651,8 @@ function cargarPrefsEnFormulario(data) {
   setVal("pref-cargo-2", cargos[1] || "");
   setVal("pref-cargo-3", cargos[2] || "");
 
-  setVal("pref-turnos", p.turnos_csv || "");
+  const turnoGuardado = splitCSV(p.turnos_csv || "")[0] || "";
+  setVal("pref-turnos", turnoSelectValue(turnoGuardado));
 
   if (p.nivel_modalidad) {
     const niveles = p.nivel_modalidad.split(",").map(s => s.trim().toUpperCase());
@@ -807,7 +695,10 @@ const setHTML = (id, h) => {
 };
 
 function splitCSV(s) {
-  return String(s || "").split(",").map(x => x.trim()).filter(Boolean);
+  return String(s || "")
+    .split(",")
+    .map(x => x.trim())
+    .filter(Boolean);
 }
 
 function esc(s) {
@@ -819,24 +710,35 @@ function esc(s) {
 }
 
 function turnoTexto(v) {
-  const t = String(v || "").trim().toUpperCase();
-  if (!t || t === "-") return "";
+  const valores = String(v || "")
+    .split(",")
+    .map(x => x.trim().toUpperCase())
+    .filter(Boolean);
 
-  return t.split(",").map(x => {
-    if (x === "M") return "Mañana";
-    if (x === "T") return "Tarde";
-    if (x === "V") return "Vespertino";
-    if (x === "N") return "Noche";
-    if (x === "ALTERNADO") return "Alternado";
+  if (!valores.length) {
+    return "";
+  }
+
+  return valores.map(x => {
+    if (x === "M" || x === "MANANA") return "Mañana";
+    if (x === "T" || x === "TARDE") return "Tarde";
+    if (x === "V" || x === "VESPERTINO") return "Vespertino";
+    if (x === "N" || x === "NOCHE") return "Noche";
+    if (x === "ALTERNADO" || x === "A") return "Alternado";
     return x;
-  }).filter(Boolean).join(", ");
+  }).join(", ");
 }
 
 function fmtFecha(v) {
   const t = String(v || "").trim();
-  if (!t || t === "-") return "-";
+
+  if (!t || t === "-") {
+    return "-";
+  }
+
   const d = new Date(t);
-  return isNaN(d.getTime()) ? t : d.toLocaleString("es-AR");
+
+  return Number.isNaN(d.getTime()) ? t : d.toLocaleString("es-AR");
 }
 
 /* ──────────────────────────────────────────
@@ -845,6 +747,7 @@ function fmtFecha(v) {
 
 function debounce(fn, ms = 320) {
   let timer;
+
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => fn.apply(this, args), ms);
@@ -864,7 +767,10 @@ function renderAC(lista, items, input) {
     return;
   }
 
-  lista.innerHTML = items.map(it => `<div class="ac-item">${esc(it.label || "")}</div>`).join("");
+  lista.innerHTML = items
+    .map(it => `<div class="ac-item">${esc(it.label || "")}</div>`)
+    .join("");
+
   lista.style.display = "block";
 
   lista.querySelectorAll(".ac-item").forEach(el => {
@@ -880,7 +786,10 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
-  if (!input || !lista) return;
+
+  if (!input || !lista) {
+    return;
+  }
 
   input.addEventListener("input", debounce(async () => {
     const q = input.value.trim();
@@ -894,15 +803,17 @@ function activarAC(inputId, listaId, tipo) {
     try {
       const data = await fetchSugerencias(tipo, q);
       renderAC(lista, data.ok ? data.items : [], input);
-    } catch (_) {
+    } catch {
       lista.innerHTML = "";
       lista.style.display = "none";
     }
   }));
 
-  input.addEventListener("blur", () => setTimeout(() => {
-    lista.style.display = "none";
-  }, 150));
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      lista.style.display = "none";
+    }, 150);
+  });
 
   input.addEventListener("focus", () => {
     if (input.value.trim().length >= 2) {
@@ -943,7 +854,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnRecargar = document.getElementById("btn-recargar-panel");
   if (btnRecargar) {
     btnRecargar.addEventListener("click", async () => {
-      btnLoad(btnRecargar, "↻ Recargando...");
+      btnLoad(btnRecargar, "Recargando...");
       try {
         await cargarDashboard();
       } catch (e) {
@@ -967,8 +878,8 @@ document.addEventListener("DOMContentLoaded", () => {
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
 
   initPwToggles();
-
   actualizarNav();
+
   if (obtenerToken()) {
     cargarDashboard();
   } else {
