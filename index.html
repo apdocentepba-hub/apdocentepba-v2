@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-
   <header class="header">
     <div class="header-inner">
       <div class="brand">
@@ -64,6 +64,7 @@
             <h2>Crear cuenta</h2>
             <p>Completá tus datos para empezar a recibir alertas</p>
           </div>
+
           <form id="form-registro" novalidate>
             <div class="grid-2">
               <div class="field">
@@ -75,6 +76,7 @@
                 <input type="text" id="reg-apellido" placeholder="Tu apellido" required autocomplete="family-name"/>
               </div>
             </div>
+
             <div class="grid-2">
               <div class="field">
                 <label for="reg-email">Email <span class="req">*</span></label>
@@ -85,6 +87,7 @@
                 <input type="text" id="reg-celular" placeholder="11 1234-5678" autocomplete="tel"/>
               </div>
             </div>
+
             <div class="field">
               <label for="reg-password">Contraseña <span class="req">*</span></label>
               <div class="pw-wrap">
@@ -92,14 +95,22 @@
                 <button type="button" class="pw-toggle" data-target="reg-password" tabindex="-1">👁</button>
               </div>
             </div>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button>
             </div>
+
             <div class="form-foot">¿Ya tenés cuenta?
               <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button>
             </div>
+
             <span id="registro-msg" class="msg"></span>
           </form>
+
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap">
+            <div id="google-btn-registro"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -111,11 +122,13 @@
             <h2>Iniciar sesión</h2>
             <p>Ingresá para ver tus alertas y preferencias</p>
           </div>
+
           <form id="form-login" novalidate>
             <div class="field">
               <label for="login-email">Email</label>
               <input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"/>
             </div>
+
             <div class="field">
               <label for="login-password">Contraseña</label>
               <div class="pw-wrap">
@@ -123,14 +136,22 @@
                 <button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button>
               </div>
             </div>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary btn-full">Ingresar</button>
             </div>
+
             <div class="form-foot">¿No tenés cuenta?
               <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate gratis</button>
             </div>
+
             <span id="login-msg" class="msg"></span>
           </form>
+
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap">
+            <div id="google-btn-login"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -185,10 +206,14 @@
 
         <div class="panel-card prefs-card">
           <div class="card-lbl">✏️ Configurar mis preferencias de alerta</div>
-          <p class="prefs-hint">Las alertas se muestran cuando un APD coincide con tu distrito, cargo o materia, nivel y turno. Si dejás un campo vacío, ese filtro no se aplica.</p>
+          <p class="prefs-hint">Si dejás distritos o cargos vacíos, ese filtro no se aplica.</p>
 
           <form id="form-preferencias">
-            <div class="sec-label">Distritos</div>
+            <div class="sec-head">
+              <div class="sec-label">Distritos</div>
+              <button id="btn-clear-distritos" class="mini-btn" type="button">Quitar filtro</button>
+            </div>
+
             <div class="grid-3">
               <div class="field">
                 <label for="pref-distrito-principal">Distrito principal</label>
@@ -207,7 +232,11 @@
               </div>
             </div>
 
-            <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 3 — dejá vacío para no filtrar)</span></div>
+            <div class="sec-head">
+              <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 3)</span></div>
+              <button id="btn-clear-cargos" class="mini-btn" type="button">Quitar filtro</button>
+            </div>
+
             <div class="grid-3">
               <div class="field">
                 <label for="pref-cargo-1">Cargo / Materia 1</label>
@@ -241,7 +270,7 @@
               </div>
             </div>
 
-            <div class="sec-label">Nivel / Modalidad <span class="hint-sm">(podés elegir más de uno — sin selección = cualquier nivel)</span></div>
+            <div class="sec-label">Nivel / Modalidad <span class="hint-sm">(sin selección = cualquiera)</span></div>
             <div id="pref-nivel-modalidad-box" class="checks-grid">
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="INICIAL"><span class="chk-lbl">Inicial</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PRIMARIO"><span class="chk-lbl">Primario</span></label>
@@ -259,15 +288,15 @@
             <div class="notif-grid">
               <label class="chk-card chk-notif">
                 <input type="checkbox" id="pref-alertas-activas"/>
-                <div><span class="chk-lbl">🔔 Alertas activas</span><span class="chk-sub">Recibir alertas de APD compatibles</span></div>
+                <div><span class="chk-lbl">🔔 Alertas activas</span><span class="chk-sub">Recibir alertas compatibles</span></div>
               </label>
               <label class="chk-card chk-notif">
                 <input type="checkbox" id="pref-alertas-email"/>
-                <div><span class="chk-lbl">📧 Email</span><span class="chk-sub">Notificación por correo electrónico</span></div>
+                <div><span class="chk-lbl">📧 Email</span><span class="chk-sub">Enviar resumen por correo</span></div>
               </label>
               <label class="chk-card chk-notif">
                 <input type="checkbox" id="pref-alertas-whatsapp"/>
-                <div><span class="chk-lbl">💬 WhatsApp</span><span class="chk-sub">Próximamente disponible</span></div>
+                <div><span class="chk-lbl">💬 WhatsApp</span><span class="chk-sub">Próximamente</span></div>
               </label>
             </div>
 
@@ -285,6 +314,6 @@
     <div class="footer-inner">APDocentePBA · Sistema gratuito de alertas para docentes PBA · 2026</div>
   </footer>
 
-  <script src="app_v2.js?v=7"></script>
+  <script src="app_v2.js?v=8"></script>
 </body>
 </html>
