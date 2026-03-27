@@ -7,7 +7,8 @@ const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
 const GOOGLE_CLIENT_ID = "650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.googleusercontent.com";
 
 const TOKEN_KEY = "apd_token_v2";
-const AUTOCOMPLETE_DEBOUNCE_MS = 120;
+const AUTOCOMPLETE_DEBOUNCE_MS = 90;
+const AUTOCOMPLETE_LIMIT = 12;
 
 let tokenMem = null;
 let googleInitDone = false;
@@ -21,6 +22,13 @@ const alertasState = {
 const postulantesResumenCache = new Map();
 const suggestionCache = new Map();
 const autocompleteStates = new Map();
+
+const catalogoAutocomplete = {
+  ready: false,
+  loading: null,
+  distritos: [],
+  cargos: []
+};
 
 function buildPlanFallback() {
   return {
@@ -177,8 +185,55 @@ async function supabaseFetch(path, options = {}) {
   }
 }
 
+async function supabaseRangeFetch(path, from, to) {
+  const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
+    method: "GET",
+    headers: {
+      apikey: APD_SUPABASE_KEY,
+      Authorization: `Bearer ${APD_SUPABASE_KEY}`,
+      Range: `${from}-${to}`,
+      "Range-Unit": "items"
+    }
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+
+  try {
+    return text ? JSON.parse(text) : [];
+  } catch {
+    throw new Error("Supabase devolvió JSON inválido");
+  }
+}
+
+async function supabaseFetchAll(pathBase, pageSize = 1000, maxPages = 8) {
+  const out = [];
+
+  for (let page = 0; page < maxPages; page++) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const rows = await supabaseRangeFetch(pathBase, from, to);
+
+    if (!Array.isArray(rows) || !rows.length) {
+      break;
+    }
+
+    out.push(...rows);
+
+    if (rows.length < pageSize) {
+      break;
+    }
+  }
+
+  return out;
+}
+
 async function workerFetchJson(path, options = {}) {
   const headers = { ...(options.headers || {}) };
+
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -1063,7 +1118,7 @@ function limpiarDistritos() {
     "sug-distrito-3",
     "sug-distrito-4",
     "sug-distrito-5"
-  ].forEach(id => limpiarListaAC(id));
+  ].forEach(limpiarListaAC);
 }
 
 function limpiarCargos() {
@@ -1081,7 +1136,7 @@ function limpiarCargos() {
     "sug-cargo-3",
     "sug-cargo-4",
     "sug-cargo-5"
-  ].forEach(id => limpiarListaAC(id));
+  ].forEach(limpiarListaAC);
 }
 
 function limpiarListaAC(id) {
@@ -1392,15 +1447,57 @@ function debounce(fn, ms = AUTOCOMPLETE_DEBOUNCE_MS) {
   return wrapped;
 }
 
-function autocompleteMinChars(tipo) {
-  return tipo === "distrito" ? 1 : 2;
+function normalizarBusqueda(v) {
+  return String(v || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function normalizeCacheKey(tipo, q) {
-  return `${tipo}|${String(q || "").trim().toUpperCase()}`;
+function labelsUnicos(rows) {
+  const out = [];
+  const seen = new Set();
+
+  (Array.isArray(rows) ? rows : []).forEach(row => {
+    [row?.nombre, row?.apd_nombre].forEach(raw => {
+      const label = String(raw || "").trim();
+      const key = normalizarBusqueda(label);
+      if (!label || !key || seen.has(key)) return;
+      seen.add(key);
+      out.push(label.toUpperCase());
+    });
+  });
+
+  return out.sort((a, b) => a.localeCompare(b, "es"));
 }
 
-async function fetchSugerencias(tipo, q) {
+async function cargarCatalogosAutocomplete() {
+  if (catalogoAutocomplete.ready) return catalogoAutocomplete;
+  if (catalogoAutocomplete.loading) return catalogoAutocomplete.loading;
+
+  catalogoAutocomplete.loading = (async () => {
+    const [distritosRows, cargosRows] = await Promise.all([
+      supabaseFetch("catalogo_distritos?select=nombre,apd_nombre&order=nombre.asc"),
+      supabaseFetchAll("catalogo_cargos_areas?select=nombre,apd_nombre&order=nombre.asc", 1000, 8)
+    ]);
+
+    catalogoAutocomplete.distritos = labelsUnicos(distritosRows);
+    catalogoAutocomplete.cargos = labelsUnicos(cargosRows);
+    catalogoAutocomplete.ready = true;
+    return catalogoAutocomplete;
+  })();
+
+  try {
+    return await catalogoAutocomplete.loading;
+  } finally {
+    catalogoAutocomplete.loading = null;
+  }
+}
+
+async function fetchSugerenciasRemotas(tipo, q) {
   const url = `${APD_WEB_APP_URL}?accion=sugerencias&tipo=${encodeURIComponent(tipo)}&q=${encodeURIComponent(q)}`;
   const res = await fetch(url);
   const text = await res.text();
@@ -1410,6 +1507,40 @@ async function fetchSugerencias(tipo, q) {
   } catch {
     return { ok: false, items: [] };
   }
+}
+
+function buscarSugerenciasLocales(tipo, q) {
+  const base = tipo === "distrito" ? catalogoAutocomplete.distritos : catalogoAutocomplete.cargos;
+  const needle = normalizarBusqueda(q);
+
+  if (!needle) return [];
+
+  const starts = [];
+  const includes = [];
+
+  for (const label of base) {
+    const hay = normalizarBusqueda(label);
+
+    if (!hay) continue;
+
+    if (hay.startsWith(needle)) {
+      starts.push({ label });
+      continue;
+    }
+
+    if (hay.includes(needle)) {
+      includes.push({ label });
+    }
+
+    if (starts.length >= AUTOCOMPLETE_LIMIT) break;
+    if (starts.length + includes.length >= AUTOCOMPLETE_LIMIT * 3) break;
+  }
+
+  return [...starts, ...includes].slice(0, AUTOCOMPLETE_LIMIT);
+}
+
+function normalizeCacheKey(tipo, q) {
+  return `${tipo}|${normalizarBusqueda(q)}`;
 }
 
 function hideAC(state) {
@@ -1436,7 +1567,7 @@ function setACActive(state, index) {
 function seleccionarAC(state, index) {
   const item = state.items[index];
   if (!item) return;
-  state.input.value = String(item.label || item.value || "").trim();
+  state.input.value = String(item.label || "").trim();
   hideAC(state);
 }
 
@@ -1448,37 +1579,39 @@ function renderACItems(state, items) {
 
   state.items = items;
   state.activeIndex = 0;
+
   state.lista.innerHTML = items.map((it, i) => `
     <div class="ac-item ${i === 0 ? "is-active" : ""}" data-index="${i}">
       ${esc(it.label || "")}
     </div>
   `).join("");
+
   state.lista.style.display = "block";
 
   state.lista.querySelectorAll(".ac-item").forEach(el => {
-    const index = Number(el.dataset.index);
+    const idx = Number(el.dataset.index);
 
     el.addEventListener("mouseenter", () => {
-      setACActive(state, index);
+      setACActive(state, idx);
     });
 
     el.addEventListener("mousedown", ev => {
       ev.preventDefault();
-      seleccionarAC(state, index);
+      seleccionarAC(state, idx);
     });
   });
 }
 
 async function buscarSugerenciasState(state) {
   const q = state.input.value.trim();
-  const minChars = autocompleteMinChars(state.tipo);
 
-  if (q.length < minChars) {
+  if (!q) {
     hideAC(state);
     return;
   }
 
   const cacheKey = normalizeCacheKey(state.tipo, q);
+
   if (suggestionCache.has(cacheKey)) {
     renderACItems(state, suggestionCache.get(cacheKey));
     return;
@@ -1488,12 +1621,23 @@ async function buscarSugerenciasState(state) {
   const requestId = ++state.requestSeq;
 
   try {
-    const data = await fetchSugerencias(state.tipo, q);
+    let items = [];
+
+    try {
+      await cargarCatalogosAutocomplete();
+      items = buscarSugerenciasLocales(state.tipo, q);
+    } catch (err) {
+      console.error("ERROR CARGANDO CATALOGOS AC:", err);
+    }
+
+    if (!items.length) {
+      const data = await fetchSugerenciasRemotas(state.tipo, q);
+      items = data.ok && Array.isArray(data.items) ? data.items : [];
+    }
 
     if (requestId !== state.requestSeq) return;
     if (state.input.value.trim() !== q) return;
 
-    const items = data.ok ? (Array.isArray(data.items) ? data.items : []) : [];
     suggestionCache.set(cacheKey, items);
     renderACItems(state, items);
   } catch {
@@ -1571,8 +1715,7 @@ function activarAC(inputId, listaId, tipo) {
   });
 
   input.addEventListener("focus", () => {
-    const minChars = autocompleteMinChars(tipo);
-    if (input.value.trim().length >= minChars) {
+    if (input.value.trim()) {
       state.search.flush();
     }
   });
@@ -1632,6 +1775,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ["pref-cargo-4", "sug-cargo-4", "cargo_area"],
     ["pref-cargo-5", "sug-cargo-5", "cargo_area"]
   ].forEach(([inputId, listaId, tipo]) => activarAC(inputId, listaId, tipo));
+
+  cargarCatalogosAutocomplete().catch(err => {
+    console.error("ERROR PRELOAD AUTOCOMPLETE:", err);
+  });
 
   initPwToggles();
   initGoogleAuth();
