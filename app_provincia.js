@@ -97,6 +97,13 @@ async function obtenerWhatsAppHealth() {
   return workerFetchJson('/api/whatsapp/health');
 }
 
+async function enviarWhatsAppTest(userId) {
+  return workerFetchJson('/api/whatsapp/test-send', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId })
+  });
+}
+
 async function crearCheckoutMercadoPago(userId, planCode) {
   return workerFetchJson('/api/mercadopago/create-checkout-link', {
     method: 'POST',
@@ -152,7 +159,7 @@ function startRadarRotationProvincia(items) {
     ? items
     : [{ title: 'Radar provincial', text: 'Todavía no hay suficiente historial provincial para construir insights serios.' }];
 
-  let index = 0;
+  let index = list.length > 1 ? Math.floor(Math.random() * list.length) : 0;
 
   function paint() {
     const item = list[index % list.length];
@@ -205,6 +212,8 @@ function renderProvincia(data) {
       <span class="chip">Desiertas: ${fmtProvinciaNum(data.state_breakdown?.desiertas || 0)}</span>
       <span class="chip">Cerradas: ${fmtProvinciaNum(data.state_breakdown?.cerradas || 0)}</span>
     </div>
+
+    ${data.coverage_hint ? `<p class="prefs-hint" style="margin-bottom:14px">${escProvincia(data.coverage_hint)}</p>` : ''}
 
     <div class="radar-columns">
       <div class="radar-box">
@@ -301,7 +310,10 @@ function renderCanalesProvincia(whatsapp, planInfo) {
       <article class="soft-item">
         <div class="soft-title">WhatsApp</div>
         <div class="soft-sub">${whatsapp?.configured ? 'Configuración lista para pruebas controladas.' : 'Todavía faltan variables del canal.'}</div>
-        <div class="soft-meta">Preferencia del usuario: ${whatsappRequested ? 'Solicitada' : 'Apagada'} · Plantilla: ${whatsapp?.template_ready ? 'Lista' : 'Pendiente'} · Access token: ${whatsapp?.access_token_ready ? 'OK' : 'Falta'}</div>
+        <div class="soft-meta">Preferencia del usuario: ${whatsappRequested ? 'Solicitada' : 'Apagada'} · Plantilla: ${escProvincia(whatsapp?.template_name || 'Pendiente')} (${escProvincia(whatsapp?.template_lang || '-')}) · Access token: ${whatsapp?.access_token_ready ? 'OK' : 'Falta'}</div>
+        <div class="soft-actions">
+          <button id="btn-whatsapp-test" class="btn btn-secondary soft-action" type="button"${token && whatsapp?.configured ? '' : ' disabled'}>Enviar prueba</button>
+        </div>
       </article>
 
       <article class="soft-item">
@@ -333,6 +345,25 @@ function renderCanalesProvincia(whatsapp, planInfo) {
       window.alert(err?.message || 'No se pudo preparar el checkout');
     } finally {
       restoreButtonProvincia(btn);
+    }
+  });
+
+  const waBtn = document.getElementById('btn-whatsapp-test');
+  waBtn?.addEventListener('click', async () => {
+    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+    if (!userId) return;
+
+    setButtonBusyProvincia(waBtn, 'Enviando...');
+    try {
+      const data = await enviarWhatsAppTest(userId);
+      window.alert(data?.message
+        ? `${data.message}${data.destination ? ` a ${data.destination}` : ''}`
+        : 'Prueba de WhatsApp enviada');
+    } catch (err) {
+      console.error('ERROR WHATSAPP TEST:', err);
+      window.alert(err?.message || 'No se pudo enviar la prueba de WhatsApp');
+    } finally {
+      restoreButtonProvincia(waBtn);
     }
   });
 }
