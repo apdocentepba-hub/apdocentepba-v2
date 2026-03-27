@@ -27,9 +27,7 @@ function mostrarSeccion(id) {
 window.mostrarSeccion = mostrarSeccion;
 
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    String(v || "").trim()
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
 }
 
 function guardarToken(token) {
@@ -42,12 +40,10 @@ function guardarToken(token) {
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
-
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
-
   return tokenMem || null;
 }
 
@@ -311,9 +307,7 @@ function initGoogleAuth(retries = 20) {
   if (googleInitDone) return;
 
   if (!window.google?.accounts?.id) {
-    if (retries > 0) {
-      setTimeout(() => initGoogleAuth(retries - 1), 300);
-    }
+    if (retries > 0) setTimeout(() => initGoogleAuth(retries - 1), 300);
     return;
   }
 
@@ -372,12 +366,7 @@ async function handleGoogleCredential(response) {
     }
 
     actualizarNav();
-    showMsg(
-      target,
-      data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto",
-      "ok"
-    );
-
+    showMsg(target, data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto", "ok");
     await cargarDashboard();
   } catch (err) {
     console.error(err);
@@ -389,7 +378,6 @@ async function obtenerMisAlertas(userId) {
   const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
   let data = null;
-
   try {
     data = await res.json();
   } catch {
@@ -427,14 +415,8 @@ function irAAlerta(index) {
 
 function buildPostulantesUrl(alerta) {
   const params = new URLSearchParams();
-
-  if (alerta?.idoferta) {
-    params.set("oferta", String(alerta.idoferta).trim());
-  }
-
-  if (alerta?.iddetalle) {
-    params.set("detalle", String(alerta.iddetalle).trim());
-  }
+  if (alerta?.idoferta) params.set("oferta", String(alerta.idoferta).trim());
+  if (alerta?.iddetalle) params.set("detalle", String(alerta.iddetalle).trim());
 
   return params.toString()
     ? `http://servicios.abc.gov.ar/actos.publicos.digitales/postulantes/?${params.toString()}`
@@ -444,10 +426,7 @@ function buildPostulantesUrl(alerta) {
 function formatPuntaje(v) {
   const n = Number(v);
   return Number.isFinite(n)
-    ? n.toLocaleString("es-AR", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      })
+    ? n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : "-";
 }
 
@@ -523,7 +502,6 @@ async function cargarResumenPostulantes(alerta) {
 
     const actual = alertasState.items[alertasState.index];
     const currentKey = `${String(actual?.idoferta || "").trim()}|${String(actual?.iddetalle || "").trim()}`;
-
     if (currentKey !== key) return;
 
     renderResumenPostulantes(box, data);
@@ -536,13 +514,6 @@ async function cargarResumenPostulantes(alerta) {
   }
 }
 
-function getAlertAtOffset(offset) {
-  const total = alertasState.items.length;
-  if (!total) return null;
-  const idx = (alertasState.index + offset + total) % total;
-  return alertasState.items[idx] || null;
-}
-
 function tituloAlerta(alerta) {
   return [alerta?.cargo, alerta?.area]
     .filter(Boolean)
@@ -550,30 +521,26 @@ function tituloAlerta(alerta) {
     .join(" · ") || "Oferta APD";
 }
 
-function renderStackPreview(alerta, depth, label, gotoIndex) {
+function renderPeekPreview(alerta, side, gotoIndex) {
   if (!alerta) return "";
-
-  const titulo = tituloAlerta(alerta);
-  const sub = alerta.distrito || alerta.escuela || "Oferta compatible";
 
   return `
     <button
       type="button"
-      class="alerta-stack-card alerta-stack-card-${depth}"
+      class="alerta-peek alerta-peek-${side}"
       data-goto-index="${gotoIndex}"
-      aria-label="Ir a ${esc(titulo)}"
+      aria-label="Ir a ${esc(tituloAlerta(alerta))}"
     >
-      <div class="alerta-stack-content">
-        <span class="alerta-stack-label">${esc(label)}</span>
-        <strong class="alerta-stack-title">${esc(titulo)}</strong>
-        <span class="alerta-stack-sub">${esc(sub)}</span>
-      </div>
+      <div class="alerta-peek-chip">${side === "left" ? "Anterior" : "Siguiente"}</div>
+      <div class="alerta-peek-title">${esc(tituloAlerta(alerta))}</div>
+      <div class="alerta-peek-sub">${esc(alerta.escuela || alerta.distrito || "Oferta compatible")}</div>
     </button>
   `;
 }
 
 function renderDots(total, current) {
   if (total <= 1) return "";
+
   return `
     <div class="alerta-dots" aria-label="Navegación de alertas">
       ${Array.from({ length: total }, (_, i) => `
@@ -621,16 +588,16 @@ function renderAlertaActual() {
   const titulo = tituloAlerta(a);
   const abcUrl = buildPostulantesUrl(a);
 
-  const next1Index = total > 1 ? (alertasState.index + 1) % total : -1;
-  const next2Index = total > 2 ? (alertasState.index + 2) % total : -1;
+  const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
+  const nextIndex = total > 1 ? (alertasState.index + 1) % total : -1;
 
-  const next1 = total > 1 ? items[next1Index] : null;
-  const next2 = total > 2 ? items[next2Index] : null;
+  const prev = total > 1 ? items[prevIndex] : null;
+  const next = total > 1 ? items[nextIndex] : null;
 
   box.innerHTML = `
-    <div class="alerta-deck">
-      ${next2 ? renderStackPreview(next2, 2, "Después", next2Index) : ""}
-      ${next1 ? renderStackPreview(next1, 1, "Siguiente", next1Index) : ""}
+    <div class="alerta-stage">
+      ${prev ? renderPeekPreview(prev, "left", prevIndex) : ""}
+      ${next ? renderPeekPreview(next, "right", nextIndex) : ""}
 
       <article class="alerta-floating alerta-main-card">
         <div class="alerta-topbar">
@@ -651,12 +618,12 @@ function renderAlertaActual() {
         <div class="alerta-grid">
           ${alertaRow("Distrito", a.distrito)}
           ${alertaRow("Turno", turnoTexto(a.turno))}
-          ${alertaRow("Curso/Div.", normalizarCursoDivision(a.cursodivision))}
+          ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
           ${alertaRow("Jornada", a.jornada)}
           ${alertaRow("Módulos", a.hsmodulos)}
-          ${alertaRow("Desde", fmtFechaABC(a.supl_desde, "date"))}
-          ${alertaRow("Hasta", fmtFechaABC(a.supl_hasta, "date"))}
-          ${alertaRow("Cierre", fmtFechaABC(a.finoferta, "datetime"))}
+          ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
+          ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
+          ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
           ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
         </div>
 
@@ -763,10 +730,7 @@ function renderDashboard(data) {
   const pref = data.preferencias || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
-
+  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
   const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
@@ -890,10 +854,7 @@ function turnoSelectValue(v) {
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
-    c.checked = false;
-  });
-
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -970,7 +931,6 @@ function normalizarCursoDivision(v) {
 
 function turnoTexto(v) {
   const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
-
   if (!items.length) return "";
 
   return items.map(x => {
@@ -987,10 +947,7 @@ function parseFechaFlexible(v) {
   const raw = String(v || "").trim();
   if (!raw) return null;
 
-  const dmy = raw.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
-  );
-
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (dmy) {
     const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
     return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
@@ -1014,15 +971,7 @@ function parseAbcLiteralDate(v) {
 
   if (iso) {
     const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = iso;
-    return {
-      dd,
-      mm,
-      yyyy,
-      hh,
-      mi,
-      ss,
-      hasTime: iso[4] != null
-    };
+    return { dd, mm, yyyy, hh, mi, ss, hasTime: iso[4] != null };
   }
 
   const dmy = raw.match(
@@ -1071,10 +1020,7 @@ function fmtFecha(v) {
   if (!d) return raw;
   if (d.getFullYear() >= 9999) return "Sin fecha";
 
-  const onlyDate =
-    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) ||
-    /^\d{4}-\d{2}-\d{2}$/.test(raw);
-
+  const onlyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw);
   const options = onlyDate
     ? { day: "2-digit", month: "2-digit", year: "numeric" }
     : { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" };
@@ -1084,7 +1030,6 @@ function fmtFecha(v) {
 
 function debounce(fn, ms = 320) {
   let timer;
-
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => fn.apply(this, args), ms);
@@ -1120,7 +1065,6 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
-
   if (!input || !lista) return;
 
   input.addEventListener("input", debounce(async () => {
@@ -1141,16 +1085,10 @@ function activarAC(inputId, listaId, tipo) {
     }
   }));
 
-  input.addEventListener("blur", () => {
-    setTimeout(() => {
-      lista.style.display = "none";
-    }, 150);
-  });
+  input.addEventListener("blur", () => setTimeout(() => { lista.style.display = "none"; }, 150));
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) {
-      input.dispatchEvent(new Event("input"));
-    }
+    if (input.value.trim().length >= 2) input.dispatchEvent(new Event("input"));
   });
 }
 
@@ -1174,11 +1112,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-logout")?.addEventListener("click", logout);
   document.getElementById("btnCerrarSesion")?.addEventListener("click", logout);
-
   document.getElementById("btnLogin")?.addEventListener("click", () => mostrarSeccion("login"));
   document.getElementById("btnRegistro")?.addEventListener("click", () => mostrarSeccion("registro"));
   document.getElementById("btnMiPanel")?.addEventListener("click", () => cargarDashboard());
-
   document.getElementById("btn-clear-distritos")?.addEventListener("click", limpiarDistritos);
   document.getElementById("btn-clear-cargos")?.addEventListener("click", limpiarCargos);
 
@@ -1197,7 +1133,6 @@ document.addEventListener("DOMContentLoaded", () => {
   activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
   activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
   activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
-
   activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
   activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
