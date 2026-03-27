@@ -9,7 +9,17 @@ const GOOGLE_CLIENT_ID = "650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.goo
 const TOKEN_KEY = "apd_token_v2";
 let tokenMem = null;
 let googleInitDone = false;
-const alertasState = { items: [], index: 0 };
+
+const alertasState = {
+  items: [],
+  index: 0
+};
+
+const postulantesResumenCache = new Map();
+
+/* ──────────────────────────────────────────
+   NAVEGACIÓN
+────────────────────────────────────────── */
 
 function mostrarSeccion(id) {
   document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
@@ -20,24 +30,35 @@ function mostrarSeccion(id) {
 
 window.mostrarSeccion = mostrarSeccion;
 
+/* ──────────────────────────────────────────
+   TOKEN / SESIÓN
+────────────────────────────────────────── */
+
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
 }
 
 function guardarToken(token) {
   const limpio = String(token || "").trim();
+
   if (!limpio) return false;
+
   tokenMem = limpio;
   localStorage.setItem(TOKEN_KEY, limpio);
+
   return localStorage.getItem(TOKEN_KEY) === limpio;
 }
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
+
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
+
   return tokenMem || null;
 }
 
@@ -45,6 +66,10 @@ function borrarToken() {
   tokenMem = null;
   localStorage.removeItem(TOKEN_KEY);
 }
+
+/* ──────────────────────────────────────────
+   NAV
+────────────────────────────────────────── */
 
 function actualizarNav() {
   const ok = !!obtenerToken();
@@ -69,6 +94,10 @@ function limpiarMsgs() {
   });
 }
 
+/* ──────────────────────────────────────────
+   MENSAJES
+────────────────────────────────────────── */
+
 function showMsg(id, texto, tipo = "info") {
   const el = document.getElementById(id);
   if (!el) return;
@@ -80,6 +109,10 @@ function authMsgTarget() {
   const registroVisible = !document.getElementById("registro")?.classList.contains("hidden");
   return registroVisible ? "registro-msg" : "login-msg";
 }
+
+/* ──────────────────────────────────────────
+   BOTONES
+────────────────────────────────────────── */
 
 function btnLoad(btn, txt) {
   if (!btn) return;
@@ -93,6 +126,10 @@ function btnRestore(btn) {
   btn.disabled = false;
   btn.textContent = btn.dataset.orig || btn.textContent;
 }
+
+/* ──────────────────────────────────────────
+   HTTP GOOGLE SCRIPT
+────────────────────────────────────────── */
 
 async function post(payload) {
   const res = await fetch(APD_WEB_APP_URL, {
@@ -109,6 +146,10 @@ async function post(payload) {
     throw new Error("El backend no devolvió JSON válido");
   }
 }
+
+/* ──────────────────────────────────────────
+   SUPABASE
+────────────────────────────────────────── */
 
 async function supabaseFetch(path, options = {}) {
   const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
@@ -206,10 +247,18 @@ function adaptarPreferencias(prefRaw) {
   };
 }
 
+/* ──────────────────────────────────────────
+   PANEL LOADING
+────────────────────────────────────────── */
+
 function setPanelLoading(activo) {
   document.getElementById("panel-loading")?.classList.toggle("hidden", !activo);
   document.getElementById("panel-content")?.classList.toggle("hidden", activo);
 }
+
+/* ──────────────────────────────────────────
+   REGISTRO
+────────────────────────────────────────── */
 
 async function registrarDocente(e) {
   e.preventDefault();
@@ -243,6 +292,10 @@ async function registrarDocente(e) {
   }
 }
 
+/* ──────────────────────────────────────────
+   LOGIN
+────────────────────────────────────────── */
+
 async function loginPassword(e) {
   e.preventDefault();
 
@@ -261,6 +314,7 @@ async function loginPassword(e) {
     });
 
     let data = null;
+
     try {
       data = await res.json();
     } catch {
@@ -296,10 +350,17 @@ async function loginPassword(e) {
   }
 }
 
+/* ──────────────────────────────────────────
+   GOOGLE LOGIN
+────────────────────────────────────────── */
+
 function initGoogleAuth(retries = 20) {
   if (googleInitDone) return;
+
   if (!window.google?.accounts?.id) {
-    if (retries > 0) setTimeout(() => initGoogleAuth(retries - 1), 300);
+    if (retries > 0) {
+      setTimeout(() => initGoogleAuth(retries - 1), 300);
+    }
     return;
   }
 
@@ -318,7 +379,8 @@ function initGoogleAuth(retries = 20) {
       theme: "outline",
       size: "large",
       text: "signin_with",
-      shape: "pill"
+      shape: "pill",
+      width: 320
     });
   }
 
@@ -327,7 +389,8 @@ function initGoogleAuth(retries = 20) {
       theme: "outline",
       size: "large",
       text: "signup_with",
-      shape: "pill"
+      shape: "pill",
+      width: 320
     });
   }
 }
@@ -356,7 +419,12 @@ async function handleGoogleCredential(response) {
     }
 
     actualizarNav();
-    showMsg(target, data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto", "ok");
+    showMsg(
+      target,
+      data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto",
+      "ok"
+    );
+
     await cargarDashboard();
   } catch (err) {
     console.error(err);
@@ -364,8 +432,13 @@ async function handleGoogleCredential(response) {
   }
 }
 
+/* ──────────────────────────────────────────
+   ALERTAS
+────────────────────────────────────────── */
+
 async function obtenerMisAlertas(userId) {
   const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
+
   let data = null;
 
   try {
@@ -389,9 +462,136 @@ function renderAlertasAPD(alertas) {
 
 function moverAlerta(step) {
   const total = alertasState.items.length;
+
   if (!total) return;
+
   alertasState.index = (alertasState.index + step + total) % total;
   renderAlertaActual();
+}
+
+function buildPostulantesUrl(alerta) {
+  const params = new URLSearchParams();
+
+  if (alerta?.idoferta) {
+    params.set("oferta", String(alerta.idoferta).trim());
+  }
+
+  if (alerta?.iddetalle) {
+    params.set("detalle", String(alerta.iddetalle).trim());
+  }
+
+  return params.toString()
+    ? `https://servicios.abc.gov.ar/actos.publicos.digitales/postulantes/?${params.toString()}`
+    : "";
+}
+
+function formatPuntaje(v) {
+  const n = Number(v);
+
+  return Number.isFinite(n)
+    ? n.toLocaleString("es-AR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
+    : "-";
+}
+
+function titleCaseName(v) {
+  return String(v || "")
+    .toLowerCase()
+    .replace(/\b\p{L}/gu, c => c.toUpperCase());
+}
+
+function renderResumenPostulantes(box, data) {
+  const total = Number(data?.total_postulantes || 0);
+
+  if (!total) {
+    box.innerHTML = `
+      <div class="alerta-meta-head">Referencia de postulantes</div>
+      <div class="alerta-meta-empty">Todavía no hay postulantes visibles para esta oferta.</div>
+    `;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="alerta-meta-head">Referencia de postulantes</div>
+    <div class="alerta-meta-grid">
+      <div class="alerta-meta-item">
+        <span class="alerta-meta-k">Postulantes</span>
+        <strong class="alerta-meta-v">${total}</strong>
+      </div>
+      <div class="alerta-meta-item">
+        <span class="alerta-meta-k">Puntaje del primero</span>
+        <strong class="alerta-meta-v">${formatPuntaje(data.puntaje_primero)}</strong>
+      </div>
+      <div class="alerta-meta-item">
+        <span class="alerta-meta-k">Primero en lista</span>
+        <strong class="alerta-meta-v">${esc(titleCaseName(data.nombre_primero || "-"))}</strong>
+      </div>
+      <div class="alerta-meta-item">
+        <span class="alerta-meta-k">Listado</span>
+        <strong class="alerta-meta-v">${esc(data.listado_origen_primero || "-")}</strong>
+      </div>
+    </div>
+  `;
+}
+
+async function cargarResumenPostulantes(alerta) {
+  const box = document.getElementById("alerta-postulantes-meta");
+
+  if (!box) return;
+
+  const oferta = String(alerta?.idoferta || "").trim();
+  const detalle = String(alerta?.iddetalle || "").trim();
+
+  if (!oferta && !detalle) {
+    box.innerHTML = `
+      <div class="alerta-meta-head">Referencia de postulantes</div>
+      <div class="alerta-meta-empty">Esta oferta no trae identificadores para consultar postulantes.</div>
+    `;
+    return;
+  }
+
+  const key = `${oferta}|${detalle}`;
+
+  if (postulantesResumenCache.has(key)) {
+    renderResumenPostulantes(box, postulantesResumenCache.get(key));
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="alerta-meta-head">Referencia de postulantes</div>
+    <div class="alerta-meta-loading">Cargando postulantes...</div>
+  `;
+
+  try {
+    const res = await fetch(
+      `${API_URL}/api/postulantes-resumen?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.message || data?.error || "No se pudo consultar la lista");
+    }
+
+    postulantesResumenCache.set(key, data);
+
+    const actual = alertasState.items[alertasState.index];
+    const currentKey = `${String(actual?.idoferta || "").trim()}|${String(actual?.iddetalle || "").trim()}`;
+
+    if (currentKey !== key) {
+      return;
+    }
+
+    renderResumenPostulantes(box, data);
+  } catch (err) {
+    console.error("ERROR POSTULANTES:", err);
+    box.innerHTML = `
+      <div class="alerta-meta-head">Referencia de postulantes</div>
+      <div class="alerta-meta-error">No se pudo leer la lista de postulantes.</div>
+    `;
+  }
 }
 
 function renderAlertaActual() {
@@ -423,7 +623,12 @@ function renderAlertaActual() {
   }
 
   const a = items[alertasState.index];
-  const titulo = [a.cargo, a.area].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
+  const titulo = [a.cargo, a.area]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(" · ") || "Oferta APD";
+
+  const abcUrl = a.abc_postulantes_url || buildPostulantesUrl(a);
 
   box.innerHTML = `
     <div class="alerta-floating">
@@ -453,16 +658,29 @@ function renderAlertaActual() {
         ${alertaRow("Cierre", fmtFecha(a.finoferta))}
         ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
       </div>
+
+      <div id="alerta-postulantes-meta" class="alerta-meta-card">
+        <div class="alerta-meta-head">Referencia de postulantes</div>
+        <div class="alerta-meta-loading">Cargando postulantes...</div>
+      </div>
+
+      <div class="alerta-actions">
+        ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Ver postulantes ABC</a>` : ""}
+      </div>
     </div>
   `;
 
   box.querySelector("#alerta-prev")?.addEventListener("click", () => moverAlerta(-1));
   box.querySelector("#alerta-next")?.addEventListener("click", () => moverAlerta(1));
+
+  cargarResumenPostulantes(a);
 }
 
 function alertaRow(label, value) {
   const v = String(value || "").trim();
+
   if (!v) return "";
+
   return `
     <div class="alerta-row">
       <span class="alerta-key">${esc(label)}</span>
@@ -470,6 +688,10 @@ function alertaRow(label, value) {
     </div>
   `;
 }
+
+/* ──────────────────────────────────────────
+   DASHBOARD
+────────────────────────────────────────── */
 
 async function cargarDashboard() {
   const token = obtenerToken();
@@ -495,6 +717,7 @@ async function cargarDashboard() {
     const preferencias = adaptarPreferencias(await obtenerPreferenciasPorUserId(token));
 
     let alertas = [];
+
     try {
       alertas = await obtenerMisAlertas(token);
     } catch (e) {
@@ -531,7 +754,10 @@ function renderDashboard(data) {
   const pref = data.preferencias || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
+  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito]
+    .filter(Boolean)
+    .join(" / ") || "(sin filtro)";
+
   const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
@@ -569,6 +795,10 @@ function renderDashboard(data) {
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
 }
 
+/* ──────────────────────────────────────────
+   PREFERENCIAS
+────────────────────────────────────────── */
+
 function getNivelArray() {
   return Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
     .map(el => String(el.value || "").trim().toUpperCase())
@@ -579,6 +809,7 @@ async function guardarPreferencias(e) {
   e.preventDefault();
 
   const token = obtenerToken();
+
   if (!token) {
     showMsg("preferencias-msg", "Sesión no válida", "error");
     return;
@@ -644,18 +875,23 @@ function limpiarListaAC(id) {
 
 function turnoSelectValue(v) {
   const t = String(v || "").trim().toUpperCase();
+
   if (t === "MANANA") return "M";
   if (t === "TARDE") return "T";
   if (t === "VESPERTINO") return "V";
   if (t === "NOCHE") return "N";
   if (t === "ALTERNADO") return "ALTERNADO";
+
   return t;
 }
 
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
+    c.checked = false;
+  });
+
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -684,6 +920,10 @@ function cargarPrefsEnFormulario(data) {
   setCheck("pref-alertas-email", !!p.alertas_email);
   setCheck("pref-alertas-whatsapp", !!p.alertas_whatsapp);
 }
+
+/* ──────────────────────────────────────────
+   HELPERS
+────────────────────────────────────────── */
 
 const val = id => (document.getElementById(id)?.value || "").trim();
 
@@ -723,15 +963,22 @@ function esc(s) {
 
 function normalizarCursoDivision(v) {
   let s = String(v || "").trim();
+
   if (!s) return "-";
+
   s = s.replace(/Â°/g, "°").replace(/º/g, "°").replace(/�/g, "°");
   s = s.replace(/(\d)\s*°\s*(\d)\s*°?/g, "$1°$2°");
   s = s.replace(/\s+/g, " ").trim();
+
   return s || "-";
 }
 
 function turnoTexto(v) {
-  const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+  const items = String(v || "")
+    .split(",")
+    .map(x => x.trim().toUpperCase())
+    .filter(Boolean);
+
   if (!items.length) return "";
 
   return items.map(x => {
@@ -746,9 +993,13 @@ function turnoTexto(v) {
 
 function parseFechaFlexible(v) {
   const raw = String(v || "").trim();
+
   if (!raw) return null;
 
-  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const dmy = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+
   if (dmy) {
     const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
     return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
@@ -760,14 +1011,19 @@ function parseFechaFlexible(v) {
 
 function fmtFecha(v) {
   const raw = String(v || "").trim();
+
   if (!raw || raw === "-") return "-";
   if (raw.includes("9999")) return "Sin fecha";
 
   const d = parseFechaFlexible(raw);
+
   if (!d) return raw;
   if (d.getFullYear() >= 9999) return "Sin fecha";
 
-  const onlyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const onlyDate =
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) ||
+    /^\d{4}-\d{2}-\d{2}$/.test(raw);
+
   const options = onlyDate
     ? { day: "2-digit", month: "2-digit", year: "numeric" }
     : { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" };
@@ -775,8 +1031,13 @@ function fmtFecha(v) {
   return new Intl.DateTimeFormat("es-AR", options).format(d);
 }
 
+/* ──────────────────────────────────────────
+   AUTOCOMPLETE
+────────────────────────────────────────── */
+
 function debounce(fn, ms = 320) {
   let timer;
+
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => fn.apply(this, args), ms);
@@ -812,6 +1073,7 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
+
   if (!input || !lista) return;
 
   input.addEventListener("input", debounce(async () => {
@@ -832,12 +1094,22 @@ function activarAC(inputId, listaId, tipo) {
     }
   }));
 
-  input.addEventListener("blur", () => setTimeout(() => { lista.style.display = "none"; }, 150));
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      lista.style.display = "none";
+    }, 150);
+  });
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) input.dispatchEvent(new Event("input"));
+    if (input.value.trim().length >= 2) {
+      input.dispatchEvent(new Event("input"));
+    }
   });
 }
+
+/* ──────────────────────────────────────────
+   PASSWORD TOGGLE
+────────────────────────────────────────── */
 
 function initPwToggles() {
   document.querySelectorAll(".pw-toggle").forEach(btn => {
@@ -852,6 +1124,10 @@ function initPwToggles() {
   });
 }
 
+/* ──────────────────────────────────────────
+   INIT
+────────────────────────────────────────── */
+
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("form-registro")?.addEventListener("submit", registrarDocente);
   document.getElementById("form-login")?.addEventListener("submit", loginPassword);
@@ -859,9 +1135,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-logout")?.addEventListener("click", logout);
   document.getElementById("btnCerrarSesion")?.addEventListener("click", logout);
+
   document.getElementById("btnLogin")?.addEventListener("click", () => mostrarSeccion("login"));
   document.getElementById("btnRegistro")?.addEventListener("click", () => mostrarSeccion("registro"));
   document.getElementById("btnMiPanel")?.addEventListener("click", () => cargarDashboard());
+
   document.getElementById("btn-clear-distritos")?.addEventListener("click", limpiarDistritos);
   document.getElementById("btn-clear-cargos")?.addEventListener("click", limpiarCargos);
 
@@ -880,6 +1158,7 @@ document.addEventListener("DOMContentLoaded", () => {
   activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
   activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
   activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
+
   activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
   activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
