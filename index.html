@@ -208,6 +208,7 @@
         <div class="panel-card prefs-card">
           <div class="card-lbl">✏️ Configurar mis preferencias de alerta</div>
           <p class="prefs-hint">Si dejás distritos o cargos vacíos, ese filtro no se aplica.</p>
+          <p class="prefs-hint">Beta actual: ya podés elegir hasta 5 distritos y hasta 5 cargos/materias.</p>
 
           <form id="form-preferencias">
             <div class="sec-head">
@@ -233,8 +234,21 @@
               </div>
             </div>
 
+            <div class="grid-2">
+              <div class="field">
+                <label for="pref-cuarto-distrito">Cuarto distrito</label>
+                <input type="text" id="pref-cuarto-distrito" placeholder="Ej: LOMAS DE ZAMORA" autocomplete="off"/>
+                <div id="sug-distrito-4" class="ac-list"></div>
+              </div>
+              <div class="field">
+                <label for="pref-quinto-distrito">Quinto distrito</label>
+                <input type="text" id="pref-quinto-distrito" placeholder="Ej: BERAZATEGUI" autocomplete="off"/>
+                <div id="sug-distrito-5" class="ac-list"></div>
+              </div>
+            </div>
+
             <div class="sec-head">
-              <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 3)</span></div>
+              <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 5)</span></div>
               <button id="btn-clear-cargos" class="mini-btn" type="button">Quitar filtro</button>
             </div>
 
@@ -253,6 +267,19 @@
                 <label for="pref-cargo-3">Cargo / Materia 3</label>
                 <input type="text" id="pref-cargo-3" placeholder="Ej: INGLÉS" autocomplete="off"/>
                 <div id="sug-cargo-3" class="ac-list"></div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label for="pref-cargo-4">Cargo / Materia 4</label>
+                <input type="text" id="pref-cargo-4" placeholder="Ej: HISTORIA" autocomplete="off"/>
+                <div id="sug-cargo-4" class="ac-list"></div>
+              </div>
+              <div class="field">
+                <label for="pref-cargo-5">Cargo / Materia 5</label>
+                <input type="text" id="pref-cargo-5" placeholder="Ej: BIOLOGÍA" autocomplete="off"/>
+                <div id="sug-cargo-5" class="ac-list"></div>
               </div>
             </div>
 
@@ -276,13 +303,13 @@
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="INICIAL"><span class="chk-lbl">Inicial</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PRIMARIO"><span class="chk-lbl">Primario</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SECUNDARIO"><span class="chk-lbl">Secundario</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SUPERIOR FORMACION DOCENTE INICIAL"><span class="chk-lbl">Superior / Form. Docente</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SUPERIOR"><span class="chk-lbl">Superior / Form. Docente</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ESPECIAL"><span class="chk-lbl">Ed. Especial</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION DE JOVENES, ADULTOS Y ADULTOS MAYORES"><span class="chk-lbl">Jóvenes y Adultos</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="ADULTOS"><span class="chk-lbl">Jóvenes y Adultos</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION FISICA"><span class="chk-lbl">Ed. Física</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PSICOLOGIA COMUNITARIA Y PEDAGOGIA SOCIAL"><span class="chk-lbl">Psicología Comunitaria</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PSICOLOGIA"><span class="chk-lbl">Psicología Comunitaria</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ARTISTICA"><span class="chk-lbl">Ed. Artística</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION TECNICO-PROFESIONAL"><span class="chk-lbl">Técnico-Profesional</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="TECNICO PROFESIONAL"><span class="chk-lbl">Técnico-Profesional</span></label>
             </div>
 
             <div class="sec-label">Notificaciones</div>
@@ -315,6 +342,6 @@
     <div class="footer-inner">APDocentePBA · Sistema gratuito de alertas para docentes PBA · 2026</div>
   </footer>
 
-  <script src="app_v2.js?v=9"></script>
+  <script src="app_v2.js?v=10"></script>
 </body>
 </html>
