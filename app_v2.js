@@ -1,65 +1,43 @@
 'use strict';
 
-/* ══════════════════════════════════════════
-   APDocentePBA — app_v2.js
-   Versión alineada con:
-   - Cloudflare Worker
-   - Supabase user_preferences con arrays
-   - Google login desactivado temporalmente
-══════════════════════════════════════════ */
-
 const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
 const APD_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 const APD_SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
 const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
+const GOOGLE_CLIENT_ID = "650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.googleusercontent.com";
 
-/* ──────────────────────────────────────────
-   NAVEGACIÓN
-────────────────────────────────────────── */
+const TOKEN_KEY = "apd_token_v2";
+let tokenMem = null;
+let googleInitDone = false;
+const alertasState = { items: [], index: 0 };
 
 function mostrarSeccion(id) {
   document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
   const dest = document.getElementById(id);
-  if (dest) {
-    dest.classList.remove("hidden");
-  }
+  if (dest) dest.classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-/* ──────────────────────────────────────────
-   TOKEN / SESIÓN
-────────────────────────────────────────── */
-
-const TOKEN_KEY = "apd_token_v2";
-let tokenMem = null;
+window.mostrarSeccion = mostrarSeccion;
 
 function esUUID(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    String(v || "").trim()
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "").trim());
 }
 
 function guardarToken(token) {
   const limpio = String(token || "").trim();
-
-  if (!limpio) {
-    return false;
-  }
-
+  if (!limpio) return false;
   tokenMem = limpio;
   localStorage.setItem(TOKEN_KEY, limpio);
-
   return localStorage.getItem(TOKEN_KEY) === limpio;
 }
 
 function obtenerToken() {
   const ls = localStorage.getItem(TOKEN_KEY);
-
   if (ls && String(ls).trim()) {
     tokenMem = String(ls).trim();
     return tokenMem;
   }
-
   return tokenMem || null;
 }
 
@@ -67,10 +45,6 @@ function borrarToken() {
   tokenMem = null;
   localStorage.removeItem(TOKEN_KEY);
 }
-
-/* ──────────────────────────────────────────
-   NAV
-────────────────────────────────────────── */
 
 function actualizarNav() {
   const ok = !!obtenerToken();
@@ -95,10 +69,6 @@ function limpiarMsgs() {
   });
 }
 
-/* ──────────────────────────────────────────
-   MENSAJES
-────────────────────────────────────────── */
-
 function showMsg(id, texto, tipo = "info") {
   const el = document.getElementById(id);
   if (!el) return;
@@ -106,9 +76,10 @@ function showMsg(id, texto, tipo = "info") {
   el.className = `msg msg-${tipo}`;
 }
 
-/* ──────────────────────────────────────────
-   BOTONES
-────────────────────────────────────────── */
+function authMsgTarget() {
+  const registroVisible = !document.getElementById("registro")?.classList.contains("hidden");
+  return registroVisible ? "registro-msg" : "login-msg";
+}
 
 function btnLoad(btn, txt) {
   if (!btn) return;
@@ -122,10 +93,6 @@ function btnRestore(btn) {
   btn.disabled = false;
   btn.textContent = btn.dataset.orig || btn.textContent;
 }
-
-/* ──────────────────────────────────────────
-   HTTP GOOGLE (registro y sugerencias)
-────────────────────────────────────────── */
 
 async function post(payload) {
   const res = await fetch(APD_WEB_APP_URL, {
@@ -142,10 +109,6 @@ async function post(payload) {
     throw new Error("El backend no devolvió JSON válido");
   }
 }
-
-/* ──────────────────────────────────────────
-   SUPABASE
-────────────────────────────────────────── */
 
 async function supabaseFetch(path, options = {}) {
   const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
@@ -172,17 +135,15 @@ async function supabaseFetch(path, options = {}) {
 }
 
 async function obtenerDocentePorId(userId) {
-  const safeUserId = encodeURIComponent(userId);
   const rows = await supabaseFetch(
-    `users?id=eq.${safeUserId}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
   );
   return rows?.[0] || null;
 }
 
 async function obtenerPreferenciasPorUserId(userId) {
-  const safeUserId = encodeURIComponent(userId);
   const rows = await supabaseFetch(
-    `user_preferences?user_id=eq.${safeUserId}&select=*`
+    `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=*`
   );
   return rows?.[0] || null;
 }
@@ -245,18 +206,10 @@ function adaptarPreferencias(prefRaw) {
   };
 }
 
-/* ──────────────────────────────────────────
-   PANEL LOADING
-────────────────────────────────────────── */
-
 function setPanelLoading(activo) {
   document.getElementById("panel-loading")?.classList.toggle("hidden", !activo);
   document.getElementById("panel-content")?.classList.toggle("hidden", activo);
 }
-
-/* ──────────────────────────────────────────
-   REGISTRO
-────────────────────────────────────────── */
 
 async function registrarDocente(e) {
   e.preventDefault();
@@ -290,10 +243,6 @@ async function registrarDocente(e) {
   }
 }
 
-/* ──────────────────────────────────────────
-   LOGIN
-────────────────────────────────────────── */
-
 async function loginPassword(e) {
   e.preventDefault();
 
@@ -302,19 +251,16 @@ async function loginPassword(e) {
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const email = val("login-email").trim();
-    const password = val("login-password");
-
     const res = await fetch(`${API_URL}/api/login`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email, password })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: val("login-email").trim(),
+        password: val("login-password")
+      })
     });
 
     let data = null;
-
     try {
       data = await res.json();
     } catch {
@@ -334,9 +280,7 @@ async function loginPassword(e) {
       return;
     }
 
-    const persistido = guardarToken(token);
-
-    if (!persistido) {
+    if (!guardarToken(token)) {
       showMsg("login-msg", "No se pudo guardar la sesión en el navegador", "error");
       return;
     }
@@ -345,29 +289,83 @@ async function loginPassword(e) {
     showMsg("login-msg", "Ingresando...", "ok");
     await cargarDashboard();
   } catch (err) {
-    console.error("ERROR LOGIN:", err);
+    console.error(err);
     showMsg("login-msg", "Error de conexión. Intentá de nuevo.", "error");
   } finally {
     btnRestore(btn);
   }
 }
 
-async function handleGoogleLogin() {
-  showMsg("login-msg", "Ingreso con Google desactivado temporalmente.", "error");
-}
+function initGoogleAuth(retries = 20) {
+  if (googleInitDone) return;
+  if (!window.google?.accounts?.id) {
+    if (retries > 0) setTimeout(() => initGoogleAuth(retries - 1), 300);
+    return;
+  }
 
-window.handleGoogleLogin = handleGoogleLogin;
-window.mostrarSeccion = mostrarSeccion;
+  googleInitDone = true;
 
-/* ──────────────────────────────────────────
-   ALERTAS
-────────────────────────────────────────── */
-
-async function obtenerMisAlertas(userId) {
-  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`, {
-    method: "GET"
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential
   });
 
+  const loginBox = document.getElementById("google-btn-login");
+  const regBox = document.getElementById("google-btn-registro");
+
+  if (loginBox) {
+    google.accounts.id.renderButton(loginBox, {
+      theme: "outline",
+      size: "large",
+      text: "signin_with",
+      shape: "pill"
+    });
+  }
+
+  if (regBox) {
+    google.accounts.id.renderButton(regBox, {
+      theme: "outline",
+      size: "large",
+      text: "signup_with",
+      shape: "pill"
+    });
+  }
+}
+
+async function handleGoogleCredential(response) {
+  const target = authMsgTarget();
+  showMsg(target, "Validando Google...", "info");
+
+  try {
+    const res = await fetch(`${API_URL}/api/google-auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential: response?.credential || "" })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok || !data?.token) {
+      showMsg(target, data?.message || "No se pudo ingresar con Google", "error");
+      return;
+    }
+
+    if (!guardarToken(data.token)) {
+      showMsg(target, "No se pudo guardar la sesión", "error");
+      return;
+    }
+
+    actualizarNav();
+    showMsg(target, data?.mode === "register" ? "Cuenta creada con Google" : "Ingreso con Google correcto", "ok");
+    await cargarDashboard();
+  } catch (err) {
+    console.error(err);
+    showMsg(target, "Error validando Google", "error");
+  }
+}
+
+async function obtenerMisAlertas(userId) {
+  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
   let data = null;
 
   try {
@@ -383,30 +381,30 @@ async function obtenerMisAlertas(userId) {
   return Array.isArray(data.resultados) ? data.resultados : [];
 }
 
-function alertaRow(label, value) {
-  if (!value) {
-    return "";
-  }
-
-  return `
-    <div class="alerta-row">
-      <span class="alerta-key">${esc(label)}</span>
-      <span class="alerta-val">${esc(String(value))}</span>
-    </div>
-  `;
+function renderAlertasAPD(alertas) {
+  alertasState.items = Array.isArray(alertas) ? alertas : [];
+  alertasState.index = 0;
+  renderAlertaActual();
 }
 
-function renderAlertasAPD(alertas) {
+function moverAlerta(step) {
+  const total = alertasState.items.length;
+  if (!total) return;
+  alertasState.index = (alertasState.index + step + total) % total;
+  renderAlertaActual();
+}
+
+function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
+  const items = alertasState.items;
+  const total = items.length;
 
   if (!box) return;
 
-  const lista = Array.isArray(alertas) ? alertas : [];
-
   if (badge) {
-    if (lista.length > 0) {
-      badge.textContent = String(lista.length);
+    if (total) {
+      badge.textContent = String(total);
       badge.classList.remove("hidden");
     } else {
       badge.textContent = "";
@@ -414,43 +412,64 @@ function renderAlertasAPD(alertas) {
     }
   }
 
-  if (!lista.length) {
+  if (!total) {
     box.innerHTML = `
       <div class="empty-state">
         <p>No hay alertas compatibles todavía.</p>
-        <p class="empty-hint">Configurá distrito, cargo o materia, nivel y turno. Si dejás algo vacío, ese filtro no se aplica.</p>
+        <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
       </div>
     `;
     return;
   }
 
-  box.innerHTML = lista.map(a => `
-    <div class="alerta-card">
+  const a = items[alertasState.index];
+  const titulo = [a.cargo, a.area].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
+
+  box.innerHTML = `
+    <div class="alerta-floating">
+      <div class="alerta-topbar">
+        <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+        <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
+        <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+      </div>
+
       <div class="alerta-tags">
         ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
         ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
         <span class="tag tag-estado">Activa</span>
       </div>
-      <div class="alerta-titulo">${esc(a.cargo || a.area || "Oferta APD")}</div>
-      <div class="alerta-info">
+
+      <div class="alerta-title">${esc(titulo)}</div>
+      <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
+
+      <div class="alerta-grid">
         ${alertaRow("Distrito", a.distrito)}
-        ${alertaRow("Área", a.area)}
-        ${alertaRow("Escuela", a.escuela)}
-        ${alertaRow("Curso/Div.", a.cursodivision)}
+        ${alertaRow("Turno", turnoTexto(a.turno))}
+        ${alertaRow("Curso/Div.", normalizarCursoDivision(a.cursodivision))}
         ${alertaRow("Jornada", a.jornada)}
         ${alertaRow("Módulos", a.hsmodulos)}
         ${alertaRow("Desde", fmtFecha(a.supl_desde))}
         ${alertaRow("Hasta", fmtFecha(a.supl_hasta))}
         ${alertaRow("Cierre", fmtFecha(a.finoferta))}
-        ${alertaRow("Observaciones", a.observaciones)}
+        ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
       </div>
     </div>
-  `).join("");
+  `;
+
+  box.querySelector("#alerta-prev")?.addEventListener("click", () => moverAlerta(-1));
+  box.querySelector("#alerta-next")?.addEventListener("click", () => moverAlerta(1));
 }
 
-/* ──────────────────────────────────────────
-   DASHBOARD
-────────────────────────────────────────── */
+function alertaRow(label, value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  return `
+    <div class="alerta-row">
+      <span class="alerta-key">${esc(label)}</span>
+      <span class="alerta-val">${esc(v)}</span>
+    </div>
+  `;
+}
 
 async function cargarDashboard() {
   const token = obtenerToken();
@@ -473,11 +492,9 @@ async function cargarDashboard() {
       return;
     }
 
-    const preferenciasRaw = await obtenerPreferenciasPorUserId(token);
-    const preferencias = adaptarPreferencias(preferenciasRaw);
+    const preferencias = adaptarPreferencias(await obtenerPreferenciasPorUserId(token));
 
     let alertas = [];
-
     try {
       alertas = await obtenerMisAlertas(token);
     } catch (e) {
@@ -512,9 +529,12 @@ async function cargarDashboard() {
 function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
-  const alts = Array.isArray(data.alertas) ? data.alertas : [];
-  const stats = data.estadisticas || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
+
+  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
+  const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
+  const niveles = pref.nivel_modalidad || "(cualquiera)";
+  const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
 
   setText("panel-bienvenida", nombre ? `Bienvenido/a, ${nombre}` : "Bienvenido/a");
   setText("panel-subtitulo", doc.email ? `Sesión: ${doc.email}` : "Panel docente");
@@ -527,40 +547,30 @@ function renderDashboard(data) {
     <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Inactivo"}</p>
   `);
 
-  const cargosDisplay = pref.cargos_csv || pref.materias_csv || "-";
-
   setHTML("panel-preferencias-resumen", `
-    <p><strong>Distrito:</strong> ${esc(pref.distrito_principal || "-")}</p>
-    ${pref.segundo_distrito ? `<p><strong>2° distrito:</strong> ${esc(pref.segundo_distrito)}</p>` : ""}
-    ${pref.tercer_distrito ? `<p><strong>3° distrito:</strong> ${esc(pref.tercer_distrito)}</p>` : ""}
-    <p><strong>Cargos/Mat.:</strong> ${esc(cargosDisplay)}</p>
-    <p><strong>Nivel:</strong> ${esc(pref.nivel_modalidad || "(cualquiera)")}</p>
-    <p><strong>Turno:</strong> ${esc(turnoTexto(pref.turnos_csv) || "(cualquiera)")}</p>
+    <p><strong>Distritos:</strong> ${esc(distritos)}</p>
+    <p><strong>Cargos/Materias:</strong> ${esc(cargos)}</p>
+    <p><strong>Nivel:</strong> ${esc(niveles)}</p>
+    <p><strong>Turno:</strong> ${esc(turnos)}</p>
     <p><strong>Alertas:</strong> ${pref.alertas_activas ? "Activas" : "Pausadas"}</p>
     <p><strong>Email:</strong> ${pref.alertas_email ? "Sí" : "No"}</p>
   `);
 
   setHTML("panel-estadisticas", `
     <div class="stats-row">
-      <div class="stat-box"><span class="stat-n">${stats.total_alertas ?? 0}</span><span class="stat-l">Alertas</span></div>
-      <div class="stat-box"><span class="stat-n">${stats.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
-      <div class="stat-box"><span class="stat-n">${stats.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.total_alertas ?? 0}</span><span class="stat-l">Alertas</span></div>
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
     </div>
-    <p class="stat-acceso">Último acceso: ${esc(fmtFecha(stats.ultimo_acceso || "-"))}</p>
+    <p class="stat-acceso">Último acceso: ${esc(fmtFecha(data.estadisticas?.ultimo_acceso || "-"))}</p>
   `);
 
-  renderAlertasAPD(alts);
+  renderAlertasAPD(data.alertas || []);
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
 }
 
-/* ──────────────────────────────────────────
-   PREFERENCIAS — GUARDAR
-────────────────────────────────────────── */
-
 function getNivelArray() {
-  return Array.from(
-    document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked')
-  )
+  return Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'))
     .map(el => String(el.value || "").trim().toUpperCase())
     .filter(Boolean);
 }
@@ -569,7 +579,6 @@ async function guardarPreferencias(e) {
   e.preventDefault();
 
   const token = obtenerToken();
-
   if (!token) {
     showMsg("preferencias-msg", "Sesión no válida", "error");
     return;
@@ -616,9 +625,22 @@ async function guardarPreferencias(e) {
   }
 }
 
-/* ──────────────────────────────────────────
-   PREFERENCIAS — CARGAR EN FORMULARIO
-────────────────────────────────────────── */
+function limpiarDistritos() {
+  ["pref-distrito-principal", "pref-segundo-distrito", "pref-tercer-distrito"].forEach(id => setVal(id, ""));
+  ["sug-distrito-1", "sug-distrito-2", "sug-distrito-3"].forEach(limpiarListaAC);
+}
+
+function limpiarCargos() {
+  ["pref-cargo-1", "pref-cargo-2", "pref-cargo-3"].forEach(id => setVal(id, ""));
+  ["sug-cargo-1", "sug-cargo-2", "sug-cargo-3"].forEach(limpiarListaAC);
+}
+
+function limpiarListaAC(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = "";
+  el.style.display = "none";
+}
 
 function turnoSelectValue(v) {
   const t = String(v || "").trim().toUpperCase();
@@ -633,10 +655,7 @@ function turnoSelectValue(v) {
 function cargarPrefsEnFormulario(data) {
   const p = data.preferencias || {};
 
-  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => {
-    c.checked = false;
-  });
-
+  document.querySelectorAll('input[name="pref-nivel-modalidad"]').forEach(c => c.checked = false);
   document.querySelectorAll(".ac-list").forEach(l => {
     l.innerHTML = "";
     l.style.display = "none";
@@ -651,8 +670,8 @@ function cargarPrefsEnFormulario(data) {
   setVal("pref-cargo-2", cargos[1] || "");
   setVal("pref-cargo-3", cargos[2] || "");
 
-  const turnoGuardado = splitCSV(p.turnos_csv || "")[0] || "";
-  setVal("pref-turnos", turnoSelectValue(turnoGuardado));
+  const turno = splitCSV(p.turnos_csv || "")[0] || "";
+  setVal("pref-turnos", turnoSelectValue(turno));
 
   if (p.nivel_modalidad) {
     const niveles = p.nivel_modalidad.split(",").map(s => s.trim().toUpperCase());
@@ -666,10 +685,6 @@ function cargarPrefsEnFormulario(data) {
   setCheck("pref-alertas-whatsapp", !!p.alertas_whatsapp);
 }
 
-/* ──────────────────────────────────────────
-   HELPERS DOM
-────────────────────────────────────────── */
-
 const val = id => (document.getElementById(id)?.value || "").trim();
 
 const setVal = (id, v) => {
@@ -677,7 +692,7 @@ const setVal = (id, v) => {
   if (el) el.value = v;
 };
 
-const checked = id => !!(document.getElementById(id)?.checked);
+const checked = id => !!document.getElementById(id)?.checked;
 
 const setCheck = (id, v) => {
   const el = document.getElementById(id);
@@ -695,10 +710,7 @@ const setHTML = (id, h) => {
 };
 
 function splitCSV(s) {
-  return String(s || "")
-    .split(",")
-    .map(x => x.trim())
-    .filter(Boolean);
+  return String(s || "").split(",").map(x => x.trim()).filter(Boolean);
 }
 
 function esc(s) {
@@ -709,17 +721,20 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+function normalizarCursoDivision(v) {
+  let s = String(v || "").trim();
+  if (!s) return "-";
+  s = s.replace(/Â°/g, "°").replace(/º/g, "°").replace(/�/g, "°");
+  s = s.replace(/(\d)\s*°\s*(\d)\s*°?/g, "$1°$2°");
+  s = s.replace(/\s+/g, " ").trim();
+  return s || "-";
+}
+
 function turnoTexto(v) {
-  const valores = String(v || "")
-    .split(",")
-    .map(x => x.trim().toUpperCase())
-    .filter(Boolean);
+  const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+  if (!items.length) return "";
 
-  if (!valores.length) {
-    return "";
-  }
-
-  return valores.map(x => {
+  return items.map(x => {
     if (x === "M" || x === "MANANA") return "Mañana";
     if (x === "T" || x === "TARDE") return "Tarde";
     if (x === "V" || x === "VESPERTINO") return "Vespertino";
@@ -729,25 +744,39 @@ function turnoTexto(v) {
   }).join(", ");
 }
 
-function fmtFecha(v) {
-  const t = String(v || "").trim();
+function parseFechaFlexible(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return null;
 
-  if (!t || t === "-") {
-    return "-";
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
   }
 
-  const d = new Date(t);
-
-  return Number.isNaN(d.getTime()) ? t : d.toLocaleString("es-AR");
+  const iso = new Date(raw);
+  return Number.isNaN(iso.getTime()) ? null : iso;
 }
 
-/* ──────────────────────────────────────────
-   AUTOCOMPLETE
-────────────────────────────────────────── */
+function fmtFecha(v) {
+  const raw = String(v || "").trim();
+  if (!raw || raw === "-") return "-";
+  if (raw.includes("9999")) return "Sin fecha";
+
+  const d = parseFechaFlexible(raw);
+  if (!d) return raw;
+  if (d.getFullYear() >= 9999) return "Sin fecha";
+
+  const onlyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const options = onlyDate
+    ? { day: "2-digit", month: "2-digit", year: "numeric" }
+    : { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" };
+
+  return new Intl.DateTimeFormat("es-AR", options).format(d);
+}
 
 function debounce(fn, ms = 320) {
   let timer;
-
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => fn.apply(this, args), ms);
@@ -767,10 +796,7 @@ function renderAC(lista, items, input) {
     return;
   }
 
-  lista.innerHTML = items
-    .map(it => `<div class="ac-item">${esc(it.label || "")}</div>`)
-    .join("");
-
+  lista.innerHTML = items.map(it => `<div class="ac-item">${esc(it.label || "")}</div>`).join("");
   lista.style.display = "block";
 
   lista.querySelectorAll(".ac-item").forEach(el => {
@@ -786,10 +812,7 @@ function renderAC(lista, items, input) {
 function activarAC(inputId, listaId, tipo) {
   const input = document.getElementById(inputId);
   const lista = document.getElementById(listaId);
-
-  if (!input || !lista) {
-    return;
-  }
+  if (!input || !lista) return;
 
   input.addEventListener("input", debounce(async () => {
     const q = input.value.trim();
@@ -809,22 +832,12 @@ function activarAC(inputId, listaId, tipo) {
     }
   }));
 
-  input.addEventListener("blur", () => {
-    setTimeout(() => {
-      lista.style.display = "none";
-    }, 150);
-  });
+  input.addEventListener("blur", () => setTimeout(() => { lista.style.display = "none"; }, 150));
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) {
-      input.dispatchEvent(new Event("input"));
-    }
+    if (input.value.trim().length >= 2) input.dispatchEvent(new Event("input"));
   });
 }
-
-/* ──────────────────────────────────────────
-   MOSTRAR / OCULTAR CONTRASEÑA
-────────────────────────────────────────── */
 
 function initPwToggles() {
   document.querySelectorAll(".pw-toggle").forEach(btn => {
@@ -839,10 +852,6 @@ function initPwToggles() {
   });
 }
 
-/* ──────────────────────────────────────────
-   INIT
-────────────────────────────────────────── */
-
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("form-registro")?.addEventListener("submit", registrarDocente);
   document.getElementById("form-login")?.addEventListener("submit", loginPassword);
@@ -850,6 +859,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-logout")?.addEventListener("click", logout);
   document.getElementById("btnCerrarSesion")?.addEventListener("click", logout);
+  document.getElementById("btnLogin")?.addEventListener("click", () => mostrarSeccion("login"));
+  document.getElementById("btnRegistro")?.addEventListener("click", () => mostrarSeccion("registro"));
+  document.getElementById("btnMiPanel")?.addEventListener("click", () => cargarDashboard());
+  document.getElementById("btn-clear-distritos")?.addEventListener("click", limpiarDistritos);
+  document.getElementById("btn-clear-cargos")?.addEventListener("click", limpiarCargos);
 
   const btnRecargar = document.getElementById("btn-recargar-panel");
   if (btnRecargar) {
@@ -857,27 +871,21 @@ document.addEventListener("DOMContentLoaded", () => {
       btnLoad(btnRecargar, "Recargando...");
       try {
         await cargarDashboard();
-      } catch (e) {
-        console.error(e);
       } finally {
         btnRestore(btnRecargar);
       }
     });
   }
 
-  document.getElementById("btnLogin")?.addEventListener("click", () => mostrarSeccion("login"));
-  document.getElementById("btnRegistro")?.addEventListener("click", () => mostrarSeccion("registro"));
-  document.getElementById("btnMiPanel")?.addEventListener("click", () => cargarDashboard());
-
   activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
   activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
   activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
-
   activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
   activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
 
   initPwToggles();
+  initGoogleAuth();
   actualizarNav();
 
   if (obtenerToken()) {
