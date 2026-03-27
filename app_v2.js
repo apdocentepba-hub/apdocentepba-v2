@@ -9,6 +9,7 @@ const GOOGLE_CLIENT_ID = "650896364013-s3o36ckvoi42947v6ummmgdkdmsgondo.apps.goo
 const TOKEN_KEY = "apd_token_v2";
 const AUTOCOMPLETE_DEBOUNCE_MS = 90;
 const AUTOCOMPLETE_LIMIT = 12;
+const HISTORICO_DAYS_DEFAULT = 30;
 
 let tokenMem = null;
 let googleInitDone = false;
@@ -243,6 +244,22 @@ async function guardarPreferenciasServidor(userId, payload) {
     body: JSON.stringify({
       user_id: userId,
       preferencias: payload
+    })
+  });
+}
+
+async function obtenerHistoricoResumen(userId, days = HISTORICO_DAYS_DEFAULT) {
+  return workerFetchJson(
+    `/api/historico-resumen?user_id=${encodeURIComponent(userId)}&days=${encodeURIComponent(days)}`
+  );
+}
+
+async function capturarHistoricoAPD(userId) {
+  return workerFetchJson("/api/capturar-historico-apd", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: userId,
+      include_postulantes: true
     })
   });
 }
@@ -789,6 +806,169 @@ function alertaRow(label, value) {
   `;
 }
 
+function fmtNum(v, digits = 0) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "-";
+
+  return n.toLocaleString("es-AR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
+function tituloHistoricoCliente(item) {
+  return [item?.cargo, item?.area]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(" · ") || "Oferta APD";
+}
+
+function renderHistoricoList(items, labelFn = item => item.label) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<p class="ph">Todavía no hay datos suficientes.</p>`;
+  }
+
+  return `
+    <ul class="historico-list">
+      ${items.map(item => `
+        <li class="historico-item">
+          <span>${esc(labelFn(item))}</span>
+          <strong class="historico-count">${fmtNum(item.value)}</strong>
+        </li>
+      `).join("")}
+    </ul>
+  `;
+}
+
+function renderHistoricoAPD(data) {
+  const box = document.getElementById("panel-historico-apd");
+  if (!box) return;
+
+  if (!data || data.empty || !data.ofertas_unicas) {
+    box.innerHTML = `
+      <div class="empty-state">
+        <p>${esc(data?.message || "Todavía no hay histórico APD para mostrar.")}</p>
+        <p class="empty-hint">
+          Tocá "Actualizar histórico" para guardar una primera foto de los APD actuales y empezar a ver tendencias.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  const competencia = [
+    data.promedio_postulantes != null
+      ? `<span class="historico-chip">Promedio de postulantes: ${fmtNum(data.promedio_postulantes, 1)}</span>`
+      : "",
+    data.promedio_puntaje_primero != null
+      ? `<span class="historico-chip">Puntaje del primero: ${fmtNum(data.promedio_puntaje_primero, 2)}</span>`
+      : "",
+    data.capturas_filtradas
+      ? `<span class="historico-chip">Capturas filtradas: ${fmtNum(data.capturas_filtradas)}</span>`
+      : ""
+  ].filter(Boolean).join("");
+
+  const ultimas = Array.isArray(data.ultimas_ofertas) ? data.ultimas_ofertas : [];
+
+  box.innerHTML = `
+    <div class="historico-head">
+      <div class="historico-updated">Última captura: ${esc(fmtFecha(data.ultima_captura || "-"))}</div>
+      <div class="historico-note">Ventana analizada: últimos ${fmtNum(data.ventana_dias)} días</div>
+    </div>
+
+    <div class="historico-grid">
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.ofertas_unicas)}</span>
+        <span class="historico-stat-l">Ofertas únicas</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.activas_estimadas)}</span>
+        <span class="historico-stat-l">Activas ahora</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.nuevas_7d)}</span>
+        <span class="historico-stat-l">Nuevas en 7 días</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.cierran_72h)}</span>
+        <span class="historico-stat-l">Cierran en 72h</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${data.promedio_postulantes != null ? fmtNum(data.promedio_postulantes, 1) : "-"}</span>
+        <span class="historico-stat-l">Promedio postulantes</span>
+      </div>
+    </div>
+
+    <div class="historico-columns">
+      <div class="historico-box">
+        <h4>Distritos con más movimiento</h4>
+        ${renderHistoricoList(data.top_distritos)}
+      </div>
+      <div class="historico-box">
+        <h4>Cargos / áreas más publicados</h4>
+        ${renderHistoricoList(data.top_cargos)}
+      </div>
+      <div class="historico-box">
+        <h4>Turnos más frecuentes</h4>
+        ${renderHistoricoList(data.top_turnos, item => turnoTexto(item.label) || item.label)}
+      </div>
+    </div>
+
+    <div class="historico-box">
+      <h4>Competencia estimada</h4>
+      <div class="historico-competition">
+        ${competencia || '<span class="historico-chip">Todavía no hay suficiente lectura de postulantes.</span>'}
+      </div>
+    </div>
+
+    <div class="historico-box historico-box-latest">
+      <h4>Último movimiento relevante</h4>
+      <div class="historico-latest">
+        ${ultimas.length ? ultimas.map(item => `
+          <article class="historico-offer">
+            <div class="historico-offer-title">${esc(tituloHistoricoCliente(item))}</div>
+            <div class="historico-offer-sub">${esc(item.escuela || "Sin escuela")} · ${esc(item.distrito || "-")}</div>
+            <div class="historico-offer-meta">
+              <span>${esc(turnoTexto(item.turno) || "-")}</span>
+              <span>Cierre: ${esc(fmtFechaABC(item.finoferta, "datetime"))}</span>
+            </div>
+            <div class="historico-offer-aux">
+              Vista en histórico: ${esc(fmtFecha(item.captured_at || "-"))}
+              ${item.total_postulantes != null ? ` · ${fmtNum(item.total_postulantes)} postulantes` : ""}
+            </div>
+          </article>
+        `).join("") : '<p class="ph">Todavía no hay movimiento reciente para mostrar.</p>'}
+      </div>
+    </div>
+  `;
+}
+
+async function cargarHistoricoPanel(userId, days = HISTORICO_DAYS_DEFAULT) {
+  const box = document.getElementById("panel-historico-apd");
+  if (box) {
+    box.innerHTML = `<p class="ph">Cargando histórico APD...</p>`;
+  }
+
+  try {
+    const data = await obtenerHistoricoResumen(userId, days);
+    renderHistoricoAPD(data);
+    return data;
+  } catch (err) {
+    console.error("ERROR HISTORICO APD:", err);
+
+    if (box) {
+      box.innerHTML = `
+        <div class="empty-state">
+          <p>No se pudo cargar el histórico APD.</p>
+          <p class="empty-hint">${esc(err?.message || "Intentá de nuevo en un rato.")}</p>
+        </div>
+      `;
+    }
+
+    return null;
+  }
+}
+
 async function cargarDashboard() {
   const token = obtenerToken();
 
@@ -838,6 +1018,10 @@ async function cargarDashboard() {
     cargarPrefsEnFormulario({ preferencias });
     renderPlanUI(planActual);
     actualizarNav();
+
+    cargarHistoricoPanel(token).catch(err => {
+      console.error("ERROR PANEL HISTORICO:", err);
+    });
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
@@ -901,6 +1085,7 @@ function renderDashboard(data) {
 
   renderAlertasAPD(data.alertas || []);
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
+  setHTML("panel-historico-apd", `<p class="ph">Cargando histórico APD...</p>`);
 }
 
 function renderPlanUI(planInfo) {
@@ -1763,6 +1948,32 @@ document.addEventListener("DOMContentLoaded", () => {
         await cargarDashboard();
       } finally {
         btnRestore(btnRecargar);
+      }
+    });
+  }
+
+  const btnHistorico = document.getElementById("btn-refresh-historico");
+  if (btnHistorico) {
+    btnHistorico.addEventListener("click", async () => {
+      const token = obtenerToken();
+      if (!token) return;
+
+      btnLoad(btnHistorico, "Actualizando...");
+      setHTML("panel-historico-apd", `<p class="ph">Actualizando histórico APD...</p>`);
+
+      try {
+        await capturarHistoricoAPD(token);
+        await cargarHistoricoPanel(token);
+      } catch (err) {
+        console.error("ERROR CAPTURANDO HISTORICO:", err);
+        setHTML("panel-historico-apd", `
+          <div class="empty-state">
+            <p>No pudimos actualizar el histórico.</p>
+            <p class="empty-hint">${esc(err?.message || "Intentá de nuevo en un rato.")}</p>
+          </div>
+        `);
+      } finally {
+        btnRestore(btnHistorico);
       }
     });
   }
