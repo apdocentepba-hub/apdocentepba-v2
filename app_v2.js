@@ -259,7 +259,7 @@ async function capturarHistoricoAPD(userId) {
     method: "POST",
     body: JSON.stringify({
       user_id: userId,
-      include_postulantes: true
+      include_postulantes: false
     })
   });
 }
@@ -840,6 +840,28 @@ function renderHistoricoList(items, labelFn = item => item.label) {
   `;
 }
 
+function renderHistoricoCambios(cambios) {
+  if (!Array.isArray(cambios) || !cambios.length) {
+    return `<p class="ph">Todavía no detectamos cambios de estado entre snapshots.</p>`;
+  }
+
+  return `
+    <div class="historico-latest">
+      ${cambios.map(item => `
+        <article class="historico-offer">
+          <div class="historico-offer-title">${esc(tituloHistoricoCliente(item))}</div>
+          <div class="historico-offer-sub">${esc(item.escuela || "Sin escuela")} · ${esc(item.distrito || "-")}</div>
+          <div class="historico-competition">
+            <span class="historico-chip">Antes: ${esc(item.estado_anterior || "-")}</span>
+            <span class="historico-chip">Ahora: ${esc(item.estado_actual || "-")}</span>
+          </div>
+          <div class="historico-offer-aux">Detectado: ${esc(fmtFecha(item.captured_at || "-"))}</div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderHistoricoAPD(data) {
   const box = document.getElementById("panel-historico-apd");
   if (!box) return;
@@ -856,19 +878,23 @@ function renderHistoricoAPD(data) {
     return;
   }
 
-  const competencia = [
+  const lecturaRapida = [
+    data.capturas_filtradas
+      ? `<span class="historico-chip">Capturas filtradas: ${fmtNum(data.capturas_filtradas)}</span>`
+      : "",
     data.promedio_postulantes != null
-      ? `<span class="historico-chip">Promedio de postulantes: ${fmtNum(data.promedio_postulantes, 1)}</span>`
+      ? `<span class="historico-chip">Promedio postulantes: ${fmtNum(data.promedio_postulantes, 1)}</span>`
       : "",
     data.promedio_puntaje_primero != null
       ? `<span class="historico-chip">Puntaje del primero: ${fmtNum(data.promedio_puntaje_primero, 2)}</span>`
       : "",
-    data.capturas_filtradas
-      ? `<span class="historico-chip">Capturas filtradas: ${fmtNum(data.capturas_filtradas)}</span>`
+    data.cierran_72h
+      ? `<span class="historico-chip">Cierran en 72h: ${fmtNum(data.cierran_72h)}</span>`
       : ""
   ].filter(Boolean).join("");
 
   const ultimas = Array.isArray(data.ultimas_ofertas) ? data.ultimas_ofertas : [];
+  const cambios = Array.isArray(data.ultimos_cambios) ? data.ultimos_cambios : [];
 
   box.innerHTML = `
     <div class="historico-head">
@@ -886,16 +912,24 @@ function renderHistoricoAPD(data) {
         <span class="historico-stat-l">Activas ahora</span>
       </div>
       <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.designadas_estimadas)}</span>
+        <span class="historico-stat-l">Designadas</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.anuladas_estimadas)}</span>
+        <span class="historico-stat-l">Anuladas</span>
+      </div>
+      <div class="historico-stat">
+        <span class="historico-stat-n">${fmtNum(data.desiertas_estimadas)}</span>
+        <span class="historico-stat-l">Desiertas</span>
+      </div>
+      <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.nuevas_7d)}</span>
         <span class="historico-stat-l">Nuevas en 7 días</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${fmtNum(data.cierran_72h)}</span>
-        <span class="historico-stat-l">Cierran en 72h</span>
-      </div>
-      <div class="historico-stat">
-        <span class="historico-stat-n">${data.promedio_postulantes != null ? fmtNum(data.promedio_postulantes, 1) : "-"}</span>
-        <span class="historico-stat-l">Promedio postulantes</span>
+        <span class="historico-stat-n">${fmtNum(data.cambios_estado_recientes)}</span>
+        <span class="historico-stat-l">Cambios detectados</span>
       </div>
     </div>
 
@@ -915,10 +949,15 @@ function renderHistoricoAPD(data) {
     </div>
 
     <div class="historico-box">
-      <h4>Competencia estimada</h4>
+      <h4>Lectura rápida</h4>
       <div class="historico-competition">
-        ${competencia || '<span class="historico-chip">Todavía no hay suficiente lectura de postulantes.</span>'}
+        ${lecturaRapida || '<span class="historico-chip">Todavía no tenemos lectura estadística suficiente.</span>'}
       </div>
+    </div>
+
+    <div class="historico-box historico-box-latest">
+      <h4>Cambios recientes de estado</h4>
+      ${renderHistoricoCambios(cambios)}
     </div>
 
     <div class="historico-box historico-box-latest">
@@ -930,11 +969,10 @@ function renderHistoricoAPD(data) {
             <div class="historico-offer-sub">${esc(item.escuela || "Sin escuela")} · ${esc(item.distrito || "-")}</div>
             <div class="historico-offer-meta">
               <span>${esc(turnoTexto(item.turno) || "-")}</span>
-              <span>Cierre: ${esc(fmtFechaABC(item.finoferta, "datetime"))}</span>
+              <span>Estado: ${esc(item.estado || "-")}</span>
             </div>
             <div class="historico-offer-aux">
               Vista en histórico: ${esc(fmtFecha(item.captured_at || "-"))}
-              ${item.total_postulantes != null ? ` · ${fmtNum(item.total_postulantes)} postulantes` : ""}
             </div>
           </article>
         `).join("") : '<p class="ph">Todavía no hay movimiento reciente para mostrar.</p>'}
