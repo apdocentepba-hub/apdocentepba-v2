@@ -789,4 +789,50 @@ input::placeholder{color:#b0b7c3}
   color:var(--azul);
   font-weight:600;
 }
+.plan-stack{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.plan-title{
+  font-size:20px;
+  line-height:1.2;
+  font-weight:700;
+  color:var(--azul);
+}
+.plan-pill-row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.plan-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  padding:4px 10px;
+  font-size:12px;
+  font-weight:700;
+  background:var(--azul-light);
+  color:var(--azul);
+}
+.plan-pill-neutral{
+  background:var(--gris-bg);
+  color:var(--texto-mid);
+}
+.plan-note{
+  font-size:13px;
+  color:var(--texto-sub);
+  line-height:1.5;
+}
+.ac-status{
+  padding:10px 14px;
+  font-size:13px;
+  color:var(--texto-sub);
+}
+.ac-item.is-active{
+  background:var(--azul-light);
+  color:var(--azul);
+  font-weight:600;
+}
 
