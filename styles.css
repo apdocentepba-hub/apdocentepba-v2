@@ -310,6 +310,7 @@ input::placeholder{color:#b0b7c3}
   color:var(--azul);
   background:var(--azul-light);
 }
+.mini-group{display:flex;gap:8px;flex-wrap:wrap}
 
 .checks-grid{
   display:grid;
@@ -823,6 +824,180 @@ input::placeholder{color:#b0b7c3}
   color:var(--texto);
 }
 
+.soft-list{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.soft-item{
+  background:linear-gradient(180deg,#fff,#f7fbff);
+  border:1px solid var(--gris-b2);
+  border-radius:14px;
+  padding:12px 14px;
+}
+.soft-title{
+  font-size:14px;
+  font-weight:700;
+  color:var(--azul);
+  margin-bottom:4px;
+}
+.soft-sub{
+  font-size:13px;
+  color:var(--texto-mid);
+  line-height:1.4;
+}
+.soft-meta{
+  font-size:12px;
+  color:var(--texto-sub);
+  line-height:1.4;
+}
+.soft-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.soft-action{
+  width:100%;
+  justify-content:center;
+}
+
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:10px;
+  margin-bottom:14px;
+}
+.pill-row,.chip-row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.pill,.chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:12px;
+  font-weight:700;
+}
+.pill{
+  background:var(--azul-light);
+  color:var(--azul);
+}
+.chip{
+  background:var(--gris-bg);
+  border:1px solid var(--gris-b2);
+  color:var(--texto-mid);
+}
+
+.banner-rotator{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-bottom:16px;
+}
+.banner-card{
+  border-radius:18px;
+  padding:18px;
+  background:
+    radial-gradient(circle at top right, rgba(31,102,255,.16), transparent 32%),
+    linear-gradient(135deg,#f8fbff,#eef4ff);
+  border:1px solid rgba(31,102,255,.14);
+  min-height:116px;
+}
+.banner-title{
+  font-size:12px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  color:var(--azul-claro);
+  margin-bottom:8px;
+}
+.banner-text{
+  font-size:18px;
+  line-height:1.35;
+  color:var(--azul);
+  font-weight:700;
+}
+
+.progress-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.progress{
+  height:10px;
+  background:#e7edf8;
+  border-radius:999px;
+  overflow:hidden;
+}
+.progress-bar{
+  height:100%;
+  background:linear-gradient(90deg,var(--azul),var(--azul-claro));
+  border-radius:999px;
+}
+.progress-legend{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:var(--texto-sub);
+  font-weight:600;
+}
+
+.backfill-meta{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:14px;
+}
+.backfill-box{
+  background:var(--gris-bg);
+  border:1px solid var(--gris-b2);
+  border-radius:14px;
+  padding:12px;
+}
+.backfill-k{
+  display:block;
+  font-size:10px;
+  color:var(--texto-sub);
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+  margin-bottom:4px;
+}
+.backfill-v{
+  display:block;
+  font-size:14px;
+  color:var(--texto);
+  font-weight:700;
+  line-height:1.3;
+}
+
+.radar-columns{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+}
+.radar-box{
+  background:linear-gradient(180deg,#fff,#f8fbff);
+  border:1px solid var(--gris-b2);
+  border-radius:16px;
+  padding:14px;
+}
+.radar-box h4{
+  font-size:13px;
+  font-weight:700;
+  color:var(--azul);
+  margin-bottom:10px;
+}
+
 .footer{
   background:var(--azul);
   padding:20px 0;
@@ -843,6 +1018,7 @@ input::placeholder{color:#b0b7c3}
   .alerta-window-preview{width:126px}
   .alerta-window-preview-left{left:-4px}
   .alerta-window-preview-right{right:-4px}
+  .radar-columns{grid-template-columns:1fr 1fr}
 }
 
 @media (max-width:768px){
@@ -853,6 +1029,7 @@ input::placeholder{color:#b0b7c3}
   .grid-2,.grid-3{grid-template-columns:1fr}
   .notif-grid{grid-template-columns:1fr}
   .stats-row{grid-template-columns:repeat(3,1fr)}
+  .stats-grid,.radar-columns,.backfill-meta{grid-template-columns:1fr}
   .form-card form{padding:22px 20px 24px}
   .form-card-hdr{padding:22px 20px}
   .google-wrap{padding:0 20px 24px}
@@ -860,6 +1037,7 @@ input::placeholder{color:#b0b7c3}
   .checks-grid{grid-template-columns:1fr}
   .sec-head{flex-direction:column;align-items:stretch}
   .mini-btn{width:100%}
+  .mini-group{width:100%}
   .alerta-grid{grid-template-columns:1fr}
   .alerta-meta-grid{grid-template-columns:1fr}
   .alerta-meta-item-wide{grid-column:auto}
