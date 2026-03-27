@@ -186,6 +186,8 @@ function adaptarPreferencias(prefRaw) {
       distrito_principal: "",
       segundo_distrito: "",
       tercer_distrito: "",
+      cuarto_distrito: "",
+      quinto_distrito: "",
       otros_distritos_arr: [],
       cargos_csv: "",
       cargos_arr: [],
@@ -211,6 +213,8 @@ function adaptarPreferencias(prefRaw) {
     distrito_principal: prefRaw.distrito_principal || "",
     segundo_distrito: otros[0] || "",
     tercer_distrito: otros[1] || "",
+    cuarto_distrito: otros[2] || "",
+    quinto_distrito: otros[3] || "",
     otros_distritos_arr: otros,
     cargos_csv: cargos.join(", "),
     cargos_arr: cargos,
@@ -778,8 +782,16 @@ function renderDashboard(data) {
   const pref = data.preferencias || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, pref.segundo_distrito, pref.tercer_distrito].filter(Boolean).join(" / ") || "(sin filtro)";
-  const cargos = pref.cargos_csv || pref.materias_csv || "(sin filtro)";
+  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
+    .filter(Boolean)
+    .join(" / ") || "(sin filtro)";
+
+  const cargosLista = [
+    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
+    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+  ].filter(Boolean);
+
+  const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
 
@@ -838,12 +850,16 @@ async function guardarPreferencias(e) {
   const cargos = [
     val("pref-cargo-1").toUpperCase().trim(),
     val("pref-cargo-2").toUpperCase().trim(),
-    val("pref-cargo-3").toUpperCase().trim()
+    val("pref-cargo-3").toUpperCase().trim(),
+    val("pref-cargo-4").toUpperCase().trim(),
+    val("pref-cargo-5").toUpperCase().trim()
   ].filter(Boolean);
 
   const otrosDistritos = [
     val("pref-segundo-distrito").toUpperCase().trim(),
-    val("pref-tercer-distrito").toUpperCase().trim()
+    val("pref-tercer-distrito").toUpperCase().trim(),
+    val("pref-cuarto-distrito").toUpperCase().trim(),
+    val("pref-quinto-distrito").toUpperCase().trim()
   ].filter(Boolean);
 
   const turno = val("pref-turnos").trim();
@@ -873,13 +889,39 @@ async function guardarPreferencias(e) {
 }
 
 function limpiarDistritos() {
-  ["pref-distrito-principal", "pref-segundo-distrito", "pref-tercer-distrito"].forEach(id => setVal(id, ""));
-  ["sug-distrito-1", "sug-distrito-2", "sug-distrito-3"].forEach(limpiarListaAC);
+  [
+    "pref-distrito-principal",
+    "pref-segundo-distrito",
+    "pref-tercer-distrito",
+    "pref-cuarto-distrito",
+    "pref-quinto-distrito"
+  ].forEach(id => setVal(id, ""));
+
+  [
+    "sug-distrito-1",
+    "sug-distrito-2",
+    "sug-distrito-3",
+    "sug-distrito-4",
+    "sug-distrito-5"
+  ].forEach(limpiarListaAC);
 }
 
 function limpiarCargos() {
-  ["pref-cargo-1", "pref-cargo-2", "pref-cargo-3"].forEach(id => setVal(id, ""));
-  ["sug-cargo-1", "sug-cargo-2", "sug-cargo-3"].forEach(limpiarListaAC);
+  [
+    "pref-cargo-1",
+    "pref-cargo-2",
+    "pref-cargo-3",
+    "pref-cargo-4",
+    "pref-cargo-5"
+  ].forEach(id => setVal(id, ""));
+
+  [
+    "sug-cargo-1",
+    "sug-cargo-2",
+    "sug-cargo-3",
+    "sug-cargo-4",
+    "sug-cargo-5"
+  ].forEach(limpiarListaAC);
 }
 
 function limpiarListaAC(id) {
@@ -911,6 +953,8 @@ function cargarPrefsEnFormulario(data) {
   setVal("pref-distrito-principal", p.distrito_principal || "");
   setVal("pref-segundo-distrito", p.segundo_distrito || "");
   setVal("pref-tercer-distrito", p.tercer_distrito || "");
+  setVal("pref-cuarto-distrito", p.cuarto_distrito || "");
+  setVal("pref-quinto-distrito", p.quinto_distrito || "");
 
   const cargosGuardados = [
     ...(Array.isArray(p.cargos_arr) ? p.cargos_arr : []),
@@ -924,6 +968,8 @@ function cargarPrefsEnFormulario(data) {
   setVal("pref-cargo-1", cargos[0] || "");
   setVal("pref-cargo-2", cargos[1] || "");
   setVal("pref-cargo-3", cargos[2] || "");
+  setVal("pref-cargo-4", cargos[3] || "");
+  setVal("pref-cargo-5", cargos[4] || "");
 
   const turno = (Array.isArray(p.turnos_arr) ? p.turnos_arr[0] : "") || splitCSV(p.turnos_csv || "")[0] || "";
   setVal("pref-turnos", turnoSelectValue(turno));
@@ -1279,9 +1325,14 @@ document.addEventListener("DOMContentLoaded", () => {
   activarAC("pref-distrito-principal", "sug-distrito-1", "distrito");
   activarAC("pref-segundo-distrito", "sug-distrito-2", "distrito");
   activarAC("pref-tercer-distrito", "sug-distrito-3", "distrito");
+  activarAC("pref-cuarto-distrito", "sug-distrito-4", "distrito");
+  activarAC("pref-quinto-distrito", "sug-distrito-5", "distrito");
+
   activarAC("pref-cargo-1", "sug-cargo-1", "cargo_area");
   activarAC("pref-cargo-2", "sug-cargo-2", "cargo_area");
   activarAC("pref-cargo-3", "sug-cargo-3", "cargo_area");
+  activarAC("pref-cargo-4", "sug-cargo-4", "cargo_area");
+  activarAC("pref-cargo-5", "sug-cargo-5", "cargo_area");
 
   initPwToggles();
   initGoogleAuth();
