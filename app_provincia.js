@@ -535,7 +535,7 @@ async function cargarExtrasProvincia() {
     setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresa para ver canales y checkout.</p>');
     return;
   }
-
+window.cargarExtrasProvincia = cargarExtrasProvincia;
   const [freshPlanInfo, planesResponse, provincia, backfill, whatsapp] = await Promise.all([
     obtenerMiPlanProvincia(token).catch(err => {
       console.error('ERROR MI PLAN:', err);
