@@ -2,6 +2,7 @@
 
 const PROVINCIA_DAYS_DEFAULT = 30;
 let radarRotationTimer = null;
+let provinciaBackfillMonitorTimer = null;
 
 const escProvincia = typeof esc === 'function'
   ? esc
@@ -28,6 +29,10 @@ function fmtProvinciaFecha(value) {
   return Number.isNaN(d.getTime()) ? raw : d.toLocaleString('es-AR');
 }
 
+function sleepProvincia(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function currentPlanProvincia() {
   try {
     if (typeof planActual !== 'undefined' && planActual) return planActual;
@@ -43,6 +48,11 @@ function currentPlanProvincia() {
 function stopRadarRotationProvincia() {
   if (radarRotationTimer) clearInterval(radarRotationTimer);
   radarRotationTimer = null;
+}
+
+function stopProvinciaBackfillMonitor() {
+  if (provinciaBackfillMonitorTimer) clearTimeout(provinciaBackfillMonitorTimer);
+  provinciaBackfillMonitorTimer = null;
 }
 
 function setPanelHTMLProvincia(id, html) {
@@ -75,6 +85,14 @@ async function obtenerProvinciaResumen(days = PROVINCIA_DAYS_DEFAULT) {
   return workerFetchJson(`/api/provincia/resumen?days=${encodeURIComponent(days)}`);
 }
 
+async function obtenerMiPlanProvincia(userId) {
+  return workerFetchJson(`/api/mi-plan?user_id=${encodeURIComponent(userId)}`);
+}
+
+async function obtenerPlanesProvincia() {
+  return workerFetchJson('/api/planes');
+}
+
 async function obtenerProvinciaBackfillStatus() {
   return workerFetchJson('/api/provincia/backfill-status');
 }
@@ -83,6 +101,13 @@ async function procesarProvinciaBackfill(force = false) {
   return workerFetchJson('/api/provincia/backfill-step', {
     method: 'POST',
     body: JSON.stringify({ force })
+  });
+}
+
+async function lanzarProvinciaBackfillAuto() {
+  return workerFetchJson('/api/provincia/backfill-kick', {
+    method: 'POST',
+    body: JSON.stringify({})
   });
 }
 
@@ -114,6 +139,59 @@ async function crearCheckoutMercadoPago(userId, planCode) {
   });
 }
 
+function clearMercadoPagoReturnParamsProvincia() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('mp')) return;
+    url.searchParams.delete('mp');
+    window.history.replaceState({}, document.title, url.toString());
+  } catch {}
+}
+
+function syncPlanProvincia(planInfo, userId) {
+  const resolved = planInfo || currentPlanProvincia();
+
+  try {
+    if (typeof planActual !== 'undefined') {
+      planActual = resolved;
+    }
+  } catch {}
+
+  if (typeof renderPlanUI === 'function') {
+    renderPlanUI(resolved);
+    return resolved;
+  }
+
+  if (typeof renderPlan === 'function') {
+    try {
+      renderPlan(resolved, userId);
+      return resolved;
+    } catch {}
+  }
+
+  const plan = resolved?.plan || {};
+  const subscription = resolved?.subscription || {};
+  const panel = document.getElementById('panel-plan');
+  if (panel) {
+    panel.innerHTML = `
+      <div class="plan-stack">
+        <div class="plan-title">${escProvincia(plan.nombre || 'Plan')}</div>
+        <div class="plan-pill-row">
+          <span class="plan-pill">${escProvincia(subscription.status || 'disponible')}</span>
+          <span class="plan-pill plan-pill-neutral">${plan.price_ars != null ? `$ ${fmtProvinciaNum(plan.price_ars)}` : 'Sin precio'}</span>
+        </div>
+        <div class="plan-pill-row">
+          <span class="plan-pill">Hasta ${fmtProvinciaNum(plan.max_distritos || 0)} distrito(s)</span>
+          <span class="plan-pill">Hasta ${fmtProvinciaNum(plan.max_cargos || 0)} cargo(s)</span>
+        </div>
+        <p class="plan-note">${escProvincia(plan.descripcion || '')}</p>
+      </div>
+    `;
+  }
+
+  return resolved;
+}
+
 function renderListProvincia(items, emptyMessage, labelFn = item => item.label) {
   if (!Array.isArray(items) || !items.length) {
     return `<p class="ph">${escProvincia(emptyMessage)}</p>`;
@@ -133,7 +211,7 @@ function renderListProvincia(items, emptyMessage, labelFn = item => item.label) 
 
 function renderLatestProvincia(rows) {
   if (!Array.isArray(rows) || !rows.length) {
-    return `<p class="ph">Todavía no hay movimientos recientes para mostrar.</p>`;
+    return `<p class="ph">Todavia no hay movimientos recientes para mostrar.</p>`;
   }
 
   return `
@@ -157,7 +235,7 @@ function startRadarRotationProvincia(items) {
 
   const list = Array.isArray(items) && items.length
     ? items
-    : [{ title: 'Radar provincial', text: 'Todavía no hay suficiente historial provincial para construir insights serios.' }];
+    : [{ title: 'Radar provincial', text: 'Todavia no hay suficiente historial provincial para construir insights serios.' }];
 
   let index = list.length > 1 ? Math.floor(Math.random() * list.length) : 0;
 
@@ -189,8 +267,8 @@ function renderProvincia(data) {
     stopRadarRotationProvincia();
     box.innerHTML = `
       <div class="empty-state">
-        <p>Todavía no hay radar provincial suficiente.</p>
-        <p class="empty-hint">Empezá a procesar lotes para ir poblando el histórico global de la provincia.</p>
+        <p>Todavia no hay radar provincial suficiente.</p>
+        <p class="empty-hint">Empeza a procesar lotes para ir poblando el historico global de la provincia.</p>
       </div>
     `;
     return;
@@ -217,21 +295,21 @@ function renderProvincia(data) {
 
     <div class="radar-columns">
       <div class="radar-box">
-        <h4>Distritos con más movimiento</h4>
-        ${renderListProvincia(data.top_distritos, 'Todavía no hay ranking distrital.')}
+        <h4>Distritos con mas movimiento</h4>
+        ${renderListProvincia(data.top_distritos, 'Todavia no hay ranking distrital.')}
       </div>
       <div class="radar-box">
-        <h4>Cargos / áreas con más publicaciones</h4>
-        ${renderListProvincia(data.top_cargos, 'Todavía no hay ranking de cargos.')}
+        <h4>Cargos / areas con mas publicaciones</h4>
+        ${renderListProvincia(data.top_cargos, 'Todavia no hay ranking de cargos.')}
       </div>
       <div class="radar-box">
         <h4>Turnos dominantes</h4>
-        ${renderListProvincia(data.top_turnos, 'Todavía no hay ranking de turnos.')}
+        ${renderListProvincia(data.top_turnos, 'Todavia no hay ranking de turnos.')}
       </div>
     </div>
 
     <div class="historico-box historico-box-latest" style="margin-top:14px">
-      <h4>Último movimiento provincial visible</h4>
+      <h4>Ultimo movimiento provincial visible</h4>
       ${renderLatestProvincia(data.latest_rows)}
     </div>
   `;
@@ -251,7 +329,8 @@ function renderBackfill(data) {
   const statusMap = {
     idle: 'En espera',
     running: 'Procesando',
-    finished: 'Completado'
+    finished: 'Completado',
+    error: 'Con error'
   };
 
   box.innerHTML = `
@@ -271,7 +350,7 @@ function renderBackfill(data) {
         <span class="backfill-v">${escProvincia(data.district_name || 'Pendiente')}</span>
       </div>
       <div class="backfill-box">
-        <span class="backfill-k">Página siguiente</span>
+        <span class="backfill-k">Pagina siguiente</span>
         <span class="backfill-v">${fmtProvinciaNum((data.next_page || 0) + 1)}</span>
       </div>
       <div class="backfill-box">
@@ -283,18 +362,54 @@ function renderBackfill(data) {
         <span class="backfill-v">${fmtProvinciaNum(data.offers_processed || 0)}</span>
       </div>
       <div class="backfill-box">
-        <span class="backfill-k">Último lote</span>
+        <span class="backfill-k">Ultimo lote</span>
         <span class="backfill-v">${fmtProvinciaNum(data.last_batch_count || 0)} ofertas</span>
       </div>
       <div class="backfill-box">
-        <span class="backfill-k">Última corrida</span>
+        <span class="backfill-k">Ultima corrida</span>
         <span class="backfill-v">${escProvincia(fmtProvinciaFecha(data.last_run_at || '-'))}</span>
       </div>
+    </div>
+    ${data.last_error ? `
+      <p class="prefs-hint" style="margin-top:14px">
+        Ultimo error: ${escProvincia(data.last_error)}${data.retryable ? ' Podes relanzar el proceso; quedo listo para reintentar.' : ''}
+      </p>
+    ` : ''}
+  `;
+}
+
+function renderPlanOptionsProvincia(currentPlanCode, publicPlans) {
+  if (!Array.isArray(publicPlans) || !publicPlans.length) {
+    return `<p class="soft-meta" style="margin-top:10px">Todavia no hay planes publicos disponibles.</p>`;
+  }
+
+  return `
+    <div class="soft-meta" style="margin-top:10px">
+      ${publicPlans.map(item => {
+        const itemCode = String(item.code || '').trim().toUpperCase();
+        const current = itemCode === currentPlanCode;
+        return `
+          <div style="margin-top:8px">
+            <strong>${escProvincia(item.nombre || itemCode)}</strong>
+            ${item.price_ars != null ? ` · $ ${fmtProvinciaNum(item.price_ars)}` : ''}
+            · ${fmtProvinciaNum(item.max_distritos || 0)} distrito(s)
+            · ${fmtProvinciaNum(item.max_cargos || 0)} cargo(s)
+            <div class="soft-actions" style="margin-top:8px">
+              <button
+                class="btn ${current ? 'btn-secondary' : 'btn-primary'} soft-action"
+                type="button"
+                data-checkout-plan-code="${escProvincia(itemCode)}"
+                ${current ? 'disabled' : ''}
+              >${current ? 'Plan actual' : `Ir a ${escProvincia(item.nombre || itemCode)}`}</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
 }
 
-function renderCanalesProvincia(whatsapp, planInfo) {
+function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
   const box = document.getElementById('panel-canales');
   if (!box) return;
 
@@ -304,12 +419,15 @@ function renderCanalesProvincia(whatsapp, planInfo) {
   const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
   const planCode = String(plan.code || subscription.plan_code || 'PLUS').trim().toUpperCase();
   const whatsappRequested = typeof checked === 'function' ? checked('pref-alertas-whatsapp') : false;
+  const publicPlans = (Array.isArray(planesCatalog) ? planesCatalog : [])
+    .filter(item => item && item.public_visible !== false && Number(item.price_ars || 0) > 0)
+    .sort((a, b) => Number(a.sort_order || 999) - Number(b.sort_order || 999));
 
   box.innerHTML = `
     <div class="soft-list">
       <article class="soft-item">
         <div class="soft-title">WhatsApp</div>
-        <div class="soft-sub">${whatsapp?.configured ? 'Configuración lista para pruebas controladas.' : 'Todavía faltan variables del canal.'}</div>
+        <div class="soft-sub">${whatsapp?.configured ? 'Configuracion lista para pruebas controladas.' : 'Todavia faltan variables del canal.'}</div>
         <div class="soft-meta">Preferencia del usuario: ${whatsappRequested ? 'Solicitada' : 'Apagada'} · Plantilla: ${escProvincia(whatsapp?.template_name || 'Pendiente')} (${escProvincia(whatsapp?.template_lang || '-')}) · Access token: ${whatsapp?.access_token_ready ? 'OK' : 'Falta'}</div>
         <div class="soft-actions">
           <button id="btn-whatsapp-test" class="btn btn-secondary soft-action" type="button"${token && whatsapp?.configured ? '' : ' disabled'}>Enviar prueba</button>
@@ -318,14 +436,29 @@ function renderCanalesProvincia(whatsapp, planInfo) {
 
       <article class="soft-item">
         <div class="soft-title">Mercado Pago</div>
-        <div class="soft-sub">Podés dejar preparado el checkout del plan actual para probar el flujo de suscripciones.</div>
-        <div class="soft-meta">Plan: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'beta')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
+        <div class="soft-sub">Podes refrescar el plan activo o preparar checkout para cambiar al plan que quieras.</div>
+        <div class="soft-meta">Plan actual: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'disponible')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
+        ${renderPlanOptionsProvincia(planCode, publicPlans)}
         <div class="soft-actions">
-          <button id="btn-checkout-plan-provincia" class="btn btn-primary soft-action" type="button"${token ? '' : ' disabled'}>Preparar checkout</button>
+          <button id="btn-refresh-plan-provincia" class="btn btn-secondary soft-action" type="button"${token ? '' : ' disabled'}>Refrescar plan</button>
+          <button id="btn-checkout-plan-provincia" class="btn btn-primary soft-action" type="button"${token ? '' : ' disabled'}>Preparar checkout del plan actual</button>
         </div>
       </article>
     </div>
   `;
+
+  const refreshBtn = document.getElementById('btn-refresh-plan-provincia');
+  refreshBtn?.addEventListener('click', async () => {
+    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+    if (!userId) return;
+
+    setButtonBusyProvincia(refreshBtn, 'Actualizando...');
+    try {
+      await cargarExtrasProvincia();
+    } finally {
+      restoreButtonProvincia(refreshBtn);
+    }
+  });
 
   const btn = document.getElementById('btn-checkout-plan-provincia');
   btn?.addEventListener('click', async () => {
@@ -338,7 +471,7 @@ function renderCanalesProvincia(whatsapp, planInfo) {
       if (data.checkout_url) {
         window.open(data.checkout_url, '_blank', 'noopener');
       } else {
-        window.alert(data.message || 'Se registró la sesión, pero todavía no hay checkout real configurado.');
+        window.alert(data.message || 'Se registro la sesion, pero todavia no hay checkout real configurado.');
       }
     } catch (err) {
       console.error('ERROR CHECKOUT:', err);
@@ -346,6 +479,29 @@ function renderCanalesProvincia(whatsapp, planInfo) {
     } finally {
       restoreButtonProvincia(btn);
     }
+  });
+
+  box.querySelectorAll('[data-checkout-plan-code]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+      const targetPlanCode = String(button.getAttribute('data-checkout-plan-code') || '').trim().toUpperCase();
+      if (!userId || !targetPlanCode || targetPlanCode === planCode) return;
+
+      setButtonBusyProvincia(button, 'Preparando...');
+      try {
+        const data = await crearCheckoutMercadoPago(userId, targetPlanCode);
+        if (data.checkout_url) {
+          window.open(data.checkout_url, '_blank', 'noopener');
+        } else {
+          window.alert(data.message || 'Se registro la sesion, pero todavia no hay checkout real configurado.');
+        }
+      } catch (err) {
+        console.error('ERROR CHECKOUT PLAN:', err);
+        window.alert(err?.message || 'No se pudo preparar el checkout');
+      } finally {
+        restoreButtonProvincia(button);
+      }
+    });
   });
 
   const waBtn = document.getElementById('btn-whatsapp-test');
@@ -373,15 +529,22 @@ async function cargarExtrasProvincia() {
 
   if (!token) {
     stopRadarRotationProvincia();
-    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresá para ver el radar provincial.</p>');
-    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresá para ver el estado del backfill.</p>');
-    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresá para ver canales y checkout.</p>');
+    stopProvinciaBackfillMonitor();
+    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresa para ver el radar provincial.</p>');
+    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresa para ver el estado del backfill.</p>');
+    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresa para ver canales y checkout.</p>');
     return;
   }
 
-  const planInfo = currentPlanProvincia();
-
-  const [provincia, backfill, whatsapp] = await Promise.all([
+  const [freshPlanInfo, planesResponse, provincia, backfill, whatsapp] = await Promise.all([
+    obtenerMiPlanProvincia(token).catch(err => {
+      console.error('ERROR MI PLAN:', err);
+      return null;
+    }),
+    obtenerPlanesProvincia().catch(err => {
+      console.error('ERROR PLANES:', err);
+      return null;
+    }),
     obtenerProvinciaResumen().catch(err => {
       console.error('ERROR RADAR PROVINCIAL:', err);
       return null;
@@ -396,9 +559,30 @@ async function cargarExtrasProvincia() {
     })
   ]);
 
+  const planInfo = syncPlanProvincia(freshPlanInfo || currentPlanProvincia(), token);
+  const planesCatalog = Array.isArray(planesResponse?.planes) ? planesResponse.planes : [];
+
+  clearMercadoPagoReturnParamsProvincia();
   renderProvincia(provincia);
   renderBackfill(backfill);
-  renderCanalesProvincia(whatsapp, planInfo);
+  renderCanalesProvincia(whatsapp, planInfo, planesCatalog);
+}
+
+async function monitorProvinciaBackfill(maxChecks = 8, delayMs = 2500) {
+  stopProvinciaBackfillMonitor();
+
+  for (let i = 0; i < maxChecks; i += 1) {
+    await sleepProvincia(delayMs);
+    const status = await obtenerProvinciaBackfillStatus().catch(() => null);
+    await cargarExtrasProvincia();
+
+    if (!status || status.status !== 'running') {
+      stopProvinciaBackfillMonitor();
+      return;
+    }
+  }
+
+  stopProvinciaBackfillMonitor();
 }
 
 function bindProvinciaButtons() {
@@ -416,8 +600,9 @@ function bindProvinciaButtons() {
     const btn = document.getElementById('btn-provincia-step');
     setButtonBusyProvincia(btn, 'Procesando...');
     try {
-      await procesarProvinciaBackfill();
+      await lanzarProvinciaBackfillAuto();
       await cargarExtrasProvincia();
+      await monitorProvinciaBackfill();
     } catch (err) {
       console.error('ERROR BACKFILL STEP:', err);
       window.alert(err?.message || 'No se pudo procesar el lote provincial');
@@ -427,7 +612,7 @@ function bindProvinciaButtons() {
   });
 
   document.getElementById('btn-provincia-reset')?.addEventListener('click', async () => {
-    if (!window.confirm('Esto reinicia solo el cursor provincial. ¿Querés seguir?')) return;
+    if (!window.confirm('Esto reinicia solo el cursor provincial. Queres seguir?')) return;
 
     const btn = document.getElementById('btn-provincia-reset');
     setButtonBusyProvincia(btn, 'Reseteando...');
@@ -456,9 +641,10 @@ if (typeof logout === 'function') {
   const logoutOriginal = logout;
   logout = function (...args) {
     stopRadarRotationProvincia();
-    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresá para ver el radar provincial.</p>');
-    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresá para ver el estado del backfill.</p>');
-    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresá para ver canales y checkout.</p>');
+    stopProvinciaBackfillMonitor();
+    setPanelHTMLProvincia('panel-radar-provincia', '<p class="ph">Ingresa para ver el radar provincial.</p>');
+    setPanelHTMLProvincia('panel-backfill-provincia', '<p class="ph">Ingresa para ver el estado del backfill.</p>');
+    setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresa para ver canales y checkout.</p>');
     return logoutOriginal.apply(this, args);
   };
 }
