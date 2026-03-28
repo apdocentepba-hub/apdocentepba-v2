@@ -148,18 +148,45 @@ function btnRestore(btn) {
 }
 
 async function post(payload) {
-  const res = await fetch(APD_WEB_APP_URL, {
+  const action = String(payload?.action || "").trim();
+
+  let url = API_URL + "/api";
+
+  if (action === "login") {
+    url += "/login";
+  } else if (action === "register") {
+    url += "/register";
+  } else if (action === "google-auth") {
+    url += "/google-auth";
+  } else if (action === "backfill") {
+    url += "/backfill";
+  } else {
+    // ⚠️ fallback: sigue usando Google para lo que no migramos
+    const resp = await fetch(APD_WEB_APP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    return await resp.json();
+  }
+
+  const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    headers: {
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify(payload)
   });
 
-  const text = await res.text();
+  const text = await resp.text();
 
   try {
     return JSON.parse(text);
-  } catch {
-    throw new Error("El backend no devolvió JSON válido");
+  } catch (_) {
+    throw new Error(text || "Respuesta inválida del servidor");
   }
 }
 
