@@ -135,7 +135,7 @@ function bindAdminEvents() {
   );
 }
 
-const postulantesResumenCache = new Map();
+
 
 
 const postulantesResumenCache = new Map();
