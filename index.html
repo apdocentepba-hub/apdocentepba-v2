@@ -3,24 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>APDocentePBA — Alertas docentes PBA</title>
+  <title>APDocentePBA - Alertas docentes PBA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-
   <header class="header">
     <div class="header-inner">
       <div class="brand">
-        <div class="brand-icon">📋</div>
+        <div class="brand-icon">AP</div>
         <div>
           <h1 class="brand-title">APDocentePBA</h1>
-          <p class="brand-sub">Alertas de Actos Públicos Digitales · Provincia de Buenos Aires</p>
+          <p class="brand-sub">Alertas de Actos Publicos Digitales · Provincia de Buenos Aires</p>
         </div>
       </div>
+
       <nav class="top-nav">
         <div id="navPublico" class="nav-group">
           <button id="btnLogin" class="btn btn-ghost" type="button">Ingresar</button>
@@ -28,7 +28,7 @@
         </div>
         <div id="navPrivado" class="nav-group hidden">
           <button id="btnMiPanel" class="btn btn-ghost" type="button">Mi panel</button>
-          <button id="btnCerrarSesion" class="btn btn-danger" type="button">Cerrar sesión</button>
+          <button id="btnCerrarSesion" class="btn btn-danger" type="button">Cerrar sesion</button>
         </div>
       </nav>
     </div>
@@ -38,21 +38,22 @@
     <section id="inicio" class="section">
       <div class="container">
         <div class="hero-card">
-          <div class="hero-eyebrow">🎯 Beta abierta para docentes PBA</div>
-          <h2 class="hero-title">Nunca más te pierdas<br>un Acto Público Digital</h2>
+          <span class="hero-eyebrow">Beta abierta</span>
+          <h2 class="hero-title">Tu radar docente para APD y tendencias provinciales</h2>
           <p class="hero-desc">
-            Configurá tus preferencias de distrito, materia, nivel y turno,
-            y recibí alertas automáticas cuando se publique un APD que te interese.
+            Configura tus distritos, cargos y niveles para ver alertas filtradas,
+            y al mismo tiempo segui el movimiento provincial para evaluar cambios de distrito,
+            materias calientes y vacancias.
           </p>
           <div class="hero-actions">
-            <button class="btn btn-primary btn-lg" onclick="mostrarSeccion('registro')">Empezar ahora</button>
-            <button class="btn btn-outline btn-lg" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
+            <button class="btn btn-primary btn-lg" type="button" onclick="mostrarSeccion('registro')">Crear cuenta</button>
+            <button class="btn btn-outline btn-lg" type="button" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
           </div>
           <div class="hero-features">
-            <div class="hfeat"><span class="hfeat-icon">⚡</span><span>APD en tiempo real</span></div>
-            <div class="hfeat"><span class="hfeat-icon">📧</span><span>Alertas por email</span></div>
-            <div class="hfeat"><span class="hfeat-icon">🎯</span><span>Filtros por perfil</span></div>
-            <div class="hfeat"><span class="hfeat-icon">📍</span><span>Radar provincial</span></div>
+            <div class="hfeat">Alertas filtradas</div>
+            <div class="hfeat">Historico de tus distritos</div>
+            <div class="hfeat">Radar provincial</div>
+            <div class="hfeat">Base para WhatsApp y pagos</div>
           </div>
         </div>
       </div>
@@ -63,55 +64,46 @@
         <div class="form-card">
           <div class="form-card-hdr">
             <h2>Crear cuenta</h2>
-            <p>Completá tus datos para empezar a recibir alertas</p>
+            <p>Empieza con alertas filtradas y luego sumamos radar provincial.</p>
           </div>
-
           <form id="form-registro" novalidate>
             <div class="grid-2">
               <div class="field">
-                <label for="reg-nombre">Nombre <span class="req">*</span></label>
-                <input type="text" id="reg-nombre" placeholder="Tu nombre" required autocomplete="given-name"/>
+                <label for="reg-nombre">Nombre</label>
+                <input type="text" id="reg-nombre" placeholder="Nombre" required>
               </div>
               <div class="field">
-                <label for="reg-apellido">Apellido <span class="req">*</span></label>
-                <input type="text" id="reg-apellido" placeholder="Tu apellido" required autocomplete="family-name"/>
+                <label for="reg-apellido">Apellido</label>
+                <input type="text" id="reg-apellido" placeholder="Apellido" required>
               </div>
             </div>
-
             <div class="grid-2">
               <div class="field">
-                <label for="reg-email">Email <span class="req">*</span></label>
-                <input type="email" id="reg-email" placeholder="tu@email.com" required autocomplete="email"/>
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" placeholder="tu@email.com" required>
               </div>
               <div class="field">
                 <label for="reg-celular">Celular</label>
-                <input type="text" id="reg-celular" placeholder="11 1234-5678" autocomplete="tel"/>
+                <input type="text" id="reg-celular" placeholder="11 1234 5678">
               </div>
             </div>
-
             <div class="field">
-              <label for="reg-password">Contraseña <span class="req">*</span></label>
+              <label for="reg-password">Contrasena</label>
               <div class="pw-wrap">
-                <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"/>
-                <button type="button" class="pw-toggle" data-target="reg-password" tabindex="-1">👁</button>
+                <input type="password" id="reg-password" placeholder="Minimo 6 caracteres" required>
+                <button type="button" class="pw-toggle" data-target="reg-password">Ver</button>
               </div>
             </div>
-
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button>
+              <button type="submit" class="btn btn-primary btn-full">Crear cuenta</button>
             </div>
-
-            <div class="form-foot">¿Ya tenés cuenta?
-              <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button>
+            <div class="form-foot">
+              <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
             </div>
-
             <span id="registro-msg" class="msg"></span>
           </form>
-
-          <div class="separator"><span>o continuá con Google</span></div>
-          <div class="google-wrap">
-            <div id="google-btn-registro"></div>
-          </div>
+          <div class="separator"><span>o continua con Google</span></div>
+          <div class="google-wrap"><div id="google-btn-registro"></div></div>
         </div>
       </div>
     </section>
@@ -120,39 +112,31 @@
       <div class="container form-wrap">
         <div class="form-card">
           <div class="form-card-hdr">
-            <h2>Iniciar sesión</h2>
-            <p>Ingresá para ver tus alertas y preferencias</p>
+            <h2>Ingresar</h2>
+            <p>Entra para ver tus alertas y el radar provincial.</p>
           </div>
-
           <form id="form-login" novalidate>
             <div class="field">
               <label for="login-email">Email</label>
-              <input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"/>
+              <input type="email" id="login-email" placeholder="tu@email.com" required>
             </div>
-
             <div class="field">
-              <label for="login-password">Contraseña</label>
+              <label for="login-password">Contrasena</label>
               <div class="pw-wrap">
-                <input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"/>
-                <button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button>
+                <input type="password" id="login-password" placeholder="Tu contrasena" required>
+                <button type="button" class="pw-toggle" data-target="login-password">Ver</button>
               </div>
             </div>
-
             <div class="form-actions">
               <button type="submit" class="btn btn-primary btn-full">Ingresar</button>
             </div>
-
-            <div class="form-foot">¿No tenés cuenta?
-              <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate</button>
+            <div class="form-foot">
+              <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Todavia no tengo cuenta</button>
             </div>
-
             <span id="login-msg" class="msg"></span>
           </form>
-
-          <div class="separator"><span>o continuá con Google</span></div>
-          <div class="google-wrap">
-            <div id="google-btn-login"></div>
-          </div>
+          <div class="separator"><span>o continua con Google</span></div>
+          <div class="google-wrap"><div id="google-btn-login"></div></div>
         </div>
       </div>
     </section>
@@ -162,48 +146,46 @@
         <div class="panel-header">
           <div>
             <h2 id="panel-bienvenida">Bienvenido/a</h2>
-            <p id="panel-subtitulo" class="panel-sub">Cargando...</p>
+            <p id="panel-subtitulo" class="panel-sub">Cargando panel...</p>
           </div>
           <div class="panel-actions">
-            <button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button>
-            <button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button>
+            <button id="btn-recargar-panel" class="btn btn-secondary" type="button">Recargar</button>
+            <button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesion</button>
           </div>
         </div>
 
         <div id="panel-loading" class="panel-loading hidden">
           <div class="spinner"></div>
-          <span>Cargando panel...</span>
+          <span>Cargando datos...</span>
         </div>
 
         <div id="panel-content" class="cards-grid">
           <div class="panel-card span-4">
-            <div class="card-lbl">👤 Mi cuenta</div>
+            <div class="card-lbl">Mi cuenta</div>
             <div id="panel-datos-docente"><p class="ph">Cargando...</p></div>
           </div>
 
           <div class="panel-card span-4">
-            <div class="card-lbl">⚙️ Mis preferencias</div>
-            <div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div>
-          </div>
-
-          <div class="panel-card span-4">
-            <div class="card-lbl">📊 Estadísticas</div>
-            <div id="panel-estadisticas"><p class="ph">Cargando...</p></div>
-          </div>
-
-          <div class="panel-card span-4">
-            <div class="card-lbl">💳 Mi plan</div>
+            <div class="card-lbl">Mi plan</div>
             <div id="panel-plan"><p class="ph">Cargando...</p></div>
           </div>
 
           <div class="panel-card span-4">
-            <div class="card-lbl">💬 Canales</div>
+            <div class="card-lbl">Canales</div>
             <div id="panel-canales"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-8">
+            <div class="card-lbl-row">
+              <span class="card-lbl">Radar provincial</span>
+              <button id="btn-refresh-provincia" class="mini-btn" type="button">Refrescar radar</button>
+            </div>
+            <div id="panel-radar-provincia"><p class="ph">Cargando...</p></div>
           </div>
 
           <div class="panel-card span-4">
             <div class="card-lbl-row">
-              <span class="card-lbl">🛠️ Backfill provincial</span>
+              <span class="card-lbl">Backfill provincial</span>
               <div class="mini-group">
                 <button id="btn-provincia-step" class="mini-btn" type="button">Procesar lote</button>
                 <button id="btn-provincia-reset" class="mini-btn" type="button">Reset</button>
@@ -212,127 +194,100 @@
             <div id="panel-backfill-provincia"><p class="ph">Cargando...</p></div>
           </div>
 
-          <div class="panel-card span-12">
-            <div class="card-lbl-row">
-              <span class="card-lbl">📍 Radar provincial</span>
-              <button id="btn-refresh-provincia" class="mini-btn" type="button">Refrescar radar</button>
-            </div>
-            <p class="prefs-hint">
-              Este bloque resume movimiento provincial real para ayudarte a evaluar otros distritos, materias y estados.
-            </p>
-            <div id="panel-radar-provincia"><p class="ph">Cargando...</p></div>
-          </div>
-
           <div class="panel-card span-8">
             <div class="card-lbl-row">
-              <span class="card-lbl">🔔 Alertas APD activas</span>
+              <span class="card-lbl">Alertas actuales</span>
               <span id="alertas-badge" class="badge-num hidden"></span>
             </div>
             <div id="panel-alertas"><p class="ph">Cargando...</p></div>
           </div>
 
           <div class="panel-card span-4">
-            <div class="card-lbl">📋 Historial</div>
-            <div id="panel-historial"><p class="ph">Cargando...</p></div>
+            <div class="card-lbl">Resumen de filtros</div>
+            <div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div>
           </div>
 
           <div class="panel-card span-12">
             <div class="card-lbl-row">
-              <span class="card-lbl">📈 Tendencia APD</span>
-              <button id="btn-refresh-historico" class="mini-btn" type="button">Actualizar histórico</button>
+              <span class="card-lbl">Historico de tus distritos</span>
+              <button id="btn-refresh-historico" class="mini-btn" type="button">Actualizar historico</button>
             </div>
-            <p class="prefs-hint">
-              Guardamos fotos de los APD de tus distritos para estimar movimiento, cierres y cambios de estado.
-            </p>
             <div id="panel-historico-apd"><p class="ph">Cargando...</p></div>
           </div>
         </div>
 
         <div class="panel-card prefs-card">
-          <div class="card-lbl">✏️ Configurar mis preferencias de alerta</div>
-          <p class="prefs-hint">Si dejás distritos o cargos vacíos, ese filtro no se aplica.</p>
-          <p id="prefs-plan-hint" class="prefs-hint">Cargando límites del plan...</p>
-
+          <div class="card-lbl">Configurar preferencias</div>
+          <p id="prefs-plan-hint" class="prefs-hint">Cargando limites del plan...</p>
           <form id="form-preferencias">
-            <div class="sec-head">
-              <div class="sec-label">Distritos</div>
-              <button id="btn-clear-distritos" class="mini-btn" type="button">Quitar filtro</button>
-            </div>
-
+            <div class="sec-label">Distritos</div>
             <div class="grid-3">
               <div class="field">
                 <label for="pref-distrito-principal">Distrito principal</label>
-                <input type="text" id="pref-distrito-principal" placeholder="Ej: AVELLANEDA" autocomplete="off"/>
+                <input type="text" id="pref-distrito-principal" autocomplete="off">
                 <div id="sug-distrito-1" class="ac-list"></div>
               </div>
               <div class="field">
                 <label for="pref-segundo-distrito">Segundo distrito</label>
-                <input type="text" id="pref-segundo-distrito" placeholder="Ej: LANÚS" autocomplete="off"/>
+                <input type="text" id="pref-segundo-distrito" autocomplete="off">
                 <div id="sug-distrito-2" class="ac-list"></div>
               </div>
               <div class="field">
                 <label for="pref-tercer-distrito">Tercer distrito</label>
-                <input type="text" id="pref-tercer-distrito" placeholder="Ej: QUILMES" autocomplete="off"/>
+                <input type="text" id="pref-tercer-distrito" autocomplete="off">
                 <div id="sug-distrito-3" class="ac-list"></div>
               </div>
             </div>
-
             <div class="grid-2">
               <div class="field">
                 <label for="pref-cuarto-distrito">Cuarto distrito</label>
-                <input type="text" id="pref-cuarto-distrito" placeholder="Ej: LOMAS DE ZAMORA" autocomplete="off"/>
+                <input type="text" id="pref-cuarto-distrito" autocomplete="off">
                 <div id="sug-distrito-4" class="ac-list"></div>
               </div>
               <div class="field">
                 <label for="pref-quinto-distrito">Quinto distrito</label>
-                <input type="text" id="pref-quinto-distrito" placeholder="Ej: BERAZATEGUI" autocomplete="off"/>
+                <input type="text" id="pref-quinto-distrito" autocomplete="off">
                 <div id="sug-distrito-5" class="ac-list"></div>
               </div>
             </div>
 
-            <div class="sec-head">
-              <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 5)</span></div>
-              <button id="btn-clear-cargos" class="mini-btn" type="button">Quitar filtro</button>
-            </div>
-
+            <div class="sec-label">Cargos o materias</div>
             <div class="grid-3">
               <div class="field">
-                <label for="pref-cargo-1">Cargo / Materia 1</label>
-                <input type="text" id="pref-cargo-1" placeholder="Ej: PRECEPTOR" autocomplete="off"/>
+                <label for="pref-cargo-1">Cargo 1</label>
+                <input type="text" id="pref-cargo-1" autocomplete="off">
                 <div id="sug-cargo-1" class="ac-list"></div>
               </div>
               <div class="field">
-                <label for="pref-cargo-2">Cargo / Materia 2</label>
-                <input type="text" id="pref-cargo-2" placeholder="Ej: MATEMÁTICA" autocomplete="off"/>
+                <label for="pref-cargo-2">Cargo 2</label>
+                <input type="text" id="pref-cargo-2" autocomplete="off">
                 <div id="sug-cargo-2" class="ac-list"></div>
               </div>
               <div class="field">
-                <label for="pref-cargo-3">Cargo / Materia 3</label>
-                <input type="text" id="pref-cargo-3" placeholder="Ej: INGLÉS" autocomplete="off"/>
+                <label for="pref-cargo-3">Cargo 3</label>
+                <input type="text" id="pref-cargo-3" autocomplete="off">
                 <div id="sug-cargo-3" class="ac-list"></div>
               </div>
             </div>
-
             <div class="grid-2">
               <div class="field">
-                <label for="pref-cargo-4">Cargo / Materia 4</label>
-                <input type="text" id="pref-cargo-4" placeholder="Ej: HISTORIA" autocomplete="off"/>
+                <label for="pref-cargo-4">Cargo 4</label>
+                <input type="text" id="pref-cargo-4" autocomplete="off">
                 <div id="sug-cargo-4" class="ac-list"></div>
               </div>
               <div class="field">
-                <label for="pref-cargo-5">Cargo / Materia 5</label>
-                <input type="text" id="pref-cargo-5" placeholder="Ej: BIOLOGÍA" autocomplete="off"/>
+                <label for="pref-cargo-5">Cargo 5</label>
+                <input type="text" id="pref-cargo-5" autocomplete="off">
                 <div id="sug-cargo-5" class="ac-list"></div>
               </div>
             </div>
 
-            <div class="sec-label">Turno</div>
             <div class="grid-2">
               <div class="field">
-                <label for="pref-turnos">Turno preferido</label>
+                <label for="pref-turnos">Turno</label>
                 <select id="pref-turnos">
                   <option value="">Cualquier turno</option>
-                  <option value="M">Mañana</option>
+                  <option value="M">Manana</option>
                   <option value="T">Tarde</option>
                   <option value="V">Vespertino</option>
                   <option value="N">Noche</option>
@@ -341,33 +296,49 @@
               </div>
             </div>
 
-            <div class="sec-label">Nivel / Modalidad <span class="hint-sm">(sin selección = cualquiera)</span></div>
-            <div id="pref-nivel-modalidad-box" class="checks-grid">
+            <div class="sec-label">Nivel o modalidad</div>
+            <div class="checks-grid">
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="INICIAL"><span class="chk-lbl">Inicial</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PRIMARIO"><span class="chk-lbl">Primario</span></label>
               <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SECUNDARIO"><span class="chk-lbl">Secundario</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SUPERIOR"><span class="chk-lbl">Superior / Form. Docente</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ESPECIAL"><span class="chk-lbl">Ed. Especial</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="ADULTOS"><span class="chk-lbl">Jóvenes y Adultos</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION FISICA"><span class="chk-lbl">Ed. Física</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PSICOLOGIA"><span class="chk-lbl">Psicología Comunitaria</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ARTISTICA"><span class="chk-lbl">Ed. Artística</span></label>
-              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="TECNICO PROFESIONAL"><span class="chk-lbl">Técnico-Profesional</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="SUPERIOR"><span class="chk-lbl">Superior</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ESPECIAL"><span class="chk-lbl">Especial</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="ADULTOS"><span class="chk-lbl">Adultos</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION FISICA"><span class="chk-lbl">Fisica</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="PSICOLOGIA"><span class="chk-lbl">Psicologia</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="EDUCACION ARTISTICA"><span class="chk-lbl">Artistica</span></label>
+              <label class="chk-card"><input type="checkbox" name="pref-nivel-modalidad" value="TECNICO PROFESIONAL"><span class="chk-lbl">Tecnico profesional</span></label>
             </div>
 
             <div class="sec-label">Notificaciones</div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="pref-celular">Celular para Telegram / WhatsApp</label>
+                <input type="text" id="pref-celular" placeholder="54911..." autocomplete="tel">
+              </div>
+            </div>
             <div class="notif-grid">
               <label class="chk-card chk-notif">
-                <input type="checkbox" id="pref-alertas-activas"/>
-                <div><span class="chk-lbl">🔔 Alertas activas</span><span class="chk-sub">Recibir alertas compatibles</span></div>
+                <input type="checkbox" id="pref-alertas-activas">
+                <div><span class="chk-lbl">Alertas activas</span><span class="chk-sub">Prende o pausa tus alertas</span></div>
               </label>
               <label class="chk-card chk-notif">
-                <input type="checkbox" id="pref-alertas-email"/>
-                <div><span class="chk-lbl">📧 Email</span><span class="chk-sub">Listo para activarlo cuando compres el dominio</span></div>
+                <input type="checkbox" id="pref-alertas-email">
+                <div><span class="chk-lbl">Email</span><span class="chk-sub">Canal principal</span></div>
               </label>
               <label class="chk-card chk-notif">
-                <input type="checkbox" id="pref-alertas-whatsapp"/>
-                <div><span class="chk-lbl">💬 WhatsApp</span><span class="chk-sub">Queda preparado para cuando lo habilites</span></div>
+                <input type="checkbox" id="pref-alertas-telegram">
+                <div><span class="chk-lbl">Telegram</span><span class="chk-sub">Alertas push por bot vinculado</span></div>
+              </label>
+            </div>
+            <div class="notif-grid">
+              <label class="chk-card chk-notif">
+                <input type="checkbox" id="pref-alertas-whatsapp">
+                <div><span class="chk-lbl">WhatsApp premium</span><span class="chk-sub">Bot de consulta; no envia push automatico</span></div>
+              </label>
+              <label class="chk-card chk-notif">
+                <input type="checkbox" id="pref-whatsapp-habilitado">
+                <div><span class="chk-lbl">Consulta WA habilitada</span><span class="chk-sub">Permite responder segun tus filtros guardados</span></div>
               </label>
             </div>
 
@@ -382,10 +353,10 @@
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">APDocentePBA · Sistema de alertas para docentes PBA · 2026</div>
+    <div class="footer-inner">APDocentePBA · Base de alertas y radar provincial</div>
   </footer>
 
-  <script src="app_v2.js?v=14"></script>
-  <script src="app_provincia.js?v=1"></script>
+  <script src="app_v2.js"></script>
+  <script src="app_provincia.js"></script>
 </body>
 </html>
