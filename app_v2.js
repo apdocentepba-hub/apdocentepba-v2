@@ -346,6 +346,93 @@ function setPanelLoading(activo) {
   document.getElementById("panel-loading")?.classList.toggle("hidden", !activo);
   document.getElementById("panel-content")?.classList.toggle("hidden", activo);
 }
+function parseFechaAPD(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const normal = raw
+    .replace("T", " ")
+    .replace(/\.\d+Z$/, "")
+    .replace(/Z$/, "");
+
+  let m = normal.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[ ,]+(\d{2}):(\d{2}))?$/);
+  if (m) {
+    const dd = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const yyyy = Number(m[3]);
+    const hh = Number(m[4] || 23);
+    const min = Number(m[5] || 59);
+    const d = new Date(yyyy, mm, dd, hh, min, 0, 0);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  m = normal.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ,]+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) {
+    const yyyy = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const dd = Number(m[3]);
+    const hh = Number(m[4] || 23);
+    const min = Number(m[5] || 59);
+    const ss = Number(m[6] || 0);
+    const d = new Date(yyyy, mm, dd, hh, min, ss, 0);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function estadoOfertaInactiva(alerta) {
+  const estado = String(
+    alerta?.estado ||
+    alerta?.estado_oferta ||
+    alerta?.estado_actual ||
+    ""
+  ).trim().toUpperCase();
+
+  if (!estado) return false;
+
+  return [
+    "CERRADA",
+    "FINALIZADA",
+    "FINALIZADO",
+    "VENCIDA",
+    "VENCIDO",
+    "ANULADA",
+    "ANULADO",
+    "DESIERTA",
+    "DESIERTO",
+    "DESIGNADA",
+    "DESIGNADO",
+    "CESE",
+    "CESADA",
+    "NO VIGENTE"
+  ].includes(estado);
+}
+
+function ofertaVencidaPorFecha(alerta) {
+  const fecha =
+    alerta?.finoferta ||
+    alerta?.finoferta_label ||
+    alerta?.fecha_cierre_raw ||
+    alerta?.fecha_cierre ||
+    alerta?.cierre ||
+    "";
+
+  const d = parseFechaAPD(fecha);
+  if (!d) return false;
+
+  return d.getTime() < Date.now();
+}
+
+function filtrarAlertasVigentes(alertas) {
+  return (Array.isArray(alertas) ? alertas : []).filter(alerta => {
+    if (!alerta) return false;
+    if (estadoOfertaInactiva(alerta)) return false;
+    if (ofertaVencidaPorFecha(alerta)) return false;
+    return true;
+  });
+}
 
 async function registrarDocente(e) {
   e.preventDefault();
@@ -569,11 +656,11 @@ async function obtenerMisAlertas(userId) {
     throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
   }
 
-  return Array.isArray(data.resultados) ? data.resultados : [];
+  return filtrarAlertasVigentes(Array.isArray(data.resultados) ? data.resultados : []);
 }
 
 function renderAlertasAPD(alertas) {
-  alertasState.items = Array.isArray(alertas) ? alertas : [];
+  alertasState.items = filtrarAlertasVigentes(alertas);
   alertasState.index = 0;
   renderAlertaActual();
 }
@@ -815,7 +902,7 @@ function renderAlertaActual() {
           <div class="alerta-tags">
             ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
             ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-            <span class="tag tag-estado">Activa</span>
+            ${a?.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
           </div>
 
           <div class="alerta-title">${esc(titulo)}</div>
