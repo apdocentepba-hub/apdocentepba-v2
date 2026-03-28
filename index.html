@@ -247,6 +247,27 @@
             <div id="panel-historico-apd"><p class="ph">Cargando...</p></div>
           </div>
         </div>
+        <div id="admin-panel-card" class="panel-card span-12 hidden">
+  <div class="card-lbl-row">
+    <span class="card-lbl">🛡️ Administración del sistema</span>
+    <div class="mini-group">
+      <button id="admin-cargar-resumen" class="mini-btn" type="button">Resumen</button>
+      <button id="admin-cargar-usuarios" class="mini-btn" type="button">Usuarios</button>
+      <button id="admin-cargar-sesiones" class="mini-btn" type="button">Sesiones</button>
+      <button id="admin-cargar-alertas" class="mini-btn" type="button">Alertas</button>
+    </div>
+  </div>
+
+  <p class="prefs-hint">
+    Este bloque es privado y solo se muestra a usuarios administradores.
+  </p>
+
+  <div id="admin-cards" class="admin-cards"></div>
+
+  <div class="admin-block">
+    <pre id="admin-output" class="admin-output">Esperando consulta...</pre>
+  </div>
+</div>
 
         <div class="panel-card prefs-card">
           <div class="card-lbl">✏️ Configurar mis preferencias de alerta</div>
