@@ -21,6 +21,123 @@ const alertasState = {
   index: 0
 };
 
+/* ===== ADMIN ===== */
+const ADMIN = {
+  enabled: false
+};
+
+function getAdminToken() {
+  return obtenerToken();
+}
+
+async function adminApiGet(path) {
+  const token = getAdminToken();
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": token ? `Bearer ${token}` : ""
+    }
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  }
+
+  return data;
+}
+
+function adminSetOutput(data) {
+  const pre = document.getElementById("admin-output");
+  if (!pre) return;
+  pre.textContent = JSON.stringify(data, null, 2);
+}
+
+function adminSetCards(resumen) {
+  const box = document.getElementById("admin-cards");
+  if (!box) return;
+
+  if (!resumen) {
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="admin-card"><strong>Usuarios</strong><span>${resumen.usuarios_total ?? 0}</span></div>
+    <div class="admin-card"><strong>Activos</strong><span>${resumen.usuarios_activos ?? 0}</span></div>
+    <div class="admin-card"><strong>Admins</strong><span>${resumen.admins_total ?? 0}</span></div>
+    <div class="admin-card"><strong>Sesiones</strong><span>${resumen.sesiones_activas ?? 0}</span></div>
+    <div class="admin-card"><strong>Alertas hoy</strong><span>${resumen.alertas_hoy ?? 0}</span></div>
+    <div class="admin-card"><strong>Errores</strong><span>${resumen.errores_hoy ?? 0}</span></div>
+  `;
+}
+
+async function adminCheckAccess() {
+  try {
+    const data = await adminApiGet("/api/admin/me");
+    const isAdmin = !!data?.user?.es_admin;
+
+    ADMIN.enabled = isAdmin;
+
+    const card = document.getElementById("admin-panel-card");
+    if (card) {
+      card.classList.toggle("hidden", !isAdmin);
+    }
+
+    return isAdmin;
+  } catch (e) {
+    ADMIN.enabled = false;
+    const card = document.getElementById("admin-panel-card");
+    if (card) card.classList.add("hidden");
+    return false;
+  }
+}
+
+async function adminLoadResumen() {
+  const data = await adminApiGet("/api/admin/resumen");
+  adminSetCards(data.resumen || null);
+  adminSetOutput(data);
+}
+
+async function adminLoadUsuarios() {
+  const data = await adminApiGet("/api/admin/usuarios");
+  adminSetOutput(data);
+}
+
+async function adminLoadSesiones() {
+  const data = await adminApiGet("/api/admin/sesiones");
+  adminSetOutput(data);
+}
+
+async function adminLoadAlertas() {
+  const data = await adminApiGet("/api/admin/alertas");
+  adminSetOutput(data);
+}
+
+function bindAdminEvents() {
+  document.getElementById("admin-cargar-resumen")?.addEventListener("click", () =>
+    adminLoadResumen().catch(err => adminSetOutput({ ok: false, error: err.message }))
+  );
+
+  document.getElementById("admin-cargar-usuarios")?.addEventListener("click", () =>
+    adminLoadUsuarios().catch(err => adminSetOutput({ ok: false, error: err.message }))
+  );
+
+  document.getElementById("admin-cargar-sesiones")?.addEventListener("click", () =>
+    adminLoadSesiones().catch(err => adminSetOutput({ ok: false, error: err.message }))
+  );
+
+  document.getElementById("admin-cargar-alertas")?.addEventListener("click", () =>
+    adminLoadAlertas().catch(err => adminSetOutput({ ok: false, error: err.message }))
+  );
+}
+
+const postulantesResumenCache = new Map();
+
+
 const postulantesResumenCache = new Map();
 const suggestionCache = new Map();
 const autocompleteStates = new Map();
@@ -1220,6 +1337,8 @@ async function cargarDashboard() {
         console.error("ERROR EXTRAS PROVINCIA:", err);
       });
     }
+    await adminCheckAccess();
+bindAdminEvents();
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
