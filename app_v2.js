@@ -1128,9 +1128,11 @@ async function cargarDashboard() {
     renderPlanUI(planActual);
     actualizarNav();
 
-    cargarHistoricoPanel(token).catch(err => {
-      console.error("ERROR PANEL HISTORICO:", err);
-    });
+    if (typeof window.cargarExtrasProvincia === "function") {
+      window.cargarExtrasProvincia().catch(err => {
+        console.error("ERROR EXTRAS PROVINCIA:", err);
+      });
+    }
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
     alert("Error cargando panel");
