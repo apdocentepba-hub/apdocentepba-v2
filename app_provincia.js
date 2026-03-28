@@ -1,5 +1,5 @@
 'use strict';
-
+console.log("APP_PROVINCIA_CARGADO");
 const PROVINCIA_DAYS_DEFAULT = 30;
 let radarRotationTimer = null;
 let provinciaBackfillMonitorTimer = null;
