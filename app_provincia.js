@@ -122,28 +122,6 @@ async function obtenerWhatsAppHealth() {
   return workerFetchJson('/api/whatsapp/health');
 }
 
-async function obtenerEmailHealth() {
-  return workerFetchJson('/api/email/health');
-}
-
-async function enviarEmailTest(userId) {
-  return workerFetchJson('/api/email/test-send', {
-    method: 'POST',
-    body: JSON.stringify({ user_id: userId })
-  });
-}
-
-async function obtenerTelegramLinkStatus(userId) {
-  return workerFetchJson(`/api/telegram/link-status?user_id=${encodeURIComponent(userId)}`);
-}
-
-async function iniciarTelegramLink(userId) {
-  return workerFetchJson('/api/telegram/link-start', {
-    method: 'POST',
-    body: JSON.stringify({ user_id: userId })
-  });
-}
-
 async function enviarWhatsAppTest(userId) {
   return workerFetchJson('/api/whatsapp/test-send', {
     method: 'POST',
@@ -622,8 +600,9 @@ function bindProvinciaButtons() {
     const btn = document.getElementById('btn-provincia-step');
     setButtonBusyProvincia(btn, 'Procesando...');
     try {
-      await procesarProvinciaBackfill(true);
+      await lanzarProvinciaBackfillAuto();
       await cargarExtrasProvincia();
+      await monitorProvinciaBackfill();
     } catch (err) {
       console.error('ERROR BACKFILL STEP:', err);
       window.alert(err?.message || 'No se pudo procesar el lote provincial');
