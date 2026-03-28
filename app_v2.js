@@ -322,32 +322,61 @@ function setPanelLoading(activo) {
 async function registrarDocente(e) {
   e.preventDefault();
 
-  const btn = e.submitter || document.querySelector("#form-registro button[type='submit']");
+  const btn = e.submitter || document.querySelector('#form-registro button[type="submit"]');
+
+  if (btn?.disabled) return;
+
+  const nombre = val("reg-nombre").trim();
+  const apellido = val("reg-apellido").trim();
+  const email = val("reg-email").trim().toLowerCase();
+  const celular = val("reg-celular").trim();
+  const password = val("reg-password").trim();
+
+  if (!nombre) {
+    showMsg("registro-msg", "Ingresá el nombre", "error");
+    return;
+  }
+
+  if (!apellido) {
+    showMsg("registro-msg", "Ingresá el apellido", "error");
+    return;
+  }
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showMsg("registro-msg", "Ingresá un email válido", "error");
+    return;
+  }
+
+  if (!password || password.length < 6) {
+    showMsg("registro-msg", "La contraseña debe tener al menos 6 caracteres", "error");
+    return;
+  }
+
   btnLoad(btn, "Registrando...");
   showMsg("registro-msg", "Procesando...", "info");
 
   try {
     const data = await post({
       action: "register",
-      nombre: val("reg-nombre"),
-      apellido: val("reg-apellido"),
-      email: val("reg-email"),
-      celular: val("reg-celular"),
-      password: val("reg-password")
+      nombre,
+      apellido,
+      email,
+      celular,
+      password
     });
 
-    if (data.ok) {
+    if (data?.ok) {
       showMsg("registro-msg", data.message || "Registro exitoso", "ok");
       document.getElementById("form-registro")?.reset();
       setTimeout(() => mostrarSeccion("login"), 1200);
     } else {
-      showMsg("registro-msg", data.message || "No se pudo registrar", "error");
+      showMsg("registro-msg", data?.error || data?.message || "No se pudo registrar", "error");
     }
   } catch (err) {
-    console.error(err);
-    showMsg("registro-msg", "Error de conexión. Intentá de nuevo.", "error");
+    console.error("Error registro:", err);
+    showMsg("registro-msg", err?.message || "Error al registrar", "error");
   } finally {
-    btnRestore(btn);
+    btnLoad(btn, null);
   }
 }
 
