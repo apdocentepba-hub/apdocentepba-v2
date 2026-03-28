@@ -51,7 +51,9 @@ function stopRadarRotationProvincia() {
 }
 
 function stopProvinciaBackfillMonitor() {
-  if (provinciaBackfillMonitorTimer) clearTimeout(provinciaBackfillMonitorTimer);
+  if (provinciaBackfillMonitorTimer) {
+    clearTimeout(provinciaBackfillMonitorTimer);
+  }
   provinciaBackfillMonitorTimer = null;
 }
 
@@ -566,14 +568,27 @@ window.cargarExtrasProvincia = cargarExtrasProvincia;
   renderProvincia(provincia);
   renderBackfill(backfill);
   renderCanalesProvincia(whatsapp, planInfo, planesCatalog);
+
+  if (backfill?.status === 'running' && !provinciaBackfillMonitorTimer) {
+    provinciaBackfillMonitorTimer = setTimeout(() => {
+      monitorProvinciaBackfill().catch(err => {
+        console.error('ERROR REANUDANDO MONITOR BACKFILL:', err);
+      });
+    }, 1000);
+  }
 }
 
-async function monitorProvinciaBackfill(maxChecks = 8, delayMs = 2500) {
+async function monitorProvinciaBackfill(delayMs = 2500) {
   stopProvinciaBackfillMonitor();
 
-  for (let i = 0; i < maxChecks; i += 1) {
+  while (true) {
     await sleepProvincia(delayMs);
-    const status = await obtenerProvinciaBackfillStatus().catch(() => null);
+
+    const status = await obtenerProvinciaBackfillStatus().catch(err => {
+      console.error('ERROR MONITOR BACKFILL STATUS:', err);
+      return null;
+    });
+
     await cargarExtrasProvincia();
 
     if (!status || status.status !== 'running') {
@@ -581,8 +596,6 @@ async function monitorProvinciaBackfill(maxChecks = 8, delayMs = 2500) {
       return;
     }
   }
-
-  stopProvinciaBackfillMonitor();
 }
 
 function bindProvinciaButtons() {
@@ -596,21 +609,27 @@ function bindProvinciaButtons() {
     }
   });
 
-  document.getElementById('btn-provincia-step')?.addEventListener('click', async () => {
+    document.getElementById('btn-provincia-step')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-provincia-step');
     setButtonBusyProvincia(btn, 'Procesando...');
     try {
       await lanzarProvinciaBackfillAuto();
       await cargarExtrasProvincia();
-      await monitorProvinciaBackfill();
+
+      if (!provinciaBackfillMonitorTimer) {
+        provinciaBackfillMonitorTimer = setTimeout(() => {
+          monitorProvinciaBackfill().catch(err => {
+            console.error('ERROR MONITOR BACKFILL:', err);
+          });
+        }, 1000);
+      }
     } catch (err) {
       console.error('ERROR BACKFILL STEP:', err);
-      window.alert(err?.message || 'No se pudo procesar el lote provincial');
+      window.alert(err?.message || 'No se pudo procesar el backfill provincial');
     } finally {
       restoreButtonProvincia(btn);
     }
   });
-
   document.getElementById('btn-provincia-reset')?.addEventListener('click', async () => {
     if (!window.confirm('Esto reinicia solo el cursor provincial. Queres seguir?')) return;
 
