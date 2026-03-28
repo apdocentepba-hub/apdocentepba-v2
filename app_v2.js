@@ -383,14 +383,28 @@ async function registrarDocente(e) {
   showMsg("registro-msg", "Procesando...", "info");
 
   try {
-    const data = await post({
-      action: "register",
-      nombre,
-      apellido,
-      email,
-      celular,
-      password
+    const resp = await fetch(`${API_URL}/api/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        nombre,
+        apellido,
+        email,
+        celular,
+        password
+      })
     });
+
+    const text = await resp.text();
+    let data = {};
+
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      throw new Error(text || "Respuesta inválida del servidor");
+    }
 
     if (data?.ok) {
       showMsg("registro-msg", data.message || "Registro exitoso", "ok");
