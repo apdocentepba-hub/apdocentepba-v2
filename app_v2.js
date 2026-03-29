@@ -1328,9 +1328,34 @@ try {
     method: 'POST',
     body: JSON.stringify({
       offers: alertasPanel.map(o => ({
-        ...o,
-        id: String(o.idoferta || o.iddetalle || o.id)
-      }))
+  id: String(o.idoferta || o.iddetalle),
+  source_offer_key: o.source_offer_key,
+
+  // 👇 AGREGAR TODO EL OBJETO REAL
+  cargo: o.cargo,
+  materia: o.materia,
+  nivel: o.nivel,
+  distrito: o.distrito,
+  escuela: o.escuela,
+  turno: o.turno,
+
+  modulos: o.modulos,
+  dias_horarios: o.dias_horarios,
+
+  desde: o.desde,
+  hasta: o.hasta,
+
+  tipo_cargo: o.tipo_cargo,
+  revista: o.revista,
+
+  curso_division: o.curso_division,
+  jornada: o.jornada,
+
+  observaciones: o.observaciones,
+
+  fecha_cierre: o.fecha_cierre,
+  link_postular: o.link_postular
+}))
     })
   });
 } catch (err) {
