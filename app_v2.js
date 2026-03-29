@@ -1318,7 +1318,18 @@ async function cargarDashboard() {
 
     const preferencias = adaptarPreferencias(prefRaw);
     planActual = planInfo || buildPlanFallback();
+const alertasPanel = Array.isArray(alertasResult) ? alertasResult : [];
 
+try {
+  await workerFetchJson('/api/sync-offers', {
+    method: 'POST',
+    body: JSON.stringify({
+      offers: alertasPanel
+    })
+  });
+} catch (err) {
+  console.warn('ERROR SYNC OFFERS:', err);
+}
     renderDashboard({
       docente,
       preferencias,
