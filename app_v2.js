@@ -1318,8 +1318,11 @@ async function cargarDashboard() {
 
     const preferencias = adaptarPreferencias(prefRaw);
     planActual = planInfo || buildPlanFallback();
-const alertasPanel = Array.isArray(alertasResult) ? alertasResult : [];
+const alertasPanel = Array.isArray(alertasResult?.resultados)
+  ? alertasResult
+  : [];
 
+console.log("ALERTAS PANEL:", alertasPanel.length, alertasPanel);
 try {
   await workerFetchJson('/api/sync-offers', {
     method: 'POST',
