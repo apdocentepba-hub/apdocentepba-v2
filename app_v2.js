@@ -1328,10 +1328,8 @@ try {
   method: 'POST',
   body: JSON.stringify({
     offers: alertasPanel.map(o => ({
-      id: String(o.idoferta || o.iddetalle),
-      source_offer_key: o.source_offer_key,
-      idoferta: o.idoferta,
-      iddetalle: o.iddetalle
+      ...o,
+      id: String(o.idoferta || o.iddetalle || o.id)
     }))
   })
 });
