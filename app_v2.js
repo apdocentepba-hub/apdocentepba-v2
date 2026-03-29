@@ -1327,7 +1327,10 @@ try {
   await workerFetchJson('/api/sync-offers', {
     method: 'POST',
     body: JSON.stringify({
-      offers: alertasPanel
+      offers: alertasPanel.map(o => ({
+        ...o,
+        id: o.idoferta || o.iddetalle || o.id
+      }))
     })
   });
 } catch (err) {
