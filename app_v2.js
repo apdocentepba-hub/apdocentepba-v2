@@ -1318,7 +1318,7 @@ async function cargarDashboard() {
 
     const preferencias = adaptarPreferencias(prefRaw);
     planActual = planInfo || buildPlanFallback();
-const alertasPanel = Array.isArray(alertasResult?.resultados)
+const alertasPanel = Array.isArray(alertasResult)
   ? alertasResult
   : [];
 
