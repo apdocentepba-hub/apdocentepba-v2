@@ -1325,39 +1325,31 @@ const alertasPanel = Array.isArray(alertasResult)
 console.log("ALERTAS PANEL:", alertasPanel.length, alertasPanel);
 try {
   await workerFetchJson('/api/sync-offers', {
-    method: 'POST',
-    body: JSON.stringify({
-      offers: alertasPanel.map(o => ({
-  id: String(o.idoferta || o.iddetalle),
-  source_offer_key: o.source_offer_key,
-
-  // 👇 AGREGAR TODO EL OBJETO REAL
-  cargo: o.cargo,
-  materia: o.materia,
-  nivel: o.nivel,
-  distrito: o.distrito,
-  escuela: o.escuela,
-  turno: o.turno,
-
-  modulos: o.modulos,
-  dias_horarios: o.dias_horarios,
-
-  desde: o.desde,
-  hasta: o.hasta,
-
-  tipo_cargo: o.tipo_cargo,
-  revista: o.revista,
-
-  curso_division: o.curso_division,
-  jornada: o.jornada,
-
-  observaciones: o.observaciones,
-
-  fecha_cierre: o.fecha_cierre,
-  link_postular: o.link_postular
-}))
-    })
-  });
+  method: 'POST',
+  body: JSON.stringify({
+    offers: alertasPanel.map(o => ({
+      ...o,
+      id: String(o.idoferta || o.iddetalle || o.id),
+      modulos: o.hsmodulos || o.modulos || "",
+      desde: o.supl_desde_label || o.supl_desde || o.desde || "",
+      hasta: o.supl_hasta_label || o.supl_hasta || o.hasta || "",
+      fecha_cierre: o.finoferta_label || o.finoferta || o.fecha_cierre || "",
+      tipo_cargo: o.tipooferta || o.tipo_cargo || "",
+      revista: o.supl_revista || o.revista || "",
+      curso_division: o.cursodivision || o.curso_division || "",
+      jornada: o.jornada || "",
+      dias_horarios: [
+        o.lunes,
+        o.martes,
+        o.miercoles,
+        o.jueves,
+        o.viernes,
+        o.sabado
+      ].filter(Boolean).join(" "),
+      link_postular: o.abc_postulantes_url || o.link_postular || ""
+    }))
+  })
+});
 } catch (err) {
   console.warn('ERROR SYNC OFFERS:', err);
 }
