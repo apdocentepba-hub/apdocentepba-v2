@@ -1333,8 +1333,7 @@ try {
     renderDashboard({
       docente,
       preferencias,
-      alertas: Array.isArray(alertasResult) ? alertasResult : [],
-      historial: [],
+alertas: alertasPanel,      historial: [],
       planInfo: planActual,
       estadisticas: {
         total_alertas: Array.isArray(alertasResult) ? alertasResult.length : 0,
