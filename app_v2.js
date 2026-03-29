@@ -333,11 +333,16 @@ async function supabaseFetch(path, options = {}) {
 }
 
 async function workerFetchJson(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
+ const headers = { ...(options.headers || {}) };
+const token = obtenerToken();
 
-  if (options.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
+if (token && !headers["Authorization"]) {
+  headers["Authorization"] = `Bearer ${token}`;
+}
+
+if (options.body && !headers["Content-Type"]) {
+  headers["Content-Type"] = "application/json";
+}
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
