@@ -1324,29 +1324,44 @@ const alertasPanel = Array.isArray(alertasResult)
 
 console.log("ALERTAS PANEL:", alertasPanel.length, alertasPanel);
 try {
-  await workerFetchJson('/api/sync-offers', {
+ await workerFetchJson('/api/sync-offers', {
   method: 'POST',
   body: JSON.stringify({
     offers: alertasPanel.map(o => ({
       ...o,
-      id: String(o.idoferta || o.iddetalle || o.id),
-      modulos: o.hsmodulos || o.modulos || "",
-      desde: o.supl_desde_label || o.supl_desde || o.desde || "",
-      hasta: o.supl_hasta_label || o.supl_hasta || o.hasta || "",
-      fecha_cierre: o.finoferta_label || o.finoferta || o.fecha_cierre || "",
-      tipo_cargo: o.tipooferta || o.tipo_cargo || "",
-      revista: o.supl_revista || o.revista || "",
-      curso_division: o.cursodivision || o.curso_division || "",
-      jornada: o.jornada || "",
-      dias_horarios: [
-        o.lunes,
-        o.martes,
-        o.miercoles,
-        o.jueves,
-        o.viernes,
-        o.sabado
+      id: String(o.idoferta || o.iddetalle || o.id || ""),
+      offer_id: String(o.idoferta || o.iddetalle || o.id || ""),
+
+      cargo: o.cargo || o.descripcioncargo || "",
+      materia: o.materia || o.area || o.descripcionarea || "",
+      nivel: o.nivel || o.nivel_modalidad || o.descnivelmodalidad || "",
+      distrito: o.distrito || o.descdistrito || "",
+      escuela: o.escuela || o.nombreestablecimiento || "",
+      turno: o.turno || "",
+
+      modulos: o.modulos || o.hsmodulos || "",
+      dias_horarios: o.dias_horarios || [
+        o.lunes, o.martes, o.miercoles, o.jueves, o.viernes, o.sabado
       ].filter(Boolean).join(" "),
-      link_postular: o.abc_postulantes_url || o.link_postular || ""
+
+      desde: o.desde || o.supl_desde_label || o.supl_desde || "",
+      hasta: o.hasta || o.supl_hasta_label || o.supl_hasta || "",
+
+      tipo_cargo: o.tipo_cargo || o.tipooferta || "",
+      revista: o.revista || o.supl_revista || "",
+
+      curso_division: o.curso_division || o.cursodivision || "",
+      jornada: o.jornada || "",
+
+      observaciones: o.observaciones || "",
+      fecha_cierre: o.fecha_cierre || o.fecha_cierre_fmt || o.finoferta_label || o.finoferta || "",
+
+      link_postular: o.link_postular || o.abc_postulantes_url || "",
+      source_offer_key: o.source_offer_key || "",
+
+      total_postulantes: o.total_postulantes ?? null,
+      puntaje_primero: o.puntaje_primero ?? null,
+      listado_origen_primero: o.listado_origen_primero || ""
     }))
   })
 });
