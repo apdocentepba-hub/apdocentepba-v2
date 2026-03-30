@@ -1442,7 +1442,14 @@ function renderAlertasAPD(alertas) {
 
   const items = Array.isArray(alertas) ? alertas : [];
   alertasState.items = items;
-  alertasState.index = 0;
+
+  if (!Number.isInteger(alertasState.index)) {
+    alertasState.index = 0;
+  }
+
+  if (alertasState.index >= items.length) {
+    alertasState.index = 0;
+  }
 
   if (badge) {
     if (items.length) {
@@ -1454,6 +1461,8 @@ function renderAlertasAPD(alertas) {
     }
   }
 
+  renderAlertaActual();
+}
   if (!items.length) {
     const bloqueoMsg = String(planGateState?.alertasMessage || "").trim();
 
