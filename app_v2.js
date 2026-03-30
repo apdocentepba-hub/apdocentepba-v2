@@ -1434,6 +1434,7 @@ function renderDashboard(data) {
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
   setHTML("panel-historico-apd", `<p class="ph">Cargando histórico APD...</p>`);
 }
+
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
   const plan = info.plan || {};
