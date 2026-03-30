@@ -1378,6 +1378,62 @@ bindAdminEvents();
     setPanelLoading(false);
   }
 }
+function renderDashboard(data) {
+  const doc = data.docente || {};
+  const pref = data.preferencias || {};
+  const planInfo = data.planInfo || buildPlanFallback();
+  const plan = planInfo.plan || {};
+  const subscription = planInfo.subscription || {};
+  const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
+
+  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
+    .filter(Boolean)
+    .join(" / ") || "(sin filtro)";
+
+  const cargosLista = [
+    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
+    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+  ].filter(Boolean);
+
+  const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
+  const niveles = pref.nivel_modalidad || "(cualquiera)";
+  const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
+  const planNombre = planNombreHumano(plan, subscription);
+
+  setText("panel-bienvenida", nombre ? `Bienvenido/a, ${nombre}` : "Bienvenido/a");
+  setText("panel-subtitulo", doc.email ? `Sesión: ${doc.email}` : "Panel docente");
+
+  setHTML("panel-datos-docente", `
+    <p><strong>ID:</strong> ${esc(doc.id || "-")}</p>
+    <p><strong>Nombre:</strong> ${esc(nombre || "-")}</p>
+    <p><strong>Email:</strong> ${esc(doc.email || "-")}</p>
+    <p><strong>Celular:</strong> ${esc(doc.celular || "-")}</p>
+    <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Inactivo"}</p>
+  `);
+
+  setHTML("panel-preferencias-resumen", `
+    <p><strong>Distritos:</strong> ${esc(distritos)}</p>
+    <p><strong>Cargos/Materias:</strong> ${esc(cargos)}</p>
+    <p><strong>Nivel:</strong> ${esc(niveles)}</p>
+    <p><strong>Turno:</strong> ${esc(turnos)}</p>
+    <p><strong>Plan:</strong> ${esc(planNombre)}</p>
+    <p><strong>Alertas:</strong> ${pref.alertas_activas ? "Activas" : "Pausadas"}</p>
+    <p><strong>Email:</strong> ${pref.alertas_email ? "Sí" : "No"}</p>
+  `);
+
+  setHTML("panel-estadisticas", `
+    <div class="stats-row">
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.total_alertas ?? 0}</span><span class="stat-l">Alertas</span></div>
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
+      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
+    </div>
+    <p class="stat-acceso">Último acceso: ${esc(fmtFecha(data.estadisticas?.ultimo_acceso || "-"))}</p>
+  `);
+
+  renderAlertasAPD(data.alertas || []);
+  setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
+  setHTML("panel-historico-apd", `<p class="ph">Cargando histórico APD...</p>`);
+}
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
   const plan = info.plan || {};
