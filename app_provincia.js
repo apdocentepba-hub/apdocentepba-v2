@@ -479,12 +479,10 @@ function renderPlanOptionsProvincia(currentPlanCode, publicPlans) {
       ${publicPlans.map(item => {
         const itemCode = String(item.code || '').trim().toUpperCase();
         const current = itemCode === currentCode;
-        const isTrial = currentCode === 'TRIAL_7D';
+
         const ctaText = current
           ? 'Plan actual'
-          : isTrial
-            ? `Suscribirme a ${escProvincia(item.nombre || itemCode)}`
-            : `Cambiar a ${escProvincia(item.nombre || itemCode)}`;
+          : `Suscribirme a ${escProvincia(item.nombre || itemCode)}`;
 
         return `
           <div style="
