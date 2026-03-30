@@ -1006,9 +1006,9 @@ function renderAlertaActual() {
   const desde = p.desde || p.supl_desde_label || "-";
   const hasta = p.hasta || p.supl_hasta_label || "-";
   const cierre = p.fecha_cierre || p.finoferta_label || p.finoferta || "-";
-  const postulantes = p.total_postulantes ?? "-";
-  const puntaje = p.puntaje_primero ?? "-";
-  const listado = p.listado_origen_primero || "-";
+  const postulantes = p.total_postulantes ?? item?.total_postulantes ?? "-";
+const puntaje = p.puntaje_primero ?? item?.puntaje_primero ?? "-";
+const listado = p.listado_origen_primero || item?.listado_origen_primero || "-";
   const link = p.link || p.link_postular || p.abc_postulantes_url || "";
 
   const prevIndex = (safeIndex - 1 + total) % total;
