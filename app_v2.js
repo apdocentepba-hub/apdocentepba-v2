@@ -964,7 +964,7 @@ function renderDots(total, current) {
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
-  const items = alertasState.items;
+  const items = Array.isArray(alertasState.items) ? alertasState.items : [];
   const total = items.length;
   const bloqueoMsg = String(planGateState?.alertasMessage || "").trim();
 
@@ -979,6 +979,101 @@ function renderAlertaActual() {
       badge.classList.add("hidden");
     }
   }
+
+  if (!total) {
+    box.innerHTML = bloqueoMsg
+      ? `
+        <div class="empty-state">
+          <p>${esc(bloqueoMsg)}</p>
+          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
+        </div>
+      `
+      : `
+        <div class="empty-state">
+          <p>No hay alertas compatibles todavía.</p>
+          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
+        </div>
+      `;
+    return;
+  }
+
+  if (!Number.isInteger(alertasState.index)) {
+    alertasState.index = 0;
+  }
+
+  if (alertasState.index < 0) {
+    alertasState.index = 0;
+  }
+
+  if (alertasState.index >= total) {
+    alertasState.index = 0;
+  }
+
+  const item = items[alertasState.index];
+  const p = item?.offer_payload || item || {};
+
+  const titulo = p.materia || p.cargo || p.title || "Oferta APD";
+  const escuela = p.escuela || "Escuela no informada";
+  const distrito = p.distrito || "-";
+  const turno = p.turno || "-";
+  const nivel = p.nivel || "-";
+  const jornada = p.jornada || "-";
+  const cursoDivision = p.curso_division || "-";
+  const modulos = p.modulos || "-";
+  const desde = p.desde || "-";
+  const hasta = p.hasta || "-";
+  const cierre = p.fecha_cierre || p.finoferta_label || p.finoferta || "-";
+  const postulantes = p.total_postulantes ?? "-";
+  const puntaje = p.puntaje_primero ?? "-";
+  const listado = p.listado_origen_primero || "-";
+  const link = p.link || p.link_postular || p.abc_postulantes_url || "";
+
+  box.innerHTML = `
+    <article class="alerta-card">
+      <div class="alerta-topbar">
+        <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+        <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
+        <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+      </div>
+
+      <h3 class="alerta-title">${esc(titulo)}</h3>
+      <div class="alerta-sub">${esc(escuela)}</div>
+
+      <div class="alerta-grid">
+        <div><strong>Distrito:</strong> ${esc(distrito)}</div>
+        <div><strong>Turno:</strong> ${esc(turno)}</div>
+        <div><strong>Nivel:</strong> ${esc(nivel)}</div>
+        <div><strong>Jornada:</strong> ${esc(jornada)}</div>
+        <div><strong>Curso / División:</strong> ${esc(cursoDivision)}</div>
+        <div><strong>Módulos:</strong> ${esc(String(modulos))}</div>
+        <div><strong>Desde:</strong> ${esc(desde)}</div>
+        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
+        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
+        <div><strong>Postulantes:</strong> ${esc(String(postulantes))}</div>
+        <div><strong>Mejor puntaje:</strong> ${esc(String(puntaje))}</div>
+        <div><strong>Listado:</strong> ${esc(listado)}</div>
+      </div>
+
+      ${link ? `
+        <div class="alerta-actions">
+          <a class="btn btn-primary" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a>
+        </div>
+      ` : ""}
+    </article>
+  `;
+
+  document.getElementById("alerta-prev")?.addEventListener("click", () => {
+    if (!alertasState.items.length) return;
+    alertasState.index = (alertasState.index - 1 + alertasState.items.length) % alertasState.items.length;
+    renderAlertaActual();
+  });
+
+  document.getElementById("alerta-next")?.addEventListener("click", () => {
+    if (!alertasState.items.length) return;
+    alertasState.index = (alertasState.index + 1) % alertasState.items.length;
+    renderAlertaActual();
+  });
+}
 
   if (!total) {
     box.innerHTML = bloqueoMsg
