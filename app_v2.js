@@ -1516,13 +1516,14 @@ function renderDashboard(data) {
   const subscription = planInfo.subscription || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
+ const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
+  .filter(Boolean)
+  .join(" / ") || "(sin filtro)";
 
-  const cargosLista = [
-    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
-    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+const cargosLista = [
+  ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
+  ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+]
   ].filter(Boolean);
 
   const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
