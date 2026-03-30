@@ -786,17 +786,13 @@ async function obtenerMisAlertas(userId) {
   planGateState.alertasMessage = String(data?.message || "").trim();
 
   return filtrarAlertasVigentes(
-    Array.isArray(data.resultados) ? data.resultados : []
+    Array.isArray(data.resultados)
+      ? data.resultados
+      : Array.isArray(data.items)
+      ? data.items
+      : []
   );
 }
-
-function moverAlerta(step) {
-  const total = alertasState.items.length;
-  if (!total) return;
-  alertasState.index = (alertasState.index + step + total) % total;
-  renderAlertaActual();
-}
-
 function irAAlerta(index) {
   const total = alertasState.items.length;
   if (!total) return;
@@ -970,6 +966,7 @@ function renderAlertaActual() {
   const badge = document.getElementById("alertas-badge");
   const items = alertasState.items;
   const total = items.length;
+  const bloqueoMsg = String(planGateState?.alertasMessage || "").trim();
 
   if (!box) return;
 
@@ -982,6 +979,113 @@ function renderAlertaActual() {
       badge.classList.add("hidden");
     }
   }
+
+  if (!total) {
+    box.innerHTML = bloqueoMsg
+      ? `
+        <div class="empty-state">
+          <p>${esc(bloqueoMsg)}</p>
+          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
+        </div>
+      `
+      : `
+        <div class="empty-state">
+          <p>No hay alertas compatibles todavía.</p>
+          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
+        </div>
+      `;
+    return;
+  }
+
+  const safeIndex = Math.min(Math.max(alertasState.index || 0, 0), total - 1);
+  alertasState.index = safeIndex;
+  const item = items[safeIndex];
+
+  const payload = item?.offer_payload || item || {};
+  const cargo = payload.cargo || payload.title || "Oferta APD";
+  const escuela = payload.escuela || "Escuela no informada";
+  const distrito = payload.distrito || "-";
+  const turno = payload.turno || "-";
+  const nivel = payload.nivel || "-";
+  const jornada = payload.jornada || "-";
+  const cursoDivision = payload.curso_division || "-";
+  const desde = payload.desde || "-";
+  const hasta = payload.hasta || "-";
+  const modulos = payload.modulos || "-";
+  const cierre = payload.fecha_cierre || "-";
+  const observaciones = payload.observaciones || "";
+  const tipoSituacion = payload.tipo_situacion || payload.tipo_cargo || "";
+  const totalPostulantes = payload.total_postulantes ?? "—";
+  const puntajePrimero = payload.puntaje_primero ?? "—";
+  const listadoPrimero = payload.listado_origen_primero || "";
+  const abcUrl = payload.link || "#";
+
+  box.innerHTML = `
+    <div class="alerta-card">
+      <div class="alerta-head">
+        <div>
+          <h3>${esc(cargo)}</h3>
+          <p class="alerta-sub">${esc(escuela)}</p>
+        </div>
+        <div class="alerta-nav">
+          <button class="btn btn-secondary btn-sm" id="alerta-prev"${total <= 1 ? " disabled" : ""}>‹</button>
+          <span class="alerta-pos">${safeIndex + 1} / ${total}</span>
+          <button class="btn btn-secondary btn-sm" id="alerta-next"${total <= 1 ? " disabled" : ""}>›</button>
+        </div>
+      </div>
+
+      <div class="alerta-badges">
+        <span class="chip">📍 ${esc(distrito)}</span>
+        <span class="chip">🕒 ${esc(turno)}</span>
+        <span class="chip">🎓 ${esc(nivel)}</span>
+        <span class="chip">🏫 ${esc(jornada)}</span>
+        ${tipoSituacion ? `<span class="chip">📌 ${esc(tipoSituacion)}</span>` : ""}
+      </div>
+
+      <div class="alerta-grid">
+        <div><strong>Curso/división:</strong> ${esc(cursoDivision)}</div>
+        <div><strong>Desde:</strong> ${esc(desde)}</div>
+        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
+        <div><strong>Módulos:</strong> ${esc(modulos)}</div>
+        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
+      </div>
+
+      ${
+        observaciones
+          ? `
+            <div class="alerta-box">
+              <strong>Observaciones</strong>
+              <p>${esc(observaciones)}</p>
+            </div>
+          `
+          : ""
+      }
+
+      <div class="alerta-box">
+        <strong>Resumen de postulantes</strong>
+        <p><strong>Cantidad:</strong> ${esc(String(totalPostulantes))}</p>
+        <p><strong>Puntaje más alto:</strong> ${esc(String(puntajePrimero))}</p>
+        ${listadoPrimero ? `<p><strong>Listado del más alto:</strong> ${esc(listadoPrimero)}</p>` : ""}
+      </div>
+
+      <div class="alerta-actions">
+        <a class="btn btn-primary" href="${esc(abcUrl)}" target="_blank" rel="noopener">Ir a ABC</a>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("alerta-prev")?.addEventListener("click", () => {
+    if (!alertasState.items.length) return;
+    alertasState.index = (alertasState.index - 1 + alertasState.items.length) % alertasState.items.length;
+    renderAlertaActual();
+  });
+
+  document.getElementById("alerta-next")?.addEventListener("click", () => {
+    if (!alertasState.items.length) return;
+    alertasState.index = (alertasState.index + 1) % alertasState.items.length;
+    renderAlertaActual();
+  });
+}
 
   if (!total) {
     box.innerHTML = `
