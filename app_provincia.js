@@ -707,8 +707,8 @@ async function cargarExtrasProvincia() {
     }, 1000);
   }
 }
-window.cargarExtrasProvincia = cargarExtrasProvincia;
 
+window.cargarExtrasProvincia = cargarExtrasProvincia;
 async function monitorProvinciaBackfill(delayMs = 2500) {
   stopProvinciaBackfillMonitor();
 
