@@ -551,8 +551,8 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
 
       <article class="soft-item">
         <div class="soft-title">Mercado Pago</div>
-        <div class="soft-sub">Podes refrescar el plan activo o preparar checkout para cambiar al plan que quieras.</div>
-        <div class="soft-meta">Plan actual: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'disponible')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
+<div class="soft-sub">Elegí un plan y abrí Mercado Pago directamente con el plan seleccionado.</div>
+<div class="soft-meta">Plan actual: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'disponible')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
         ${renderPlanOptionsProvincia(planCode, publicPlans)}
         <div class="soft-actions">
           <button id="btn-refresh-plan-provincia" class="btn btn-secondary soft-action" type="button"${token ? '' : ' disabled'}>Refrescar plan</button>
