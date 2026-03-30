@@ -712,7 +712,7 @@ async function cargarExtrasProvincia() {
     setPanelHTMLProvincia('panel-canales', '<p class="ph">Ingresa para ver canales y checkout.</p>');
     return;
   }
-window.cargarExtrasProvincia = cargarExtrasProvincia;
+
   const [freshPlanInfo, planesResponse, provincia, backfill, whatsapp] = await Promise.all([
     obtenerMiPlanProvincia(token).catch(err => {
       console.error('ERROR MI PLAN:', err);
@@ -753,6 +753,8 @@ window.cargarExtrasProvincia = cargarExtrasProvincia;
   }
 }
 
+window.cargarExtrasProvincia = cargarExtrasProvincia;
+
 async function monitorProvinciaBackfill(delayMs = 2500) {
   stopProvinciaBackfillMonitor();
 
@@ -784,7 +786,7 @@ function bindProvinciaButtons() {
     }
   });
 
-    document.getElementById('btn-provincia-step')?.addEventListener('click', async () => {
+  document.getElementById('btn-provincia-step')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-provincia-step');
     setButtonBusyProvincia(btn, 'Procesando...');
     try {
@@ -805,6 +807,7 @@ function bindProvinciaButtons() {
       restoreButtonProvincia(btn);
     }
   });
+
   document.getElementById('btn-provincia-reset')?.addEventListener('click', async () => {
     if (!window.confirm('Esto reinicia solo el cursor provincial. Queres seguir?')) return;
 
