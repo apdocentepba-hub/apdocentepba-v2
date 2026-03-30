@@ -1064,18 +1064,6 @@ function renderAlertaActual() {
     renderAlertaActual();
   });
 }
-
-function alertaRow(label, value) {
-  const v = String(value || "").trim();
-  if (!v) return "";
-  return `
-    <div class="alerta-row">
-      <span class="alerta-key">${esc(label)}</span>
-      <span class="alerta-val">${esc(v)}</span>
-    </div>
-  `;
-}
-
 function fmtNum(v, digits = 0) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "-";
