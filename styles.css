@@ -1096,3 +1096,6 @@ input::placeholder{color:#b0b7c3}
   white-space: pre-wrap;
   word-break: break-word;
 }
+.alerta-card-lista {
+  margin-bottom: 14px;
+}
