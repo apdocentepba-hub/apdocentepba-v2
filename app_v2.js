@@ -349,7 +349,7 @@ if (options.body && !headers["Content-Type"]) {
   headers["Content-Type"] = "application/json";
 }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${}${path}`, {
     ...options,
     headers
   });
