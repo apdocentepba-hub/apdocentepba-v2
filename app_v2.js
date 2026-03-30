@@ -783,13 +783,11 @@ async function obtenerMisAlertas(userId) {
     throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
   }
 
-  return filtrarAlertasVigentes(Array.isArray(data.resultados) ? data.resultados : []);
-}
+  planGateState.alertasMessage = String(data?.message || "").trim();
 
-function renderAlertasAPD(alertas) {
-  alertasState.items = filtrarAlertasVigentes(alertas);
-  alertasState.index = 0;
-  renderAlertaActual();
+  return filtrarAlertasVigentes(
+    Array.isArray(data.resultados) ? data.resultados : []
+  );
 }
 
 function moverAlerta(step) {
