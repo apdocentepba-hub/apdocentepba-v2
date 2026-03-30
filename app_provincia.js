@@ -174,22 +174,109 @@ function syncPlanProvincia(planInfo, userId) {
   const plan = resolved?.plan || {};
   const subscription = resolved?.subscription || {};
   const panel = document.getElementById('panel-plan');
-  if (panel) {
-    panel.innerHTML = `
-      <div class="plan-stack">
-        <div class="plan-title">${escProvincia(plan.nombre || 'Plan')}</div>
-        <div class="plan-pill-row">
-          <span class="plan-pill">${escProvincia(subscription.status || 'disponible')}</span>
-          <span class="plan-pill plan-pill-neutral">${plan.price_ars != null ? `$ ${fmtProvinciaNum(plan.price_ars)}` : 'Sin precio'}</span>
-        </div>
-        <div class="plan-pill-row">
-          <span class="plan-pill">Hasta ${fmtProvinciaNum(plan.max_distritos || 0)} distrito(s)</span>
-          <span class="plan-pill">Hasta ${fmtProvinciaNum(plan.max_cargos || 0)} cargo(s)</span>
-        </div>
-        <p class="plan-note">${escProvincia(plan.descripcion || '')}</p>
-      </div>
-    `;
+
+if (panel) {
+  const status = subscription?.status || "inactivo";
+  const isTrial = !!subscription?.trial_ends_at;
+  const isActive = status === "active" || status === "beta";
+
+  let estadoTexto = "Inactivo";
+  let estadoColor = "#6b7280";
+
+  if (isTrial) {
+    estadoTexto = "Periodo de prueba";
+    estadoColor = "#f59e0b";
+  } else if (isActive) {
+    estadoTexto = "Activo";
+    estadoColor = "#16a34a";
   }
+
+  const venceTexto = subscription?.trial_ends_at
+    ? `Prueba hasta: ${fmtProvinciaFecha(subscription.trial_ends_at)}`
+    : subscription?.current_period_ends_at
+      ? `Renueva: ${fmtProvinciaFecha(subscription.current_period_ends_at)}`
+      : "";
+
+  panel.innerHTML = `
+    <div style="
+      background:#ffffff;
+      border-radius:14px;
+      padding:16px;
+      border:1px solid #e5e7eb;
+    ">
+
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px;">
+        ${escProvincia(plan.nombre || "Plan")}
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <span style="
+          background:${estadoColor}20;
+          color:${estadoColor};
+          padding:4px 10px;
+          border-radius:999px;
+          font-size:12px;
+          font-weight:700;
+        ">
+          ${estadoTexto}
+        </span>
+
+        <span style="
+          margin-left:8px;
+          background:#eef2ff;
+          color:#3730a3;
+          padding:4px 10px;
+          border-radius:999px;
+          font-size:12px;
+          font-weight:700;
+        ">
+          ${plan.price_ars ? `$ ${fmtProvinciaNum(plan.price_ars)}` : "Gratis"}
+        </span>
+      </div>
+
+      <div style="font-size:13px;color:#374151;margin-bottom:8px;">
+        📍 Hasta ${fmtProvinciaNum(plan.max_distritos || 0)} distritos
+      </div>
+
+      <div style="font-size:13px;color:#374151;margin-bottom:8px;">
+        📚 Hasta ${fmtProvinciaNum(plan.max_cargos || 0)} cargos/materias
+      </div>
+
+      <div style="font-size:13px;color:#374151;margin-bottom:8px;">
+        📊 Incluye postulantes y puntajes
+      </div>
+
+      ${venceTexto ? `
+        <div style="font-size:12px;color:#6b7280;margin-top:6px;">
+          ${venceTexto}
+        </div>
+      ` : ""}
+
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+
+        ${
+          !isActive
+            ? `<button id="btn-suscribirse" class="btn btn-primary">
+                Suscribirme
+              </button>`
+            : `<button class="btn btn-secondary" disabled>
+                Plan actual
+              </button>`
+        }
+
+        ${
+          isActive
+            ? `<button id="btn-cambiar-plan" class="btn btn-outline">
+                Cambiar plan
+              </button>`
+            : ""
+        }
+
+      </div>
+
+    </div>
+  `;
+}
 
   return resolved;
 }
