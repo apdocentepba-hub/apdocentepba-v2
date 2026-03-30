@@ -1075,22 +1075,7 @@ function renderAlertaActual() {
   });
 }
 
-  if (!total) {
-    box.innerHTML = bloqueoMsg
-      ? `
-        <div class="empty-state">
-          <p>${esc(bloqueoMsg)}</p>
-          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
-        </div>
-      `
-      : `
-        <div class="empty-state">
-          <p>No hay alertas compatibles todavía.</p>
-          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
-        </div>
-      `;
-    return;
-  }
+  
 
   const safeIndex = Math.min(Math.max(alertasState.index || 0, 0), total - 1);
   alertasState.index = safeIndex;
