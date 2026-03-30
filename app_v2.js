@@ -598,7 +598,7 @@ async function registrarDocente(e) {
   showMsg("registro-msg", "Procesando...", "info");
 
   try {
-    const resp = await fetch(`${}/api/register`, {
+    const resp = await fetch(`${API_URL}/api/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
