@@ -655,6 +655,7 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
     }
   });
 }
+
 async function cargarExtrasProvincia() {
   const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
 
