@@ -1567,6 +1567,7 @@ async function guardarPreferencias(e) {
 
   try {
     const data = await guardarPreferenciasServidor(token, payload);
+
     if (data?.plan || data?.subscription) {
       planActual = {
         ok: true,
@@ -1575,11 +1576,25 @@ async function guardarPreferencias(e) {
       };
       renderPlanUI(planActual);
     }
+
+    planGateState.preferenciasMessage = "";
     showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");
     await cargarDashboard();
   } catch (err) {
     console.error("ERROR GUARDANDO PREFERENCIAS:", err);
-    showMsg("preferencias-msg", err?.message || "Error guardando preferencias", "error");
+
+    const msg = String(err?.message || "Error guardando preferencias").trim();
+    planGateState.preferenciasMessage = msg;
+
+    showMsg("preferencias-msg", msg, "error");
+
+    if (/plan.*vencido|suscribite|suscripción/i.test(msg)) {
+      try {
+        await cargarExtrasProvincia();
+      } catch (e) {
+        console.error("ERROR RECARGANDO EXTRAS PROVINCIA:", e);
+      }
+    }
   } finally {
     btnRestore(btn);
   }
