@@ -472,24 +472,51 @@ function renderPlanOptionsProvincia(currentPlanCode, publicPlans) {
     return `<p class="soft-meta" style="margin-top:10px">Todavia no hay planes publicos disponibles.</p>`;
   }
 
+  const currentCode = String(currentPlanCode || '').trim().toUpperCase();
+
   return `
     <div class="soft-meta" style="margin-top:10px">
       ${publicPlans.map(item => {
         const itemCode = String(item.code || '').trim().toUpperCase();
-        const current = itemCode === currentPlanCode;
+        const current = itemCode === currentCode;
+        const isTrial = currentCode === 'TRIAL_7D';
+        const ctaText = current
+          ? 'Plan actual'
+          : isTrial
+            ? `Suscribirme a ${escProvincia(item.nombre || itemCode)}`
+            : `Cambiar a ${escProvincia(item.nombre || itemCode)}`;
+
         return `
-          <div style="margin-top:8px">
-            <strong>${escProvincia(item.nombre || itemCode)}</strong>
-            ${item.price_ars != null ? ` · $ ${fmtProvinciaNum(item.price_ars)}` : ''}
-            · ${fmtProvinciaNum(item.max_distritos || 0)} distrito(s)
-            · ${fmtProvinciaNum(item.max_cargos || 0)} cargo(s)
-            <div class="soft-actions" style="margin-top:8px">
+          <div style="
+            margin-top:10px;
+            padding:12px;
+            border:1px solid #e5e7eb;
+            border-radius:12px;
+            background:#fff;
+          ">
+            <div style="font-weight:700;color:#111827;">
+              ${escProvincia(item.nombre || itemCode)}
+            </div>
+
+            <div style="font-size:13px;color:#4b5563;margin-top:4px;">
+              ${item.price_ars != null ? `$ ${fmtProvinciaNum(item.price_ars)}` : 'Gratis'}
+              · ${fmtProvinciaNum(item.max_distritos || 0)} distrito(s)
+              · ${fmtProvinciaNum(item.max_cargos || 0)} cargo(s)/materia(s)
+            </div>
+
+            ${item.descripcion ? `
+              <div style="font-size:12px;color:#6b7280;margin-top:6px;">
+                ${escProvincia(item.descripcion)}
+              </div>
+            ` : ''}
+
+            <div class="soft-actions" style="margin-top:10px">
               <button
                 class="btn ${current ? 'btn-secondary' : 'btn-primary'} soft-action"
                 type="button"
                 data-checkout-plan-code="${escProvincia(itemCode)}"
                 ${current ? 'disabled' : ''}
-              >${current ? 'Plan actual' : `Ir a ${escProvincia(item.nombre || itemCode)}`}</button>
+              >${ctaText}</button>
             </div>
           </div>
         `;
@@ -497,7 +524,6 @@ function renderPlanOptionsProvincia(currentPlanCode, publicPlans) {
     </div>
   `;
 }
-
 function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
   const box = document.getElementById('panel-canales');
   if (!box) return;
