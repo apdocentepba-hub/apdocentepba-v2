@@ -554,7 +554,6 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
         ${renderPlanOptionsProvincia(planCode, publicPlans)}
         <div class="soft-actions">
           <button id="btn-refresh-plan-provincia" class="btn btn-secondary soft-action" type="button"${token ? '' : ' disabled'}>Refrescar plan</button>
-          <button id="btn-checkout-plan-provincia" class="btn btn-primary soft-action" type="button"${token ? '' : ' disabled'}>Preparar checkout del plan actual</button>
         </div>
       </article>
     </div>
@@ -573,26 +572,7 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
     }
   });
 
-  const btn = document.getElementById('btn-checkout-plan-provincia');
-  btn?.addEventListener('click', async () => {
-    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
-    if (!userId) return;
-
-    setButtonBusyProvincia(btn, 'Preparando...');
-    try {
-      const data = await crearCheckoutMercadoPago(userId, planCode);
-      if (data.checkout_url) {
-        window.open(data.checkout_url, '_blank', 'noopener');
-      } else {
-        window.alert(data.message || 'Se registro la sesion, pero todavia no hay checkout real configurado.');
-      }
-    } catch (err) {
-      console.error('ERROR CHECKOUT:', err);
-      window.alert(err?.message || 'No se pudo preparar el checkout');
-    } finally {
-      restoreButtonProvincia(btn);
-    }
-  });
+  
 
   box.querySelectorAll('[data-checkout-plan-code]').forEach(button => {
     button.addEventListener('click', async () => {
