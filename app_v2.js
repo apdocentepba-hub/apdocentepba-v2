@@ -273,7 +273,7 @@ function btnRestore(btn) {
 async function post(payload) {
   const action = String(payload?.action || "").trim();
 
-  let url =  + "/api";
+  let url = API_URL + "/api";
 
   if (action === "login") {
     url += "/login";
@@ -644,7 +644,7 @@ async function loginPassword(e) {
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const res = await fetch(`${}/api/login`, {
+    const res = await fetch(`${API_URL}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -736,7 +736,7 @@ async function handleGoogleCredential(response) {
   showMsg(target, "Validando Google...", "info");
 
   try {
-    const res = await fetch(`${}/api/google-auth`, {
+    const res = await fetch(`${API_URL}/api/google-auth`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credential: response?.credential || "" })
@@ -769,7 +769,7 @@ async function handleGoogleCredential(response) {
 }
 
 async function obtenerMisAlertas(userId) {
-  const res = await fetch(`${}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
+  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
   let data = null;
 
@@ -878,7 +878,7 @@ async function cargarResumenPostulantes(alerta) {
 
   try {
     const res = await fetch(
-      `${}/api/postulantes-resumen?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`
+      `${API_URL}/api/postulantes-resumen?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`
     );
 
     const data = await res.json();
@@ -964,7 +964,7 @@ function renderDots(total, current) {
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
-  const items = Array.isArray(alertasState.items) ? alertasState.items : [];
+  const items = alertasState.items;
   const total = items.length;
   const bloqueoMsg = String(planGateState?.alertasMessage || "").trim();
 
@@ -982,127 +982,98 @@ function renderAlertaActual() {
 
   if (!total) {
     box.innerHTML = bloqueoMsg
-      ? `<div class="empty-state"><p>${esc(bloqueoMsg)}</p><p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p></div>`
-      : `<div class="empty-state"><p>No hay alertas compatibles todavía.</p><p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p></div>`;
+      ? `
+        <div class="empty-state">
+          <p>${esc(bloqueoMsg)}</p>
+          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
+        </div>
+      `
+      : `
+        <div class="empty-state">
+          <p>No hay alertas compatibles todavía.</p>
+          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
+        </div>
+      `;
     return;
   }
 
-  if (!Number.isInteger(alertasState.index)) alertasState.index = 0;
-  if (alertasState.index < 0) alertasState.index = 0;
-  if (alertasState.index >= total) alertasState.index = 0;
-
-  const safeIndex = alertasState.index;
+  const safeIndex = Math.min(Math.max(alertasState.index || 0, 0), total - 1);
+  alertasState.index = safeIndex;
   const item = items[safeIndex];
-  const p = item?.offer_payload || item || {};
 
-  const titulo = p.materia || p.cargo || p.title || "Oferta APD";
-  const escuela = p.escuela || "Escuela no informada";
-  const distrito = p.distrito || "-";
-  const turno = turnoTexto(p.turno || "") || p.turno || "-";
-  const nivel = p.nivel || p.nivel_modalidad || "-";
-  const jornada = p.jornada || "-";
-  const cursoDivision = p.curso_division || p.cursodivision || "-";
-  const modulos = p.modulos || p.hsmodulos || "-";
-  const desde = p.desde || p.supl_desde_label || "-";
-  const hasta = p.hasta || p.supl_hasta_label || "-";
-  const cierre = p.fecha_cierre || p.finoferta_label || p.finoferta || "-";
-  const postulantes = p.total_postulantes ?? item?.total_postulantes ?? "-";
-const puntaje = p.puntaje_primero ?? item?.puntaje_primero ?? "-";
-const listado = p.listado_origen_primero || item?.listado_origen_primero || "-";
-  const link = p.link || p.link_postular || p.abc_postulantes_url || "";
-
-  const prevIndex = (safeIndex - 1 + total) % total;
-  const nextIndex = (safeIndex + 1) % total;
-  const prevItem = total > 1 ? items[prevIndex]?.offer_payload || items[prevIndex] || {} : null;
-  const nextItem = total > 1 ? items[nextIndex]?.offer_payload || items[nextIndex] || {} : null;
-
-  const prevPreview = prevItem ? `
-    <button type="button" class="alerta-window-preview alerta-window-preview-left" data-goto-index="${prevIndex}" aria-label="Anterior">
-      <div class="alerta-windowbar alerta-windowbar-mini">
-        <span class="alerta-windowdot win-red"></span>
-        <span class="alerta-windowdot win-yellow"></span>
-        <span class="alerta-windowdot win-green"></span>
-      </div>
-      <div class="alerta-window-preview-side">Anterior</div>
-      <div class="alerta-window-preview-title">${esc(prevItem.materia || prevItem.cargo || prevItem.title || "Oferta APD")}</div>
-      <div class="alerta-window-preview-sub">${esc(prevItem.escuela || "Sin escuela")}</div>
-      <div class="alerta-window-preview-meta">${esc(prevItem.distrito || "-")} · ${esc(turnoTexto(prevItem.turno || "") || "-")}</div>
-    </button>` : "";
-
-  const nextPreview = nextItem ? `
-    <button type="button" class="alerta-window-preview alerta-window-preview-right" data-goto-index="${nextIndex}" aria-label="Siguiente">
-      <div class="alerta-windowbar alerta-windowbar-mini">
-        <span class="alerta-windowdot win-red"></span>
-        <span class="alerta-windowdot win-yellow"></span>
-        <span class="alerta-windowdot win-green"></span>
-      </div>
-      <div class="alerta-window-preview-side">Siguiente</div>
-      <div class="alerta-window-preview-title">${esc(nextItem.materia || nextItem.cargo || nextItem.title || "Oferta APD")}</div>
-      <div class="alerta-window-preview-sub">${esc(nextItem.escuela || "Sin escuela")}</div>
-      <div class="alerta-window-preview-meta">${esc(nextItem.distrito || "-")} · ${esc(turnoTexto(nextItem.turno || "") || "-")}</div>
-    </button>` : "";
-
-  const pct = total > 0 ? ((safeIndex + 1) / total) * 100 : 0;
-  const progressBar = `<div class="alerta-progress"><span class="alerta-progress-bar" style="width:${pct}%"></span></div>`;
-
-  const dots = total > 1 ? `
-    <div class="alerta-dots" aria-label="Navegación de alertas">
-      ${Array.from({ length: total }, (_, i) => `
-        <button type="button" class="alerta-dot ${i === safeIndex ? "is-active" : ""}" data-dot-index="${i}" aria-label="Ir a oferta ${i + 1}" ${i === safeIndex ? 'aria-current="true"' : ""}></button>
-      `).join("")}
-    </div>` : "";
+  const payload = item?.offer_payload || item || {};
+  const cargo = payload.cargo || payload.title || "Oferta APD";
+  const escuela = payload.escuela || "Escuela no informada";
+  const distrito = payload.distrito || "-";
+  const turno = payload.turno || "-";
+  const nivel = payload.nivel || "-";
+  const jornada = payload.jornada || "-";
+  const cursoDivision = payload.curso_division || "-";
+  const desde = payload.desde || "-";
+  const hasta = payload.hasta || "-";
+  const modulos = payload.modulos || "-";
+  const cierre = payload.fecha_cierre || "-";
+  const observaciones = payload.observaciones || "";
+  const tipoSituacion = payload.tipo_situacion || payload.tipo_cargo || "";
+  const totalPostulantes = payload.total_postulantes ?? "—";
+  const puntajePrimero = payload.puntaje_primero ?? "—";
+  const listadoPrimero = payload.listado_origen_primero || "";
+  const abcUrl = payload.link || "#";
 
   box.innerHTML = `
-    <div class="alerta-carousel-shell">
-      <div class="alerta-stage">
-        ${prevPreview}
-
-        <div class="alerta-main-card">
-          <div class="alerta-floating">
-            <div class="alerta-windowbar">
-              <span class="alerta-windowdot win-red"></span>
-              <span class="alerta-windowdot win-yellow"></span>
-              <span class="alerta-windowdot win-green"></span>
-            </div>
-
-            ${progressBar}
-
-            <div class="alerta-topbar">
-              <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
-              <div class="alerta-counter">Oferta ${safeIndex + 1} de ${total}</div>
-              <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
-            </div>
-
-            <h3 class="alerta-title">${esc(titulo)}</h3>
-            <div class="alerta-subtitle">${esc(escuela)}</div>
-
-            <div class="alerta-grid">
-              <div class="alerta-row"><span class="alerta-key">Distrito</span><span class="alerta-val">${esc(distrito)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Turno</span><span class="alerta-val">${esc(turno)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Nivel</span><span class="alerta-val">${esc(nivel)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Jornada</span><span class="alerta-val">${esc(jornada)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Curso / División</span><span class="alerta-val">${esc(cursoDivision)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Módulos</span><span class="alerta-val">${esc(String(modulos))}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Desde</span><span class="alerta-val">${esc(desde)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Hasta</span><span class="alerta-val">${esc(hasta)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Cierre</span><span class="alerta-val">${esc(cierre)}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Postulantes</span><span class="alerta-val">${esc(String(postulantes))}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Mejor puntaje</span><span class="alerta-val">${esc(String(puntaje))}</span></div>
-              <div class="alerta-row"><span class="alerta-key">Listado</span><span class="alerta-val">${esc(listado)}</span></div>
-            </div>
-
-            ${link ? `<div class="alerta-actions"><a class="btn btn-primary alerta-link" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a></div>` : ""}
-          </div>
+    <div class="alerta-card">
+      <div class="alerta-head">
+        <div>
+          <h3>${esc(cargo)}</h3>
+          <p class="alerta-sub">${esc(escuela)}</p>
         </div>
-
-        ${nextPreview}
+        <div class="alerta-nav">
+          <button class="btn btn-secondary btn-sm" id="alerta-prev"${total <= 1 ? " disabled" : ""}>‹</button>
+          <span class="alerta-pos">${safeIndex + 1} / ${total}</span>
+          <button class="btn btn-secondary btn-sm" id="alerta-next"${total <= 1 ? " disabled" : ""}>›</button>
+        </div>
       </div>
 
-      ${dots}
+      <div class="alerta-badges">
+        <span class="chip">📍 ${esc(distrito)}</span>
+        <span class="chip">🕒 ${esc(turno)}</span>
+        <span class="chip">🎓 ${esc(nivel)}</span>
+        <span class="chip">🏫 ${esc(jornada)}</span>
+        ${tipoSituacion ? `<span class="chip">📌 ${esc(tipoSituacion)}</span>` : ""}
+      </div>
+
+      <div class="alerta-grid">
+        <div><strong>Curso/división:</strong> ${esc(cursoDivision)}</div>
+        <div><strong>Desde:</strong> ${esc(desde)}</div>
+        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
+        <div><strong>Módulos:</strong> ${esc(modulos)}</div>
+        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
+      </div>
+
+      ${
+        observaciones
+          ? `
+            <div class="alerta-box">
+              <strong>Observaciones</strong>
+              <p>${esc(observaciones)}</p>
+            </div>
+          `
+          : ""
+      }
+
+      <div class="alerta-box">
+        <strong>Resumen de postulantes</strong>
+        <p><strong>Cantidad:</strong> ${esc(String(totalPostulantes))}</p>
+        <p><strong>Puntaje más alto:</strong> ${esc(String(puntajePrimero))}</p>
+        ${listadoPrimero ? `<p><strong>Listado del más alto:</strong> ${esc(listadoPrimero)}</p>` : ""}
+      </div>
+
+      <div class="alerta-actions">
+        <a class="btn btn-primary" href="${esc(abcUrl)}" target="_blank" rel="noopener">Ir a ABC</a>
+      </div>
     </div>
   `;
 
-  // Botones prev/next
   document.getElementById("alerta-prev")?.addEventListener("click", () => {
     if (!alertasState.items.length) return;
     alertasState.index = (alertasState.index - 1 + alertasState.items.length) % alertasState.items.length;
@@ -1114,33 +1085,114 @@ const listado = p.listado_origen_primero || item?.listado_origen_primero || "-";
     alertasState.index = (alertasState.index + 1) % alertasState.items.length;
     renderAlertaActual();
   });
-
-  // Preview cards laterales
-  box.querySelectorAll(".alerta-window-preview").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.gotoIndex);
-      if (Number.isInteger(idx) && idx >= 0 && idx < alertasState.items.length) {
-        alertasState.index = idx;
-        renderAlertaActual();
-      }
-    });
-  });
-
-  // Dots
-  box.querySelectorAll(".alerta-dot").forEach(dot => {
-    dot.addEventListener("click", () => {
-      const idx = Number(dot.dataset.dotIndex);
-      if (Number.isInteger(idx) && idx >= 0 && idx < alertasState.items.length) {
-        alertasState.index = idx;
-        renderAlertaActual();
-      }
-    });
-  });
 }
 
-  
+  if (!total) {
+    box.innerHTML = `
+      <div class="empty-state">
+        <p>No hay alertas compatibles todavía.</p>
+        <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
+      </div>
+    `;
+    return;
+  }
 
-  
+  const a = items[alertasState.index];
+  const titulo = tituloAlerta(a);
+  const abcUrl = buildPostulantesUrl(a);
+
+  const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
+  const nextIndex = total > 1 ? (alertasState.index + 1) % total : -1;
+
+  const prev = total > 1 ? items[prevIndex] : null;
+  const next = total > 1 ? items[nextIndex] : null;
+
+  box.innerHTML = `
+    <div class="alerta-carousel-shell">
+      <div class="alerta-stage">
+        ${prev ? renderWindowPreview(prev, "left", prevIndex) : ""}
+        ${next ? renderWindowPreview(next, "right", nextIndex) : ""}
+
+        <article class="alerta-floating alerta-main-card">
+          <div class="alerta-windowbar">
+            <span class="alerta-windowdot win-red"></span>
+            <span class="alerta-windowdot win-yellow"></span>
+            <span class="alerta-windowdot win-green"></span>
+          </div>
+
+          <div class="alerta-topbar">
+            <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+            <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
+            <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+          </div>
+
+          ${renderProgress(total, alertasState.index)}
+
+          <div class="alerta-tags">
+            ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
+            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+            ${a?.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
+          </div>
+
+          <div class="alerta-title">${esc(titulo)}</div>
+          <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
+
+          <div class="alerta-grid">
+            ${alertaRow("Distrito", a.distrito)}
+            ${alertaRow("Turno", turnoTexto(a.turno))}
+            ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
+            ${alertaRow("Jornada", a.jornada)}
+            ${alertaRow("Módulos", a.hsmodulos)}
+            ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
+            ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
+            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
+            ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+          </div>
+
+          <div id="alerta-postulantes-meta" class="alerta-meta-card">
+            <div class="alerta-meta-head">Referencia de postulantes</div>
+            <div class="alerta-meta-loading">Cargando postulantes...</div>
+          </div>
+
+          <div class="alerta-actions">
+            ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
+          </div>
+        </article>
+      </div>
+
+      ${renderDots(total, alertasState.index)}
+    </div>
+  `;
+
+  box.querySelector("#alerta-prev")?.addEventListener("click", () => moverAlerta(-1));
+  box.querySelector("#alerta-next")?.addEventListener("click", () => moverAlerta(1));
+
+  box.querySelectorAll("[data-goto-index]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      irAAlerta(Number(btn.dataset.gotoIndex));
+    });
+  });
+
+  box.querySelectorAll("[data-dot-index]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      irAAlerta(Number(btn.dataset.dotIndex));
+    });
+  });
+
+  cargarResumenPostulantes(a);
+}
+
+function alertaRow(label, value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  return `
+    <div class="alerta-row">
+      <span class="alerta-key">${esc(label)}</span>
+      <span class="alerta-val">${esc(v)}</span>
+    </div>
+  `;
+}
+
 function fmtNum(v, digits = 0) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "-";
@@ -1455,6 +1507,7 @@ bindAdminEvents();
     setPanelLoading(false);
   }
 }
+
 function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
@@ -1463,13 +1516,14 @@ function renderDashboard(data) {
   const subscription = planInfo.subscription || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
+ const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
+  .filter(Boolean)
+  .join(" / ") || "(sin filtro)";
 
-  const cargosLista = [
-    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
-    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+const cargosLista = [
+  ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
+  ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
+]
   ].filter(Boolean);
 
   const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
@@ -1511,35 +1565,6 @@ function renderDashboard(data) {
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
   setHTML("panel-historico-apd", `<p class="ph">Cargando histórico APD...</p>`);
 }
-function renderAlertasAPD(alertas) {
-  const box = document.getElementById("panel-alertas");
-  const badge = document.getElementById("alertas-badge");
-
-  if (!box) return;
-
-  const items = Array.isArray(alertas) ? alertas : [];
-  alertasState.items = items;
-
-  if (!Number.isInteger(alertasState.index)) {
-    alertasState.index = 0;
-  }
-
-  if (alertasState.index >= items.length) {
-    alertasState.index = 0;
-  }
-
-  if (badge) {
-    if (items.length) {
-      badge.textContent = String(items.length);
-      badge.classList.remove("hidden");
-    } else {
-      badge.textContent = "";
-      badge.classList.add("hidden");
-    }
-  }
-
-  renderAlertaActual();
-}
 
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
@@ -1572,6 +1597,7 @@ function renderPlanUI(planInfo) {
     hint.textContent = `${nombre}: hasta ${maxDistritos} distrito(s) y ${maxCargos} cargo(s)/materia(s).`;
   }
 }
+
 function planNombreHumano(plan, subscription) {
   const code = String(plan?.code || subscription?.plan_code || "").trim().toUpperCase();
 
