@@ -961,7 +961,7 @@ function renderDots(total, current) {
   `;
 }
 
-function renderAlertaActual(alertas) {
+function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
   const items = alertasState.items;
