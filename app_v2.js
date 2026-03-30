@@ -982,86 +982,127 @@ function renderAlertaActual() {
 
   if (!total) {
     box.innerHTML = bloqueoMsg
-      ? `
-        <div class="empty-state">
-          <p>${esc(bloqueoMsg)}</p>
-          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
-        </div>
-      `
-      : `
-        <div class="empty-state">
-          <p>No hay alertas compatibles todavía.</p>
-          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
-        </div>
-      `;
+      ? `<div class="empty-state"><p>${esc(bloqueoMsg)}</p><p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p></div>`
+      : `<div class="empty-state"><p>No hay alertas compatibles todavía.</p><p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p></div>`;
     return;
   }
 
-  if (!Number.isInteger(alertasState.index)) {
-    alertasState.index = 0;
-  }
+  if (!Number.isInteger(alertasState.index)) alertasState.index = 0;
+  if (alertasState.index < 0) alertasState.index = 0;
+  if (alertasState.index >= total) alertasState.index = 0;
 
-  if (alertasState.index < 0) {
-    alertasState.index = 0;
-  }
-
-  if (alertasState.index >= total) {
-    alertasState.index = 0;
-  }
-
-  const item = items[alertasState.index];
+  const safeIndex = alertasState.index;
+  const item = items[safeIndex];
   const p = item?.offer_payload || item || {};
 
   const titulo = p.materia || p.cargo || p.title || "Oferta APD";
   const escuela = p.escuela || "Escuela no informada";
   const distrito = p.distrito || "-";
-  const turno = p.turno || "-";
-  const nivel = p.nivel || "-";
+  const turno = turnoTexto(p.turno || "") || p.turno || "-";
+  const nivel = p.nivel || p.nivel_modalidad || "-";
   const jornada = p.jornada || "-";
-  const cursoDivision = p.curso_division || "-";
-  const modulos = p.modulos || "-";
-  const desde = p.desde || "-";
-  const hasta = p.hasta || "-";
+  const cursoDivision = p.curso_division || p.cursodivision || "-";
+  const modulos = p.modulos || p.hsmodulos || "-";
+  const desde = p.desde || p.supl_desde_label || "-";
+  const hasta = p.hasta || p.supl_hasta_label || "-";
   const cierre = p.fecha_cierre || p.finoferta_label || p.finoferta || "-";
   const postulantes = p.total_postulantes ?? "-";
   const puntaje = p.puntaje_primero ?? "-";
   const listado = p.listado_origen_primero || "-";
   const link = p.link || p.link_postular || p.abc_postulantes_url || "";
 
+  const prevIndex = (safeIndex - 1 + total) % total;
+  const nextIndex = (safeIndex + 1) % total;
+  const prevItem = total > 1 ? items[prevIndex]?.offer_payload || items[prevIndex] || {} : null;
+  const nextItem = total > 1 ? items[nextIndex]?.offer_payload || items[nextIndex] || {} : null;
+
+  const prevPreview = prevItem ? `
+    <button type="button" class="alerta-window-preview alerta-window-preview-left" data-goto-index="${prevIndex}" aria-label="Anterior">
+      <div class="alerta-windowbar alerta-windowbar-mini">
+        <span class="alerta-windowdot win-red"></span>
+        <span class="alerta-windowdot win-yellow"></span>
+        <span class="alerta-windowdot win-green"></span>
+      </div>
+      <div class="alerta-window-preview-side">Anterior</div>
+      <div class="alerta-window-preview-title">${esc(prevItem.materia || prevItem.cargo || prevItem.title || "Oferta APD")}</div>
+      <div class="alerta-window-preview-sub">${esc(prevItem.escuela || "Sin escuela")}</div>
+      <div class="alerta-window-preview-meta">${esc(prevItem.distrito || "-")} · ${esc(turnoTexto(prevItem.turno || "") || "-")}</div>
+    </button>` : "";
+
+  const nextPreview = nextItem ? `
+    <button type="button" class="alerta-window-preview alerta-window-preview-right" data-goto-index="${nextIndex}" aria-label="Siguiente">
+      <div class="alerta-windowbar alerta-windowbar-mini">
+        <span class="alerta-windowdot win-red"></span>
+        <span class="alerta-windowdot win-yellow"></span>
+        <span class="alerta-windowdot win-green"></span>
+      </div>
+      <div class="alerta-window-preview-side">Siguiente</div>
+      <div class="alerta-window-preview-title">${esc(nextItem.materia || nextItem.cargo || nextItem.title || "Oferta APD")}</div>
+      <div class="alerta-window-preview-sub">${esc(nextItem.escuela || "Sin escuela")}</div>
+      <div class="alerta-window-preview-meta">${esc(nextItem.distrito || "-")} · ${esc(turnoTexto(nextItem.turno || "") || "-")}</div>
+    </button>` : "";
+
+  const pct = total > 0 ? ((safeIndex + 1) / total) * 100 : 0;
+  const progressBar = `<div class="alerta-progress"><span class="alerta-progress-bar" style="width:${pct}%"></span></div>`;
+
+  const dots = total > 1 ? `
+    <div class="alerta-dots" aria-label="Navegación de alertas">
+      ${Array.from({ length: total }, (_, i) => `
+        <button type="button" class="alerta-dot ${i === safeIndex ? "is-active" : ""}" data-dot-index="${i}" aria-label="Ir a oferta ${i + 1}" ${i === safeIndex ? 'aria-current="true"' : ""}></button>
+      `).join("")}
+    </div>` : "";
+
   box.innerHTML = `
-    <article class="alerta-card">
-      <div class="alerta-topbar">
-        <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
-        <div class="alerta-counter">Oferta ${alertasState.index + 1} de ${total}</div>
-        <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
-      </div>
+    <div class="alerta-carousel-shell">
+      <div class="alerta-stage">
+        ${prevPreview}
 
-      <h3 class="alerta-title">${esc(titulo)}</h3>
-      <div class="alerta-sub">${esc(escuela)}</div>
+        <div class="alerta-main-card">
+          <div class="alerta-floating">
+            <div class="alerta-windowbar">
+              <span class="alerta-windowdot win-red"></span>
+              <span class="alerta-windowdot win-yellow"></span>
+              <span class="alerta-windowdot win-green"></span>
+            </div>
 
-      <div class="alerta-grid">
-        <div><strong>Distrito:</strong> ${esc(distrito)}</div>
-        <div><strong>Turno:</strong> ${esc(turno)}</div>
-        <div><strong>Nivel:</strong> ${esc(nivel)}</div>
-        <div><strong>Jornada:</strong> ${esc(jornada)}</div>
-        <div><strong>Curso / División:</strong> ${esc(cursoDivision)}</div>
-        <div><strong>Módulos:</strong> ${esc(String(modulos))}</div>
-        <div><strong>Desde:</strong> ${esc(desde)}</div>
-        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
-        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
-        <div><strong>Postulantes:</strong> ${esc(String(postulantes))}</div>
-        <div><strong>Mejor puntaje:</strong> ${esc(String(puntaje))}</div>
-        <div><strong>Listado:</strong> ${esc(listado)}</div>
-      </div>
+            ${progressBar}
 
-      ${link ? `
-        <div class="alerta-actions">
-          <a class="btn btn-primary" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a>
+            <div class="alerta-topbar">
+              <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+              <div class="alerta-counter">Oferta ${safeIndex + 1} de ${total}</div>
+              <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
+            </div>
+
+            <h3 class="alerta-title">${esc(titulo)}</h3>
+            <div class="alerta-subtitle">${esc(escuela)}</div>
+
+            <div class="alerta-grid">
+              <div class="alerta-row"><span class="alerta-key">Distrito</span><span class="alerta-val">${esc(distrito)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Turno</span><span class="alerta-val">${esc(turno)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Nivel</span><span class="alerta-val">${esc(nivel)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Jornada</span><span class="alerta-val">${esc(jornada)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Curso / División</span><span class="alerta-val">${esc(cursoDivision)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Módulos</span><span class="alerta-val">${esc(String(modulos))}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Desde</span><span class="alerta-val">${esc(desde)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Hasta</span><span class="alerta-val">${esc(hasta)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Cierre</span><span class="alerta-val">${esc(cierre)}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Postulantes</span><span class="alerta-val">${esc(String(postulantes))}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Mejor puntaje</span><span class="alerta-val">${esc(String(puntaje))}</span></div>
+              <div class="alerta-row"><span class="alerta-key">Listado</span><span class="alerta-val">${esc(listado)}</span></div>
+            </div>
+
+            ${link ? `<div class="alerta-actions"><a class="btn btn-primary alerta-link" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a></div>` : ""}
+          </div>
         </div>
-      ` : ""}
-    </article>
+
+        ${nextPreview}
+      </div>
+
+      ${dots}
+    </div>
   `;
 
+  // Botones prev/next
   document.getElementById("alerta-prev")?.addEventListener("click", () => {
     if (!alertasState.items.length) return;
     alertasState.index = (alertasState.index - 1 + alertasState.items.length) % alertasState.items.length;
@@ -1072,6 +1113,28 @@ function renderAlertaActual() {
     if (!alertasState.items.length) return;
     alertasState.index = (alertasState.index + 1) % alertasState.items.length;
     renderAlertaActual();
+  });
+
+  // Preview cards laterales
+  box.querySelectorAll(".alerta-window-preview").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.gotoIndex);
+      if (Number.isInteger(idx) && idx >= 0 && idx < alertasState.items.length) {
+        alertasState.index = idx;
+        renderAlertaActual();
+      }
+    });
+  });
+
+  // Dots
+  box.querySelectorAll(".alerta-dot").forEach(dot => {
+    dot.addEventListener("click", () => {
+      const idx = Number(dot.dataset.dotIndex);
+      if (Number.isInteger(idx) && idx >= 0 && idx < alertasState.items.length) {
+        alertasState.index = idx;
+        renderAlertaActual();
+      }
+    });
   });
 }
 
