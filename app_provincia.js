@@ -528,31 +528,71 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
 
   const plan = planInfo?.plan || {};
   const subscription = planInfo?.subscription || {};
-  const featureFlags = typeof plan.feature_flags === 'object' && plan.feature_flags ? plan.feature_flags : {};
+  const featureFlags = typeof plan.feature_flags === 'object' && plan.feature_flags
+    ? plan.feature_flags
+    : {};
+
   const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
-  const planCode = String(plan.code || subscription.plan_code || 'PLUS').trim().toUpperCase();
-  const whatsappRequested = typeof checked === 'function' ? checked('pref-alertas-whatsapp') : false;
-  const publicPlans = (Array.isArray(planesCatalog) ? planesCatalog : [])
-    .filter(item => item && item.public_visible !== false && Number(item.price_ars || 0) > 0)
-    .sort((a, b) => Number(a.sort_order || 999) - Number(b.sort_order || 999));
+  const planCode = String(plan.code || subscription.plan_code || '').trim().toUpperCase();
+  const currentStatus = String(subscription.status || '').trim().toLowerCase();
+
+  const whatsappConfigured = !!whatsapp?.configured;
+  const whatsappAllowed = featureFlags.whatsapp !== false;
+  const whatsappDestination = whatsapp?.destination || subscription?.whatsapp_number || '';
+
+  const publicPlans = Array.isArray(planesCatalog)
+    ? planesCatalog
+        .filter(item => item && item.public_visible !== false && item.is_active !== false)
+        .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    : [];
 
   box.innerHTML = `
-    <div class="soft-list">
-      <article class="soft-item">
-        <div class="soft-title">WhatsApp</div>
-        <div class="soft-sub">${whatsapp?.configured ? 'Configuracion lista para pruebas controladas.' : 'Todavia faltan variables del canal.'}</div>
-        <div class="soft-meta">Preferencia del usuario: ${whatsappRequested ? 'Solicitada' : 'Apagada'} · Plantilla: ${escProvincia(whatsapp?.template_name || 'Pendiente')} (${escProvincia(whatsapp?.template_lang || '-')}) · Access token: ${whatsapp?.access_token_ready ? 'OK' : 'Falta'}</div>
+    <div class="soft-stack">
+      <article class="soft-card">
+        <div class="soft-title-row">
+          <h3>WhatsApp</h3>
+        </div>
+        <div class="soft-sub">
+          ${whatsappAllowed
+            ? (whatsappConfigured
+                ? 'Configuracion lista para pruebas controladas.'
+                : 'Todavia no esta configurado para este usuario.')
+            : 'Tu plan actual no incluye pruebas por WhatsApp.'}
+        </div>
+        <div class="soft-meta">
+          Preferencia del usuario: ${whatsapp?.enabled ? 'Activa' : 'Apagada'}
+          · Plantilla: ${escProvincia(whatsapp?.template_name || 'hello_world')}
+          · Access token: ${whatsapp?.access_token_present ? 'OK' : 'NO'}
+          ${whatsappDestination ? `· Destino: ${escProvincia(whatsappDestination)}` : ''}
+        </div>
         <div class="soft-actions">
-          <button id="btn-whatsapp-test" class="btn btn-secondary soft-action" type="button"${token && whatsapp?.configured ? '' : ' disabled'}>Enviar prueba</button>
+          <button
+            id="btn-whatsapp-test"
+            class="btn btn-secondary soft-action"
+            type="button"
+            ${(token && whatsappAllowed) ? '' : 'disabled'}
+          >Enviar prueba</button>
         </div>
       </article>
 
-      <article class="soft-item">
-        <div class="soft-title">Mercado Pago</div>
+      <article class="soft-card">
+        <div class="soft-title-row">
+          <h3>Mercado Pago</h3>
+        </div>
         <div class="soft-sub">Elegi el plan que quieras y abri Mercado Pago directamente con ese plan.</div>
-        <div class="soft-meta">Plan actual: ${escProvincia(plan.nombre || planCode)} · Estado: ${escProvincia(subscription.status || 'disponible')} · Radar provincial: ${featureFlags.provincia ? 'Incluido' : 'No incluido'}</div>
+        <div class="soft-meta">
+          Plan actual: ${escProvincia(plan.nombre || subscription.plan_code || 'Sin plan')}
+          · Estado: ${escProvincia(subscription.status || 'inactivo')}
+          ${subscription.current_period_ends_at ? `· Renueva: ${escProvincia(fmtProvinciaFecha(subscription.current_period_ends_at))}` : ''}
+          ${subscription.trial_ends_at ? `· Prueba hasta: ${escProvincia(fmtProvinciaFecha(subscription.trial_ends_at))}` : ''}
+        </div>
+        <div class="soft-meta" style="margin-top:8px">
+          Incluye postulantes y puntajes en todos los planes.
+        </div>
+
         ${renderPlanOptionsProvincia(planCode, publicPlans)}
-        <div class="soft-actions">
+
+        <div class="soft-actions" style="margin-top:12px">
           <button id="btn-refresh-plan-provincia" class="btn btn-secondary soft-action" type="button"${token ? '' : ' disabled'}>Refrescar plan</button>
         </div>
       </article>
@@ -572,6 +612,50 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
     }
   });
 
+  box.querySelectorAll('[data-checkout-plan-code]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+      const targetPlanCode = String(button.getAttribute('data-checkout-plan-code') || '').trim().toUpperCase();
+      if (!userId || !targetPlanCode || targetPlanCode === planCode) return;
+
+      setButtonBusyProvincia(button, 'Preparando...');
+      try {
+        const data = await crearCheckoutMercadoPago(userId, targetPlanCode);
+        if (data.checkout_url) {
+          window.open(data.checkout_url, '_blank', 'noopener');
+        } else {
+          window.alert(data.message || 'Se registro la sesion, pero todavia no hay checkout real configurado.');
+        }
+      } catch (err) {
+        console.error('ERROR CHECKOUT PLAN:', err);
+        window.alert(err?.message || 'No se pudo preparar el checkout');
+      } finally {
+        restoreButtonProvincia(button);
+      }
+    });
+  });
+
+  const waBtn = document.getElementById('btn-whatsapp-test');
+  waBtn?.addEventListener('click', async () => {
+    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
+    if (!userId) return;
+
+    setButtonBusyProvincia(waBtn, 'Enviando...');
+    try {
+      const data = await enviarWhatsAppTest(userId);
+      window.alert(
+        data?.message
+          ? `${data.message}${data.destination ? ` a ${data.destination}` : ''}`
+          : 'Prueba de WhatsApp enviada'
+      );
+    } catch (err) {
+      console.error('ERROR WHATSAPP TEST:', err);
+      window.alert(err?.message || 'No se pudo enviar la prueba de WhatsApp');
+    } finally {
+      restoreButtonProvincia(waBtn);
+    }
+  });
+}
   
 
   box.querySelectorAll('[data-checkout-plan-code]').forEach(button => {
