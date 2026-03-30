@@ -1030,18 +1030,18 @@ function renderAlertaActual() {
       <div class="alerta-sub">${esc(escuela)}</div>
 
       <div class="alerta-grid">
-        ${alertaRow("Distrito", distrito)}
-        ${alertaRow("Turno", turno)}
-        ${alertaRow("Nivel", nivel)}
-        ${alertaRow("Jornada", jornada)}
-        ${alertaRow("Curso / División", cursoDivision)}
-        ${alertaRow("Módulos", modulos)}
-        ${alertaRow("Desde", desde)}
-        ${alertaRow("Hasta", hasta)}
-        ${alertaRow("Cierre", cierre)}
-        ${alertaRow("Postulantes", postulantes)}
-        ${alertaRow("Mejor puntaje", puntaje)}
-        ${alertaRow("Listado", listado)}
+        <div><strong>Distrito:</strong> ${esc(distrito)}</div>
+        <div><strong>Turno:</strong> ${esc(turno)}</div>
+        <div><strong>Nivel:</strong> ${esc(nivel)}</div>
+        <div><strong>Jornada:</strong> ${esc(jornada)}</div>
+        <div><strong>Curso / División:</strong> ${esc(cursoDivision)}</div>
+        <div><strong>Módulos:</strong> ${esc(String(modulos))}</div>
+        <div><strong>Desde:</strong> ${esc(desde)}</div>
+        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
+        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
+        <div><strong>Postulantes:</strong> ${esc(String(postulantes))}</div>
+        <div><strong>Mejor puntaje:</strong> ${esc(String(puntaje))}</div>
+        <div><strong>Listado:</strong> ${esc(listado)}</div>
       </div>
 
       ${link ? `
