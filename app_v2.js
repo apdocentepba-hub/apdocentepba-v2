@@ -21,6 +21,11 @@ const alertasState = {
   index: 0
 };
 
+const planGateState = {
+  alertasMessage: "",
+  preferenciasMessage: ""
+};
+
 /* ===== ADMIN ===== */
 const ADMIN = {
   enabled: false
