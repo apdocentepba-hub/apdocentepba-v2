@@ -1,7 +1,7 @@
 'use strict';
 console.log("APP_V2_CARGADO");
 
-const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
+const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev/";
 const APD_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 const APD_SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
 const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
@@ -273,7 +273,7 @@ function btnRestore(btn) {
 async function post(payload) {
   const action = String(payload?.action || "").trim();
 
-  let url = API_URL + "/api";
+  let url =  + "/api";
 
   if (action === "login") {
     url += "/login";
@@ -349,7 +349,7 @@ if (options.body && !headers["Content-Type"]) {
   headers["Content-Type"] = "application/json";
 }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${}${path}`, {
     ...options,
     headers
   });
@@ -598,7 +598,7 @@ async function registrarDocente(e) {
   showMsg("registro-msg", "Procesando...", "info");
 
   try {
-    const resp = await fetch(`${API_URL}/api/register`, {
+    const resp = await fetch(`${}/api/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -644,7 +644,7 @@ async function loginPassword(e) {
   showMsg("login-msg", "Verificando credenciales...", "info");
 
   try {
-    const res = await fetch(`${API_URL}/api/login`, {
+    const res = await fetch(`${}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -736,7 +736,7 @@ async function handleGoogleCredential(response) {
   showMsg(target, "Validando Google...", "info");
 
   try {
-    const res = await fetch(`${API_URL}/api/google-auth`, {
+    const res = await fetch(`${}/api/google-auth`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credential: response?.credential || "" })
@@ -769,7 +769,7 @@ async function handleGoogleCredential(response) {
 }
 
 async function obtenerMisAlertas(userId) {
-  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
+  const res = await fetch(`${}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
   let data = null;
 
@@ -878,7 +878,7 @@ async function cargarResumenPostulantes(alerta) {
 
   try {
     const res = await fetch(
-      `${API_URL}/api/postulantes-resumen?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`
+      `${}/api/postulantes-resumen?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`
     );
 
     const data = await res.json();
