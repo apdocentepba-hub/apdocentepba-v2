@@ -534,7 +534,6 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
 
   const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
   const planCode = String(plan.code || subscription.plan_code || '').trim().toUpperCase();
-  const currentStatus = String(subscription.status || '').trim().toLowerCase();
 
   const whatsappConfigured = !!whatsapp?.configured;
   const whatsappAllowed = featureFlags.whatsapp !== false;
@@ -579,7 +578,7 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
         <div class="soft-title-row">
           <h3>Mercado Pago</h3>
         </div>
-        <div class="soft-sub">Elegi el plan que quieras y abri Mercado Pago directamente con ese plan.</div>
+        <div class="soft-sub">Elegí el plan que quieras y abrí Mercado Pago directamente con ese plan.</div>
         <div class="soft-meta">
           Plan actual: ${escProvincia(plan.nombre || subscription.plan_code || 'Sin plan')}
           · Estado: ${escProvincia(subscription.status || 'inactivo')}
@@ -656,51 +655,6 @@ function renderCanalesProvincia(whatsapp, planInfo, planesCatalog) {
     }
   });
 }
-  
-
-  box.querySelectorAll('[data-checkout-plan-code]').forEach(button => {
-    button.addEventListener('click', async () => {
-      const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
-      const targetPlanCode = String(button.getAttribute('data-checkout-plan-code') || '').trim().toUpperCase();
-      if (!userId || !targetPlanCode || targetPlanCode === planCode) return;
-
-      setButtonBusyProvincia(button, 'Preparando...');
-      try {
-        const data = await crearCheckoutMercadoPago(userId, targetPlanCode);
-        if (data.checkout_url) {
-          window.open(data.checkout_url, '_blank', 'noopener');
-        } else {
-          window.alert(data.message || 'Se registro la sesion, pero todavia no hay checkout real configurado.');
-        }
-      } catch (err) {
-        console.error('ERROR CHECKOUT PLAN:', err);
-        window.alert(err?.message || 'No se pudo preparar el checkout');
-      } finally {
-        restoreButtonProvincia(button);
-      }
-    });
-  });
-
-  const waBtn = document.getElementById('btn-whatsapp-test');
-  waBtn?.addEventListener('click', async () => {
-    const userId = typeof obtenerToken === 'function' ? obtenerToken() : null;
-    if (!userId) return;
-
-    setButtonBusyProvincia(waBtn, 'Enviando...');
-    try {
-      const data = await enviarWhatsAppTest(userId);
-      window.alert(data?.message
-        ? `${data.message}${data.destination ? ` a ${data.destination}` : ''}`
-        : 'Prueba de WhatsApp enviada');
-    } catch (err) {
-      console.error('ERROR WHATSAPP TEST:', err);
-      window.alert(err?.message || 'No se pudo enviar la prueba de WhatsApp');
-    } finally {
-      restoreButtonProvincia(waBtn);
-    }
-  });
-}
-
 async function cargarExtrasProvincia() {
   const token = typeof obtenerToken === 'function' ? obtenerToken() : null;
 
