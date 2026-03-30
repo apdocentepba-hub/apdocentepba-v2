@@ -1013,65 +1013,43 @@ function renderAlertaActual() {
   const hasta = payload.hasta || "-";
   const modulos = payload.modulos || "-";
   const cierre = payload.fecha_cierre || "-";
-  const observaciones = payload.observaciones || "";
-  const tipoSituacion = payload.tipo_situacion || payload.tipo_cargo || "";
-  const totalPostulantes = payload.total_postulantes ?? "—";
-  const puntajePrimero = payload.puntaje_primero ?? "—";
-  const listadoPrimero = payload.listado_origen_primero || "";
-  const abcUrl = payload.link || "#";
+  const postulantes = payload.total_postulantes ?? "-";
+  const puntaje = payload.puntaje_primero ?? "-";
+  const listado = payload.listado_origen_primero || "-";
+  const link = payload.link || payload.link_postular || "";
 
   box.innerHTML = `
-    <div class="alerta-card">
-      <div class="alerta-head">
-        <div>
-          <h3>${esc(cargo)}</h3>
-          <p class="alerta-sub">${esc(escuela)}</p>
-        </div>
-        <div class="alerta-nav">
-          <button class="btn btn-secondary btn-sm" id="alerta-prev"${total <= 1 ? " disabled" : ""}>‹</button>
-          <span class="alerta-pos">${safeIndex + 1} / ${total}</span>
-          <button class="btn btn-secondary btn-sm" id="alerta-next"${total <= 1 ? " disabled" : ""}>›</button>
-        </div>
+    <article class="alerta-card">
+      <div class="alerta-topbar">
+        <button id="alerta-prev" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Anterior">&larr;</button>
+        <div class="alerta-counter">Oferta ${safeIndex + 1} de ${total}</div>
+        <button id="alerta-next" class="alerta-nav" type="button" ${total < 2 ? "disabled" : ""} aria-label="Siguiente">&rarr;</button>
       </div>
 
-      <div class="alerta-badges">
-        <span class="chip">📍 ${esc(distrito)}</span>
-        <span class="chip">🕒 ${esc(turno)}</span>
-        <span class="chip">🎓 ${esc(nivel)}</span>
-        <span class="chip">🏫 ${esc(jornada)}</span>
-        ${tipoSituacion ? `<span class="chip">📌 ${esc(tipoSituacion)}</span>` : ""}
-      </div>
+      <h3 class="alerta-title">${esc(cargo)}</h3>
+      <div class="alerta-sub">${esc(escuela)}</div>
 
       <div class="alerta-grid">
-        <div><strong>Curso/división:</strong> ${esc(cursoDivision)}</div>
-        <div><strong>Desde:</strong> ${esc(desde)}</div>
-        <div><strong>Hasta:</strong> ${esc(hasta)}</div>
-        <div><strong>Módulos:</strong> ${esc(modulos)}</div>
-        <div><strong>Cierre:</strong> ${esc(cierre)}</div>
+        ${alertaRow("Distrito", distrito)}
+        ${alertaRow("Turno", turno)}
+        ${alertaRow("Nivel", nivel)}
+        ${alertaRow("Jornada", jornada)}
+        ${alertaRow("Curso / División", cursoDivision)}
+        ${alertaRow("Módulos", modulos)}
+        ${alertaRow("Desde", desde)}
+        ${alertaRow("Hasta", hasta)}
+        ${alertaRow("Cierre", cierre)}
+        ${alertaRow("Postulantes", postulantes)}
+        ${alertaRow("Mejor puntaje", puntaje)}
+        ${alertaRow("Listado", listado)}
       </div>
 
-      ${
-        observaciones
-          ? `
-            <div class="alerta-box">
-              <strong>Observaciones</strong>
-              <p>${esc(observaciones)}</p>
-            </div>
-          `
-          : ""
-      }
-
-      <div class="alerta-box">
-        <strong>Resumen de postulantes</strong>
-        <p><strong>Cantidad:</strong> ${esc(String(totalPostulantes))}</p>
-        <p><strong>Puntaje más alto:</strong> ${esc(String(puntajePrimero))}</p>
-        ${listadoPrimero ? `<p><strong>Listado del más alto:</strong> ${esc(listadoPrimero)}</p>` : ""}
-      </div>
-
-      <div class="alerta-actions">
-        <a class="btn btn-primary" href="${esc(abcUrl)}" target="_blank" rel="noopener">Ir a ABC</a>
-      </div>
-    </div>
+      ${link ? `
+        <div class="alerta-actions">
+          <a class="btn btn-primary" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a>
+        </div>
+      ` : ""}
+    </article>
   `;
 
   document.getElementById("alerta-prev")?.addEventListener("click", () => {
@@ -1086,9 +1064,6 @@ function renderAlertaActual() {
     renderAlertaActual();
   });
 }
-
- 
-
 
 function alertaRow(label, value) {
   const v = String(value || "").trim();
