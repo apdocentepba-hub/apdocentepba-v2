@@ -112,7 +112,6 @@ async function lanzarProvinciaBackfillAuto() {
     body: JSON.stringify({})
   });
 }
-
 async function resetearProvinciaBackfill() {
   return workerFetchJson('/api/provincia/backfill-reset', {
     method: 'POST',
@@ -713,21 +712,25 @@ window.cargarExtrasProvincia = cargarExtrasProvincia;
 async function monitorProvinciaBackfill(delayMs = 2500) {
   stopProvinciaBackfillMonitor();
 
-  while (true) {
-    await sleepProvincia(delayMs);
+  await sleepProvincia(delayMs);
 
-    const status = await obtenerProvinciaBackfillStatus().catch(err => {
-      console.error('ERROR MONITOR BACKFILL STATUS:', err);
-      return null;
-    });
+  const status = await obtenerProvinciaBackfillStatus().catch(err => {
+    console.error('ERROR MONITOR BACKFILL STATUS:', err);
+    return null;
+  });
 
-    await cargarExtrasProvincia();
+  await cargarExtrasProvincia();
 
-    if (!status || status.status !== 'running') {
-      stopProvinciaBackfillMonitor();
-      return;
-    }
+  if (status && status.status === 'running') {
+    provinciaBackfillMonitorTimer = setTimeout(() => {
+      monitorProvinciaBackfill(delayMs).catch(err => {
+        console.error('ERROR MONITOR BACKFILL:', err);
+      });
+    }, delayMs);
+    return;
   }
+
+  stopProvinciaBackfillMonitor();
 }
 
 function bindProvinciaButtons() {
@@ -745,7 +748,7 @@ function bindProvinciaButtons() {
     const btn = document.getElementById('btn-provincia-step');
     setButtonBusyProvincia(btn, 'Procesando...');
     try {
-      await lanzarProvinciaBackfillAuto();
+      await procesarProvinciaBackfill(false);
       await cargarExtrasProvincia();
 
       if (!provinciaBackfillMonitorTimer) {
