@@ -1,7 +1,7 @@
 'use strict';
 console.log("APP_V2_CARGADO");
 
-const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev/";
+const API_URL = "https://ancient-wildflower-cd37.apdocentepba.workers.dev";
 const APD_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 const APD_SUPABASE_URL = "https://vvgkinkvojqwfuqaxijh.supabase.co";
 const APD_SUPABASE_KEY = "sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT";
