@@ -632,8 +632,8 @@ async function registrarDocente(e) {
     console.error("Error registro:", err);
     showMsg("registro-msg", err?.message || "Error al registrar", "error");
   } finally {
-    btnLoad(btn, null);
-  }
+  btnRestore(btn);
+}
 }
 
 async function loginPassword(e) {
