@@ -1543,78 +1543,7 @@ function renderAlertasAPD(alertas) {
 
   renderAlertaActual();
 }
-  if (!items.length) {
-    const bloqueoMsg = String(planGateState?.alertasMessage || "").trim();
 
-    box.innerHTML = bloqueoMsg
-      ? `
-        <div class="empty-state">
-          <p>${esc(bloqueoMsg)}</p>
-          <p class="empty-hint">Activá una suscripción desde Mercado Pago para volver a ver alertas y recibir emails.</p>
-        </div>
-      `
-      : `
-        <div class="empty-state">
-          <p>No hay alertas compatibles todavía.</p>
-          <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
-        </div>
-      `;
-
-    return;
-  }
-
-  box.innerHTML = items.map((raw, idx) => {
-    const p = raw?.offer_payload || raw || {};
-
-    const titulo = p.materia || p.cargo || p.title || "Oferta APD";
-    const escuela = p.escuela || raw.escuela || "Escuela no informada";
-    const distrito = p.distrito || raw.distrito || "-";
-    const turno = p.turno || raw.turno || "-";
-    const nivel = p.nivel || raw.nivel || "-";
-    const jornada = p.jornada || raw.jornada || "-";
-    const cursoDivision = p.curso_division || raw.curso_division || "-";
-    const modulos = p.modulos || raw.modulos || "-";
-    const desde = p.desde || raw.desde || "-";
-    const hasta = p.hasta || raw.hasta || "-";
-    const cierre = p.fecha_cierre || raw.fecha_cierre || raw.finoferta_label || raw.finoferta || "-";
-    const postulantes = p.total_postulantes ?? raw.total_postulantes ?? "-";
-    const puntaje = p.puntaje_primero ?? raw.puntaje_primero ?? "-";
-    const listado = p.listado_origen_primero || raw.listado_origen_primero || "-";
-    const link = p.link || p.link_postular || raw.link_postular || raw.abc_postulantes_url || "";
-
-    return `
-      <article class="alerta-card alerta-card-lista" data-alerta-index="${idx}">
-        <div class="alerta-topbar" style="margin-bottom:10px;">
-          <div class="alerta-counter">Oferta ${idx + 1} de ${items.length}</div>
-        </div>
-
-        <h3 class="alerta-title">${esc(titulo)}</h3>
-        <div class="alerta-sub">${esc(escuela)}</div>
-
-        <div class="alerta-grid">
-          <div><strong>Distrito:</strong> ${esc(distrito)}</div>
-          <div><strong>Turno:</strong> ${esc(turno)}</div>
-          <div><strong>Nivel:</strong> ${esc(nivel)}</div>
-          <div><strong>Jornada:</strong> ${esc(jornada)}</div>
-          <div><strong>Curso / División:</strong> ${esc(cursoDivision)}</div>
-          <div><strong>Módulos:</strong> ${esc(String(modulos))}</div>
-          <div><strong>Desde:</strong> ${esc(desde)}</div>
-          <div><strong>Hasta:</strong> ${esc(hasta)}</div>
-          <div><strong>Cierre:</strong> ${esc(cierre)}</div>
-          <div><strong>Postulantes:</strong> ${esc(String(postulantes))}</div>
-          <div><strong>Mejor puntaje:</strong> ${esc(String(puntaje))}</div>
-          <div><strong>Listado:</strong> ${esc(listado)}</div>
-        </div>
-
-        ${link ? `
-          <div class="alerta-actions">
-            <a class="btn btn-primary" href="${esc(link)}" target="_blank" rel="noopener">Ver publicación</a>
-          </div>
-        ` : ""}
-      </article>
-    `;
-  }).join("");
-}
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
   const plan = info.plan || {};
