@@ -763,11 +763,26 @@ async function handleGoogleCredential(response) {
   }
 }
 
+async function obtenerMisAlertas(userId) {
+  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
 
+  let data = null;
+
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error("El Worker no devolvió JSON válido en /api/mis-alertas");
+  }
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
+  }
+
+  return filtrarAlertasVigentes(Array.isArray(data.resultados) ? data.resultados : []);
+}
 
 function renderAlertasAPD(alertas) {
-  alertasState.items = 
-    Array.isArray(alertas) ? alertas: [];
+  alertasState.items = filtrarAlertasVigentes(alertas);
   alertasState.index = 0;
   renderAlertaActual();
 }
