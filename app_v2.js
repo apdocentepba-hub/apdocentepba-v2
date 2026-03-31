@@ -782,7 +782,8 @@ async function obtenerMisAlertas(userId) {
 }
 
 function renderAlertasAPD(alertas) {
-  alertasState.items = filtrarAlertasVigentes(alertas);
+  alertasState.items = 
+    Array.isArray(alertas) ? alertas: [];
   alertasState.index = 0;
   renderAlertaActual();
 }
