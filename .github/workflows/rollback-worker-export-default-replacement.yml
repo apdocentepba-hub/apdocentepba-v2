@@ -1,0 +1,79 @@
+name: Rollback worker export default replacement
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Commit SHA a revertir. Si queda vacío, intenta revertir HEAD solo si coincide con el apply seguro."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  rollback-worker-export-default-replacement:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assert safe branch
+        run: |
+          CURRENT_BRANCH="${GITHUB_REF_NAME}"
+          echo "Branch actual: ${CURRENT_BRANCH}"
+          if [ "${CURRENT_BRANCH}" != "refactor/worker-base-20260401" ]; then
+            echo "ERROR: este workflow solo puede correr en refactor/worker-base-20260401"
+            exit 1
+          fi
+
+      - name: Resolve target commit
+        id: target
+        run: |
+          INPUT_SHA="${{ github.event.inputs.commit_sha }}"
+          if [ -n "$INPUT_SHA" ]; then
+            TARGET_SHA="$INPUT_SHA"
+          else
+            TARGET_SHA="$(git rev-parse HEAD)"
+            SUBJECT="$(git log -1 --pretty=%s "$TARGET_SHA")"
+            echo "HEAD subject: $SUBJECT"
+            if [ "$SUBJECT" != "Apply safe export default router replacement" ]; then
+              echo "ERROR: HEAD no es el commit de apply seguro y no se indicó commit_sha"
+              exit 1
+            fi
+          fi
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Revert target commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git revert --no-edit "${{ steps.target.outputs.target_sha }}"
+
+      - name: Validate rollback changed files
+        run: |
+          git diff --name-only HEAD~1 HEAD > changed_files.txt
+          echo 'Changed files after revert:'
+          cat changed_files.txt
+          if ! grep -qx 'worker.js' changed_files.txt; then
+            echo 'ERROR: el rollback no tocó worker.js'
+            exit 1
+          fi
+
+      - name: Publish rollback summary
+        run: |
+          echo '# Rollback worker export default replacement' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '- commit revertido: ${{ steps.target.outputs.target_sha }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- rama: ${GITHUB_REF_NAME}' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '## Primeras líneas del diff de rollback' >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff HEAD~1 HEAD -- worker.js | sed -n '1,220p' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push rollback commit
+        run: git push
