@@ -1222,8 +1222,9 @@ const vigenciaLabel =
 
           ${renderProgress(total, alertasState.index)}
 
-         <div class="alerta-tags">
+   <div class="alerta-tags">
   ${a.escuela ? `<span class="tag tag-escuela">${esc(a.escuela)}</span>` : ""}
+  ${a.distrito ? `<span class="tag tag-distrito">${esc(a.distrito)}</span>` : ""}
   ${a.turno ? `<span class="tag tag-turno">${esc(a.turno)}</span>` : ""}
   ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
   ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
@@ -1233,16 +1234,11 @@ const vigenciaLabel =
 
 <div class="alerta-title">${esc(titulo)}</div>
 
-<div class="alerta-grid">
-  ${alertaRow("Distrito", a.distrito)}
-  ${alertaRow("Turno", turnoTexto(a.turno))}
-  ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
-  ${alertaRow("Jornada", a.jornada)}
-  ${alertaRow("Situación", a.revista)}
-  ${alertaRow("Módulos", a.hsmodulos || a.modulos)}
-  ${alertaRow("Días / horarios", a.dias_horarios || a.horario)}
-  ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
-  ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
+<div class="alerta-grid alerta-grid-clean">
+  ${alertaRow("Curso / Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
+  ${(a.hsmodulos || a.modulos) ? alertaRow("Módulos", a.hsmodulos || a.modulos) : ""}
+  ${horarioLabel ? alertaRow("Días / horarios", horarioLabel) : ""}
+  ${vigenciaLabel ? alertaRow("Vigencia", vigenciaLabel) : ""}
   ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
   ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
 </div>
