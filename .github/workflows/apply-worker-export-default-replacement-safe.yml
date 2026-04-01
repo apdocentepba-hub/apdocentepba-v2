@@ -1,0 +1,111 @@
+name: Apply worker export default replacement safe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-worker-export-default-replacement-safe:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Assert safe branch
+        run: |
+          CURRENT_BRANCH="${GITHUB_REF_NAME}"
+          echo "Branch actual: ${CURRENT_BRANCH}"
+          if [ "${CURRENT_BRANCH}" != "refactor/worker-base-20260401" ]; then
+            echo "ERROR: este workflow solo puede correr en refactor/worker-base-20260401"
+            exit 1
+          fi
+
+      - name: Prepare artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Backup current worker.js
+        run: cp worker.js artifacts/worker.js.before-apply.backup.js
+
+      - name: Build candidate and strict report
+        run: node scripts/build-worker-export-default-candidate.mjs --write --strict
+
+      - name: Apply replacement to worker.js
+        run: node scripts/build-worker-export-default-candidate.mjs --apply --strict
+
+      - name: Validate changed files
+        run: |
+          git diff --name-only > changed_files.txt
+          echo 'Changed files:'
+          cat changed_files.txt
+          COUNT=$(wc -l < changed_files.txt | tr -d ' ')
+          if [ "$COUNT" -ne 1 ]; then
+            echo 'ERROR: el workflow esperaba exactamente 1 archivo modificado.'
+            exit 1
+          fi
+          ONLY=$(cat changed_files.txt)
+          if [ "$ONLY" != "worker.js" ]; then
+            echo 'ERROR: el único archivo permitido a modificar es worker.js'
+            exit 1
+          fi
+
+      - name: Verify applied replacement strictly
+        run: node scripts/verify-worker-export-default-applied.mjs --write --strict
+
+      - name: Run duplicated routes check after apply
+        run: node scripts/check-worker-router-duplicates.mjs
+
+      - name: Publish summary
+        run: |
+          node -e "const fs=require('fs'); const before='artifacts/worker.export-default.report.json'; const after='artifacts/worker.export-default.applied-report.json'; const r1=JSON.parse(fs.readFileSync(before,'utf8')); const r2=JSON.parse(fs.readFileSync(after,'utf8')); const lines=[
+            '# Apply worker export default replacement safe',
+            '',
+            '## Build candidate',
+            '- ok: ' + r1.ok,
+            '- prefix_unchanged: ' + r1.checks.prefix_unchanged,
+            '- suffix_unchanged: ' + r1.checks.suffix_unchanged,
+            '- scheduled_block_same_hash: ' + r1.checks.scheduled_block_same_hash,
+            '',
+            '## Verify applied',
+            '- ok: ' + r2.ok,
+            '- export_default_matches_prototype: ' + r2.checks.export_default_matches_prototype,
+            '- scheduled_block_same_hash: ' + r2.checks.scheduled_block_same_hash,
+            '- hardcoded_kick: ' + r2.counts.hardcoded_kick,
+            '- hardcoded_status: ' + r2.counts.hardcoded_status,
+            '- prefixed_kick: ' + r2.counts.prefixed_kick,
+            '- prefixed_status: ' + r2.counts.prefixed_status,
+            '',
+            'Artifacts:',
+            '- artifacts/worker.js.before-apply.backup.js',
+            '- artifacts/worker.export-default.candidate.js',
+            '- artifacts/worker.export-default.report.json',
+            '- artifacts/worker.export-default.applied-report.json'
+          ]; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');"
+
+      - name: Commit replacement on safe branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          git commit -m "Apply safe export default router replacement"
+          git push
+
+      - name: Upload apply artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-export-default-safe-apply
+          path: |
+            artifacts/worker.js.before-apply.backup.js
+            artifacts/worker.export-default.candidate.js
+            artifacts/worker.export-default.report.json
+            artifacts/worker.export-default.applied-report.json
+          if-no-files-found: error
