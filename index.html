@@ -276,76 +276,107 @@
 
           <form id="form-preferencias">
             <div class="sec-head">
-              <div class="sec-label">Distritos</div>
-              <button id="btn-clear-distritos" class="mini-btn" type="button">Quitar filtro</button>
-            </div>
+  <div class="sec-label">Distritos <span id="districts-hint" class="hint-sm"></span></div>
+  <button id="btn-clear-distritos" class="mini-btn" type="button">Quitar filtro</button>
+</div>
 
-            <div class="grid-3">
-              <div class="field">
-                <label for="pref-distrito-principal">Distrito principal</label>
-                <input type="text" id="pref-distrito-principal" placeholder="Ej: AVELLANEDA" autocomplete="off"/>
-                <div id="sug-distrito-1" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-segundo-distrito">Segundo distrito</label>
-                <input type="text" id="pref-segundo-distrito" placeholder="Ej: LANÚS" autocomplete="off"/>
-                <div id="sug-distrito-2" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-tercer-distrito">Tercer distrito</label>
-                <input type="text" id="pref-tercer-distrito" placeholder="Ej: QUILMES" autocomplete="off"/>
-                <div id="sug-distrito-3" class="ac-list"></div>
-              </div>
-            </div>
+<div class="grid-3">
+  <div class="field" id="field-distrito-1">
+    <label id="label-distrito-1" for="pref-distrito-principal">Distrito principal</label>
+    <input type="text" id="pref-distrito-principal" placeholder="Ej: AVELLANEDA" autocomplete="off"/>
+    <div id="sug-distrito-1" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-distrito-2">
+    <label id="label-distrito-2" for="pref-segundo-distrito">Segundo distrito</label>
+    <input type="text" id="pref-segundo-distrito" placeholder="Ej: LANÚS" autocomplete="off"/>
+    <div id="sug-distrito-2" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-distrito-3">
+    <label id="label-distrito-3" for="pref-tercer-distrito">Tercer distrito</label>
+    <input type="text" id="pref-tercer-distrito" placeholder="Ej: QUILMES" autocomplete="off"/>
+    <div id="sug-distrito-3" class="ac-list"></div>
+  </div>
+</div>
 
-            <div class="grid-2">
-              <div class="field">
-                <label for="pref-cuarto-distrito">Cuarto distrito</label>
-                <input type="text" id="pref-cuarto-distrito" placeholder="Ej: LOMAS DE ZAMORA" autocomplete="off"/>
-                <div id="sug-distrito-4" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-quinto-distrito">Quinto distrito</label>
-                <input type="text" id="pref-quinto-distrito" placeholder="Ej: BERAZATEGUI" autocomplete="off"/>
-                <div id="sug-distrito-5" class="ac-list"></div>
-              </div>
-            </div>
+<div class="grid-2">
+  <div class="field" id="field-distrito-4">
+    <label id="label-distrito-4" for="pref-cuarto-distrito">Cuarto distrito</label>
+    <input type="text" id="pref-cuarto-distrito" placeholder="Ej: LOMAS DE ZAMORA" autocomplete="off"/>
+    <div id="sug-distrito-4" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-distrito-5">
+    <label id="label-distrito-5" for="pref-quinto-distrito">Quinto distrito</label>
+    <input type="text" id="pref-quinto-distrito" placeholder="Ej: BERAZATEGUI" autocomplete="off"/>
+    <div id="sug-distrito-5" class="ac-list"></div>
+  </div>
+</div>
 
-            <div class="sec-head">
-              <div class="sec-label">Cargos / Materias <span class="hint-sm">(hasta 5)</span></div>
-              <button id="btn-clear-cargos" class="mini-btn" type="button">Quitar filtro</button>
-            </div>
+<div class="sec-head">
+  <div class="sec-label">Cargos / Materias <span id="cargos-hint" class="hint-sm">(hasta 5)</span></div>
+  <button id="btn-clear-cargos" class="mini-btn" type="button">Quitar filtro</button>
+</div>
 
-            <div class="grid-3">
-              <div class="field">
-                <label for="pref-cargo-1">Cargo / Materia 1</label>
-                <input type="text" id="pref-cargo-1" placeholder="Ej: PRECEPTOR" autocomplete="off"/>
-                <div id="sug-cargo-1" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-cargo-2">Cargo / Materia 2</label>
-                <input type="text" id="pref-cargo-2" placeholder="Ej: MATEMÁTICA" autocomplete="off"/>
-                <div id="sug-cargo-2" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-cargo-3">Cargo / Materia 3</label>
-                <input type="text" id="pref-cargo-3" placeholder="Ej: INGLÉS" autocomplete="off"/>
-                <div id="sug-cargo-3" class="ac-list"></div>
-              </div>
-            </div>
+<div class="grid-3">
+  <div class="field" id="field-cargo-1">
+    <label id="label-cargo-1" for="pref-cargo-1">Cargo / Materia 1</label>
+    <input type="text" id="pref-cargo-1" placeholder="Ej: PRECEPTOR" autocomplete="off"/>
+    <div id="sug-cargo-1" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-cargo-2">
+    <label id="label-cargo-2" for="pref-cargo-2">Cargo / Materia 2</label>
+    <input type="text" id="pref-cargo-2" placeholder="Ej: MATEMÁTICA" autocomplete="off"/>
+    <div id="sug-cargo-2" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-cargo-3">
+    <label id="label-cargo-3" for="pref-cargo-3">Cargo / Materia 3</label>
+    <input type="text" id="pref-cargo-3" placeholder="Ej: INGLÉS" autocomplete="off"/>
+    <div id="sug-cargo-3" class="ac-list"></div>
+  </div>
+</div>
 
-            <div class="grid-2">
-              <div class="field">
-                <label for="pref-cargo-4">Cargo / Materia 4</label>
-                <input type="text" id="pref-cargo-4" placeholder="Ej: HISTORIA" autocomplete="off"/>
-                <div id="sug-cargo-4" class="ac-list"></div>
-              </div>
-              <div class="field">
-                <label for="pref-cargo-5">Cargo / Materia 5</label>
-                <input type="text" id="pref-cargo-5" placeholder="Ej: BIOLOGÍA" autocomplete="off"/>
-                <div id="sug-cargo-5" class="ac-list"></div>
-              </div>
-            </div>
+<div class="grid-3">
+  <div class="field" id="field-cargo-4">
+    <label id="label-cargo-4" for="pref-cargo-4">Cargo / Materia 4</label>
+    <input type="text" id="pref-cargo-4" placeholder="Ej: HISTORIA" autocomplete="off"/>
+    <div id="sug-cargo-4" class="ac-list"></div>
+  </div>
+  <div class="field" id="field-cargo-5">
+    <label id="label-cargo-5" for="pref-cargo-5">Cargo / Materia 5</label>
+    <input type="text" id="pref-cargo-5" placeholder="Ej: BIOLOGÍA" autocomplete="off"/>
+    <div id="sug-cargo-5" class="ac-list"></div>
+  </div>
+  <div class="field hidden" id="field-cargo-6">
+    <label id="label-cargo-6" for="pref-cargo-6">Cargo / Materia 6</label>
+    <input type="text" id="pref-cargo-6" placeholder="Ej: GEOGRAFÍA" autocomplete="off"/>
+    <div id="sug-cargo-6" class="ac-list"></div>
+  </div>
+</div>
+
+<div class="grid-3">
+  <div class="field hidden" id="field-cargo-7">
+    <label id="label-cargo-7" for="pref-cargo-7">Cargo / Materia 7</label>
+    <input type="text" id="pref-cargo-7" placeholder="Ej: LITERATURA" autocomplete="off"/>
+    <div id="sug-cargo-7" class="ac-list"></div>
+  </div>
+  <div class="field hidden" id="field-cargo-8">
+    <label id="label-cargo-8" for="pref-cargo-8">Cargo / Materia 8</label>
+    <input type="text" id="pref-cargo-8" placeholder="Ej: FÍSICA" autocomplete="off"/>
+    <div id="sug-cargo-8" class="ac-list"></div>
+  </div>
+  <div class="field hidden" id="field-cargo-9">
+    <label id="label-cargo-9" for="pref-cargo-9">Cargo / Materia 9</label>
+    <input type="text" id="pref-cargo-9" placeholder="Ej: QUÍMICA" autocomplete="off"/>
+    <div id="sug-cargo-9" class="ac-list"></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="field hidden" id="field-cargo-10">
+    <label id="label-cargo-10" for="pref-cargo-10">Cargo / Materia 10</label>
+    <input type="text" id="pref-cargo-10" placeholder="Ej: BIOLOGÍA" autocomplete="off"/>
+    <div id="sug-cargo-10" class="ac-list"></div>
+  </div>
+</div>
 
             <div class="sec-label">Turno</div>
             <div class="grid-2">
