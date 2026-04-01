@@ -1,0 +1,20 @@
+name: Locate worker core blocks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  locate-worker-core-blocks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Locate core blocks in worker.js
+        run: node scripts/locate-worker-core-blocks.mjs
