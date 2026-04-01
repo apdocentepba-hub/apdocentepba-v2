@@ -1,0 +1,27 @@
+name: Worker refactor audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker-refactor-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check duplicated provincia routes
+        run: |
+          node scripts/check-worker-router-duplicates.mjs || true
+
+      - name: Report worker routes
+        run: node scripts/report-worker-routes.mjs
+
+      - name: Locate core worker blocks
+        run: node scripts/locate-worker-core-blocks.mjs
