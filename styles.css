@@ -1096,3 +1096,20 @@ input::placeholder{color:#b0b7c3}
   white-space: pre-wrap;
   word-break: break-word;
 }
+.tag-escuela {
+  background: #eef4ff;
+  color: #1f4fa3;
+  border: 1px solid #d7e5ff;
+}
+
+.tag-jornada {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.tag-revista {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #e9d5ff;
+}
