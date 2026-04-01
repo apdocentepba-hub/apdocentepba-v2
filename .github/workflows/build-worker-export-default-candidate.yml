@@ -1,0 +1,50 @@
+name: Build worker export default candidate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-worker-export-default-candidate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build candidate and strict report
+        run: node scripts/build-worker-export-default-candidate.mjs --write --strict
+
+      - name: Publish report to workflow summary
+        run: |
+          node -e "const fs=require('fs'); const p='artifacts/worker.export-default.report.json'; const r=JSON.parse(fs.readFileSync(p,'utf8')); const lines=[
+            '# Worker export default candidate',
+            '',
+            '- ok: ' + r.ok,
+            '- prefix_unchanged: ' + r.checks.prefix_unchanged,
+            '- suffix_unchanged: ' + r.checks.suffix_unchanged,
+            '- scheduled_block_same_hash: ' + r.checks.scheduled_block_same_hash,
+            '- current hardcoded kick: ' + r.counts.current.hardcoded_kick,
+            '- current hardcoded status: ' + r.counts.current.hardcoded_status,
+            '- candidate hardcoded kick: ' + r.counts.candidate.hardcoded_kick,
+            '- candidate hardcoded status: ' + r.counts.candidate.hardcoded_status,
+            '- candidate prefixed kick: ' + r.counts.candidate.prefixed_kick,
+            '- candidate prefixed status: ' + r.counts.candidate.prefixed_status,
+            '',
+            'Artifacts:',
+            '- artifacts/worker.export-default.candidate.js',
+            '- artifacts/worker.export-default.report.json'
+          ]; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');"
+
+      - name: Upload candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-export-default-candidate
+          path: |
+            artifacts/worker.export-default.candidate.js
+            artifacts/worker.export-default.report.json
+          if-no-files-found: error
