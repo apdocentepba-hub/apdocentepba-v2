@@ -1,0 +1,48 @@
+name: Verify worker export default applied
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-worker-export-default-applied:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify applied replacement strictly
+        run: node scripts/verify-worker-export-default-applied.mjs --write --strict
+
+      - name: Check duplicated provincia routes
+        run: node scripts/check-worker-router-duplicates.mjs
+
+      - name: Publish verification summary
+        run: |
+          node -e "const fs=require('fs'); const p='artifacts/worker.export-default.applied-report.json'; const r=JSON.parse(fs.readFileSync(p,'utf8')); const lines=[
+            '# Verify worker export default applied',
+            '',
+            '- ok: ' + r.ok,
+            '- export_default_matches_prototype: ' + r.checks.export_default_matches_prototype,
+            '- scheduled_block_same_hash: ' + r.checks.scheduled_block_same_hash,
+            '- hardcoded_kick: ' + r.counts.hardcoded_kick,
+            '- hardcoded_status: ' + r.counts.hardcoded_status,
+            '- prefixed_kick: ' + r.counts.prefixed_kick,
+            '- prefixed_status: ' + r.counts.prefixed_status,
+            '',
+            'Artifact:',
+            '- artifacts/worker.export-default.applied-report.json'
+          ]; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');"
+
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-export-default-applied-report
+          path: |
+            artifacts/worker.export-default.applied-report.json
+          if-no-files-found: error

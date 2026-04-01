@@ -1,0 +1,17 @@
+name = "ancient-wildflower-cd37"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
+
+# Binding confirmado en Cloudflare:
+# EMAIL_SWEEP_STATE (KV namespace)
+#
+# Para dejar el deploy 100% reproducible desde GitHub falta agregar el id real
+# del namespace en un bloque kv_namespaces. Eso todavia no se cargo aca porque
+# en el dashboard vimos el nombre del binding pero no el namespace id.

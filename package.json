@@ -1,0 +1,14 @@
+{
+  "name": "apdocentepba-v2",
+  "private": true,
+  "version": "0.1.0",
+  "description": "APDocentePBA frontend + Cloudflare Worker source control",
+  "scripts": {
+    "dev:worker": "wrangler dev",
+    "deploy:worker": "wrangler deploy",
+    "tail:worker": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.3"
+  }
+}

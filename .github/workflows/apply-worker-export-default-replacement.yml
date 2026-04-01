@@ -1,0 +1,73 @@
+name: Apply worker export default replacement
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-worker-export-default-replacement:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build strict candidate artifacts
+        run: node scripts/build-worker-export-default-candidate.mjs --write --strict
+
+      - name: Apply replacement to worker.js
+        run: node scripts/build-worker-export-default-candidate.mjs --apply --strict
+
+      - name: Validate changed files
+        run: |
+          git diff --name-only > changed_files.txt
+          echo 'Changed files:'
+          cat changed_files.txt
+          COUNT=$(wc -l < changed_files.txt | tr -d ' ')
+          if [ "$COUNT" -ne 1 ]; then
+            echo 'ERROR: el workflow esperaba exactamente 1 archivo modificado.'
+            exit 1
+          fi
+          ONLY=$(cat changed_files.txt)
+          if [ "$ONLY" != "worker.js" ]; then
+            echo 'ERROR: el único archivo permitido a modificar es worker.js'
+            exit 1
+          fi
+
+      - name: Publish diff summary
+        run: |
+          echo '# Apply worker export default replacement' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '- archivo modificado esperado: worker.js' >> "$GITHUB_STEP_SUMMARY"
+          echo '- validación: OK si solo aparece worker.js en el diff' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '## Primeras líneas del diff' >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff -- worker.js | sed -n '1,220p' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit replacement on safe branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          git commit -m "Apply safe export default router replacement"
+          git push
+
+      - name: Upload candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-export-default-apply-report
+          path: |
+            artifacts/worker.export-default.candidate.js
+            artifacts/worker.export-default.report.json
+          if-no-files-found: error
