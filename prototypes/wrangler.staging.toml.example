@@ -1,0 +1,24 @@
+name = "ancient-wildflower-cd37-staging"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+# IMPORTANTE:
+# - Este archivo es solo ejemplo para staging.
+# - No incluye cron triggers a propósito.
+# - No debe enviar emails, WhatsApp ni ejecutar barridos automáticos
+#   hasta que se carguen variables controladas para pruebas.
+# - Idealmente staging usa secrets propios y NO los productivos.
+
+# Binding confirmado en producción:
+# EMAIL_SWEEP_STATE (KV namespace)
+#
+# En staging conviene usar OTRO namespace KV, no el mismo que producción.
+# Ejemplo cuando tengas el namespace id real:
+#
+# [[kv_namespaces]]
+# binding = "EMAIL_SWEEP_STATE"
+# id = "REEMPLAZAR_CON_KV_STAGING_ID"
