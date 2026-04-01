@@ -1215,28 +1215,30 @@ function renderAlertaActual() {
 
           ${renderProgress(total, alertasState.index)}
 
-          <div class="alerta-tags">
-            ${a.turno ? `<span class="tag tag-turno">${esc(turnoTexto(a.turno))}</span>` : ""}
-            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-            ${a?.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
-          </div>
+         <div class="alerta-tags">
+  ${a.escuela ? `<span class="tag tag-escuela">${esc(a.escuela)}</span>` : ""}
+  ${a.turno ? `<span class="tag tag-turno">${esc(a.turno)}</span>` : ""}
+  ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
+  ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+  ${a.revista ? `<span class="tag tag-revista">${esc(a.revista)}</span>` : ""}
+  ${a.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
+</div>
 
-          <div class="alerta-title">${esc(titulo)}</div>
-          <div class="alerta-subtitle">${esc(a.escuela || "Sin escuela informada")}</div>
+<div class="alerta-title">${esc(titulo)}</div>
 
-          <div class="alerta-grid">
-            ${alertaRow("Distrito", a.distrito)}
-            ${alertaRow("Turno", turnoTexto(a.turno))}
-            ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
-            ${alertaRow("Jornada", a.jornada)}
-            ${alertaRow("Módulos", a.hsmodulos || a.modulos)}
-            ${alertaRow("Días / horarios", a.dias_horarios || a.horario)}
-            ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
-            ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
-            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
-            ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
-          </div>
-
+<div class="alerta-grid">
+  ${alertaRow("Distrito", a.distrito)}
+  ${alertaRow("Turno", turnoTexto(a.turno))}
+  ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
+  ${alertaRow("Jornada", a.jornada)}
+  ${alertaRow("Situación", a.revista)}
+  ${alertaRow("Módulos", a.hsmodulos || a.modulos)}
+  ${alertaRow("Días / horarios", a.dias_horarios || a.horario)}
+  ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
+  ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
+  ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
+  ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+</div>
           <div id="alerta-postulantes-meta" class="alerta-meta-card">
             <div class="alerta-meta-head">Referencia de postulantes</div>
             <div class="alerta-meta-loading">Cargando postulantes...</div>
