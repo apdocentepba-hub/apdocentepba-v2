@@ -1113,3 +1113,55 @@ input::placeholder{color:#b0b7c3}
   color: #7c3aed;
   border: 1px solid #e9d5ff;
 }
+.alerta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.tag-escuela {
+  background: #eef4ff;
+  color: #1f4fa3;
+  border: 1px solid #d7e5ff;
+  font-weight: 700;
+}
+
+.tag-distrito {
+  background: #fff4e5;
+  color: #9a6700;
+  border: 1px solid #fde7bf;
+}
+
+.tag-jornada {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.tag-revista {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #e9d5ff;
+}
+
+.alerta-grid-clean {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.alerta-grid-clean > *:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.alerta-title {
+  margin: 6px 0 10px;
+}
+
+@media (max-width: 640px) {
+  .alerta-grid-clean {
+    grid-template-columns: 1fr;
+  }
+}
