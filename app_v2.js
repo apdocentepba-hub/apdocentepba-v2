@@ -157,8 +157,8 @@ function buildPlanFallback() {
       id: null,
       user_id: null,
       plan_code: "PLUS",
-      status: "beta",
-      source: "beta_abierta",
+      status: "available",
+      source: "fallback_frontend",
       started_at: new Date().toISOString(),
       trial_ends_at: null,
       current_period_ends_at: null,
@@ -166,18 +166,212 @@ function buildPlanFallback() {
     },
     plan: {
       code: "PLUS",
-      nombre: "Plan Plus (Beta)",
-      descripcion: "Hasta 5 distritos y 5 cargos/materias mientras terminamos pagos y automatizaciones.",
+      nombre: "Plan Plus",
+      descripcion: "Más alcance para combinar distritos y materias sin perder oportunidades. Alertas por email y Telegram próximamente.",
       price_ars: 0,
       trial_days: 0,
-      max_distritos: 5,
-      max_cargos: 5,
-      beta: true,
+      max_distritos: 2,
+      max_distritos_normales: 2,
+      max_distritos_emergencia: 0,
+      max_cargos: 4,
+      feature_flags: {
+        email: true,
+        telegram_coming_soon: true,
+        whatsapp_coming_soon: false
+      },
       public_visible: true
     }
   };
 }
+const DISTRITO_INPUT_IDS = [
+  "pref-distrito-principal",
+  "pref-segundo-distrito",
+  "pref-tercer-distrito",
+  "pref-cuarto-distrito",
+  "pref-quinto-distrito"
+];
 
+const DISTRITO_SUG_IDS = [
+  "sug-distrito-1",
+  "sug-distrito-2",
+  "sug-distrito-3",
+  "sug-distrito-4",
+  "sug-distrito-5"
+];
+
+const CARGO_INPUT_IDS = [
+  "pref-cargo-1",
+  "pref-cargo-2",
+  "pref-cargo-3",
+  "pref-cargo-4",
+  "pref-cargo-5",
+  "pref-cargo-6",
+  "pref-cargo-7",
+  "pref-cargo-8",
+  "pref-cargo-9",
+  "pref-cargo-10"
+];
+
+const CARGO_SUG_IDS = [
+  "sug-cargo-1",
+  "sug-cargo-2",
+  "sug-cargo-3",
+  "sug-cargo-4",
+  "sug-cargo-5",
+  "sug-cargo-6",
+  "sug-cargo-7",
+  "sug-cargo-8",
+  "sug-cargo-9",
+  "sug-cargo-10"
+];
+
+function planCodeUI(plan, subscription) {
+  return String(
+    plan?.display_code ||
+    plan?.code ||
+    subscription?.plan_code ||
+    ""
+  ).trim().toUpperCase();
+}
+
+function getPlanLimits(planInfo = planActual) {
+  const plan = planInfo?.plan || {};
+
+  let maxDistritos = Number(plan.max_distritos_total ?? plan.max_distritos ?? 1);
+  if (!Number.isFinite(maxDistritos) || maxDistritos < 1) maxDistritos = 1;
+  if (maxDistritos > 5) maxDistritos = 5;
+
+  let maxCargos = Number(plan.max_cargos_total ?? plan.max_cargos ?? 2);
+  if (!Number.isFinite(maxCargos) || maxCargos < 1) maxCargos = 2;
+  if (maxCargos > 10) maxCargos = 10;
+
+  let maxDistritosNormales = Number(plan.max_distritos_normales);
+  let maxDistritosEmergencia = Number(plan.max_distritos_emergencia);
+
+  if (!Number.isFinite(maxDistritosNormales) || maxDistritosNormales < 0) {
+    maxDistritosNormales = Math.min(maxDistritos, 3);
+  }
+
+  if (!Number.isFinite(maxDistritosEmergencia) || maxDistritosEmergencia < 0) {
+    maxDistritosEmergencia = Math.max(0, maxDistritos - maxDistritosNormales);
+  }
+
+  if (maxDistritosNormales + maxDistritosEmergencia > maxDistritos) {
+    maxDistritosEmergencia = Math.max(0, maxDistritos - maxDistritosNormales);
+  }
+
+  return {
+    maxDistritos,
+    maxCargos,
+    maxDistritosNormales,
+    maxDistritosEmergencia
+  };
+}
+
+function setVisibleById(id, visible) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("hidden", !visible);
+}
+
+function districtLabelForIndex(index, limits) {
+  if (index === 1) return "Distrito principal";
+  if (index <= limits.maxDistritosNormales) {
+    if (index === 2) return "Segundo distrito";
+    if (index === 3) return "Tercer distrito";
+    if (index === 4) return "Cuarto distrito";
+    if (index === 5) return "Quinto distrito";
+    return `Distrito ${index}`;
+  }
+
+  return `Distrito de emergencia ${index - limits.maxDistritosNormales}`;
+}
+
+function applyPlanFieldVisibility(planInfo = planActual) {
+  const limits = getPlanLimits(planInfo);
+
+  DISTRITO_INPUT_IDS.forEach((_, idx) => {
+    const index = idx + 1;
+    setVisibleById(`field-distrito-${index}`, index <= limits.maxDistritos);
+
+    const label = document.getElementById(`label-distrito-${index}`);
+    if (label) {
+      label.textContent = districtLabelForIndex(index, limits);
+    }
+  });
+
+  CARGO_INPUT_IDS.forEach((_, idx) => {
+    const index = idx + 1;
+    setVisibleById(`field-cargo-${index}`, index <= limits.maxCargos);
+
+    const label = document.getElementById(`label-cargo-${index}`);
+    if (label) {
+      label.textContent = `Cargo / Materia ${index}`;
+    }
+  });
+
+  const districtsHint = document.getElementById("districts-hint");
+  if (districtsHint) {
+    districtsHint.textContent = limits.maxDistritosEmergencia > 0
+      ? `(hasta ${limits.maxDistritos}: ${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia)`
+      : `(hasta ${limits.maxDistritos})`;
+  }
+
+  const cargosHint = document.getElementById("cargos-hint");
+  if (cargosHint) {
+    cargosHint.textContent = `(hasta ${limits.maxCargos})`;
+  }
+}
+
+function renderCanalesUI(plan, subscription) {
+  const flags =
+    typeof plan?.feature_flags === "object" && plan?.feature_flags
+      ? plan.feature_flags
+      : {};
+
+  const code = planCodeUI(plan, subscription);
+
+  const emailText = "Alertas por email para todos los planes.";
+  const telegramText = flags.telegram_coming_soon
+    ? "Telegram: próximamente disponible en este plan."
+    : code === "TRIAL_7D"
+      ? "Telegram no incluido en la prueba gratis."
+      : "Telegram aún no disponible en este plan.";
+  const whatsappText = flags.whatsapp_coming_soon
+    ? "WhatsApp: próximamente disponible para este plan."
+    : code === "INSIGNE"
+      ? "WhatsApp en preparación."
+      : "WhatsApp reservado para futuras mejoras.";
+
+  setHTML("panel-canales", `
+    <div class="plan-stack">
+      <div class="plan-pill-row">
+        <span class="plan-pill">📧 Email</span>
+        <span class="plan-pill plan-pill-neutral">Incluido</span>
+      </div>
+      <p class="plan-note">${esc(emailText)}</p>
+
+      <div class="plan-pill-row">
+        <span class="plan-pill">📨 Telegram</span>
+        <span class="plan-pill plan-pill-neutral">${flags.telegram_coming_soon ? "Próximamente" : "No incluido"}</span>
+      </div>
+      <p class="plan-note">${esc(telegramText)}</p>
+
+      <div class="plan-pill-row">
+        <span class="plan-pill">💬 WhatsApp</span>
+        <span class="plan-pill plan-pill-neutral">${flags.whatsapp_coming_soon ? "Próximamente" : "En preparación"}</span>
+      </div>
+      <p class="plan-note">${esc(whatsappText)}</p>
+    </div>
+  `);
+}
+
+function initPlanAutocompleteFields() {
+  [
+    ...DISTRITO_INPUT_IDS.map((inputId, i) => [inputId, DISTRITO_SUG_IDS[i], "distrito"]),
+    ...CARGO_INPUT_IDS.map((inputId, i) => [inputId, CARGO_SUG_IDS[i], "cargo_area"])
+  ].forEach(([inputId, listaId, tipo]) => activarAC(inputId, listaId, tipo));
+}
 function mostrarSeccion(id) {
   document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
   const dest = document.getElementById(id);
@@ -1035,7 +1229,8 @@ function renderAlertaActual() {
             ${alertaRow("Turno", turnoTexto(a.turno))}
             ${alertaRow("Curso/Div.", a.cursodivision || normalizarCursoDivision(a.cursodivision))}
             ${alertaRow("Jornada", a.jornada)}
-            ${alertaRow("Módulos", a.hsmodulos)}
+            ${alertaRow("Módulos", a.hsmodulos || a.modulos)}
+            ${alertaRow("Días / horarios", a.dias_horarios || a.horario)}
             ${alertaRow("Desde", a.supl_desde_label || fmtFechaABC(a.supl_desde, "date"))}
             ${alertaRow("Hasta", a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date"))}
             ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
@@ -1465,9 +1660,12 @@ function renderPlanUI(planInfo) {
   const nombre = planNombreHumano(plan, subscription);
   const estado = planEstadoHumano(subscription);
   const precio = planPrecioHumano(plan, subscription);
-  const maxDistritos = Number(plan.max_distritos || 5);
-  const maxCargos = Number(plan.max_cargos || 5);
   const descripcion = planDescripcionHumana(plan, subscription);
+  const limits = getPlanLimits(info);
+
+  const distritosText = limits.maxDistritosEmergencia > 0
+    ? `${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia`
+    : `Hasta ${limits.maxDistritos} distrito(s)`;
 
   setHTML("panel-plan", `
     <div class="plan-stack">
@@ -1477,8 +1675,8 @@ function renderPlanUI(planInfo) {
         <span class="plan-pill plan-pill-neutral">${esc(precio)}</span>
       </div>
       <div class="plan-pill-row">
-        <span class="plan-pill">Hasta ${maxDistritos} distrito(s)</span>
-        <span class="plan-pill">Hasta ${maxCargos} cargo(s)</span>
+        <span class="plan-pill">${esc(distritosText)}</span>
+        <span class="plan-pill">Hasta ${limits.maxCargos} cargo(s)/materia(s)</span>
       </div>
       <p class="plan-note">${esc(descripcion)}</p>
     </div>
@@ -1486,21 +1684,31 @@ function renderPlanUI(planInfo) {
 
   const hint = document.getElementById("prefs-plan-hint");
   if (hint) {
-    hint.textContent = `${nombre}: hasta ${maxDistritos} distrito(s) y ${maxCargos} cargo(s)/materia(s).`;
+    hint.textContent = limits.maxDistritosEmergencia > 0
+      ? `${nombre}: ${limits.maxDistritosNormales} distrito(s) principal(es), ${limits.maxDistritosEmergencia} de emergencia y hasta ${limits.maxCargos} cargo(s)/materia(s).`
+      : `${nombre}: hasta ${limits.maxDistritos} distrito(s) y ${limits.maxCargos} cargo(s)/materia(s).`;
   }
-}
 
+  renderCanalesUI(plan, subscription);
+  applyPlanFieldVisibility(info);
+}
 function planNombreHumano(plan, subscription) {
-  const code = String(plan?.code || subscription?.plan_code || "").trim().toUpperCase();
+  if (plan?.display_name) {
+    return String(plan.display_name).trim();
+  }
+
+  const code = planCodeUI(plan, subscription);
 
   if (subscription?.status === "beta" || plan?.beta) return "Plan Plus (Beta)";
   if (code === "TRIAL_7D") return "Prueba gratis 7 días";
   if (code === "BASIC") return "Plan Básico";
   if (code === "PLUS") return "Plan Plus";
-  if (code === "PREMIUM") return "Plan Premium";
+  if (code === "PREMIUM" || code === "PRO") return "Plan Pro";
+  if (code === "INSIGNE") return "Plan Insigne";
 
   return String(plan?.nombre || "Plan").trim() || "Plan";
 }
+
 
 function planEstadoHumano(subscription) {
   const status = String(subscription?.status || "").trim().toLowerCase();
@@ -1529,16 +1737,34 @@ function planPrecioHumano(plan, subscription) {
   return "Precio a definir";
 }
 
+
 function planDescripcionHumana(plan, subscription) {
   if (subscription?.status === "beta" || plan?.beta) {
     return "Durante la beta te dejamos con capacidad Plus mientras terminamos pagos, email y automatizaciones.";
   }
 
-  if (String(plan?.code || "").toUpperCase() === "TRIAL_7D") {
-    return "Prueba gratis con 1 distrito y 1 cargo/materia por 7 días.";
+  const descripcionPlan = String(plan?.descripcion || "").trim();
+  if (descripcionPlan) return descripcionPlan;
+
+  const code = planCodeUI(plan, subscription);
+
+  if (code === "TRIAL_7D") {
+    return "Probá APDocentePBA durante 7 días con 1 distrito, hasta 2 materias/cargos y todos los filtros esenciales. Todos los avisos llegan por email.";
   }
 
-  return String(plan?.descripcion || "Plan configurado para alertas APD.").trim();
+  if (code === "PLUS") {
+    return "Más alcance sin irte de presupuesto: 2 distritos, hasta 4 materias/cargos y alertas por email. Próximamente Telegram.";
+  }
+
+  if (code === "PREMIUM" || code === "PRO") {
+    return "Cobertura fuerte para multiplicar oportunidades: 3 distritos, hasta 6 materias/cargos y alertas por email. Próximamente Telegram.";
+  }
+
+  if (code === "INSIGNE") {
+    return "Cobertura máxima: 3 distritos principales + 2 de emergencia/chusmeo, hasta 10 materias/cargos y alertas por email. Próximamente WhatsApp.";
+  }
+
+  return "Plan configurado para alertas APD.";
 }
 
 function getNivelArray() {
@@ -1583,25 +1809,24 @@ async function guardarPreferencias(e) {
 }
 
 function buildPreferenciasPayload() {
-  const cargos = [
-    val("pref-cargo-1"),
-    val("pref-cargo-2"),
-    val("pref-cargo-3"),
-    val("pref-cargo-4"),
-    val("pref-cargo-5")
-  ].map(v => v.toUpperCase().trim()).filter(Boolean);
+  const limits = getPlanLimits(planActual);
 
-  const otrosDistritos = [
-    val("pref-segundo-distrito"),
-    val("pref-tercer-distrito"),
-    val("pref-cuarto-distrito"),
-    val("pref-quinto-distrito")
-  ].map(v => v.toUpperCase().trim()).filter(Boolean);
+  const distritoPrincipal = val("pref-distrito-principal").toUpperCase().trim() || null;
+
+  const otrosDistritos = DISTRITO_INPUT_IDS
+    .slice(1, limits.maxDistritos)
+    .map(id => val(id).toUpperCase().trim())
+    .filter(Boolean);
+
+  const cargos = CARGO_INPUT_IDS
+    .slice(0, limits.maxCargos)
+    .map(id => val(id).toUpperCase().trim())
+    .filter(Boolean);
 
   const turno = val("pref-turnos").trim();
 
   return {
-    distrito_principal: val("pref-distrito-principal").toUpperCase().trim() || null,
+    distrito_principal: distritoPrincipal,
     otros_distritos: otrosDistritos,
     cargos,
     materias: [],
@@ -1613,40 +1838,15 @@ function buildPreferenciasPayload() {
   };
 }
 
-function limpiarDistritos() {
-  [
-    "pref-distrito-principal",
-    "pref-segundo-distrito",
-    "pref-tercer-distrito",
-    "pref-cuarto-distrito",
-    "pref-quinto-distrito"
-  ].forEach(id => setVal(id, ""));
 
-  [
-    "sug-distrito-1",
-    "sug-distrito-2",
-    "sug-distrito-3",
-    "sug-distrito-4",
-    "sug-distrito-5"
-  ].forEach(limpiarListaAC);
+function limpiarDistritos() {
+  DISTRITO_INPUT_IDS.forEach(id => setVal(id, ""));
+  DISTRITO_SUG_IDS.forEach(limpiarListaAC);
 }
 
 function limpiarCargos() {
-  [
-    "pref-cargo-1",
-    "pref-cargo-2",
-    "pref-cargo-3",
-    "pref-cargo-4",
-    "pref-cargo-5"
-  ].forEach(id => setVal(id, ""));
-
-  [
-    "sug-cargo-1",
-    "sug-cargo-2",
-    "sug-cargo-3",
-    "sug-cargo-4",
-    "sug-cargo-5"
-  ].forEach(limpiarListaAC);
+  CARGO_INPUT_IDS.forEach(id => setVal(id, ""));
+  CARGO_SUG_IDS.forEach(limpiarListaAC);
 }
 
 function limpiarListaAC(id) {
@@ -1678,11 +1878,22 @@ function cargarPrefsEnFormulario(data) {
     l.style.display = "none";
   });
 
-  setVal("pref-distrito-principal", p.distrito_principal || "");
-  setVal("pref-segundo-distrito", p.segundo_distrito || "");
-  setVal("pref-tercer-distrito", p.tercer_distrito || "");
-  setVal("pref-cuarto-distrito", p.cuarto_distrito || "");
-  setVal("pref-quinto-distrito", p.quinto_distrito || "");
+  const otrosDistritos = Array.isArray(p.otros_distritos_arr)
+    ? p.otros_distritos_arr
+    : [
+        p.segundo_distrito,
+        p.tercer_distrito,
+        p.cuarto_distrito,
+        p.quinto_distrito
+      ].filter(Boolean);
+
+  DISTRITO_INPUT_IDS.forEach((id, index) => {
+    if (index === 0) {
+      setVal(id, p.distrito_principal || "");
+      return;
+    }
+    setVal(id, otrosDistritos[index - 1] || "");
+  });
 
   const cargosGuardados = [
     ...(Array.isArray(p.cargos_arr) ? p.cargos_arr : []),
@@ -1693,11 +1904,9 @@ function cargarPrefsEnFormulario(data) {
     ? cargosGuardados
     : splitCSV(p.cargos_csv || p.materias_csv || "");
 
-  setVal("pref-cargo-1", cargos[0] || "");
-  setVal("pref-cargo-2", cargos[1] || "");
-  setVal("pref-cargo-3", cargos[2] || "");
-  setVal("pref-cargo-4", cargos[3] || "");
-  setVal("pref-cargo-5", cargos[4] || "");
+  CARGO_INPUT_IDS.forEach((id, index) => {
+    setVal(id, cargos[index] || "");
+  });
 
   const turno = (Array.isArray(p.turnos_arr) ? p.turnos_arr[0] : "") || splitCSV(p.turnos_csv || "")[0] || "";
   setVal("pref-turnos", turnoSelectValue(turno));
@@ -1713,6 +1922,8 @@ function cargarPrefsEnFormulario(data) {
   setCheck("pref-alertas-activas", !!p.alertas_activas);
   setCheck("pref-alertas-email", !!p.alertas_email);
   setCheck("pref-alertas-whatsapp", !!p.alertas_whatsapp);
+
+  applyPlanFieldVisibility(planActual);
 }
 
 const val = id => (document.getElementById(id)?.value || "").trim();
@@ -2348,19 +2559,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  [
-    ["pref-distrito-principal", "sug-distrito-1", "distrito"],
-    ["pref-segundo-distrito", "sug-distrito-2", "distrito"],
-    ["pref-tercer-distrito", "sug-distrito-3", "distrito"],
-    ["pref-cuarto-distrito", "sug-distrito-4", "distrito"],
-    ["pref-quinto-distrito", "sug-distrito-5", "distrito"],
-    ["pref-cargo-1", "sug-cargo-1", "cargo_area"],
-    ["pref-cargo-2", "sug-cargo-2", "cargo_area"],
-    ["pref-cargo-3", "sug-cargo-3", "cargo_area"],
-    ["pref-cargo-4", "sug-cargo-4", "cargo_area"],
-    ["pref-cargo-5", "sug-cargo-5", "cargo_area"]
-  ].forEach(([inputId, listaId, tipo]) => activarAC(inputId, listaId, tipo));
-
+ initPlanAutocompleteFields();
+applyPlanFieldVisibility(planActual);
+  
   cargarCatalogoDistritosAutocomplete().catch(err => {
     console.error("ERROR PRELOAD DISTRITOS:", err);
   });
