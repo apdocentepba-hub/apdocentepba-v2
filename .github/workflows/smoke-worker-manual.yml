@@ -1,0 +1,25 @@
+name: Smoke test Worker manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "URL base del Worker a probar"
+        required: true
+        type: string
+
+jobs:
+  smoke-worker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run smoke test
+        run: node scripts/smoke-worker.mjs "${{ inputs.base_url }}"
