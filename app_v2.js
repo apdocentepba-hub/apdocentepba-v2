@@ -1186,6 +1186,13 @@ function renderAlertaActual() {
 
   const a = items[alertasState.index];
   const titulo = tituloAlerta(a);
+  const horarioLabel = a.dias_horarios || a.horario || "";
+const desdeLabel = a.supl_desde_label || fmtFechaABC(a.supl_desde, "date");
+const hastaLabel = a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date");
+const vigenciaLabel =
+  (desdeLabel || hastaLabel)
+    ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
+    : (a.revista || "Sin fecha informada");
   const abcUrl = buildPostulantesUrl(a);
 
   const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
