@@ -1,3 +1,4 @@
+import { handleProfileListadosRoute } from "./profile_listados_api.js";
 import originalWorker from "./worker.js";
 
 const API_URL_PREFIX = "/api";
@@ -512,6 +513,14 @@ export default {
         return json({ ok: true, days: 30, generated_at: new Date().toISOString(), items: [] });
       }
     }
+    if (
+  path.startsWith("/api/profile/") ||
+  path.startsWith("/api/listados/") ||
+  path.startsWith("/api/eligibility/")
+) {
+  const routed = await handleProfileListadosRoute(request, env);
+  if (routed) return routed;
+}
     return await originalWorker.fetch(request, env, ctx);
   },
   async scheduled(controller, env, ctx) {
