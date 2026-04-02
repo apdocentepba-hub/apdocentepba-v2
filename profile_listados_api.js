@@ -302,21 +302,19 @@ async function pdFetchAbcListadoPublic(dni) {
     throw new Error("Ingresá un DNI válido antes de sincronizar");
   }
 
-  const allDocs = [];
-  let facets = null;
   const pageSize = 200;
   const maxPages = 6;
-
   const baseUrls = [
     "https://abc.gob.ar/listado-oficial/select/",
     "https://abc.gob.ar/listado-oficial/select"
   ];
 
+  const errors = [];
+
   for (const baseUrl of baseUrls) {
     try {
       const docsTemp = [];
       let facetsTemp = null;
-      let success = false;
 
       for (let page = 0; page < maxPages; page += 1) {
         const start = page * pageSize;
@@ -350,9 +348,10 @@ async function pdFetchAbcListadoPublic(dni) {
 
         const text = await res.text();
         const trimmed = String(text || "").trim();
+        const contentType = res.headers.get("content-type") || "";
 
         if (!trimmed) {
-          throw new Error("ABC devolvió una respuesta vacía");
+          throw new Error(`ABC devolvió respuesta vacía | status=${res.status} | url=${url}`);
         }
 
         if (
@@ -360,42 +359,44 @@ async function pdFetchAbcListadoPublic(dni) {
           trimmed.startsWith("<html") ||
           trimmed.startsWith("<!doctype")
         ) {
-          throw new Error(`ABC devolvió HTML en vez de JSON: ${trimmed.slice(0, 180)}`);
+          throw new Error(
+            `ABC devolvió HTML | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 220)}`
+          );
         }
 
         let data = null;
         try {
           data = JSON.parse(trimmed);
         } catch {
-          throw new Error(`ABC devolvió algo no JSON: ${trimmed.slice(0, 180)}`);
+          throw new Error(
+            `ABC devolvió algo no JSON | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 220)}`
+          );
         }
 
         if (!res.ok || Number(data?.responseHeader?.status ?? 1) !== 0) {
-          throw new Error(data?.error?.msg || `ABC respondió ${res.status}`);
+          throw new Error(
+            `ABC respondió error JSON | status=${res.status} | url=${url} | body=${trimmed.slice(0, 220)}`
+          );
         }
 
         const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
         if (!facetsTemp && data?.facet_counts) facetsTemp = data.facet_counts;
         docsTemp.push(...docs);
-        success = true;
 
         const numFound = Number(data?.response?.numFound || 0);
-        if (!docs.length || docsTemp.length >= numFound) break;
+        if (!docs.length || docsTemp.length >= numFound) {
+          return { dni: normalizedDni, docs: docsTemp, facets: facetsTemp };
+        }
       }
 
-      if (success) {
-        allDocs.push(...docsTemp);
-        facets = facetsTemp;
-        return { dni: normalizedDni, docs: allDocs, facets };
-      }
+      return { dni: normalizedDni, docs: docsTemp, facets: facetsTemp };
     } catch (err) {
-      // prueba la siguiente variante de URL
+      errors.push(String(err?.message || err));
     }
   }
 
-  throw new Error("ABC público no respondió JSON válido al Worker");
+  throw new Error(errors.join(" || "));
 }
-
 function pdBuildListadoSummary(rows) {
   const distritos = [...new Set(rows.map(row => pdNorm(row?.distrito || "")).filter(Boolean))].sort();
   const anios = [...new Set(rows.map(row => Number(row?.anio || 0)).filter(Boolean))].sort((a, b) => b - a);
