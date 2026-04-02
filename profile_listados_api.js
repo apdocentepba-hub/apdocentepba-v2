@@ -307,37 +307,93 @@ async function pdFetchAbcListadoPublic(dni) {
   const pageSize = 200;
   const maxPages = 6;
 
-  for (let page = 0; page < maxPages; page += 1) {
-    const start = page * pageSize;
-    const url = pdBuildAbcSyncUrl(normalizedDni, start, pageSize);
-    const res = await fetch(url, {
-      headers: {
-        "Accept": "application/json,text/plain,*/*",
-        "User-Agent": "APDocentePBA/1.0"
-      }
-    });
+  const baseUrls = [
+    "https://abc.gob.ar/listado-oficial/select/",
+    "https://abc.gob.ar/listado-oficial/select"
+  ];
 
-    const text = await res.text();
-    let data = null;
+  for (const baseUrl of baseUrls) {
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      throw new Error("ABC devolvió una respuesta no JSON");
+      const docsTemp = [];
+      let facetsTemp = null;
+      let success = false;
+
+      for (let page = 0; page < maxPages; page += 1) {
+        const start = page * pageSize;
+
+        const params = new URLSearchParams();
+        params.set("q", `busqueda=${normalizedDni}`);
+        params.set("wt", "json");
+        params.set("rows", String(pageSize));
+        params.set("start", String(start));
+        params.set("sort", "orden asc");
+        params.set("facet", "true");
+        params.set("facet.mincount", "1");
+        params.set("json.nl", "map");
+        params.append("facet.field", "distrito");
+        params.append("facet.field", "rama");
+        params.append("facet.field", "cargo_area");
+        params.append("facet.field", "aniolistado");
+
+        const url = `${baseUrl}?${params.toString()}`;
+
+        const res = await fetch(url, {
+          method: "GET",
+          redirect: "follow",
+          headers: {
+            "Accept": "application/json, text/plain, */*",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://abc.gob.ar/listado-oficial",
+            "Origin": "https://abc.gob.ar"
+          }
+        });
+
+        const text = await res.text();
+        const trimmed = String(text || "").trim();
+
+        if (!trimmed) {
+          throw new Error("ABC devolvió una respuesta vacía");
+        }
+
+        if (
+          trimmed.startsWith("<!DOCTYPE") ||
+          trimmed.startsWith("<html") ||
+          trimmed.startsWith("<!doctype")
+        ) {
+          throw new Error(`ABC devolvió HTML en vez de JSON: ${trimmed.slice(0, 180)}`);
+        }
+
+        let data = null;
+        try {
+          data = JSON.parse(trimmed);
+        } catch {
+          throw new Error(`ABC devolvió algo no JSON: ${trimmed.slice(0, 180)}`);
+        }
+
+        if (!res.ok || Number(data?.responseHeader?.status ?? 1) !== 0) {
+          throw new Error(data?.error?.msg || `ABC respondió ${res.status}`);
+        }
+
+        const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+        if (!facetsTemp && data?.facet_counts) facetsTemp = data.facet_counts;
+        docsTemp.push(...docs);
+        success = true;
+
+        const numFound = Number(data?.response?.numFound || 0);
+        if (!docs.length || docsTemp.length >= numFound) break;
+      }
+
+      if (success) {
+        allDocs.push(...docsTemp);
+        facets = facetsTemp;
+        return { dni: normalizedDni, docs: allDocs, facets };
+      }
+    } catch (err) {
+      // prueba la siguiente variante de URL
     }
-
-    if (!res.ok || Number(data?.responseHeader?.status ?? 1) !== 0) {
-      throw new Error(data?.error?.msg || `ABC respondió ${res.status}`);
-    }
-
-    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-    if (!facets && data?.facet_counts) facets = data.facet_counts;
-    allDocs.push(...docs);
-
-    const numFound = Number(data?.response?.numFound || 0);
-    if (!docs.length || allDocs.length >= numFound) break;
   }
 
-  return { dni: normalizedDni, docs: allDocs, facets };
+  throw new Error("ABC público no respondió JSON válido al Worker");
 }
 
 function pdBuildListadoSummary(rows) {
