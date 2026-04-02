@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-01-plans-ui-1';
+  const PLAN_PATCH_VERSION = '2026-04-01-plans-ui-2';
   const PLAN_SELECTOR_ID = 'panel-plan-selector';
   const PLAN_MSG_ID = 'plan-checkout-msg';
   let planesCache = null;
@@ -14,6 +14,10 @@
 
   function planBox() {
     return document.getElementById('panel-plan');
+  }
+
+  function canalesBox() {
+    return document.getElementById('panel-canales');
   }
 
   function ensurePlanMsgNode() {
@@ -36,11 +40,58 @@
     el.className = `msg msg-${type}`;
   }
 
+  function setPlanMsgHtml(html, type = 'info') {
+    const el = ensurePlanMsgNode();
+    if (!el) return;
+    el.innerHTML = String(html || '');
+    el.className = `msg msg-${type}`;
+  }
+
   function clearPlanMsg() {
     const el = document.getElementById(PLAN_MSG_ID);
     if (!el) return;
     el.textContent = '';
     el.className = 'msg';
+  }
+
+  function cleanupCanalesMercadoPago() {
+    const box = canalesBox();
+    if (!box) return;
+
+    let removedAny = false;
+
+    [...box.querySelectorAll('.soft-card')].forEach(card => {
+      const title = String(card.querySelector('h3')?.textContent || '').trim().toLowerCase();
+      if (title === 'mercado pago') {
+        card.remove();
+        removedAny = true;
+      }
+    });
+
+    if (removedAny && !box.querySelector('[data-plan-managed-note]')) {
+      box.insertAdjacentHTML(
+        'beforeend',
+        '<div class="soft-meta" data-plan-managed-note="1" style="margin-top:8px">Los cambios de plan ahora se hacen desde el bloque <strong>Mi plan</strong>.</div>'
+      );
+    }
+  }
+
+  function mountCanalesCleanup() {
+    const box = canalesBox();
+    if (!box) return;
+
+    if (box.dataset.planPatchObserved === '1') {
+      cleanupCanalesMercadoPago();
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      cleanupCanalesMercadoPago();
+    });
+
+    observer.observe(box, { childList: true, subtree: true });
+    box.dataset.planPatchObserved = '1';
+    cleanupCanalesMercadoPago();
   }
 
   function mpReturnMessage() {
@@ -99,7 +150,7 @@
           <span class="plan-pill">Cambiar plan</span>
           <button type="button" class="btn btn-ghost" data-plan-refresh="1">Actualizar plan</button>
         </div>
-        <p class="plan-note">Elegí otro plan y te abrimos Mercado Pago. Al volver, tocá “Actualizar plan” para reflejar el cambio.</p>
+        <p class="plan-note">Elegí otro plan y te abrimos Mercado Pago. La pestaña actual queda intacta; si el navegador bloquea popups, te dejamos un enlace manual.</p>
         ${planes.map(plan => {
           const limits = window.getPlanLimits ? window.getPlanLimits({ plan }) : {
             maxDistritos: Number(plan?.max_distritos || 1),
@@ -185,9 +236,14 @@
         return;
       }
 
-      setPlanMsg('Abriendo Mercado Pago en una pestaña nueva...', 'ok');
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
-      if (!opened) window.location.href = data.checkout_url;
+      if (opened) {
+        setPlanMsg('Mercado Pago se abrió en una pestaña nueva.', 'ok');
+        return;
+      }
+
+      const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
+      setPlanMsgHtml(`Tu navegador bloqueó la pestaña nueva. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`, 'info');
     } catch (err) {
       console.error('ERROR CHECKOUT PLAN:', err);
       setPlanMsg(err?.message || 'No se pudo iniciar el cambio de plan.', 'error');
@@ -229,16 +285,24 @@
           const planes = await obtenerPlanesDisponiblesUI();
           if (currentRender !== renderSeq) return;
           renderPlanSelector(planInfo || window.planActual || {}, planes);
+          mountCanalesCleanup();
         } catch (err) {
           console.error('ERROR PLAN PATCH:', err);
           if (currentRender !== renderSeq) return;
           renderPlanSelector(planInfo || window.planActual || {}, []);
+          mountCanalesCleanup();
           setPlanMsg('No se pudieron cargar los planes disponibles.', 'error');
         }
       });
 
       return result;
     };
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountCanalesCleanup, { once: true });
+  } else {
+    mountCanalesCleanup();
   }
 
   window.APD_PLAN_PATCH_VERSION = PLAN_PATCH_VERSION;
