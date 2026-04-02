@@ -20,6 +20,7 @@ const alertasState = {
   items: [],
   index: 0
 };
+window.alertasState = alertasState;
 
 /* ===== ADMIN ===== */
 const ADMIN = {
