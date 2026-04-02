@@ -8,6 +8,7 @@ enabled = true
 
 [triggers]
 crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
+keep_vars = true
 
 # Binding confirmado en Cloudflare:
 # EMAIL_SWEEP_STATE (KV namespace)
