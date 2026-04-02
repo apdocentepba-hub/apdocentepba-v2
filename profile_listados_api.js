@@ -20,9 +20,18 @@ function pdNorm(v) {
     .toUpperCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}\s/().,-]/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+function pdTokens(v) {
+  const stop = new Set(["DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A"]);
+  return [...new Set(
+    pdNorm(v)
+      .split(" ")
+      .map(x => x.trim())
+      .filter(x => x.length > 1 && !stop.has(x))
+  )];
 }
 
 function pdGetBearerToken(request) {
@@ -194,11 +203,18 @@ function pdSafeOfferId(offer) {
 }
 
 function pdNormalizeOfferText(offer) {
-  return pdNorm(
-    [offer?.cargo, offer?.materia, offer?.area, offer?.title, offer?.descripcioncargo, offer?.descripcionarea]
-      .filter(Boolean)
-      .join(" ")
-  );
+  const fields = [
+    offer?.cargo,
+    offer?.materia,
+    offer?.area,
+    offer?.title,
+    offer?.descripcioncargo,
+    offer?.descripcionarea
+  ]
+    .map(x => pdNorm(x))
+    .filter(Boolean);
+
+  return [...new Set(fields)].join(" ");
 }
 
 function pdComputeEligibilityForOffer(offer, listados) {
@@ -207,28 +223,51 @@ function pdComputeEligibilityForOffer(offer, listados) {
   const offerDistrito = pdNorm(offer?.distrito || offer?.descdistrito || "");
   let best = null;
 
-  for (const row of Array.isArray(listados) ? listados : []) {
-    const base = pdNorm(row?.cargo_materia_normalizado || [row?.cargo, row?.materia].filter(Boolean).join(" "));
-    if (!base || !offerText) continue;
+  const offerTokens = pdTokens(offerText);
+  if (!offerTokens.length) {
+    return {
+      offer_id: offerId,
+      compatible: false,
+      match_type: "sin_match",
+      puntaje_usuario: null,
+      tipo_listado_detectado: null,
+      score_competitividad: 0,
+      confidence_level: "sin_datos",
+      strategic_message: "La oferta no trae texto suficiente para comparar."
+    };
+  }
 
-    let score = 0;
-    if (offerText === base) score = 1;
-    else if (offerText.includes(base) || base.includes(offerText)) score = 0.92;
-    else {
-      const offerTokens = offerText.split(" ").filter(Boolean);
-      const rowTokens = base.split(" ").filter(Boolean);
-      const overlap = rowTokens.filter(token => token.length > 2 && offerTokens.includes(token)).length;
-      score = overlap / Math.max(offerTokens.length, rowTokens.length, 1);
+  for (const row of Array.isArray(listados) ? listados : []) {
+    const base = pdNorm(
+      row?.cargo_materia_normalizado ||
+      [row?.cargo, row?.materia].filter(Boolean).join(" ")
+    );
+
+    if (!base) continue;
+
+    const rowTokens = pdTokens(base);
+    if (!rowTokens.length) continue;
+
+    const overlap = rowTokens.filter(token => offerTokens.includes(token));
+    const overlapCount = overlap.length;
+
+    const coverageRow = overlapCount / Math.max(rowTokens.length, 1);
+    const coverageOffer = overlapCount / Math.max(offerTokens.length, 1);
+    const dice = (2 * overlapCount) / Math.max(rowTokens.length + offerTokens.length, 1);
+
+    let score = Math.max(coverageRow, coverageOffer, dice);
+
+    if (offerDistrito && row?.distrito && pdNorm(row.distrito) === offerDistrito) {
+      score += 0.05;
     }
 
-    if (offerDistrito && row?.distrito && pdNorm(row.distrito) === offerDistrito) score += 0.03;
-    if (score < 0.55) continue;
+    if (score < 0.45) continue;
 
     const puntajeUsuario = row?.puntaje != null ? Number(row.puntaje) : null;
     const puntajePrimero = offer?.puntaje_primero != null ? Number(offer.puntaje_primero) : null;
 
     let competitiveness = score;
-    let confidenceLevel = score >= 0.9 ? "alta" : score >= 0.72 ? "media" : "baja";
+    let confidenceLevel = score >= 0.85 ? "alta" : score >= 0.65 ? "media" : "baja";
     let strategicMessage = puntajeUsuario != null
       ? `Puntaje detectado: ${puntajeUsuario.toFixed(2)}`
       : "Compatible, pero sin puntaje usable detectado";
@@ -236,6 +275,7 @@ function pdComputeEligibilityForOffer(offer, listados) {
     if (puntajeUsuario != null && Number.isFinite(puntajePrimero)) {
       const delta = puntajeUsuario - puntajePrimero;
       competitiveness = Math.max(0, Math.min(1.2, 0.65 + delta / 20));
+
       if (delta >= 0.25) {
         confidenceLevel = "muy_alta";
         strategicMessage = `Alta oportunidad: tu puntaje (${puntajeUsuario.toFixed(2)}) supera al primero visible (${puntajePrimero.toFixed(2)}).`;
@@ -254,7 +294,7 @@ function pdComputeEligibilityForOffer(offer, listados) {
     const candidate = {
       offer_id: offerId,
       compatible: true,
-      match_type: score >= 0.9 ? "exacto" : score >= 0.75 ? "fuerte" : "parcial",
+      match_type: score >= 0.85 ? "exacto" : score >= 0.65 ? "fuerte" : "parcial",
       puntaje_usuario: puntajeUsuario,
       tipo_listado_detectado: row?.tipo_listado || null,
       score_competitividad: Math.round(competitiveness * 100) / 100,
