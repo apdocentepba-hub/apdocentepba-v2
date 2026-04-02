@@ -304,15 +304,65 @@ async function pdFetchAbcListadoPublic(dni) {
 
   const pageSize = 200;
   const maxPages = 6;
-  const baseUrls = [
+  const landingUrl = "https://abc.gob.ar/listado-oficial";
+  const selectUrls = [
     "https://abc.gob.ar/listado-oficial/select/",
     "https://abc.gob.ar/listado-oficial/select"
   ];
 
+  function getCookieHeaderFromResponse(res) {
+    const rawCookies = [];
+
+    if (typeof res.headers.getSetCookie === "function") {
+      try {
+        rawCookies.push(...res.headers.getSetCookie());
+      } catch {}
+    }
+
+    const single = res.headers.get("set-cookie");
+    if (single) rawCookies.push(single);
+
+    return rawCookies
+      .map(v => String(v || "").trim())
+      .filter(Boolean)
+      .map(v => v.split(";")[0].trim())
+      .filter(Boolean)
+      .join("; ");
+  }
+
+  async function primeAbcSession() {
+    const res = await fetch(landingUrl, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Referer": "https://abc.gob.ar/",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
+
+    const text = await res.text();
+    const cookieHeader = getCookieHeaderFromResponse(res);
+
+    if (!res.ok) {
+      throw new Error(
+        `No se pudo iniciar sesión pública ABC | status=${res.status} | snippet=${String(text || "").slice(0, 180)}`
+      );
+    }
+
+    return { cookieHeader, landingHtml: text };
+  }
+
   const errors = [];
 
-  for (const baseUrl of baseUrls) {
+  for (const selectBase of selectUrls) {
     try {
+      const { cookieHeader } = await primeAbcSession();
+
       const docsTemp = [];
       let facetsTemp = null;
 
@@ -333,16 +383,21 @@ async function pdFetchAbcListadoPublic(dni) {
         params.append("facet.field", "cargo_area");
         params.append("facet.field", "aniolistado");
 
-        const url = `${baseUrl}?${params.toString()}`;
+        const url = `${selectBase}?${params.toString()}`;
 
         const res = await fetch(url, {
           method: "GET",
           redirect: "follow",
           headers: {
             "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
             "X-Requested-With": "XMLHttpRequest",
-            "Referer": "https://abc.gob.ar/listado-oficial",
-            "Origin": "https://abc.gob.ar"
+            "Referer": landingUrl,
+            "Origin": "https://abc.gob.ar",
+            ...(cookieHeader ? { "Cookie": cookieHeader } : {}),
+            "User-Agent": "Mozilla/5.0"
           }
         });
 
@@ -360,7 +415,7 @@ async function pdFetchAbcListadoPublic(dni) {
           trimmed.startsWith("<!doctype")
         ) {
           throw new Error(
-            `ABC devolvió HTML | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 220)}`
+            `ABC devolvió HTML | status=${res.status} | content-type=${contentType} | cookie=${cookieHeader ? "si" : "no"} | url=${url} | snippet=${trimmed.slice(0, 220)}`
           );
         }
 
@@ -369,7 +424,7 @@ async function pdFetchAbcListadoPublic(dni) {
           data = JSON.parse(trimmed);
         } catch {
           throw new Error(
-            `ABC devolvió algo no JSON | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 220)}`
+            `ABC devolvió algo no JSON | status=${res.status} | content-type=${contentType} | cookie=${cookieHeader ? "si" : "no"} | url=${url} | snippet=${trimmed.slice(0, 220)}`
           );
         }
 
