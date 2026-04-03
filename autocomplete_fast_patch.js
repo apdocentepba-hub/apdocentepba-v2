@@ -231,12 +231,29 @@
     });
   }
 
+  function injectScriptOnce(src, flagName) {
+    if (flagName && window[flagName]) return;
+    if ([...document.scripts].some(s => (s.src || '').includes(src))) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    if (flagName) {
+      script.addEventListener('load', () => {
+        window[flagName] = true;
+      }, { once: true });
+    }
+    document.body.appendChild(script);
+  }
+
   function bootFastAutocompletePatch() {
     retuneCargoAutocompleteStates();
     formatCargoInputsInDOM();
     cargarCatalogoCargosAutocompleteFast().catch(err => {
       console.error('ERROR PRELOAD CARGOS FAST:', err);
     });
+
+    injectScriptOnce('mercado_abc_enhance_patch.js?v=1', '__apdMercadoAbcEnhanceLoaded');
+    injectScriptOnce('ui_cleanup_patch.js?v=1', '__apdUiCleanupPatchLoaded');
   }
 
   if (document.readyState === 'loading') {
