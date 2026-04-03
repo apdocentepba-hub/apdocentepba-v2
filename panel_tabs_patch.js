@@ -6,7 +6,7 @@
     { key: 'inicio', label: 'Inicio' },
     { key: 'alertas', label: 'Alertas' },
     { key: 'perfil', label: 'Perfil / listados' },
-    { key: 'mercado', label: 'Mercado' },
+    { key: 'mercado', label: 'Estadísticas' },
     { key: 'preferencias', label: 'Preferencias' },
     { key: 'admin', label: 'Admin' }
   ];
