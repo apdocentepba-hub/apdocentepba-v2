@@ -4,9 +4,11 @@
   if (window.__apdProfileAbcUiHotfixLoaded) return;
   window.__apdProfileAbcUiHotfixLoaded = true;
 
+  const WORKER_BASE = 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
+  const ABC_IMPORT_TYPE = 'APD_ABC_LISTADOS';
   const ABC_POPUP_NAME = 'apd_abc_import';
   const ABC_POPUP_FEATURES = 'popup=yes,width=1180,height=820,left=80,top=60,resizable=yes,scrollbars=yes';
-  const ABC_IMPORT_TYPE = 'APD_ABC_LISTADOS';
+  const PROFILE_MSG_ID = 'perfil-docente-msg';
 
   function esc(v) {
     return String(v || '')
@@ -20,24 +22,27 @@
     return document.getElementById('perfil-docente-body');
   }
 
-  function profileMsg() {
-    return document.getElementById('perfil-docente-msg');
+  function profileMsgEl() {
+    return document.getElementById(PROFILE_MSG_ID);
   }
 
-  function setProfileMsg(text, type) {
-    const el = profileMsg();
+  function setProfileMsg(text, type = 'info') {
+    const el = profileMsgEl();
     if (!el) return;
     el.textContent = String(text || '');
-    el.className = `msg msg-${type || 'info'}`;
+    el.className = `msg msg-${type}`;
   }
 
   function currentSavedDni() {
-    const input = document.getElementById('perfil-dni');
-    return String(input?.value || '').replace(/\D/g, '');
+    return String(document.getElementById('perfil-dni')?.value || '').replace(/\D/g, '');
   }
 
   function currentConsent() {
     return !!document.getElementById('perfil-consentimiento')?.checked;
+  }
+
+  function token() {
+    return localStorage.getItem('apd_token_v2') || '';
   }
 
   function buildAbcPopupUrl() {
@@ -47,71 +52,142 @@
     return u.toString();
   }
 
-  function openAbcPopupDirect() {
+  function openAbcPopupNow() {
     const ref = window.open(buildAbcPopupUrl(), ABC_POPUP_NAME, ABC_POPUP_FEATURES);
     if (ref) ref.focus();
     return ref;
   }
 
+  async function saveDniInBackground() {
+    const dni = currentSavedDni();
+    const consentimiento = currentConsent();
+    if (!dni || !consentimiento) return false;
+
+    const authToken = token();
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+
+    const res = await fetch(`${WORKER_BASE}/api/profile/save-dni`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ dni, consentimiento_datos: consentimiento })
+    });
+
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { message: text || `HTTP ${res.status}` };
+    }
+
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    }
+
+    return true;
+  }
+
   function enhanceProfileUi() {
     const box = profileBody();
     if (!box) return;
-    if (box.dataset.abcHotfixDone === '1') return;
-
-    const dniField = document.getElementById('perfil-dni')?.closest('.field');
-    if (dniField) {
-      dniField.style.display = 'none';
-    }
 
     const saveBtn = document.getElementById('btn-save-dni');
-    if (saveBtn) {
-      saveBtn.style.display = 'none';
-    }
-
     const openBtn = document.getElementById('btn-open-abc');
-    if (openBtn) {
-      openBtn.textContent = 'Abrir ABC y traer listados';
-      openBtn.dataset.abcUiPatched = '1';
+    const bookmarkletBtn = document.getElementById('btn-bookmarklet-abc');
+
+    if (saveBtn) {
+      saveBtn.textContent = 'Guardar DNI y abrir ABC';
+      saveBtn.dataset.abcPrimary = '1';
+      saveBtn.classList.remove('btn-primary');
+      saveBtn.classList.add('btn-secondary');
     }
 
-    const bookmarkletBtn = document.getElementById('btn-bookmarklet-abc');
+    if (openBtn) {
+      openBtn.textContent = 'Abrir ABC otra vez';
+      openBtn.title = 'Reabrí ABC si cerraste la pestaña o querés relanzar la lectura.';
+    }
+
     if (bookmarkletBtn) {
       bookmarkletBtn.textContent = 'Guardar favorito “Traer a APDocentePBA”';
-      bookmarkletBtn.title = 'Guardalo una sola vez en favoritos. Después entrás a ABC, tocás el favorito y vuelve solo a APDocentePBA.';
+      bookmarkletBtn.title = 'Guardalo una sola vez. Después entrás a ABC, tocás el favorito y vuelve a APDocentePBA.';
     }
 
     if (!document.getElementById('apd-abc-sync-note')) {
       const target = bookmarkletBtn?.parentElement || openBtn?.parentElement || box;
       target?.insertAdjacentHTML('afterend', `
         <div id="apd-abc-sync-note" style="margin-top:12px;padding:10px 12px;border:1px solid rgba(15,52,96,.12);border-radius:12px;background:#fff;">
-          <div class="card-lbl" style="margin-bottom:6px;">🔁 Flujo recomendado para ABC</div>
+          <div class="card-lbl" style="margin-bottom:6px;">🔁 Flujo más corto desde ABC</div>
           <div class="soft-meta">
-            1. Guardá el favorito una sola vez.<br>
-            2. Abrí ABC desde este botón.<br>
-            3. Dentro de ABC tocá el favorito “Traer a APDocentePBA”.<br>
-            4. La ventana se cierra sola, se refrescan tus listados y se recalcula compatibilidad.
+            1. Cargás tu DNI y tocás <strong>Guardar DNI y abrir ABC</strong>.<br>
+            2. En ABC tocás el favorito <strong>Traer a APDocentePBA</strong>.<br>
+            3. La ventana se cierra sola y APDocentePBA refresca tus listados.
           </div>
         </div>
       `);
     }
-
-    box.dataset.abcHotfixDone = '1';
   }
 
-  document.addEventListener('click', function captureAbcOpen(ev) {
-    const btn = ev.target.closest('#btn-open-abc');
-    if (!btn) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+  function validateBeforeOpen() {
+    const dni = currentSavedDni();
+    if (!dni) {
+      setProfileMsg('Primero cargá tu DNI.', 'error');
+      return false;
+    }
+    if (!currentConsent()) {
+      setProfileMsg('Para importar desde ABC tenés que aceptar el consentimiento.', 'error');
+      return false;
+    }
+    return true;
+  }
 
-    openAbcPopupDirect();
-    setProfileMsg(
-      currentSavedDni()
-        ? 'ABC abierto. Ahora tocá tu favorito “Traer a APDocentePBA”.'
-        : 'ABC abierto. Si el favorito te pide DNI, lo completás ahí mismo y después vuelve solo a APDocentePBA.',
-      'ok'
-    );
+  function launchAbcFlow(reason) {
+    if (!validateBeforeOpen()) return;
+
+    const popup = openAbcPopupNow();
+    if (!popup) {
+      setProfileMsg('El navegador bloqueó la ventana de ABC. Habilitá popups para este sitio.', 'error');
+      return;
+    }
+
+    setProfileMsg('ABC abierto. Guardando DNI en segundo plano...', 'info');
+
+    saveDniInBackground()
+      .then(() => {
+        setProfileMsg(
+          reason === 'save'
+            ? 'ABC abierto. Ahora tocá tu favorito “Traer a APDocentePBA”.'
+            : 'ABC reabierto. Tocá tu favorito “Traer a APDocentePBA”.',
+          'ok'
+        );
+      })
+      .catch(err => {
+        setProfileMsg(
+          `ABC se abrió, pero no pude guardar el DNI automáticamente: ${err?.message || 'error'}`,
+          'error'
+        );
+      });
+  }
+
+  document.addEventListener('click', function captureAbcButtons(ev) {
+    const saveBtn = ev.target.closest('#btn-save-dni');
+    if (saveBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+      launchAbcFlow('save');
+      return;
+    }
+
+    const openBtn = ev.target.closest('#btn-open-abc');
+    if (openBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+      launchAbcFlow('open');
+    }
   }, true);
 
   window.addEventListener('message', function onAbcImportHotfix(event) {
@@ -141,14 +217,13 @@
 
   function boot() {
     enhanceProfileUi();
-
-    const observerTarget = profileBody();
-    if (observerTarget && !observerTarget.dataset.abcUiObserved) {
+    const box = profileBody();
+    if (box && !box.dataset.abcUiObserved) {
       const obs = new MutationObserver(() => {
         enhanceProfileUi();
       });
-      obs.observe(observerTarget, { childList: true, subtree: true });
-      observerTarget.dataset.abcUiObserved = '1';
+      obs.observe(box, { childList: true, subtree: true });
+      box.dataset.abcUiObserved = '1';
     }
   }
 
