@@ -1,15 +1,23 @@
 (function () {
   'use strict';
 
+  if (window.__apdPanelTabsPatchLoaded) return;
+  window.__apdPanelTabsPatchLoaded = true;
+
   const TAB_STORAGE_KEY = 'apd_panel_tab_v1';
   const TAB_DEFS = [
     { key: 'inicio', label: 'Inicio' },
     { key: 'alertas', label: 'Alertas' },
     { key: 'perfil', label: 'Perfil / listados' },
+    { key: 'plan', label: 'Plan' },
     { key: 'mercado', label: 'Mercado' },
     { key: 'preferencias', label: 'Preferencias' },
     { key: 'admin', label: 'Admin' }
   ];
+
+  let bootScheduled = false;
+  let contentObserver = null;
+  let adminObserver = null;
 
   function injectStyles() {
     if (document.getElementById('panel-tabs-patch-style')) return;
@@ -57,6 +65,7 @@
         <div id="panel-tab-pane-inicio" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-alertas" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-perfil" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
+        <div id="panel-tab-pane-plan" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-mercado" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-preferencias" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-admin" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
@@ -108,14 +117,21 @@
     moveCardByContentId('panel-datos-docente', 'inicio');
     moveCardByContentId('panel-preferencias-resumen', 'inicio');
     moveCardByContentId('panel-estadisticas', 'inicio');
-    moveCardByContentId('panel-plan', 'inicio');
 
     moveCardByContentId('panel-alertas', 'alertas');
 
     moveCardByContentId('panel-perfil-docente', 'perfil');
     moveCardByContentId('panel-listados-docente', 'perfil');
 
+    moveCardByContentId('panel-plan', 'plan');
+    moveCardByContentId('panel-canales', 'plan');
+    moveCardById('panel-plan-selector-card', 'plan');
+
     moveCardByContentId('panel-historico-docente', 'mercado');
+    moveCardByContentId('panel-radar-provincia', 'mercado');
+    moveCardByContentId('panel-historico-apd', 'mercado');
+    moveCardByContentId('panel-historial', 'mercado');
+    moveCardByContentId('panel-backfill-provincia', 'mercado');
 
     movePrefsCard();
     moveCardById('admin-panel-card', 'admin');
@@ -173,18 +189,39 @@
     repartitionCards();
   }
 
-  const observer = new MutationObserver(() => {
-    if (!getPanelDocente() || !getPanelContent()) return;
-    bootTabs();
-  });
+  function scheduleBootTabs() {
+    if (bootScheduled) return;
+    bootScheduled = true;
+    requestAnimationFrame(() => {
+      bootScheduled = false;
+      bootTabs();
+    });
+  }
+
+  function startScopedObservers() {
+    const content = getPanelContent();
+    if (content && !contentObserver) {
+      contentObserver = new MutationObserver(() => scheduleBootTabs());
+      contentObserver.observe(content, { childList: true });
+    }
+
+    const admin = document.getElementById('admin-panel-card');
+    if (admin && !adminObserver) {
+      adminObserver = new MutationObserver(() => refreshTabVisibility());
+      adminObserver.observe(admin, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+
+  window.APD_refreshPanelTabs = scheduleBootTabs;
+  window.APD_activatePanelTab = activateTab;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      bootTabs();
-      observer.observe(document.body, { childList: true, subtree: true });
+      scheduleBootTabs();
+      startScopedObservers();
     }, { once: true });
   } else {
-    bootTabs();
-    observer.observe(document.body, { childList: true, subtree: true });
+    scheduleBootTabs();
+    startScopedObservers();
   }
 })();
