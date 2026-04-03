@@ -31,6 +31,15 @@
     return { raw: text, name, code };
   }
 
+  function buildAcronym(text) {
+    return String(text || '')
+      .split(/[^A-Za-zÁÉÍÓÚÑÜ0-9]+/)
+      .filter(Boolean)
+      .map(part => part[0])
+      .join('')
+      .toUpperCase();
+  }
+
   function formatCargoDisplay(raw) {
     const info = splitCargoCode(raw);
     if (!info.raw) return '';
@@ -45,6 +54,8 @@
       info.raw,
       info.name,
       info.code,
+      buildAcronym(info.name),
+      buildAcronym(display),
       info.code ? `${info.code} ${info.name}` : ''
     ].filter(Boolean).join(' '));
   }
@@ -254,6 +265,7 @@
 
     injectScriptOnce('mercado_abc_enhance_patch.js?v=1', '__apdMercadoAbcEnhanceLoaded');
     injectScriptOnce('ui_cleanup_patch.js?v=1', '__apdUiCleanupPatchLoaded');
+    injectScriptOnce('enterprise_speed_plans_patch.js?v=1', '__apdEnterpriseSpeedPlansLoaded');
   }
 
   if (document.readyState === 'loading') {
