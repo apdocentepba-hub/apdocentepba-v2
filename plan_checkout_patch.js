@@ -1,8 +1,10 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-01-plans-ui-2';
+  const PLAN_PATCH_VERSION = '2026-04-03-plans-ui-3';
   const PLAN_SELECTOR_ID = 'panel-plan-selector';
+  const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
+  const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
   let planesCache = null;
   let renderSeq = 0;
@@ -18,6 +20,14 @@
 
   function canalesBox() {
     return document.getElementById('panel-canales');
+  }
+
+  function selectorCard() {
+    return document.getElementById(PLAN_SELECTOR_CARD_ID);
+  }
+
+  function selectorBody() {
+    return document.getElementById(PLAN_SELECTOR_BODY_ID);
   }
 
   function ensurePlanMsgNode() {
@@ -139,56 +149,98 @@
     return `<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;">${features.slice(0, 5).map(item => `<li>${window.esc ? window.esc(item) : String(item)}</li>`).join('')}</ul>`;
   }
 
-  function buildPlanCards(planInfo, planes) {
-    if (!Array.isArray(planes) || !planes.length) {
-      return '<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(15,52,96,.12);"><p class="ph">No pudimos cargar los planes disponibles.</p></div>';
-    }
+  function ensureSelectorCard() {
+    let card = selectorCard();
+    if (card) return card;
 
-    return `
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(15,52,96,.12);">
-        <div class="plan-pill-row" style="margin-bottom:8px;">
-          <span class="plan-pill">Cambiar plan</span>
-          <button type="button" class="btn btn-ghost" data-plan-refresh="1">Actualizar plan</button>
+    const panel = document.getElementById('panel-content');
+    if (!panel) return null;
+
+    panel.insertAdjacentHTML('beforeend', `
+      <div id="${PLAN_SELECTOR_CARD_ID}" class="panel-card span-8">
+        <div class="card-lbl-row">
+          <span class="card-lbl">💳 Cambiar plan</span>
+          <div class="mini-group">
+            <button type="button" class="mini-btn" data-plan-refresh="1">Actualizar plan</button>
+          </div>
         </div>
-        <p class="plan-note">Elegí otro plan y te abrimos Mercado Pago. La pestaña actual queda intacta; si el navegador bloquea popups, te dejamos un enlace manual.</p>
-        ${planes.map(plan => {
-          const limits = window.getPlanLimits ? window.getPlanLimits({ plan }) : {
-            maxDistritos: Number(plan?.max_distritos || 1),
-            maxCargos: Number(plan?.max_cargos || 2),
-            maxDistritosNormales: Number(plan?.max_distritos_normales || plan?.max_distritos || 1),
-            maxDistritosEmergencia: Number(plan?.max_distritos_emergencia || 0)
-          };
-          const current = isCurrentPlan(plan, planInfo);
-          const nombre = window.planNombreHumano ? window.planNombreHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.display_name || plan?.nombre || plan?.code || 'Plan');
-          const precio = window.planPrecioHumano ? window.planPrecioHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.price_ars || '');
-          const descripcion = window.planDescripcionHumana ? window.planDescripcionHumana(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.descripcion || '');
-          const distritosText = limits.maxDistritosEmergencia > 0 ? `${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia` : `Hasta ${limits.maxDistritos} distrito(s)`;
-          return `
-            <div style="margin-top:12px;padding:12px;border:1px solid rgba(15,52,96,.12);border-radius:14px;background:${current ? 'rgba(15,52,96,.04)' : '#fff'};">
-              <div class="plan-pill-row">
-                <span class="plan-pill">${window.esc ? window.esc(nombre) : nombre}</span>
-                <span class="plan-pill plan-pill-neutral">${window.esc ? window.esc(precio) : precio}</span>
-              </div>
-              <div class="plan-pill-row" style="margin-top:8px;">
-                <span class="plan-pill">${window.esc ? window.esc(distritosText) : distritosText}</span>
-                <span class="plan-pill">Hasta ${limits.maxCargos} cargo(s)/materia(s)</span>
-              </div>
-              <p class="plan-note" style="margin-top:8px;">${window.esc ? window.esc(descripcion) : descripcion}</p>
-              ${buildPlanFeatureList(plan)}
-              <div style="margin-top:12px;">${planCardButtonHtml(plan, planInfo)}</div>
-            </div>`;
-        }).join('')}
-      </div>`;
+        <p class="prefs-hint">Elegí un plan y te abrimos Mercado Pago en una pestaña nueva. Acá ves la comparación completa sin mezclarla con el inicio.</p>
+        <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
+      </div>
+    `);
+
+    card = selectorCard();
+    if (typeof window.APD_refreshPanelTabs === 'function') {
+      setTimeout(() => window.APD_refreshPanelTabs(), 0);
+    }
+    return card;
   }
 
-  function renderPlanSelector(planInfo, planes) {
+  function buildPlanCards(planInfo, planes) {
+    if (!Array.isArray(planes) || !planes.length) {
+      return '<p class="ph">No pudimos cargar los planes disponibles.</p>';
+    }
+
+    return `${planes.map(plan => {
+      const limits = window.getPlanLimits ? window.getPlanLimits({ plan }) : {
+        maxDistritos: Number(plan?.max_distritos || 1),
+        maxCargos: Number(plan?.max_cargos || 2),
+        maxDistritosNormales: Number(plan?.max_distritos_normales || plan?.max_distritos || 1),
+        maxDistritosEmergencia: Number(plan?.max_distritos_emergencia || 0)
+      };
+      const current = isCurrentPlan(plan, planInfo);
+      const nombre = window.planNombreHumano ? window.planNombreHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.display_name || plan?.nombre || plan?.code || 'Plan');
+      const precio = window.planPrecioHumano ? window.planPrecioHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.price_ars || '');
+      const descripcion = window.planDescripcionHumana ? window.planDescripcionHumana(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.descripcion || '');
+      const distritosText = limits.maxDistritosEmergencia > 0 ? `${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia` : `Hasta ${limits.maxDistritos} distrito(s)`;
+      return `
+        <div style="margin-top:12px;padding:12px;border:1px solid rgba(15,52,96,.12);border-radius:14px;background:${current ? 'rgba(15,52,96,.04)' : '#fff'};">
+          <div class="plan-pill-row">
+            <span class="plan-pill">${window.esc ? window.esc(nombre) : nombre}</span>
+            <span class="plan-pill plan-pill-neutral">${window.esc ? window.esc(precio) : precio}</span>
+          </div>
+          <div class="plan-pill-row" style="margin-top:8px;">
+            <span class="plan-pill">${window.esc ? window.esc(distritosText) : distritosText}</span>
+            <span class="plan-pill">Hasta ${limits.maxCargos} cargo(s)/materia(s)</span>
+          </div>
+          <p class="plan-note" style="margin-top:8px;">${window.esc ? window.esc(descripcion) : descripcion}</p>
+          ${buildPlanFeatureList(plan)}
+          <div style="margin-top:12px;">${planCardButtonHtml(plan, planInfo)}</div>
+        </div>`;
+    }).join('')}`;
+  }
+
+  function renderSelectorCard(planInfo, planes) {
+    ensureSelectorCard();
+    const body = selectorBody();
+    if (!body) return;
+    body.innerHTML = buildPlanCards(planInfo, planes);
+    if (typeof window.APD_refreshPanelTabs === 'function') {
+      setTimeout(() => window.APD_refreshPanelTabs(), 0);
+    }
+  }
+
+  function renderCompactActions() {
     const box = planBox();
     if (!box) return;
 
     document.getElementById(PLAN_SELECTOR_ID)?.remove();
-    document.getElementById(PLAN_MSG_ID)?.remove();
+    document.getElementById('plan-summary-actions')?.remove();
 
-    box.insertAdjacentHTML('beforeend', `<div id="${PLAN_SELECTOR_ID}">${buildPlanCards(planInfo, planes)}</div>`);
+    box.insertAdjacentHTML('beforeend', `
+      <div id="plan-summary-actions" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(15,52,96,.12);">
+        <div class="plan-pill-row">
+          <span class="plan-pill">Gestión de plan</span>
+          <span class="plan-pill plan-pill-neutral">Separada del inicio</span>
+        </div>
+        <div class="form-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" data-plan-open-tab="1">Cambiar plan</button>
+          <button type="button" class="btn btn-secondary" data-plan-refresh="1">Actualizar plan</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById(PLAN_MSG_ID)?.remove();
     box.insertAdjacentHTML('beforeend', `<div id="${PLAN_MSG_ID}" class="msg"></div>`);
 
     const mpMsg = mpReturnMessage();
@@ -253,7 +305,21 @@
     }
   }
 
+  function openPlanTab() {
+    if (typeof window.APD_activatePanelTab === 'function') {
+      window.APD_activatePanelTab('plan');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
   document.addEventListener('click', async ev => {
+    const openTabBtn = ev.target.closest('[data-plan-open-tab]');
+    if (openTabBtn) {
+      ev.preventDefault();
+      openPlanTab();
+      return;
+    }
+
     const refreshBtn = ev.target.closest('[data-plan-refresh]');
     if (refreshBtn) {
       ev.preventDefault();
@@ -277,19 +343,20 @@
         const box = planBox();
         if (!box) return;
 
-        const oldSelector = document.getElementById(PLAN_SELECTOR_ID);
-        if (oldSelector) oldSelector.innerHTML = '<p class="ph">Cargando opciones de plan...</p>';
-        else box.insertAdjacentHTML('beforeend', `<div id="${PLAN_SELECTOR_ID}"><p class="ph">Cargando opciones de plan...</p></div>`);
+        renderCompactActions();
+        const body = selectorBody();
+        if (body) body.innerHTML = '<p class="ph">Cargando opciones de plan...</p>';
+        else ensureSelectorCard();
 
         try {
           const planes = await obtenerPlanesDisponiblesUI();
           if (currentRender !== renderSeq) return;
-          renderPlanSelector(planInfo || window.planActual || {}, planes);
+          renderSelectorCard(planInfo || window.planActual || {}, planes);
           mountCanalesCleanup();
         } catch (err) {
           console.error('ERROR PLAN PATCH:', err);
           if (currentRender !== renderSeq) return;
-          renderPlanSelector(planInfo || window.planActual || {}, []);
+          renderSelectorCard(planInfo || window.planActual || {}, []);
           mountCanalesCleanup();
           setPlanMsg('No se pudieron cargar los planes disponibles.', 'error');
         }
