@@ -266,7 +266,6 @@
     injectScriptOnce('market_freeze_hotfix_patch.js?v=1', '__apdMarketFreezeHotfixLoaded');
     injectScriptOnce('mercado_abc_enhance_patch.js?v=1', '__apdMercadoAbcEnhanceLoaded');
     injectScriptOnce('ui_cleanup_patch.js?v=1', '__apdUiCleanupPatchLoaded');
-    injectScriptOnce('enterprise_speed_plans_patch.js?v=1', '__apdEnterpriseSpeedPlansLoaded');
   }
 
   if (document.readyState === 'loading') {
