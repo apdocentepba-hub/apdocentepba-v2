@@ -18,6 +18,7 @@
   let bootScheduled = false;
   let contentObserver = null;
   let adminObserver = null;
+  let firstBoot = true;
 
   function injectStyles() {
     if (document.getElementById('panel-tabs-patch-style')) return;
@@ -116,17 +117,18 @@
     ensureShell();
     moveCardByContentId('panel-datos-docente', 'inicio');
     moveCardByContentId('panel-preferencias-resumen', 'inicio');
+    moveCardByContentId('panel-plan', 'inicio');
+    moveCardByContentId('panel-canales', 'inicio');
 
     moveCardByContentId('panel-alertas', 'alertas');
+    moveCardByContentId('panel-estadisticas', 'alertas');
 
     moveCardByContentId('panel-perfil-docente', 'perfil');
     moveCardByContentId('panel-listados-docente', 'perfil');
 
-    moveCardByContentId('panel-plan', 'plan');
-    moveCardByContentId('panel-canales', 'plan');
     moveCardById('panel-plan-selector-card', 'plan');
 
-    moveCardByContentId('panel-estadisticas', 'mercado');
+    moveCardByContentId('panel-historico-apd', 'mercado');
 
     movePrefsCard();
     moveCardById('admin-panel-card', 'admin');
@@ -181,6 +183,10 @@
 
   function bootTabs() {
     if (!getPanelDocente() || !getPanelContent()) return;
+    if (firstBoot) {
+      localStorage.setItem(TAB_STORAGE_KEY, 'inicio');
+      firstBoot = false;
+    }
     repartitionCards();
   }
 

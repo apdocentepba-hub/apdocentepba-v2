@@ -183,7 +183,7 @@
     return `
       <div id="panel-historico-apd-card" class="panel-card span-12">
         <div class="card-lbl-row">
-          <span class="card-lbl">🕘 Histórico APD / estadísticas</span>
+          <span class="card-lbl">📈 Estadísticas históricas</span>
           <button id="btn-refresh-historico" class="mini-btn" type="button">Actualizar histórico</button>
         </div>
         <div id="panel-historico-apd"><p class="ph">Cargando histórico APD...</p></div>
@@ -214,7 +214,6 @@
     removeCardByBodyId('panel-backfill-provincia');
     removeCardByBodyId('panel-historial');
     removeCardByBodyId('panel-radar-provincia');
-    removeCardByBodyId('panel-historico-apd');
     removeCardByBodyId('panel-historico-docente');
   }
 
@@ -222,6 +221,7 @@
     ensureScript('autocomplete_fast_patch.js?v=1', 'apd-fast-autocomplete-script');
     ensureScript('panel_tabs_patch.js?v=1', 'apd-panel-tabs-script');
     ensureScript('plan_checkout_patch.js?v=1', 'apd-plan-checkout-script');
+    ensureScript('statistics_panel_patch.js?v=1', 'apd-statistics-panel-script');
   }
 
   function bindDynamicPanelEvents() {
@@ -264,6 +264,9 @@
           }
           if (typeof g.cargarHistoricoPanel === 'function') {
             await g.cargarHistoricoPanel(token);
+          }
+          if (typeof g.APD_mountStatisticsBanner === 'function') {
+            g.APD_mountStatisticsBanner();
           }
         } catch (err) {
           console.error('ERROR CAPTURANDO HISTORICO:', err);

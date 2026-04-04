@@ -1,8 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-4';
-  const PLAN_SELECTOR_ID = 'panel-plan-selector';
+  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-5';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -33,13 +32,11 @@
   function ensurePlanMsgNode() {
     const box = planBox();
     if (!box) return null;
-
     let node = document.getElementById(PLAN_MSG_ID);
     if (!node) {
       box.insertAdjacentHTML('beforeend', `<div id="${PLAN_MSG_ID}" class="msg"></div>`);
       node = document.getElementById(PLAN_MSG_ID);
     }
-
     return node;
   }
 
@@ -69,7 +66,6 @@
     if (!box) return;
 
     let removedAny = false;
-
     [...box.querySelectorAll('.soft-card')].forEach(card => {
       const title = String(card.querySelector('h3')?.textContent || '').trim().toLowerCase();
       if (title === 'mercado pago') {
@@ -89,16 +85,11 @@
   function mountCanalesCleanup() {
     const box = canalesBox();
     if (!box) return;
-
     if (box.dataset.planPatchObserved === '1') {
       cleanupCanalesMercadoPago();
       return;
     }
-
-    const observer = new MutationObserver(() => {
-      cleanupCanalesMercadoPago();
-    });
-
+    const observer = new MutationObserver(() => cleanupCanalesMercadoPago());
     observer.observe(box, { childList: true, subtree: true });
     box.dataset.planPatchObserved = '1';
     cleanupCanalesMercadoPago();
@@ -107,7 +98,6 @@
   function mpReturnMessage() {
     const params = new URLSearchParams(window.location.search || '');
     const state = String(params.get('mp') || '').trim().toLowerCase();
-
     if (state === 'success') return { type: 'ok', text: 'Pago aprobado. Tocá “Actualizar plan” para refrescar tu suscripción.' };
     if (state === 'pending') return { type: 'info', text: 'Tu pago quedó pendiente. Cuando Mercado Pago confirme, tocá “Actualizar plan”.' };
     if (state === 'failure') return { type: 'error', text: 'El pago no se completó. Podés intentar nuevamente desde acá.' };
@@ -116,7 +106,6 @@
 
   async function obtenerPlanesDisponiblesUI() {
     if (Array.isArray(planesCache) && planesCache.length) return planesCache;
-
     const data = await window.workerFetchJson('/api/planes');
     const planes = Array.isArray(data?.planes) ? data.planes : [];
     planesCache = planes.filter(plan => plan?.public_visible !== false);
@@ -134,13 +123,54 @@
     return normalizePlanCodeSafe(plan?.code || plan?.display_code || '') === planActualCode(planInfo);
   }
 
+  function transitionPolicy(plan, planInfo) {
+    const currentCode = planActualCode(planInfo);
+    const targetCode = normalizePlanCodeSafe(plan?.code || plan?.display_code || '');
+
+    if (targetCode === currentCode) {
+      return {
+        allowed: false,
+        label: 'Plan actual',
+        reason: ''
+      };
+    }
+
+    if (!currentCode || currentCode === 'TRIAL_7D') {
+      return {
+        allowed: true,
+        label: `Cambiar a ${String(plan?.display_name || plan?.nombre || plan?.code || 'este plan')}`,
+        reason: ''
+      };
+    }
+
+    if (targetCode === 'TRIAL_7D') {
+      return {
+        allowed: false,
+        label: 'No volver a prueba',
+        reason: 'La vuelta a prueba gratis queda bloqueada hasta cerrar la cancelación segura de cobros recurrentes.'
+      };
+    }
+
+    return {
+      allowed: false,
+      label: 'Cambio manual por ahora',
+      reason: 'Los cambios entre planes pagos quedan desactivados hasta definir bien prorrateos, bajas y renovaciones de Mercado Pago.'
+    };
+  }
+
   function planCardButtonHtml(plan, planInfo) {
+    const policy = transitionPolicy(plan, planInfo);
     const current = isCurrentPlan(plan, planInfo);
-    const safeName = window.esc ? window.esc(plan?.display_name || plan?.nombre || plan?.code || 'este plan') : String(plan?.display_name || plan?.nombre || plan?.code || 'este plan');
-    const buttonLabel = current ? 'Plan actual' : `Cambiar a ${safeName}`;
-    const buttonClass = current ? 'btn btn-secondary btn-full' : 'btn btn-primary btn-full';
-    const extraAttr = current ? 'disabled' : `data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}"`;
-    return `<button type="button" class="${buttonClass}" ${extraAttr}>${buttonLabel}</button>`;
+    const buttonClass = current || !policy.allowed ? 'btn btn-secondary btn-full' : 'btn btn-primary btn-full';
+    const extraAttr = policy.allowed ? `data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}"` : 'disabled';
+    const reasonHtml = policy.reason
+      ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>`
+      : '';
+
+    return `
+      <button type="button" class="${buttonClass}" ${extraAttr}>${window.esc ? window.esc(policy.label) : policy.label}</button>
+      ${reasonHtml}
+    `;
   }
 
   function buildPlanFeatureList(plan) {
@@ -164,7 +194,8 @@
             <button type="button" class="mini-btn" data-plan-refresh="1">Actualizar plan</button>
           </div>
         </div>
-        <p class="prefs-hint">Acá comparás planes y, si elegís otro, te abrimos Mercado Pago en una pestaña nueva. El botón del resumen te trae directo a este bloque.</p>
+        <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
+        <div class="soft-meta" style="margin:8px 0 12px 0;">Para evitar problemas de cobro, por ahora solo queda habilitada la activación inicial o el paso desde prueba gratis a un plan pago. Bajas, vuelta a prueba y cambios entre planes pagos quedan bloqueados hasta cerrar bien la lógica de suscripción.</div>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
       </div>
     `);
@@ -224,9 +255,7 @@
     const box = planBox();
     if (!box) return;
 
-    document.getElementById(PLAN_SELECTOR_ID)?.remove();
     document.getElementById('plan-summary-actions')?.remove();
-
     box.insertAdjacentHTML('beforeend', `
       <div id="plan-summary-actions" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(15,52,96,.12);">
         <div class="plan-pill-row">
