@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-6';
+  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-7';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -14,24 +14,13 @@
     return raw === 'PRO' ? 'PREMIUM' : raw;
   }
 
-  function planBox() {
-    return document.getElementById('panel-plan');
-  }
-
-  function canalesBox() {
-    return document.getElementById('panel-canales');
-  }
-
-  function selectorCard() {
-    return document.getElementById(PLAN_SELECTOR_CARD_ID);
-  }
-
-  function selectorBody() {
-    return document.getElementById(PLAN_SELECTOR_BODY_ID);
-  }
+  function planBox() { return document.getElementById(PLAN_MSG_ID)?.closest('.panel-card') ? document.getElementById('panel-plan') : document.getElementById('panel-plan'); }
+  function canalesBox() { return document.getElementById('panel-canales'); }
+  function selectorCard() { return document.getElementById(PLAN_SELECTOR_CARD_ID); }
+  function selectorBody() { return document.getElementById(PLAN_SELECTOR_BODY_ID); }
 
   function ensurePlanMsgNode() {
-    const box = planBox();
+    const box = document.getElementById('panel-plan');
     if (!box) return null;
     let node = document.getElementById(PLAN_MSG_ID);
     if (!node) {
@@ -73,29 +62,12 @@
     el.className = 'msg';
   }
 
-  function setPlanMsg(text, type = 'info') {
-    setMsg(ensurePlanMsgNode(), text, type);
-  }
-
-  function setPlanMsgHtml(html, type = 'info') {
-    setMsgHtml(ensurePlanMsgNode(), html, type);
-  }
-
-  function clearPlanMsg() {
-    clearMsg(document.getElementById(PLAN_MSG_ID));
-  }
-
-  function setSelectorMsg(text, type = 'info') {
-    setMsg(ensureSelectorMsgNode(), text, type);
-  }
-
-  function setSelectorMsgHtml(html, type = 'info') {
-    setMsgHtml(ensureSelectorMsgNode(), html, type);
-  }
-
-  function clearSelectorMsg() {
-    clearMsg(document.getElementById(PLAN_SELECTOR_MSG_ID));
-  }
+  function setPlanMsg(text, type = 'info') { setMsg(ensurePlanMsgNode(), text, type); }
+  function setPlanMsgHtml(html, type = 'info') { setMsgHtml(ensurePlanMsgNode(), html, type); }
+  function clearPlanMsg() { clearMsg(document.getElementById(PLAN_MSG_ID)); }
+  function setSelectorMsg(text, type = 'info') { setMsg(ensureSelectorMsgNode(), text, type); }
+  function setSelectorMsgHtml(html, type = 'info') { setMsgHtml(ensureSelectorMsgNode(), html, type); }
+  function clearSelectorMsg() { clearMsg(document.getElementById(PLAN_SELECTOR_MSG_ID)); }
 
   function cleanupCanalesMercadoPago() {
     const box = canalesBox();
@@ -111,10 +83,7 @@
     });
 
     if (removedAny && !box.querySelector('[data-plan-managed-note]')) {
-      box.insertAdjacentHTML(
-        'beforeend',
-        '<div class="soft-meta" data-plan-managed-note="1" style="margin-top:8px">Los cambios de plan ahora se hacen desde el bloque <strong>Mi plan</strong>.</div>'
-      );
+      box.insertAdjacentHTML('beforeend', '<div class="soft-meta" data-plan-managed-note="1" style="margin-top:8px">Los cambios de plan ahora se hacen desde el bloque <strong>Mi plan</strong>.</div>');
     }
   }
 
@@ -155,6 +124,10 @@
     return normalizePlanCodeSafe(code);
   }
 
+  function currentPlanPrice(planInfo) {
+    return Number(planInfo?.plan?.price_ars || 0) || 0;
+  }
+
   function isCurrentPlan(plan, planInfo) {
     return normalizePlanCodeSafe(plan?.code || plan?.display_code || '') === planActualCode(planInfo);
   }
@@ -162,43 +135,48 @@
   function transitionPolicy(plan, planInfo) {
     const currentCode = planActualCode(planInfo);
     const targetCode = normalizePlanCodeSafe(plan?.code || plan?.display_code || '');
+    const currentPrice = currentPlanPrice(planInfo);
+    const targetPrice = Number(plan?.price_ars || 0) || 0;
+    const targetName = String(plan?.display_name || plan?.nombre || plan?.code || 'este plan');
 
     if (targetCode === currentCode) {
-      return {
-        allowed: false,
-        mode: 'current',
-        label: 'Plan actual',
-        actionLabel: 'Estás en este plan',
-        reason: 'Este es el plan que ya tenés activo hoy.'
-      };
+      return { allowed: false, mode: 'current', label: 'Plan actual', actionLabel: 'Estás en este plan', reason: 'Este es el plan que ya tenés activo hoy.' };
     }
 
     if (!currentCode || currentCode === 'TRIAL_7D') {
-      return {
-        allowed: true,
-        mode: 'checkout',
-        label: `Cambiar a ${String(plan?.display_name || plan?.nombre || plan?.code || 'este plan')}`,
-        actionLabel: `Cambiar a ${String(plan?.display_name || plan?.nombre || plan?.code || 'este plan')}`,
-        reason: ''
-      };
+      return { allowed: true, mode: 'checkout', label: `Activar ${targetName}`, actionLabel: `Activar ${targetName}`, reason: '' };
     }
 
     if (targetCode === 'TRIAL_7D') {
+      return { allowed: false, mode: 'trial_blocked', label: 'No volver a prueba', actionLabel: 'Ver por qué', reason: 'La vuelta a prueba gratis queda bloqueada hasta cerrar la cancelación segura de cobros recurrentes.' };
+    }
+
+    if (targetPrice > currentPrice) {
+      return {
+        allowed: true,
+        mode: 'upgrade_prorated',
+        label: `Subir a ${targetName}`,
+        actionLabel: `Pagar diferencia y pasar a ${targetName}`,
+        reason: 'Se descuenta un crédito proporcional por los días que te quedan del plan actual y se abre un nuevo ciclo al acreditarse el pago.'
+      };
+    }
+
+    if (targetPrice < currentPrice) {
       return {
         allowed: false,
-        mode: 'trial_blocked',
-        label: 'No volver a prueba',
-        actionLabel: 'Ver por qué',
-        reason: 'La vuelta a prueba gratis queda bloqueada hasta cerrar la cancelación segura de cobros recurrentes.'
+        mode: 'downgrade_wait',
+        label: 'Bajar al renovar',
+        actionLabel: 'Ver cómo baja de plan',
+        reason: 'Como tu plan actual ya está pago por este ciclo, el cambio a un plan menor se hace cuando venza o cuando renueves el próximo ciclo.'
       };
     }
 
     return {
       allowed: false,
-      mode: 'paid_change_blocked',
+      mode: 'same_price_manual',
       label: 'Cambio manual por ahora',
       actionLabel: 'Ver condición del cambio',
-      reason: 'Los cambios entre planes pagos quedan desactivados hasta definir bien prorrateos, bajas y renovaciones de Mercado Pago.'
+      reason: 'Ese cambio todavía no quedó automatizado.'
     };
   }
 
@@ -207,9 +185,7 @@
     const current = isCurrentPlan(plan, planInfo);
     const safeReason = encodeURIComponent(policy.reason || '');
     const safeMode = encodeURIComponent(policy.mode || 'info');
-    const reasonHtml = policy.reason
-      ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>`
-      : '';
+    const reasonHtml = policy.reason ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>` : '';
 
     if (policy.allowed) {
       return `
@@ -253,7 +229,7 @@
           </div>
         </div>
         <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
-        <div class="soft-meta" style="margin:8px 0 12px 0;">Para evitar problemas de cobro, por ahora solo queda habilitada la activación inicial o el paso desde prueba gratis a un plan pago. Bajas, vuelta a prueba y cambios entre planes pagos quedan bloqueados hasta cerrar bien la lógica de suscripción.</div>
+        <div class="soft-meta" style="margin:8px 0 12px 0;">Los upgrades de un plan pago a otro más alto ahora calculan una diferencia proporcional por el tiempo que te queda. Los downgrades se hacen al renovar el próximo ciclo.</div>
         <div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
       </div>
@@ -311,7 +287,7 @@
   }
 
   function renderCompactActions() {
-    const box = planBox();
+    const box = document.getElementById('panel-plan');
     if (!box) return;
 
     document.getElementById('plan-summary-actions')?.remove();
@@ -349,7 +325,7 @@
       const planInfo = await window.obtenerMiPlan(userId);
       if (planInfo?.plan || planInfo?.subscription) window.planActual = planInfo;
       await window.renderPlanUI(window.planActual || planInfo);
-      setPlanMsg('Plan actualizado.', 'ok');
+      setPlanMsg(planInfo?.billing_note || 'Plan actualizado.', 'ok');
       setSelectorMsg('Plan actualizado.', 'ok');
     } catch (err) {
       console.error('ERROR REFRESH PLAN:', err);
@@ -386,14 +362,15 @@
       }
 
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
+      const successMsg = data?.message || 'Mercado Pago se abrió en una pestaña nueva.';
       if (opened) {
-        setPlanMsg('Mercado Pago se abrió en una pestaña nueva.', 'ok');
-        setSelectorMsg('Mercado Pago se abrió en una pestaña nueva.', 'ok');
+        setPlanMsg(successMsg, 'ok');
+        setSelectorMsg(successMsg, 'ok');
         return;
       }
 
       const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
-      const html = `Tu navegador bloqueó la pestaña nueva. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
+      const html = `${successMsg}<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
       setPlanMsgHtml(html, 'info');
       setSelectorMsgHtml(html, 'info');
     } catch (err) {
@@ -412,7 +389,7 @@
       window.APD_activatePanelTab('plan');
     }
     setTimeout(() => {
-      const target = selectorCard() || planBox();
+      const target = selectorCard() || document.getElementById('panel-plan');
       target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
   }
@@ -439,7 +416,9 @@
       const mode = decodeURIComponent(String(infoBtn.dataset.planInfoMode || 'info'));
       const prefix = mode === 'trial_blocked'
         ? 'No podés volver a prueba gratis: '
-        : 'Cambio de plan protegido: ';
+        : mode === 'downgrade_wait'
+          ? 'Baja de plan al renovar: '
+          : 'Cambio de plan protegido: ';
       setPlanMsg(prefix + msg, 'info');
       setSelectorMsg(prefix + msg, 'info');
       return;
@@ -458,7 +437,7 @@
       const currentRender = ++renderSeq;
 
       Promise.resolve().then(async () => {
-        const box = planBox();
+        const box = document.getElementById('panel-plan');
         if (!box) return;
 
         renderCompactActions();
