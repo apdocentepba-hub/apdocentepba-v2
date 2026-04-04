@@ -29,10 +29,6 @@
     return card;
   }
 
-  function recargarPanel() {
-    document.getElementById('btn-recargar-panel')?.click();
-  }
-
   function scrollToId(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -86,19 +82,31 @@
   }
 
   function getStoredListados() {
-    return readJSON(LISTADOS_KEY, { dni: '', importedAt: null, rows: [] });
+    return readJSON(LISTADOS_KEY, { dni: '', importedAt: null, rows: [], importsCount: 0 });
+  }
+
+  function dedupeRows(rows) {
+    const map = new Map();
+    (rows || []).forEach(row => {
+      const key = [row?.tipo_listado || '', row?.distrito || '', row?.cargo || '', row?.materia || '', row?.puntaje || '', row?.raw_text || ''].join('|');
+      if (!map.has(key)) map.set(key, row);
+    });
+    return [...map.values()];
   }
 
   function saveListados(payload) {
+    const prev = getStoredListados();
+    const rows = dedupeRows(Array.isArray(payload?.rows) ? payload.rows : []);
     writeJSON(LISTADOS_KEY, {
       dni: String(payload?.dni || '').replace(/\D/g, ''),
       importedAt: new Date().toISOString(),
-      rows: Array.isArray(payload?.rows) ? payload.rows : []
+      rows,
+      importsCount: (prev.importsCount || 0) + 1
     });
   }
 
   function clearListados() {
-    writeJSON(LISTADOS_KEY, { dni: '', importedAt: null, rows: [] });
+    writeJSON(LISTADOS_KEY, { dni: '', importedAt: null, rows: [], importsCount: 0 });
   }
 
   function fmtFecha(v) {
@@ -135,7 +143,7 @@
   }
 
   function buildBookmarkletHref() {
-    const source = `(async()=>{const TYPE='${ABC_IMPORT_TYPE}';const TARGET='*';const sleep=ms=>new Promise(r=>setTimeout(r,ms));const norm=s=>String(s||'').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();const post=(status,payload,message)=>{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:TYPE,status,payload,message,source:'abc-bookmarklet'},TARGET);}};const visible=el=>!!el&&el.offsetParent!==null;const allVisible=sel=>[...document.querySelectorAll(sel)].filter(visible);const textOf=el=>norm(el&&(el.innerText||el.textContent||''));function searchButton(){const buttons=allVisible('button,a,div,span');return buttons.find(el=>/^buscar$/i.test(textOf(el)))||null;}function fieldScore(el){const meta=[el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.getAttribute('title')].filter(Boolean).join(' ');if(/dni|apellido|nombre|buscar/i.test(meta))return 10;return 0;}function searchInput(){const btn=searchButton();if(btn){let root=btn.parentElement;for(let depth=0;depth<5&&root;depth++,root=root.parentElement){const inputs=[...root.querySelectorAll('input')].filter(visible);if(inputs.length){inputs.sort((a,b)=>fieldScore(b)-fieldScore(a));return inputs[0];}}}const inputs=allVisible('input');inputs.sort((a,b)=>fieldScore(b)-fieldScore(a));return inputs[0]||null;}function fireInput(el,value){try{el.focus();el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'Enter',code:'Enter'}));}catch(e){}}function launchSearch(dni){const input=searchInput();const btn=searchButton();if(input)fireInput(input,dni);if(btn){btn.click();return true;}if(input){fireInput(input,dni);return true;}return false;}function findCardCandidates(){const els=allVisible('div,article,section,li');const hits=els.filter(el=>{const t=textOf(el);if(!t)return false;if(!/\\b\\d{7,9}\\b/.test(t))return false;if(!/Puntaje:/i.test(t))return false;if(!/Distrito:/i.test(t))return false;if(!/Cargo\\s*Area:/i.test(t))return false;if(t.length<80||t.length>1400)return false;return true;});return hits.filter(el=>!hits.some(other=>other!==el&&el.contains(other)));}function parseCardText(t){const text=String(t||'').replace(/\\u00a0/g,' ');const dni=/\\b(\\d{7,9})\\b/.exec(text)?.[1]||'';const puntaje=/Puntaje:\\s*([0-9.,]+)/i.exec(text)?.[1]||'';const orden=/Orden:\\s*([0-9]+)/i.exec(text)?.[1]||'';const cargo=(/Cargo\\s*Area:\\s*([\\s\\S]*?)(?=\\bApto\\s*F[ií]sico:|\\bDistrito:|\\bRama:|\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const distrito=(/Distrito:\\s*([\\s\\S]*?)(?=\\bRama:|\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const rama=(/Rama:\\s*([\\s\\S]*?)(?=\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const tipo=(/Tipo de Listado:\\s*([\\s\\S]*?)(?=\\bPuntaje:|\\bOrden:|$)/i.exec(text)?.[1]||'OFICIAL').replace(/\\s+/g,' ').trim();return{dni:norm(dni),puntaje:norm(puntaje),orden:norm(orden),cargo:norm(cargo),distrito:norm(distrito),rama:norm(rama),tipo_listado:norm(tipo)}}async function scrapeRows(){const items=[];for(let i=0;i<50;i++){await sleep(500);const cards=findCardCandidates();if(cards.length){cards.forEach(card=>{const item=parseCardText(card.innerText);const key=[item.dni,item.cargo,item.puntaje,item.distrito,item.rama,item.orden].join('|');if(item.dni&&item.cargo&&!items.some(x=>x.key===key)){items.push({key,...item});}});break;}if(i===5||i===12)launchSearch(window.__dniABC);}return items.map(item=>({anio:new Date().getFullYear(),tipo_listado:item.tipo_listado||'OFICIAL',distrito:item.distrito,cargo:item.cargo,materia:item.rama,puntaje:item.puntaje,fuente:'abc_favorito',raw_text:JSON.stringify(item)}));}try{const url=new URL(location.href);const dni=String(url.searchParams.get('apd_dni')||prompt('Ingresá DNI para traer la información')||'').replace(/\\D/g,'');if(!dni)throw new Error('Necesitás indicar el DNI.');window.__dniABC=dni;post('progress',null,'Preparando búsqueda en ABC...');launchSearch(dni);const rows=await scrapeRows();if(!rows.length)throw new Error('No pude leer resultados visibles en ABC.');post('ok',{dni,rows,mode:'scrape-dom'},'Listados capturados desde ABC');setTimeout(()=>{try{window.close();}catch(e){}},400);}catch(err){post('error',null,String(err?.message||err));alert(String(err?.message||err));}})();`;
+    const source = `(async()=>{const TYPE='${ABC_IMPORT_TYPE}';const TARGET='*';const sleep=ms=>new Promise(r=>setTimeout(r,ms));const norm=s=>String(s||'').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();const visible=el=>!!el&&el.offsetParent!==null;const allVisible=sel=>[...document.querySelectorAll(sel)].filter(visible);const textOf=el=>norm(el&&(el.innerText||el.textContent||''));const post=(status,payload,message)=>{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:TYPE,status,payload,message,source:'abc-bookmarklet'},TARGET);}};function searchButton(){return allVisible('button,a,div,span').find(el=>/^buscar$/i.test(textOf(el)))||null;}function fieldScore(el){const meta=[el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.getAttribute('title')].filter(Boolean).join(' ');return /dni|apellido|nombre|buscar/i.test(meta)?10:0;}function searchInput(){const btn=searchButton();if(btn){let root=btn.parentElement;for(let d=0;d<5&&root;d++,root=root.parentElement){const inputs=[...root.querySelectorAll('input')].filter(visible);if(inputs.length){inputs.sort((a,b)=>fieldScore(b)-fieldScore(a));return inputs[0];}}}const inputs=allVisible('input');inputs.sort((a,b)=>fieldScore(b)-fieldScore(a));return inputs[0]||null;}function fireInput(el,value){try{el.focus();el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'Enter',code:'Enter'}));}catch(e){}}function launchSearch(dni){const input=searchInput();const btn=searchButton();if(input)fireInput(input,dni);if(btn){btn.click();return true;}if(input){fireInput(input,dni);return true;}return false;}function pageRangeText(){const hit=allVisible('body *').find(el=>/Mostrando\\s+\\d+\\s+a\\s+\\d+\\s+de\\s+\\d+\\s+resultados/i.test(textOf(el)));return hit?textOf(hit):'';}function nextControl(){return allVisible('button,a,span,div').filter(el=>textOf(el)==='>').pop()||null;}function findCardCandidates(){const els=allVisible('div,article,section,li');const hits=els.filter(el=>{const t=textOf(el);if(!t)return false;if(!/\\b\\d{7,9}\\b/.test(t))return false;if(!/Puntaje:/i.test(t))return false;if(!/Distrito:/i.test(t))return false;if(!/Cargo\\s*Area:/i.test(t))return false;if(t.length<80||t.length>1600)return false;return true;});return hits.filter(el=>!hits.some(other=>other!==el&&el.contains(other)));}function parseCardText(t){const text=String(t||'').replace(/\\u00a0/g,' ');const dni=/\\b(\\d{7,9})\\b/.exec(text)?.[1]||'';const puntaje=/Puntaje:\\s*([0-9.,]+)/i.exec(text)?.[1]||'';const orden=/Orden:\\s*([0-9]+)/i.exec(text)?.[1]||'';const cargo=(/Cargo\\s*Area:\\s*([\\s\\S]*?)(?=\\bApto\\s*F[ií]sico:|\\bDistrito:|\\bRama:|\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const distrito=(/Distrito:\\s*([\\s\\S]*?)(?=\\bRama:|\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const rama=(/Rama:\\s*([\\s\\S]*?)(?=\\bRecalificaci[oó]n laboral:|\\bFecha:|$)/i.exec(text)?.[1]||'').replace(/\\s+/g,' ').trim();const tipo=(/Tipo de Listado:\\s*([\\s\\S]*?)(?=\\bPuntaje:|\\bOrden:|$)/i.exec(text)?.[1]||'OFICIAL').replace(/\\s+/g,' ').trim();return{dni:norm(dni),puntaje:norm(puntaje),orden:norm(orden),cargo:norm(cargo),distrito:norm(distrito),rama:norm(rama),tipo_listado:norm(tipo)}}async function scrapeRows(dni){const map=new Map();for(let step=0;step<40;step++){for(let retry=0;retry<8;retry++){const cards=findCardCandidates();if(cards.length){cards.forEach(card=>{const item=parseCardText(card.innerText);const key=[item.dni,item.cargo,item.puntaje,item.distrito,item.rama,item.orden].join('|');if(item.dni&&item.cargo)map.set(key,item);});break;}if(retry===2||retry===5)launchSearch(dni);await sleep(500);}post('progress',null,'Leyendo resultados: '+map.size+' fila(s)');const before=pageRangeText();const next=nextControl();if(!next)break;next.click();let changed=false;for(let wait=0;wait<12;wait++){await sleep(450);const after=pageRangeText();if(after&&after!==before){changed=true;break;}}if(!changed)break;}return[...map.values()].map(item=>({anio:new Date().getFullYear(),tipo_listado:item.tipo_listado||'OFICIAL',distrito:item.distrito,cargo:item.cargo,materia:item.rama,puntaje:item.puntaje,fuente:'abc_favorito',raw_text:JSON.stringify(item)}));}try{const url=new URL(location.href);const dni=String(url.searchParams.get('apd_dni')||prompt('Ingresá DNI para traer la información')||'').replace(/\\D/g,'');if(!dni)throw new Error('Necesitás indicar el DNI.');post('progress',null,'Preparando búsqueda en ABC...');launchSearch(dni);const rows=await scrapeRows(dni);if(!rows.length)throw new Error('No pude leer resultados visibles en ABC.');post('ok',{dni,rows,mode:'scrape-dom'},'Listados capturados desde ABC');setTimeout(()=>{try{window.close();}catch(e){}},400);}catch(err){post('error',null,String(err?.message||err));alert(String(err?.message||err));}})();`;
     return `javascript:${encodeURIComponent(source)}`;
   }
 
@@ -151,33 +159,63 @@
     return out;
   }
 
-  function rowMatches(row, prefs) {
+  function matchRow(row, prefs) {
     const rowDistrict = normalizeText(row?.distrito || '');
     const rowCargo = normalizeText(`${row?.cargo || ''} ${row?.materia || ''}`);
-    const districtOk = !prefs.distritos.length || prefs.distritos.some(d => {
-      const nd = normalizeText(d);
-      return nd && (rowDistrict.includes(nd) || nd.includes(rowDistrict));
-    });
-    const cargoOk = !prefs.cargos.length || prefs.cargos.some(c => {
-      const nc = normalizeText(c);
-      if (!nc) return false;
-      if (rowCargo.includes(nc) || nc.includes(rowCargo)) return true;
-      const rowT = tokens(rowCargo);
-      const prefT = tokens(nc);
-      return prefT.some(t => rowT.includes(t));
-    });
-    return districtOk && cargoOk;
+    const reasons = [];
+    let districtHits = 0;
+    let cargoHits = 0;
+
+    if (!prefs.distritos.length) {
+      districtHits = 1;
+      reasons.push('sin filtro de distrito');
+    } else {
+      prefs.distritos.forEach(d => {
+        const nd = normalizeText(d);
+        if (nd && (rowDistrict.includes(nd) || nd.includes(rowDistrict))) districtHits += 1;
+      });
+      if (districtHits) reasons.push(`distrito ${districtHits > 1 ? 'coincide' : 'compatible'}`);
+    }
+
+    if (!prefs.cargos.length) {
+      cargoHits = 1;
+      reasons.push('sin filtro de cargo');
+    } else {
+      prefs.cargos.forEach(c => {
+        const nc = normalizeText(c);
+        if (!nc) return;
+        if (rowCargo.includes(nc) || nc.includes(rowCargo)) {
+          cargoHits += 2;
+          return;
+        }
+        const rowT = tokens(rowCargo);
+        const prefT = tokens(nc);
+        const common = prefT.filter(t => rowT.includes(t)).length;
+        if (common) cargoHits += 1;
+      });
+      if (cargoHits >= 2) reasons.push('cargo muy compatible');
+      else if (cargoHits === 1) reasons.push('cargo parcialmente compatible');
+    }
+
+    const districtNeeded = prefs.distritos.length ? districtHits > 0 : true;
+    const cargoNeeded = prefs.cargos.length ? cargoHits > 0 : true;
+    const compatible = districtNeeded && cargoNeeded;
+    const strong = compatible && districtHits > 0 && cargoHits >= 2;
+    const score = (districtHits ? 40 : 0) + Math.min(cargoHits, 2) * 30 + (strong ? 20 : 0);
+    return { compatible, strong, score, reasons };
   }
 
   function getComputedData() {
     const stored = getStoredListados();
     const prefs = getPreferenceSummary();
     const rows = Array.isArray(stored.rows) ? stored.rows.slice() : [];
-    const compatibles = rows.filter(r => rowMatches(r, prefs));
-    const topRows = rows.slice().sort((a, b) => (puntajeNum(b.puntaje) || -1) - (puntajeNum(a.puntaje) || -1)).slice(0, 8);
+    const detailedRows = rows.map(row => ({ ...row, match: matchRow(row, prefs) }));
+    const compatibles = detailedRows.filter(r => r.match.compatible).sort((a, b) => b.match.score - a.match.score || (puntajeNum(b.puntaje) || -1) - (puntajeNum(a.puntaje) || -1));
+    const strongCompatibles = compatibles.filter(r => r.match.strong);
+    const topRows = detailedRows.slice().sort((a, b) => (puntajeNum(b.puntaje) || -1) - (puntajeNum(a.puntaje) || -1)).slice(0, 8);
     const byDistrict = new Map();
     const byCargo = new Map();
-    rows.forEach(r => {
+    detailedRows.forEach(r => {
       const d = String(r.distrito || 'Sin distrito').trim() || 'Sin distrito';
       const c = String(r.cargo || r.materia || 'Sin cargo').trim() || 'Sin cargo';
       byDistrict.set(d, (byDistrict.get(d) || 0) + 1);
@@ -185,10 +223,9 @@
     });
     const topDistricts = [...byDistrict.entries()].sort((a,b) => b[1]-a[1]).slice(0,5);
     const topCargos = [...byCargo.entries()].sort((a,b) => b[1]-a[1]).slice(0,5);
-    const avgPuntaje = compatibles.length
-      ? compatibles.map(r => puntajeNum(r.puntaje)).filter(v => v != null).reduce((a,b)=>a+b,0) / (compatibles.map(r => puntajeNum(r.puntaje)).filter(v => v != null).length || 1)
-      : null;
-    return { stored, prefs, rows, compatibles, topRows, topDistricts, topCargos, avgPuntaje };
+    const puntajes = compatibles.map(r => puntajeNum(r.puntaje)).filter(v => v != null);
+    const avgPuntaje = puntajes.length ? puntajes.reduce((a,b)=>a+b,0) / puntajes.length : null;
+    return { stored, prefs, rows: detailedRows, compatibles, strongCompatibles, topRows, topDistricts, topCargos, avgPuntaje };
   }
 
   function ensureStyles() {
@@ -210,9 +247,8 @@
       .safe-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
       .safe-input{width:100%;padding:10px 12px;border:1px solid rgba(15,52,96,.15);border-radius:12px;font:inherit}
       .safe-check{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid rgba(15,52,96,.12);border-radius:12px;background:#fff}
-      .safe-msg{font-size:13px;color:#334155}
-      .safe-msg.ok{color:#166534}.safe-msg.error{color:#991b1b}.safe-msg.info{color:#0f3460}
-      .safe-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+      .safe-msg{font-size:13px;color:#334155}.safe-msg.ok{color:#166534}.safe-msg.error{color:#991b1b}.safe-msg.info{color:#0f3460}
+      .safe-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
       .safe-stat{padding:10px;border:1px solid rgba(15,52,96,.12);border-radius:12px;background:#fff;text-align:center}
       .safe-stat strong{display:block;font-size:22px;color:#0f3460}
       .safe-list{display:grid;gap:8px}
@@ -221,6 +257,9 @@
       .safe-item-sub{font-size:13px;color:#334155;margin-top:4px}
       .safe-mini-list{margin:0;padding-left:18px;color:#334155;font-size:13px;line-height:1.55}
       .safe-empty{padding:12px;border:1px dashed rgba(15,52,96,.2);border-radius:12px;background:#fff;color:#475569;font-size:14px}
+      .safe-row-tag{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(15,52,96,.08);font-size:12px;font-weight:700;color:#0f3460;margin-right:6px}
+      .safe-row-tag.ok{background:rgba(22,101,52,.1);color:#166534}
+      .safe-row-tag.warn{background:rgba(180,83,9,.12);color:#92400e}
       @media (max-width: 900px){.safe-grid-2,.safe-stat-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
@@ -271,6 +310,13 @@
     document.getElementById('safe-nav-mercado')?.addEventListener('click', () => scrollToId('panel-historico-docente'));
   }
 
+  function renderProfileMsg(text, type) {
+    const el = document.getElementById('safe-profile-msg');
+    if (!el) return;
+    el.textContent = String(text || '');
+    el.className = `safe-msg ${type || 'info'}`;
+  }
+
   function renderProfileCard() {
     const body = ensureCard('panel-perfil-docente', 'span-4', '🪪 Perfil docente', 'perfil-docente-body');
     if (!body) return;
@@ -280,7 +326,7 @@
       <div class="safe-stack">
         <div class="safe-box">
           <h4>Importación desde ABC</h4>
-          <p>Cargá tu DNI, abrí ABC y usá el favorito <strong>Traer a APDocentePBA</strong>. Los resultados quedan guardados localmente en este navegador sin depender todavía del backend roto.</p>
+          <p>Cargá tu DNI, abrí ABC y usá el favorito <strong>Traer a APDocentePBA</strong>. Ahora intenta recorrer varias pantallas de resultados antes de cerrar.</p>
           <div class="safe-note">Última importación: ${esc(stored.importedAt ? fmtFecha(stored.importedAt) : 'todavía no hay datos')}</div>
         </div>
         <div class="safe-grid-2">
@@ -331,11 +377,14 @@
     });
   }
 
-  function renderProfileMsg(text, type) {
-    const el = document.getElementById('safe-profile-msg');
-    if (!el) return;
-    el.textContent = String(text || '');
-    el.className = `safe-msg ${type || 'info'}`;
+  function exportListados() {
+    const data = getStoredListados();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `apd-listados-${Date.now()}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
   }
 
   function renderListadosCard() {
@@ -348,44 +397,51 @@
           <div class="safe-empty">Todavía no hay listados guardados localmente. Abrí ABC desde Perfil docente y usá el favorito “Traer a APDocentePBA”.</div>
           <div class="safe-actions">
             <button id="safe-listados-radar" class="btn btn-secondary" type="button">Mirar radar provincial</button>
-            <button id="safe-listados-reload" class="btn btn-outline" type="button">Recargar panel</button>
           </div>
         </div>
       `;
       document.getElementById('safe-listados-radar')?.addEventListener('click', () => scrollToId('panel-radar-provincia'));
-      document.getElementById('safe-listados-reload')?.addEventListener('click', recargarPanel);
       return;
     }
+    const visibleRows = (data.compatibles.length ? data.compatibles : data.topRows).slice(0, 10);
     body.innerHTML = `
       <div class="safe-stack">
         <div class="safe-stat-grid">
           <div class="safe-stat"><strong>${fmtNum(data.rows.length)}</strong><span>Filas</span></div>
           <div class="safe-stat"><strong>${fmtNum(data.compatibles.length)}</strong><span>Compatibles</span></div>
+          <div class="safe-stat"><strong>${fmtNum(data.strongCompatibles.length)}</strong><span>Fuertes</span></div>
           <div class="safe-stat"><strong>${data.avgPuntaje != null ? fmtNum(data.avgPuntaje, 2) : '-'}</strong><span>Puntaje prom.</span></div>
         </div>
         <div class="safe-box">
           <h4>Última importación</h4>
-          <p>DNI: ${esc(data.stored.dni || '-')} · ${esc(data.stored.importedAt ? fmtFecha(data.stored.importedAt) : '-')}</p>
-          <div class="safe-note">La compatibilidad se calcula contra tus distritos y cargos visibles en el panel actual.</div>
+          <p>DNI: ${esc(data.stored.dni || '-')} · ${esc(data.stored.importedAt ? fmtFecha(data.stored.importedAt) : '-')} · Importaciones: ${fmtNum(data.stored.importsCount || 0)}</p>
+          <div class="safe-note">La compatibilidad usa los distritos y cargos visibles en Mis preferencias.</div>
         </div>
         <div class="safe-box">
-          <h4>Top resultados guardados</h4>
+          <h4>Filas destacadas</h4>
           <div class="safe-list">
-            ${data.topRows.map(row => `
+            ${visibleRows.map(row => `
               <div class="safe-item">
                 <div class="safe-item-title">${esc(row.cargo || row.materia || 'Sin cargo')}</div>
-                <div class="safe-item-sub">${esc(row.distrito || 'Sin distrito')} · Puntaje ${esc(row.puntaje || '-')} · ${rowMatches(row, data.prefs) ? 'Compatible' : 'Fuera de filtro'}</div>
+                <div class="safe-item-sub">
+                  <span class="safe-row-tag ${row.match.compatible ? 'ok' : 'warn'}">${row.match.compatible ? 'Compatible' : 'Fuera de filtro'}</span>
+                  ${row.match.strong ? '<span class="safe-row-tag ok">Coincidencia fuerte</span>' : ''}
+                  ${esc(row.distrito || 'Sin distrito')} · Puntaje ${esc(row.puntaje || '-')}
+                </div>
+                <div class="safe-note">${esc(row.match.reasons.join(' · ') || 'Sin detalle')}</div>
               </div>
             `).join('')}
           </div>
         </div>
         <div class="safe-actions">
           <button id="safe-listados-recalc" class="btn btn-secondary" type="button">Recalcular compatibilidad</button>
+          <button id="safe-listados-export" class="btn btn-outline" type="button">Exportar backup</button>
           <button id="safe-listados-clear" class="btn btn-outline" type="button">Limpiar listados</button>
         </div>
       </div>
     `;
     document.getElementById('safe-listados-recalc')?.addEventListener('click', renderAll);
+    document.getElementById('safe-listados-export')?.addEventListener('click', exportListados);
     document.getElementById('safe-listados-clear')?.addEventListener('click', () => {
       clearListados();
       renderAll();
@@ -408,6 +464,7 @@
       document.getElementById('safe-mercado-radar')?.addEventListener('click', () => scrollToId('panel-radar-provincia'));
       return;
     }
+    const best = data.compatibles[0] || null;
     body.innerHTML = `
       <div class="safe-stack">
         <div class="safe-grid-2">
@@ -426,8 +483,8 @@
         </div>
         <div class="safe-box">
           <h4>Lectura rápida</h4>
-          <p>Esto todavía es un mercado local simple armado desde tus importaciones guardadas. Después lo conectamos a histórico real sin tocar la base estable.</p>
-          <div class="safe-note">Filas locales: ${fmtNum(data.rows.length)} · Compatibles: ${fmtNum(data.compatibles.length)}</div>
+          <p>${best ? `Mejor coincidencia local: ${esc(best.cargo || best.materia || 'Sin cargo')} en ${esc(best.distrito || 'Sin distrito')} con puntaje ${esc(best.puntaje || '-')}.` : 'Todavía no hay coincidencias compatibles.'}</p>
+          <div class="safe-note">Filas locales: ${fmtNum(data.rows.length)} · Compatibles: ${fmtNum(data.compatibles.length)} · Fuertes: ${fmtNum(data.strongCompatibles.length)}</div>
         </div>
         <div class="safe-actions">
           <button id="safe-mercado-radar" class="btn btn-secondary" type="button">Ir al radar provincial</button>
