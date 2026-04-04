@@ -211,7 +211,7 @@
     let controls = '';
     if (!paidCurrent) {
       controls = '<div class="soft-meta">La renovación automática se configura cuando tengas un plan pago activo.</div>';
-    } else if (actions.can_enable_auto_renew) {
+    } else if (actions.can_enable_auto_renew || (paidCurrent && !recurringEnabled)) {
       controls = `
         <div class="plan-pill-row">
           <span class="plan-pill">Renovación automática</span>
