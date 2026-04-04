@@ -1,10 +1,11 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-5';
+  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-6';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
+  const PLAN_SELECTOR_MSG_ID = 'plan-selector-msg';
   let planesCache = null;
   let renderSeq = 0;
 
@@ -40,25 +41,60 @@
     return node;
   }
 
-  function setPlanMsg(text, type = 'info') {
-    const el = ensurePlanMsgNode();
+  function ensureSelectorMsgNode() {
+    const card = selectorCard();
+    if (!card) return null;
+    let node = document.getElementById(PLAN_SELECTOR_MSG_ID);
+    if (!node) {
+      const body = selectorBody();
+      if (body) {
+        body.insertAdjacentHTML('beforebegin', `<div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>`);
+        node = document.getElementById(PLAN_SELECTOR_MSG_ID);
+      }
+    }
+    return node;
+  }
+
+  function setMsg(el, text, type = 'info') {
     if (!el) return;
     el.textContent = String(text || '');
     el.className = `msg msg-${type}`;
   }
 
-  function setPlanMsgHtml(html, type = 'info') {
-    const el = ensurePlanMsgNode();
+  function setMsgHtml(el, html, type = 'info') {
     if (!el) return;
     el.innerHTML = String(html || '');
     el.className = `msg msg-${type}`;
   }
 
-  function clearPlanMsg() {
-    const el = document.getElementById(PLAN_MSG_ID);
+  function clearMsg(el) {
     if (!el) return;
     el.textContent = '';
     el.className = 'msg';
+  }
+
+  function setPlanMsg(text, type = 'info') {
+    setMsg(ensurePlanMsgNode(), text, type);
+  }
+
+  function setPlanMsgHtml(html, type = 'info') {
+    setMsgHtml(ensurePlanMsgNode(), html, type);
+  }
+
+  function clearPlanMsg() {
+    clearMsg(document.getElementById(PLAN_MSG_ID));
+  }
+
+  function setSelectorMsg(text, type = 'info') {
+    setMsg(ensureSelectorMsgNode(), text, type);
+  }
+
+  function setSelectorMsgHtml(html, type = 'info') {
+    setMsgHtml(ensureSelectorMsgNode(), html, type);
+  }
+
+  function clearSelectorMsg() {
+    clearMsg(document.getElementById(PLAN_SELECTOR_MSG_ID));
   }
 
   function cleanupCanalesMercadoPago() {
@@ -130,15 +166,19 @@
     if (targetCode === currentCode) {
       return {
         allowed: false,
+        mode: 'current',
         label: 'Plan actual',
-        reason: ''
+        actionLabel: 'Estás en este plan',
+        reason: 'Este es el plan que ya tenés activo hoy.'
       };
     }
 
     if (!currentCode || currentCode === 'TRIAL_7D') {
       return {
         allowed: true,
+        mode: 'checkout',
         label: `Cambiar a ${String(plan?.display_name || plan?.nombre || plan?.code || 'este plan')}`,
+        actionLabel: `Cambiar a ${String(plan?.display_name || plan?.nombre || plan?.code || 'este plan')}`,
         reason: ''
       };
     }
@@ -146,14 +186,18 @@
     if (targetCode === 'TRIAL_7D') {
       return {
         allowed: false,
+        mode: 'trial_blocked',
         label: 'No volver a prueba',
+        actionLabel: 'Ver por qué',
         reason: 'La vuelta a prueba gratis queda bloqueada hasta cerrar la cancelación segura de cobros recurrentes.'
       };
     }
 
     return {
       allowed: false,
+      mode: 'paid_change_blocked',
       label: 'Cambio manual por ahora',
+      actionLabel: 'Ver condición del cambio',
       reason: 'Los cambios entre planes pagos quedan desactivados hasta definir bien prorrateos, bajas y renovaciones de Mercado Pago.'
     };
   }
@@ -161,14 +205,28 @@
   function planCardButtonHtml(plan, planInfo) {
     const policy = transitionPolicy(plan, planInfo);
     const current = isCurrentPlan(plan, planInfo);
-    const buttonClass = current || !policy.allowed ? 'btn btn-secondary btn-full' : 'btn btn-primary btn-full';
-    const extraAttr = policy.allowed ? `data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}"` : 'disabled';
+    const safeReason = encodeURIComponent(policy.reason || '');
+    const safeMode = encodeURIComponent(policy.mode || 'info');
     const reasonHtml = policy.reason
       ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>`
       : '';
 
+    if (policy.allowed) {
+      return `
+        <button type="button" class="btn btn-primary btn-full" data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}">${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}</button>
+        ${reasonHtml}
+      `;
+    }
+
+    if (current) {
+      return `
+        <button type="button" class="btn btn-secondary btn-full" disabled>${window.esc ? window.esc(policy.label) : policy.label}</button>
+        ${reasonHtml}
+      `;
+    }
+
     return `
-      <button type="button" class="${buttonClass}" ${extraAttr}>${window.esc ? window.esc(policy.label) : policy.label}</button>
+      <button type="button" class="btn btn-secondary btn-full" data-plan-info="${safeReason}" data-plan-info-mode="${safeMode}">${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}</button>
       ${reasonHtml}
     `;
   }
@@ -196,6 +254,7 @@
         </div>
         <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
         <div class="soft-meta" style="margin:8px 0 12px 0;">Para evitar problemas de cobro, por ahora solo queda habilitada la activación inicial o el paso desde prueba gratis a un plan pago. Bajas, vuelta a prueba y cambios entre planes pagos quedan bloqueados hasta cerrar bien la lógica de suscripción.</div>
+        <div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
       </div>
     `);
@@ -280,18 +339,22 @@
     const userId = window.obtenerToken ? window.obtenerToken() : '';
     if (!userId || !window.obtenerMiPlan) {
       setPlanMsg('No se pudo refrescar el plan porque la sesión ya no está activa.', 'error');
+      setSelectorMsg('No se pudo refrescar el plan porque la sesión ya no está activa.', 'error');
       return;
     }
 
     setPlanMsg('Actualizando plan...', 'info');
+    setSelectorMsg('Actualizando plan...', 'info');
     try {
       const planInfo = await window.obtenerMiPlan(userId);
       if (planInfo?.plan || planInfo?.subscription) window.planActual = planInfo;
       await window.renderPlanUI(window.planActual || planInfo);
       setPlanMsg('Plan actualizado.', 'ok');
+      setSelectorMsg('Plan actualizado.', 'ok');
     } catch (err) {
       console.error('ERROR REFRESH PLAN:', err);
       setPlanMsg(err?.message || 'No se pudo actualizar el plan.', 'error');
+      setSelectorMsg(err?.message || 'No se pudo actualizar el plan.', 'error');
     }
   }
 
@@ -299,10 +362,12 @@
     const userId = window.obtenerToken ? window.obtenerToken() : '';
     if (!userId) {
       setPlanMsg('Tu sesión venció. Volvé a ingresar para cambiar de plan.', 'error');
+      setSelectorMsg('Tu sesión venció. Volvé a ingresar para cambiar de plan.', 'error');
       return;
     }
 
     clearPlanMsg();
+    clearSelectorMsg();
     if (button && typeof window.btnLoad === 'function') window.btnLoad(button, 'Abriendo...');
     else if (button) button.disabled = true;
 
@@ -313,21 +378,29 @@
       });
 
       if (!data?.checkout_url) {
-        setPlanMsg(data?.message || 'No se pudo generar el checkout de Mercado Pago.', data?.configured === false ? 'info' : 'error');
+        const msg = data?.message || 'No se pudo generar el checkout de Mercado Pago.';
+        const type = data?.configured === false ? 'info' : 'error';
+        setPlanMsg(msg, type);
+        setSelectorMsg(msg, type);
         return;
       }
 
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
       if (opened) {
         setPlanMsg('Mercado Pago se abrió en una pestaña nueva.', 'ok');
+        setSelectorMsg('Mercado Pago se abrió en una pestaña nueva.', 'ok');
         return;
       }
 
       const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
-      setPlanMsgHtml(`Tu navegador bloqueó la pestaña nueva. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`, 'info');
+      const html = `Tu navegador bloqueó la pestaña nueva. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
+      setPlanMsgHtml(html, 'info');
+      setSelectorMsgHtml(html, 'info');
     } catch (err) {
       console.error('ERROR CHECKOUT PLAN:', err);
-      setPlanMsg(err?.message || 'No se pudo iniciar el cambio de plan.', 'error');
+      const msg = err?.message || 'No se pudo iniciar el cambio de plan.';
+      setPlanMsg(msg, 'error');
+      setSelectorMsg(msg, 'error');
     } finally {
       if (button && typeof window.btnRestore === 'function') window.btnRestore(button);
       else if (button) button.disabled = false;
@@ -356,6 +429,19 @@
     if (refreshBtn) {
       ev.preventDefault();
       await refrescarPlanActual();
+      return;
+    }
+
+    const infoBtn = ev.target.closest('[data-plan-info]');
+    if (infoBtn) {
+      ev.preventDefault();
+      const msg = decodeURIComponent(String(infoBtn.dataset.planInfo || ''));
+      const mode = decodeURIComponent(String(infoBtn.dataset.planInfoMode || 'info'));
+      const prefix = mode === 'trial_blocked'
+        ? 'No podés volver a prueba gratis: '
+        : 'Cambio de plan protegido: ';
+      setPlanMsg(prefix + msg, 'info');
+      setSelectorMsg(prefix + msg, 'info');
       return;
     }
 
@@ -391,6 +477,7 @@
           renderSelectorCard(planInfo || window.planActual || {}, []);
           mountCanalesCleanup();
           setPlanMsg('No se pudieron cargar los planes disponibles.', 'error');
+          setSelectorMsg('No se pudieron cargar los planes disponibles.', 'error');
         }
       });
 
