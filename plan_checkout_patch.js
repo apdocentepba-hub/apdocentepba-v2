@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-03-plans-ui-3';
+  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-4';
   const PLAN_SELECTOR_ID = 'panel-plan-selector';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
@@ -159,12 +159,12 @@
     panel.insertAdjacentHTML('beforeend', `
       <div id="${PLAN_SELECTOR_CARD_ID}" class="panel-card span-8">
         <div class="card-lbl-row">
-          <span class="card-lbl">💳 Cambiar plan</span>
+          <span class="card-lbl">💳 Opciones de plan</span>
           <div class="mini-group">
             <button type="button" class="mini-btn" data-plan-refresh="1">Actualizar plan</button>
           </div>
         </div>
-        <p class="prefs-hint">Elegí un plan y te abrimos Mercado Pago en una pestaña nueva. Acá ves la comparación completa sin mezclarla con el inicio.</p>
+        <p class="prefs-hint">Acá comparás planes y, si elegís otro, te abrimos Mercado Pago en una pestaña nueva. El botón del resumen te trae directo a este bloque.</p>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
       </div>
     `);
@@ -231,10 +231,10 @@
       <div id="plan-summary-actions" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(15,52,96,.12);">
         <div class="plan-pill-row">
           <span class="plan-pill">Gestión de plan</span>
-          <span class="plan-pill plan-pill-neutral">Separada del inicio</span>
+          <span class="plan-pill plan-pill-neutral">Separada del resumen</span>
         </div>
         <div class="form-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-primary" data-plan-open-tab="1">Cambiar plan</button>
+          <button type="button" class="btn btn-primary" data-plan-open-tab="1">Ver opciones de plan</button>
           <button type="button" class="btn btn-secondary" data-plan-refresh="1">Actualizar plan</button>
         </div>
       </div>
@@ -308,8 +308,11 @@
   function openPlanTab() {
     if (typeof window.APD_activatePanelTab === 'function') {
       window.APD_activatePanelTab('plan');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    setTimeout(() => {
+      const target = selectorCard() || planBox();
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
   }
 
   document.addEventListener('click', async ev => {

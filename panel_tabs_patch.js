@@ -10,7 +10,7 @@
     { key: 'alertas', label: 'Alertas' },
     { key: 'perfil', label: 'Perfil / listados' },
     { key: 'plan', label: 'Plan' },
-    { key: 'mercado', label: 'Mercado' },
+    { key: 'mercado', label: 'Estadísticas' },
     { key: 'preferencias', label: 'Preferencias' },
     { key: 'admin', label: 'Admin' }
   ];
@@ -116,7 +116,6 @@
     ensureShell();
     moveCardByContentId('panel-datos-docente', 'inicio');
     moveCardByContentId('panel-preferencias-resumen', 'inicio');
-    moveCardByContentId('panel-estadisticas', 'inicio');
 
     moveCardByContentId('panel-alertas', 'alertas');
 
@@ -127,11 +126,7 @@
     moveCardByContentId('panel-canales', 'plan');
     moveCardById('panel-plan-selector-card', 'plan');
 
-    moveCardByContentId('panel-historico-docente', 'mercado');
-    moveCardByContentId('panel-radar-provincia', 'mercado');
-    moveCardByContentId('panel-historico-apd', 'mercado');
-    moveCardByContentId('panel-historial', 'mercado');
-    moveCardByContentId('panel-backfill-provincia', 'mercado');
+    moveCardByContentId('panel-estadisticas', 'mercado');
 
     movePrefsCard();
     moveCardById('admin-panel-card', 'admin');

@@ -17,6 +17,12 @@
     document.body.appendChild(s);
   }
 
+  function removeCardByBodyId(bodyId) {
+    const body = byId(bodyId);
+    const card = body?.closest('.panel-card');
+    if (card) card.remove();
+  }
+
   function prefsCardHtml() {
     return `
       <div id="panel-preferencias-editor-card" class="panel-card span-12 prefs-card">
@@ -203,6 +209,13 @@
     byId('panel-market-banner')?.remove();
     byId('panel-quick-actions')?.remove();
     byId('panel-premium-reasons')?.remove();
+    byId('panel-safe-quicknav')?.remove();
+    byId('btn-logout')?.remove();
+    removeCardByBodyId('panel-backfill-provincia');
+    removeCardByBodyId('panel-historial');
+    removeCardByBodyId('panel-radar-provincia');
+    removeCardByBodyId('panel-historico-apd');
+    removeCardByBodyId('panel-historico-docente');
   }
 
   function loadUsefulPatches() {
@@ -307,7 +320,7 @@
     const tick = () => {
       tries += 1;
       bootPass();
-      if (tries < 12 && (!byId('form-preferencias') || !byId('panel-historico-apd'))) {
+      if (tries < 12 && !byId('form-preferencias')) {
         setTimeout(tick, 700);
       }
     };
