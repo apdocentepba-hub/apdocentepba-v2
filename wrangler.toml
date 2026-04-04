@@ -1,5 +1,5 @@
 name = "ancient-wildflower-cd37"
-main = "worker_hotfix.js"
+main = "worker_subscription_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true
