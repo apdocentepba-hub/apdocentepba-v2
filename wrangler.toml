@@ -1,5 +1,5 @@
 name = "ancient-wildflower-cd37"
-main = "worker_subscription_hotfix.js"
+main = "worker_autorenew_optin_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true
@@ -9,7 +9,6 @@ enabled = true
 
 [triggers]
 crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
-
 
 # Binding confirmado en Cloudflare:
 # EMAIL_SWEEP_STATE (KV namespace)
