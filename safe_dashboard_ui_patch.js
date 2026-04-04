@@ -211,6 +211,82 @@
     ensureScript('plan_checkout_patch.js?v=1', 'apd-plan-checkout-script');
   }
 
+  function bindDynamicPanelEvents() {
+    const g = globalThis;
+    const form = byId('form-preferencias');
+
+    if (form && form.dataset.apdSubmitBound !== '1' && typeof g.guardarPreferencias === 'function') {
+      form.addEventListener('submit', g.guardarPreferencias);
+      form.dataset.apdSubmitBound = '1';
+    }
+
+    const btnDistritos = byId('btn-clear-distritos');
+    if (btnDistritos && btnDistritos.dataset.apdClickBound !== '1' && typeof g.limpiarDistritos === 'function') {
+      btnDistritos.addEventListener('click', g.limpiarDistritos);
+      btnDistritos.dataset.apdClickBound = '1';
+    }
+
+    const btnCargos = byId('btn-clear-cargos');
+    if (btnCargos && btnCargos.dataset.apdClickBound !== '1' && typeof g.limpiarCargos === 'function') {
+      btnCargos.addEventListener('click', g.limpiarCargos);
+      btnCargos.dataset.apdClickBound = '1';
+    }
+
+    const btnHistorico = byId('btn-refresh-historico');
+    if (btnHistorico && btnHistorico.dataset.apdClickBound !== '1') {
+      btnHistorico.addEventListener('click', async () => {
+        const token = typeof g.obtenerToken === 'function' ? g.obtenerToken() : null;
+        if (!token) return;
+
+        if (typeof g.btnLoad === 'function') g.btnLoad(btnHistorico, 'Actualizando...');
+        else btnHistorico.disabled = true;
+
+        if (typeof g.setHTML === 'function') {
+          g.setHTML('panel-historico-apd', '<p class="ph">Actualizando histórico APD...</p>');
+        }
+
+        try {
+          if (typeof g.capturarHistoricoAPD === 'function') {
+            await g.capturarHistoricoAPD(token);
+          }
+          if (typeof g.cargarHistoricoPanel === 'function') {
+            await g.cargarHistoricoPanel(token);
+          }
+        } catch (err) {
+          console.error('ERROR CAPTURANDO HISTORICO:', err);
+          if (typeof g.setHTML === 'function' && typeof g.esc === 'function') {
+            g.setHTML('panel-historico-apd', `
+              <div class="empty-state">
+                <p>No pudimos actualizar el histórico.</p>
+                <p class="empty-hint">${g.esc(err?.message || 'Intentá de nuevo en un rato.')}</p>
+              </div>
+            `);
+          }
+        } finally {
+          if (typeof g.btnRestore === 'function') g.btnRestore(btnHistorico);
+          else btnHistorico.disabled = false;
+        }
+      });
+      btnHistorico.dataset.apdClickBound = '1';
+    }
+
+    if (form && form.dataset.apdAutocompleteBound !== '1') {
+      if (typeof g.initPlanAutocompleteFields === 'function') {
+        g.initPlanAutocompleteFields();
+      }
+      if (typeof g.cargarCatalogoDistritosAutocomplete === 'function') {
+        g.cargarCatalogoDistritosAutocomplete().catch(err => {
+          console.error('ERROR PRELOAD DISTRITOS DINAMICO:', err);
+        });
+      }
+      form.dataset.apdAutocompleteBound = '1';
+    }
+
+    if (typeof g.applyPlanFieldVisibility === 'function') {
+      g.applyPlanFieldVisibility();
+    }
+  }
+
   function refreshTabs() {
     if (typeof window.APD_refreshPanelTabs === 'function') {
       setTimeout(() => window.APD_refreshPanelTabs(), 0);
@@ -222,6 +298,7 @@
     ensureHistoricoCard();
     trimLegacyUiNoise();
     loadUsefulPatches();
+    bindDynamicPanelEvents();
     refreshTabs();
   }
 
