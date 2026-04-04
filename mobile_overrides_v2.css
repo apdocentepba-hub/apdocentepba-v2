@@ -1,0 +1,13 @@
+*{box-sizing:border-box}
+@media (max-width:768px){
+  html,body,.header,.container,.panel-header,.cards-grid,.panel-card,.hero-card,.form-card,.apd-soft-card,.apd-plan-card,.apd-benefit-card,.apd-extra-card,.apd-status-card,.apd-roadmap-step{max-width:100%;min-width:0}
+  .panel-card,.hero-card,.form-card,.apd-soft-card,.apd-plan-card,.apd-benefit-card,.apd-extra-card,.apd-status-card,.apd-roadmap-step,.alerta-floating,.historico-box,.radar-box,.backfill-box,.banner-card{overflow:hidden}
+  .top-nav,.nav-group,.panel-actions,.hero-actions,.hero-features,.soft-actions,.apd-mini-actions,.apd-quick-strip,.apd-plan-cta,.mini-group,.card-lbl-row,.historico-head,.sec-head{min-width:0}
+  .apd-plan-grid,.apd-benefit-grid,.apd-status-grid,.apd-roadmap-grid,.apd-extra-grid{grid-template-columns:1fr!important}
+  .apd-top-launch,.apd-top-launch.alt,.apd-nav-launch,.soft-action{width:100%;max-width:100%;justify-content:center}
+  .brand-title,.brand-sub,.hero-title,.hero-desc,.card-lbl,.panel-sub,.apd-soft-title,.apd-soft-text,.apd-soft-sub,.apd-plan-card h4,.apd-plan-list li,.apd-benefit-card p,.apd-extra-card p,.apd-status-card p,.apd-roadmap-step p,.btn,.mini-btn,.hfeat,.apd-pill,.apd-channel-chip,.apd-extra-chip{overflow-wrap:anywhere;word-break:break-word}
+}
+@media (max-width:540px){
+  .brand-sub{max-width:none}
+  .apd-pill,.apd-channel-chip,.apd-extra-chip{max-width:100%;white-space:normal}
+}
