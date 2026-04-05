@@ -98,6 +98,21 @@
               </div>
             </div>
 
+            <div class="field" style="margin-top:10px">
+              <label style="display:flex;gap:10px;align-items:flex-start;line-height:1.45">
+                <input type="checkbox" id="reg-acepta-legal" style="margin-top:4px" />
+                <span>
+                  Acepto los
+                  <a href="./terminos.html" target="_blank" rel="noopener noreferrer">Términos y Condiciones</a>,
+                  la
+                  <a href="./privacidad.html" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>
+                  y la
+                  <a href="./suscripciones.html" target="_blank" rel="noopener noreferrer">Política de Suscripciones</a>
+                  de APDocentePBA, y reconozco que APDocentePBA es una herramienta de alertas y organización de información, no una garantía de vacante, adjudicación, designación ni resultado laboral.
+                </span>
+              </label>
+            </div>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button>
             </div>
@@ -240,7 +255,12 @@
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">APDocentePBA · Sistema de alertas para docentes PBA · 2026</div>
+    <div class="footer-inner">
+      APDocentePBA · Sistema de alertas para docentes PBA · 2026 ·
+      <a href="./terminos.html">Términos</a> ·
+      <a href="./privacidad.html">Privacidad</a> ·
+      <a href="./suscripciones.html">Suscripciones</a>
+    </div>
   </footer>
 
 <script src="app_v2.js?v=15"></script>
@@ -249,5 +269,29 @@
 <script src="plan_checkout_patch.js?v=2"></script>
 <script src="safe_dashboard_restore.js?v=3"></script>
 <script src="safe_dashboard_ui_patch.js?v=4"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('form-registro');
+  if (!form) return;
+
+  form.addEventListener('submit', function (ev) {
+    const chk = document.getElementById('reg-acepta-legal');
+    if (chk && !chk.checked) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+
+      const msg = document.getElementById('registro-msg');
+      if (msg) {
+        msg.textContent = 'Para crear la cuenta tenés que aceptar los Términos, la Política de Privacidad y la Política de Suscripciones.';
+        msg.className = 'msg msg-error';
+      }
+
+      chk.focus();
+    }
+  }, true);
+});
+</script>
+
 </body>
 </html>
