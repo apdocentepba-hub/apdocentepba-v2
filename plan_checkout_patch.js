@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-04-plans-ui-7';
+  const PLAN_PATCH_VERSION = '2026-04-05-plans-ui-8';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -14,7 +14,11 @@
     return raw === 'PRO' ? 'PREMIUM' : raw;
   }
 
-  function planBox() { return document.getElementById(PLAN_MSG_ID)?.closest('.panel-card') ? document.getElementById('panel-plan') : document.getElementById('panel-plan'); }
+  function planBox() {
+    return document.getElementById(PLAN_MSG_ID)?.closest('.panel-card')
+      ? document.getElementById('panel-plan')
+      : document.getElementById('panel-plan');
+  }
   function canalesBox() { return document.getElementById('panel-canales'); }
   function selectorCard() { return document.getElementById(PLAN_SELECTOR_CARD_ID); }
   function selectorBody() { return document.getElementById(PLAN_SELECTOR_BODY_ID); }
@@ -83,7 +87,10 @@
     });
 
     if (removedAny && !box.querySelector('[data-plan-managed-note]')) {
-      box.insertAdjacentHTML('beforeend', '<div class="soft-meta" data-plan-managed-note="1" style="margin-top:8px">Los cambios de plan ahora se hacen desde el bloque <strong>Mi plan</strong>.</div>');
+      box.insertAdjacentHTML(
+        'beforeend',
+        '<div class="soft-meta" data-plan-managed-note="1" style="margin-top:8px">Los cambios de plan ahora se hacen desde el bloque <strong>Mi plan</strong>.</div>'
+      );
     }
   }
 
@@ -140,15 +147,33 @@
     const targetName = String(plan?.display_name || plan?.nombre || plan?.code || 'este plan');
 
     if (targetCode === currentCode) {
-      return { allowed: false, mode: 'current', label: 'Plan actual', actionLabel: 'Estás en este plan', reason: 'Este es el plan que ya tenés activo hoy.' };
+      return {
+        allowed: false,
+        mode: 'current',
+        label: 'Plan actual',
+        actionLabel: 'Estás en este plan',
+        reason: 'Este es el plan que ya tenés activo hoy.'
+      };
     }
 
     if (!currentCode || currentCode === 'TRIAL_7D') {
-      return { allowed: true, mode: 'checkout', label: `Activar ${targetName}`, actionLabel: `Activar ${targetName}`, reason: '' };
+      return {
+        allowed: true,
+        mode: 'checkout',
+        label: `Activar ${targetName}`,
+        actionLabel: `Activar ${targetName}`,
+        reason: ''
+      };
     }
 
     if (targetCode === 'TRIAL_7D') {
-      return { allowed: false, mode: 'trial_blocked', label: 'No volver a prueba', actionLabel: 'Ver por qué', reason: 'La vuelta a prueba gratis queda bloqueada hasta cerrar la cancelación segura de cobros recurrentes.' };
+      return {
+        allowed: false,
+        mode: 'trial_blocked',
+        label: 'No volver a prueba',
+        actionLabel: 'Ver por qué',
+        reason: 'La prueba gratis de 7 días es solo para el primer ingreso y no vuelve a activarse después de pasar a un plan pago.'
+      };
     }
 
     if (targetPrice > currentPrice) {
@@ -157,17 +182,17 @@
         mode: 'upgrade_prorated',
         label: `Subir a ${targetName}`,
         actionLabel: `Pagar diferencia y pasar a ${targetName}`,
-        reason: 'Se descuenta un crédito proporcional por los días que te quedan del plan actual y se abre un nuevo ciclo al acreditarse el pago.'
+        reason: 'Si subís de plan, pagás la diferencia ahora y el nuevo plan queda activo en este ciclo. La próxima renovación usa el precio vigente del plan nuevo.'
       };
     }
 
     if (targetPrice < currentPrice) {
       return {
-        allowed: false,
+        allowed: true,
         mode: 'downgrade_wait',
         label: 'Bajar al renovar',
-        actionLabel: 'Ver cómo baja de plan',
-        reason: 'Como tu plan actual ya está pago por este ciclo, el cambio a un plan menor se hace cuando venza o cuando renueves el próximo ciclo.'
+        actionLabel: `Programar cambio a ${targetName}`,
+        reason: 'Si bajás de plan, seguís usando el plan actual hasta que termine este ciclo. En la próxima renovación se cobra el valor vigente del plan menor.'
       };
     }
 
@@ -185,24 +210,32 @@
     const current = isCurrentPlan(plan, planInfo);
     const safeReason = encodeURIComponent(policy.reason || '');
     const safeMode = encodeURIComponent(policy.mode || 'info');
-    const reasonHtml = policy.reason ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>` : '';
+    const reasonHtml = policy.reason
+      ? `<div class="plan-note" style="margin-top:8px;opacity:.88;">${window.esc ? window.esc(policy.reason) : String(policy.reason)}</div>`
+      : '';
 
     if (policy.allowed) {
       return `
-        <button type="button" class="btn btn-primary btn-full" data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}">${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}</button>
+        <button type="button" class="btn btn-primary btn-full" data-plan-checkout="${String(plan?.code || '').trim().toUpperCase()}">
+          ${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}
+        </button>
         ${reasonHtml}
       `;
     }
 
     if (current) {
       return `
-        <button type="button" class="btn btn-secondary btn-full" disabled>${window.esc ? window.esc(policy.label) : policy.label}</button>
+        <button type="button" class="btn btn-secondary btn-full" disabled>
+          ${window.esc ? window.esc(policy.label) : policy.label}
+        </button>
         ${reasonHtml}
       `;
     }
 
     return `
-      <button type="button" class="btn btn-secondary btn-full" data-plan-info="${safeReason}" data-plan-info-mode="${safeMode}">${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}</button>
+      <button type="button" class="btn btn-secondary btn-full" data-plan-info="${safeReason}" data-plan-info-mode="${safeMode}">
+        ${window.esc ? window.esc(policy.actionLabel) : policy.actionLabel}
+      </button>
       ${reasonHtml}
     `;
   }
@@ -210,7 +243,9 @@
   function buildPlanFeatureList(plan) {
     const features = Array.isArray(plan?.features) ? plan.features : [];
     if (!features.length) return '';
-    return `<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;">${features.slice(0, 5).map(item => `<li>${window.esc ? window.esc(item) : String(item)}</li>`).join('')}</ul>`;
+    return `<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;">
+      ${features.slice(0, 5).map(item => `<li>${window.esc ? window.esc(item) : String(item)}</li>`).join('')}
+    </ul>`;
   }
 
   function ensureSelectorCard() {
@@ -229,7 +264,10 @@
           </div>
         </div>
         <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
-        <div class="soft-meta" style="margin:8px 0 12px 0;">Los upgrades de un plan pago a otro más alto ahora calculan una diferencia proporcional por el tiempo que te queda. Los downgrades se hacen al renovar el próximo ciclo.</div>
+        <div class="soft-meta" style="margin:8px 0 12px 0;">
+          Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio corre en la próxima renovación.
+          Si el precio cambia, la próxima renovación usa el valor vigente del plan.
+        </div>
         <div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
       </div>
@@ -255,10 +293,19 @@
         maxDistritosEmergencia: Number(plan?.max_distritos_emergencia || 0)
       };
       const current = isCurrentPlan(plan, planInfo);
-      const nombre = window.planNombreHumano ? window.planNombreHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.display_name || plan?.nombre || plan?.code || 'Plan');
-      const precio = window.planPrecioHumano ? window.planPrecioHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.price_ars || '');
-      const descripcion = window.planDescripcionHumana ? window.planDescripcionHumana(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' }) : String(plan?.descripcion || '');
-      const distritosText = limits.maxDistritosEmergencia > 0 ? `${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia` : `Hasta ${limits.maxDistritos} distrito(s)`;
+      const nombre = window.planNombreHumano
+        ? window.planNombreHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' })
+        : String(plan?.display_name || plan?.nombre || plan?.code || 'Plan');
+      const precio = window.planPrecioHumano
+        ? window.planPrecioHumano(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' })
+        : String(plan?.price_ars || '');
+      const descripcion = window.planDescripcionHumana
+        ? window.planDescripcionHumana(plan, current ? (planInfo?.subscription || {}) : { plan_code: plan?.code || '', status: 'active' })
+        : String(plan?.descripcion || '');
+      const distritosText = limits.maxDistritosEmergencia > 0
+        ? `${limits.maxDistritosNormales} principales + ${limits.maxDistritosEmergencia} de emergencia`
+        : `Hasta ${limits.maxDistritos} distrito(s)`;
+
       return `
         <div style="margin-top:12px;padding:12px;border:1px solid rgba(15,52,96,.12);border-radius:14px;background:${current ? 'rgba(15,52,96,.04)' : '#fff'};">
           <div class="plan-pill-row">
@@ -311,6 +358,161 @@
     if (mpMsg) setPlanMsg(mpMsg.text, mpMsg.type);
   }
 
+  function recurringStateInfo(planInfo) {
+    const resolved = planInfo?.resolved_state || {};
+    const reconciliation = planInfo?.reconciliation || {};
+    const recurringEnabled = resolved?.recurring_enabled === true || planInfo?.recurring_enabled === true;
+    const remoteStatus = String(reconciliation?.remote_status || '').trim().toUpperCase();
+    const currentStatus = String(resolved?.current_status || '').trim().toUpperCase();
+    const pendingSignal =
+      /proceso de configuración|pendiente|completar/i.test(String(planInfo?.billing_note || '')) ||
+      remoteStatus === 'PENDING' ||
+      currentStatus === 'PENDING';
+
+    if (recurringEnabled && !pendingSignal) {
+      return { mode: 'active', label: 'Activa', buttonLabel: 'Desactivar débito automático mensual' };
+    }
+    if (pendingSignal) {
+      return { mode: 'pending', label: 'Pendiente', buttonLabel: 'Continuar configuración de débito automático' };
+    }
+    return { mode: 'off', label: 'Apagada', buttonLabel: 'Activar débito automático mensual' };
+  }
+
+  function updateChipText(box, from, to) {
+    [...box.querySelectorAll('span,button,div')].forEach(node => {
+      if (String(node.textContent || '').trim() === from) node.textContent = to;
+    });
+  }
+
+  function findAutoRenewButton(box) {
+    return [...box.querySelectorAll('button')].find(btn =>
+      /débito automático|renovación automática/i.test(String(btn.textContent || ''))
+    );
+  }
+
+  function normalizePlanStateCard(planInfo) {
+    const box = document.getElementById('panel-plan');
+    if (!box) return;
+
+    const state = recurringStateInfo(planInfo);
+    const accessUntil = planInfo?.resolved_state?.access_until_label || planInfo?.price_policy?.next_renewal_label || '';
+    const notes = {
+      active: accessUntil
+        ? `La renovación automática está activa. El próximo cobro usará el precio vigente del plan al renovar. Próximo vencimiento: ${accessUntil}.`
+        : 'La renovación automática está activa. El próximo cobro usará el precio vigente del plan al renovar.',
+      pending: 'Todavía falta terminar la autorización en Mercado Pago. Tocá el botón para continuar la configuración del débito automático.',
+      off: accessUntil
+        ? `La renovación automática está apagada. Tu acceso actual sigue hasta ${accessUntil}.`
+        : 'La renovación automática está apagada. Cuando venza este ciclo no se vuelve a cobrar solo.'
+    };
+
+    updateChipText(box, 'Manual por defecto', state.mode === 'active' ? 'Cobro automático' : state.mode === 'pending' ? 'Configuración pendiente' : 'Manual');
+    updateChipText(box, 'Apagada por defecto', state.label);
+    updateChipText(box, 'Renovación automática', 'Renovación');
+
+    const autoBtn = findAutoRenewButton(box);
+    if (autoBtn) {
+      autoBtn.textContent = state.buttonLabel;
+      autoBtn.dataset.planRecurringState = state.mode;
+      autoBtn.dataset.planRecurringAction = state.mode === 'active' ? 'cancel' : 'enable';
+
+      if (state.mode === 'active') {
+        autoBtn.classList.remove('btn-primary');
+        autoBtn.classList.add('btn-danger');
+      } else {
+        autoBtn.classList.remove('btn-danger');
+        autoBtn.classList.add('btn-primary');
+      }
+    }
+
+    if (!mpReturnMessage()) setPlanMsg(notes[state.mode], state.mode === 'active' ? 'ok' : 'info');
+
+    [...box.querySelectorAll('.msg')].forEach(node => {
+      const text = String(node.textContent || '').trim();
+      if (!text) return;
+
+      if (/Pago aprobado\. Tocá .*Actualizar plan/i.test(text) && !mpReturnMessage()) {
+        node.textContent = '';
+        node.className = 'msg';
+        return;
+      }
+
+      if (/ya está activa o en proceso de configuración/i.test(text)) {
+        setMsg(node, notes[state.mode], state.mode === 'active' ? 'ok' : 'info');
+      }
+    });
+  }
+
+  async function refreshPlanAndRender(userId, successMessage) {
+    const planInfo = await window.obtenerMiPlan(userId);
+    if (planInfo?.plan || planInfo?.subscription) window.planActual = planInfo;
+    await window.renderPlanUI(window.planActual || planInfo);
+    if (successMessage) {
+      setPlanMsg(successMessage, 'ok');
+      setSelectorMsg(successMessage, 'ok');
+    }
+  }
+
+  async function callRecurringAction(action, button) {
+    const userId = window.obtenerToken ? window.obtenerToken() : '';
+    if (!userId || typeof window.workerFetchJson !== 'function') {
+      setPlanMsg('Tu sesión venció. Volvé a ingresar para continuar.', 'error');
+      return;
+    }
+
+    const state = String(button?.dataset.planRecurringState || '').trim();
+    const endpoint = action === 'cancel' ? '/api/subscription/cancel' : '/api/subscription/enable-auto-renew';
+    const loading = action === 'cancel' ? 'Desactivando...' : state === 'pending' ? 'Abriendo...' : 'Activando...';
+
+    clearPlanMsg();
+    clearSelectorMsg();
+
+    if (button && typeof window.btnLoad === 'function') window.btnLoad(button, loading);
+    else if (button) button.disabled = true;
+
+    try {
+      const data = await window.workerFetchJson(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId })
+      });
+
+      const msg = String(data?.message || '').trim();
+
+      if (action === 'cancel') {
+        await refreshPlanAndRender(userId, msg || 'La renovación automática quedó desactivada.');
+        return;
+      }
+
+      if (data?.checkout_url) {
+        const opened = window.open(data.checkout_url, '_blank', 'noopener');
+        const infoMsg = msg || (state === 'pending'
+          ? 'Seguimos con la configuración del débito automático en Mercado Pago.'
+          : 'Mercado Pago se abrió para activar el débito automático.');
+
+        if (opened) {
+          setPlanMsg(infoMsg, 'ok');
+          setSelectorMsg(infoMsg, 'ok');
+        } else {
+          const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
+          const html = `${infoMsg}<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
+          setPlanMsgHtml(html, 'info');
+          setSelectorMsgHtml(html, 'info');
+        }
+        return;
+      }
+
+      await refreshPlanAndRender(userId, msg || 'Estado del débito automático actualizado.');
+    } catch (err) {
+      console.error('ERROR RECURRING ACTION:', err);
+      const msg = err?.message || 'No se pudo actualizar el débito automático.';
+      setPlanMsg(msg, 'error');
+      setSelectorMsg(msg, 'error');
+    } finally {
+      if (button && typeof window.btnRestore === 'function') window.btnRestore(button);
+      else if (button) button.disabled = false;
+    }
+  }
+
   async function refrescarPlanActual() {
     const userId = window.obtenerToken ? window.obtenerToken() : '';
     if (!userId || !window.obtenerMiPlan) {
@@ -321,6 +523,7 @@
 
     setPlanMsg('Actualizando plan...', 'info');
     setSelectorMsg('Actualizando plan...', 'info');
+
     try {
       const planInfo = await window.obtenerMiPlan(userId);
       if (planInfo?.plan || planInfo?.subscription) window.planActual = planInfo;
@@ -344,6 +547,7 @@
 
     clearPlanMsg();
     clearSelectorMsg();
+
     if (button && typeof window.btnLoad === 'function') window.btnLoad(button, 'Abriendo...');
     else if (button) button.disabled = true;
 
@@ -352,6 +556,11 @@
         method: 'POST',
         body: JSON.stringify({ user_id: userId, plan_code: String(planCode || '').trim().toUpperCase() })
       });
+
+      if (data?.scheduled) {
+        await refreshPlanAndRender(userId, data?.message || 'El cambio quedó programado para el próximo ciclo.');
+        return;
+      }
 
       if (!data?.checkout_url) {
         const msg = data?.message || 'No se pudo generar el checkout de Mercado Pago.';
@@ -363,6 +572,7 @@
 
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
       const successMsg = data?.message || 'Mercado Pago se abrió en una pestaña nueva.';
+
       if (opened) {
         setPlanMsg(successMsg, 'ok');
         setSelectorMsg(successMsg, 'ok');
@@ -395,6 +605,13 @@
   }
 
   document.addEventListener('click', async ev => {
+    const recurringBtn = ev.target.closest('[data-plan-recurring-action]');
+    if (recurringBtn) {
+      ev.preventDefault();
+      await callRecurringAction(recurringBtn.dataset.planRecurringAction, recurringBtn);
+      return;
+    }
+
     const openTabBtn = ev.target.closest('[data-plan-open-tab]');
     if (openTabBtn) {
       ev.preventDefault();
@@ -449,11 +666,13 @@
           const planes = await obtenerPlanesDisponiblesUI();
           if (currentRender !== renderSeq) return;
           renderSelectorCard(planInfo || window.planActual || {}, planes);
+          normalizePlanStateCard(planInfo || window.planActual || {});
           mountCanalesCleanup();
         } catch (err) {
           console.error('ERROR PLAN PATCH:', err);
           if (currentRender !== renderSeq) return;
           renderSelectorCard(planInfo || window.planActual || {}, []);
+          normalizePlanStateCard(planInfo || window.planActual || {});
           mountCanalesCleanup();
           setPlanMsg('No se pudieron cargar los planes disponibles.', 'error');
           setSelectorMsg('No se pudieron cargar los planes disponibles.', 'error');
