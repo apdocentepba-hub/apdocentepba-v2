@@ -226,20 +226,3 @@
     startScopedObservers();
   }
 })();
-(function () {
-  if (window.__apdUiPlanCleanupLoaderLoaded) return;
-  window.__apdUiPlanCleanupLoaderLoaded = true;
-  function loadCleanupPatch() {
-    if (document.querySelector('script[data-apd-ui-plan-cleanup="1"]')) return;
-    const script = document.createElement('script');
-    script.src = 'ui_plan_cleanup_patch.js?v=1';
-    script.async = false;
-    script.dataset.apdUiPlanCleanup = '1';
-    document.head.appendChild(script);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadCleanupPatch, { once: true });
-  } else {
-    loadCleanupPatch();
-  }
-})();
