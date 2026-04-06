@@ -1,7 +1,7 @@
 import baseWorker from "./worker_autorenew_optin_hotfix.js";
 
 const API_URL_PREFIX = "/api";
-const SUBSCRIPTION_STATE_POLICY_VERSION = "2026-04-04-state-safety-1";
+const SUBSCRIPTION_STATE_POLICY_VERSION = "2026-04-06-admin-payments-1";
 const REUSE_SESSION_WINDOW_MS = 20 * 60 * 1000;
 
 function corsHeaders() {
@@ -19,6 +19,11 @@ function json(data, status = 200) {
 
 function norm(v) {
   return String(v || "").trim().toUpperCase();
+}
+
+function getBearerToken(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
 }
 
 function canonicalPlanCode(code) {
@@ -73,7 +78,7 @@ function isSubscriptionCurrent(subscription) {
     return !!end && now <= end;
   }
 
-  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status)) {
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status)) {
     const end = parseFechaFlexible(subscription.current_period_ends_at)?.getTime() || 0;
     return !end || now <= end;
   }
@@ -154,8 +159,26 @@ async function supabaseInsertReturning(env, table, data) {
 }
 
 async function getUserById(env, userId) {
-  const rows = await supabaseSelect(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo&limit=1`).catch(() => []);
+  const rows = await supabaseSelect(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`).catch(() => []);
   return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function getSessionByToken(env, token) {
+  const rows = await supabaseSelect(env, `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function resolveAuthUser(env, request) {
+  const bearer = getBearerToken(request);
+  if (!bearer) return null;
+
+  const session = await getSessionByToken(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById(env, session.user_id);
+  }
+
+  return await getUserById(env, bearer);
 }
 
 async function getUserSubscriptions(env, userId) {
@@ -171,7 +194,17 @@ async function getPlanByCode(env, planCode) {
 
 async function getUserCheckoutSessions(env, userId) {
   const rows = await supabaseSelect(env, `mercadopago_checkout_sessions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&order=created_at.desc&limit=50`).catch(() => []);
-  return Array.isArray(rows) ? rows.map(row => ({ ...row, provider_payload: safeJsonParse(row.provider_payload) || row.provider_payload || null })) : [];
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse(row.provider_payload) || row.provider_payload || null })) : [];
+}
+
+async function getRecentSubscriptionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect(env, `user_subscriptions?select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,mercadopago_payer_email,external_reference,created_at&order=created_at.desc&limit=${limit}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getRecentCheckoutSessionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect(env, `mercadopago_checkout_sessions?select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at,updated_at&order=created_at.desc&limit=${limit}`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse(row.provider_payload) || row.provider_payload || null })) : [];
 }
 
 function resolveLifecycleStatus(subscription) {
@@ -193,7 +226,7 @@ function findReusableCheckoutSession(sessions, options = {}) {
   const autoRenewOptIn = options.autoRenewOptIn === true;
   const now = Date.now();
 
-  return (Array.isArray(sessions) ? sessions : []).find(session => {
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
     const status = String(session?.status || "").trim().toLowerCase();
     if (!["ready", "pending_config"].includes(status)) return false;
     if (!session?.checkout_url) return false;
@@ -212,7 +245,7 @@ function findReusableCheckoutSession(sessions, options = {}) {
 }
 
 function findScheduledDowngradeSession(sessions, currentPlanCode) {
-  return (Array.isArray(sessions) ? sessions : []).find(session => {
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
     if (String(session?.status || "").trim().toLowerCase() !== "scheduled") return false;
     const payload = safeJsonParse(session?.provider_payload) || {};
     return String(payload?.transition_mode || "") === "downgrade_next_cycle" && (!currentPlanCode || canonicalPlanCode(payload?.current_plan_code || "") === currentPlanCode);
@@ -222,7 +255,7 @@ function findScheduledDowngradeSession(sessions, currentPlanCode) {
 async function resolveSubscriptionSnapshot(env, userId) {
   const rows = await getUserSubscriptions(env, userId);
   const current = rows.find(isSubscriptionCurrent) || rows[0] || null;
-  const trialUsed = rows.some(row => canonicalPlanCode(row?.plan_code) === "TRIAL_7D");
+  const trialUsed = rows.some((row) => canonicalPlanCode(row?.plan_code) === "TRIAL_7D");
   const currentPlan = current ? await getPlanByCode(env, current.plan_code) : null;
   const sessions = await getUserCheckoutSessions(env, userId);
   const currentPlanCode = canonicalPlanCode(current?.plan_code || "");
@@ -299,21 +332,10 @@ function decidePlanTransition(snapshot, targetPlan) {
   const currentPaid = !!current && isPaidPlan(currentPlanCode) && isSubscriptionCurrent(current);
   const recurring = hasRecurringPreapproval(current);
 
-  if (!targetPlanCode) {
-    return { allowed: false, status: 400, reason: "missing_target_plan", message: "No se recibió el plan de destino." };
-  }
-
-  if (targetPlanCode === currentPlanCode && current) {
-    return { allowed: false, status: 409, reason: "same_plan", message: "Ya estás en ese plan." };
-  }
-
-  if (targetPlanCode === "TRIAL_7D") {
-    return { allowed: false, status: 409, reason: "trial_return_blocked", message: "La vuelta a prueba gratis queda bloqueada para evitar inconsistencias de facturación y de estado." };
-  }
-
-  if (!current || !currentPaid || currentPlanCode === "TRIAL_7D") {
-    return { allowed: true, status: 200, mode: "new_checkout", reason: "initial_activation", message: "Alta inicial o salida de prueba a plan pago." };
-  }
+  if (!targetPlanCode) return { allowed: false, status: 400, reason: "missing_target_plan", message: "No se recibió el plan de destino." };
+  if (targetPlanCode === currentPlanCode && current) return { allowed: false, status: 409, reason: "same_plan", message: "Ya estás en ese plan." };
+  if (targetPlanCode === "TRIAL_7D") return { allowed: false, status: 409, reason: "trial_return_blocked", message: "La vuelta a prueba gratis queda bloqueada para evitar inconsistencias de facturación y de estado." };
+  if (!current || !currentPaid || currentPlanCode === "TRIAL_7D") return { allowed: true, status: 200, mode: "new_checkout", reason: "initial_activation", message: "Alta inicial o salida de prueba a plan pago." };
 
   const currentPrice = Number(currentPlan?.price_ars || 0);
   const targetPrice = Number(targetPlan?.price_ars || 0);
@@ -344,6 +366,45 @@ function decidePlanTransition(snapshot, targetPlan) {
   }
 
   return { allowed: false, status: 409, reason: "same_price_manual", message: "El cambio entre planes del mismo valor todavía no quedó automatizado." };
+}
+
+async function handleAdminPagos(request, env) {
+  const user = await resolveAuthUser(env, request);
+  if (!user) return json({ ok: false, error: "No autenticado" }, 401);
+  if (!user.es_admin) return json({ ok: false, error: "No autorizado" }, 403);
+
+  const [subscriptions, checkouts] = await Promise.all([
+    getRecentSubscriptionsAdmin(env, 200),
+    getRecentCheckoutSessionsAdmin(env, 200)
+  ]);
+
+  const planCounts = {};
+  for (const row of subscriptions) {
+    const code = canonicalPlanCode(row?.plan_code || "") || "SIN_PLAN";
+    planCounts[code] = (planCounts[code] || 0) + 1;
+  }
+
+  const summary = {
+    subscriptions_total: subscriptions.length,
+    subscriptions_active: subscriptions.filter(isSubscriptionCurrent).length,
+    subscriptions_trial: subscriptions.filter((row) => canonicalPlanCode(row?.plan_code) === "TRIAL_7D").length,
+    subscriptions_recurring: subscriptions.filter((row) => hasRecurringPreapproval(row)).length,
+    subscriptions_cancelled: subscriptions.filter((row) => normalizeSubscriptionStatus(row?.status) === "CANCELLED").length,
+    checkout_total: checkouts.length,
+    checkout_ready: checkouts.filter((row) => String(row?.status || "").toLowerCase() === "ready").length,
+    checkout_pending: checkouts.filter((row) => ["pending", "pending_config", "scheduled"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_approved: checkouts.filter((row) => ["approved", "authorized"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_rejected: checkouts.filter((row) => ["rejected", "refunded"].includes(String(row?.status || "").toLowerCase())).length,
+    by_plan: planCounts
+  };
+
+  return json({
+    ok: true,
+    generated_at: new Date().toISOString(),
+    summary,
+    recent_subscriptions: subscriptions.slice(0, 60),
+    recent_checkouts: checkouts.slice(0, 60)
+  });
 }
 
 async function delegateJson(request, env, ctx) {
@@ -379,9 +440,7 @@ async function handleMiPlanWithState(request, env, ctx) {
     const nextPlan = await getPlanByCode(env, snapshot.scheduledChange.next_plan_code).catch(() => null);
     const nextLabel = nextPlan?.nombre || snapshot.scheduledChange.next_plan_code;
     const dateLabel = formatDateAr(snapshot.scheduledChange.apply_at);
-    const extra = dateLabel
-      ? ` Ya quedó programado el cambio a ${nextLabel} para el ${dateLabel}.`
-      : ` Ya quedó programado el cambio a ${nextLabel} para el próximo ciclo.`;
+    const extra = dateLabel ? ` Ya quedó programado el cambio a ${nextLabel} para el ${dateLabel}.` : ` Ya quedó programado el cambio a ${nextLabel} para el próximo ciclo.`;
     billingNote = `${billingNote || ""}${extra}`.trim();
   }
 
@@ -417,37 +476,22 @@ async function handleCreateCheckoutWithSafety(request, env, ctx) {
   const userId = String(body?.user_id || "").trim();
   const targetPlanCode = canonicalPlanCode(body?.plan_code || "");
 
-  if (!userId || !targetPlanCode) {
-    return json({ ok: false, reason: "missing_data", message: "Faltan user_id o plan_code.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
-  }
+  if (!userId || !targetPlanCode) return json({ ok: false, reason: "missing_data", message: "Faltan user_id o plan_code.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
 
   const user = await getUserById(env, userId);
-  if (!user) {
-    return json({ ok: false, reason: "user_not_found", message: "Usuario no encontrado.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
-  }
+  if (!user) return json({ ok: false, reason: "user_not_found", message: "Usuario no encontrado.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
 
   const snapshot = await resolveSubscriptionSnapshot(env, userId);
   const targetPlan = await getPlanByCode(env, targetPlanCode);
-  if (!targetPlan) {
-    return json({ ok: false, reason: "plan_not_found", message: "No encontramos el plan elegido.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
-  }
+  if (!targetPlan) return json({ ok: false, reason: "plan_not_found", message: "No encontramos el plan elegido.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
 
   const decision = decidePlanTransition(snapshot, targetPlan);
-  if (!decision.allowed) {
-    return json({ ok: false, reason: decision.reason, message: decision.message, actions: buildSubscriptionActions(snapshot), subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, decision.status);
-  }
+  if (!decision.allowed) return json({ ok: false, reason: decision.reason, message: decision.message, actions: buildSubscriptionActions(snapshot), subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, decision.status);
 
   if (decision.mode === "downgrade_scheduled") {
     const existing = snapshot?.scheduledChange;
     if (existing?.next_plan_code === targetPlanCode) {
-      return json({
-        ok: true,
-        scheduled: true,
-        mode: "downgrade_next_cycle",
-        message: decision.message,
-        scheduled_change: existing,
-        subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION
-      }, 200);
+      return json({ ok: true, scheduled: true, mode: "downgrade_next_cycle", message: decision.message, scheduled_change: existing, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 200);
     }
 
     const currentPlanName = snapshot.currentPlan?.nombre || snapshot.currentPlanCode || "Plan actual";
@@ -489,23 +533,13 @@ async function handleCreateCheckoutWithSafety(request, env, ctx) {
   }
 
   const transitionMode = !snapshot?.current || canonicalPlanCode(snapshot?.current?.plan_code || "") === "TRIAL_7D" ? "new_checkout" : "upgrade_prorated";
-  const reusable = findReusableCheckoutSession(snapshot?.sessions, {
-    planCode: targetPlanCode,
-    transitionMode: transitionMode === "new_checkout" ? "" : "upgrade_prorated"
-  });
+  const reusable = findReusableCheckoutSession(snapshot?.sessions, { planCode: targetPlanCode, transitionMode: transitionMode === "new_checkout" ? "" : "upgrade_prorated" });
   if (reusable) {
     return json(buildReuseCheckoutResponse(reusable, "Ya había un checkout reciente preparado para este cambio. Reutilizamos ese enlace para evitar duplicados."), 200);
   }
 
-  const delegated = await delegateJson(new Request(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify({ ...body, plan_code: targetPlanCode })
-  }), env, ctx);
-
-  if (!delegated.response.ok || !delegated.data?.ok) {
-    return json(delegated.data || { ok: false, message: "No se pudo preparar el checkout" }, delegated.response.status || 500);
-  }
+  const delegated = await delegateJson(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify({ ...body, plan_code: targetPlanCode }) }), env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json(delegated.data || { ok: false, message: "No se pudo preparar el checkout" }, delegated.response.status || 500);
 
   return json({ ...delegated.data, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, delegated.response.status || 200);
 }
@@ -513,29 +547,15 @@ async function handleCreateCheckoutWithSafety(request, env, ctx) {
 async function handleEnableAutoRenewWithSafety(request, env, ctx) {
   const body = await request.json().catch(() => ({}));
   const userId = String(body?.user_id || "").trim();
-  if (!userId) {
-    return json({ ok: false, message: "Falta user_id.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
-  }
+  if (!userId) return json({ ok: false, message: "Falta user_id.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
 
   const snapshot = await resolveSubscriptionSnapshot(env, userId);
   const currentPlanCode = snapshot?.currentPlanCode || canonicalPlanCode(snapshot?.current?.plan_code || "");
-  const reusable = findReusableCheckoutSession(snapshot?.sessions, {
-    planCode: currentPlanCode,
-    autoRenewOptIn: true
-  });
-  if (reusable) {
-    return json(buildReuseCheckoutResponse(reusable, "Ya había una activación reciente de débito automático en curso. Reutilizamos ese enlace para evitar duplicados."), 200);
-  }
+  const reusable = findReusableCheckoutSession(snapshot?.sessions, { planCode: currentPlanCode, autoRenewOptIn: true });
+  if (reusable) return json(buildReuseCheckoutResponse(reusable, "Ya había una activación reciente de débito automático en curso. Reutilizamos ese enlace para evitar duplicados."), 200);
 
-  const delegated = await delegateJson(new Request(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify(body)
-  }), env, ctx);
-
-  if (!delegated.response.ok || !delegated.data?.ok) {
-    return json(delegated.data || { ok: false, message: "No se pudo activar la renovación automática" }, delegated.response.status || 500);
-  }
+  const delegated = await delegateJson(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(body) }), env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json(delegated.data || { ok: false, message: "No se pudo activar la renovación automática" }, delegated.response.status || 500);
 
   return json({ ...delegated.data, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, delegated.response.status || 200);
 }
@@ -546,6 +566,14 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === `${API_URL_PREFIX}/admin/pagos` && request.method === "GET") {
+      try {
+        return await handleAdminPagos(request, env);
+      } catch (err) {
+        return json({ ok: false, error: err?.message || "No se pudieron leer los pagos" }, 500);
+      }
+    }
 
     if (path === `${API_URL_PREFIX}/mi-plan` && request.method === "GET") {
       try {
