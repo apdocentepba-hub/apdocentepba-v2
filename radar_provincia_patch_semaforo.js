@@ -313,98 +313,157 @@
       </div>
     `;
   }
+  async function obtenerHistoricoRadarPersonal(userId, days = 30) {
+  if (typeof window.workerFetchJson === 'function') {
+    return window.workerFetchJson(
+      `/api/historico-radar-personal?user_id=${encodeURIComponent(userId)}&days=${encodeURIComponent(days)}`
+    );
+  }
 
-  function renderPersonalRadar(data) {
-    ensureStyles();
-    ensureCard();
-    const box = byId('panel-radar-combinado');
-    if (!box) return;
+  const res = await fetch(
+    `/api/historico-radar-personal?user_id=${encodeURIComponent(userId)}&days=${encodeURIComponent(days)}`
+  );
 
-    const prefs = getPreferenceSummary();
-    const prefsHtml = renderPrefsChips(prefs);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
 
-    if (!data || data.empty || !data.ofertas_unicas) {
-      box.innerHTML = `
-        <div class="radar-personal">
-          ${renderSemaforoPersonal(data)}
-          <h4 class="radar-section-title">Tu radar según preferencias</h4>
-          <p class="radar-note">Acá te vamos a resumir qué está pasando dentro de los distritos, materias, turnos y modalidades que elegiste.</p>
-          <div class="radar-prefs">${prefsHtml || '<span class="radar-chip">Todavía no hay filtros cargados</span>'}</div>
-          <div class="radar-empty">Todavía no hay suficiente histórico filtrado para mostrar un radar personalizado útil.</div>
-        </div>
-      `;
-      return;
-    }
+  return await res.json();
+}
 
-    const topDistrito = Array.isArray(data.top_distritos) && data.top_distritos[0];
-    const topCargo = Array.isArray(data.top_cargos) && data.top_cargos[0];
-    const topTurno = Array.isArray(data.top_turnos) && data.top_turnos[0];
+function renderComparativaPersonal(data) {
+  const share = data?.comparativa?.share_vs_provincia_pct;
+  const activasProvincia = data?.comparativa?.activas_provincia;
+  const indiceMovimiento = data?.comparativa?.indice_movimiento;
 
-    const insightLines = [
-      topDistrito?.label ? `Dentro de tus filtros, el distrito más activo viene siendo ${topDistrito.label}.` : '',
-      topCargo?.label ? `La materia / cargo con más movimiento en tu radar es ${topCargo.label}.` : '',
-      topTurno?.label ? `El turno que más aparece dentro de tu selección es ${turnoTexto(topTurno.label)}.` : ''
-    ].filter(Boolean);
+  return `
+    <div class="radar-box" style="margin-bottom:12px;">
+      <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Tu radar vs provincia</h5>
+      <ul class="radar-list">
+        <li class="radar-item"><span>Activas en tu radar</span><strong>${fmtNum(data?.activas_estimadas || 0)}</strong></li>
+        <li class="radar-item"><span>Activas en provincia</span><strong>${fmtNum(activasProvincia || 0)}</strong></li>
+        <li class="radar-item"><span>Peso de tus filtros</span><strong>${share != null ? `${fmtNum(share, 1)}%` : '-'}</strong></li>
+        <li class="radar-item"><span>Índice de movimiento</span><strong>${indiceMovimiento != null ? fmtNum(indiceMovimiento, 0) : '-'}</strong></li>
+      </ul>
+    </div>
+  `;
+}
 
+ function renderPersonalRadar(data) {
+  ensureStyles();
+  ensureCard();
+  const box = byId('panel-radar-combinado');
+  if (!box) return;
+
+  const prefs = getPreferenceSummary();
+  const prefsHtml = renderPrefsChips(prefs);
+
+  if (!data || data.empty || !data.ofertas_unicas) {
     box.innerHTML = `
       <div class="radar-personal">
         ${renderSemaforoPersonal(data)}
         <h4 class="radar-section-title">Tu radar según preferencias</h4>
-        <p class="radar-note">Cruza tus preferencias actuales con la base histórica para mostrar dónde hubo más movimiento dentro de tu propio radar.</p>
-        <div class="radar-prefs">${prefsHtml || '<span class="radar-chip">Sin filtros específicos: leyendo todo tu histórico</span>'}</div>
+        <p class="radar-note">Acá te vamos a resumir qué está pasando dentro de los distritos, materias, turnos y modalidades que elegiste.</p>
+        <div class="radar-prefs">${prefsHtml || '<span class="radar-chip">Todavía no hay filtros cargados</span>'}</div>
+        <div class="radar-empty">Todavía no hay suficiente histórico filtrado para mostrar un radar personalizado útil.</div>
+      </div>
+    `;
+    return;
+  }
 
-        <div class="radar-grid" style="margin-bottom:12px;">
-          <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.ofertas_unicas)}</span><span class="radar-stat-l">Ofertas únicas en tu radar</span></div>
-          <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.activas_estimadas)}</span><span class="radar-stat-l">Activas estimadas</span></div>
-          <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.nuevas_7d)}</span><span class="radar-stat-l">Nuevas en 7 días</span></div>
-          <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.cambios_estado_recientes)}</span><span class="radar-stat-l">Cambios de estado</span></div>
-        </div>
+  const topDistrito = Array.isArray(data.top_distritos) && data.top_distritos[0];
+  const topCargo = Array.isArray(data.top_cargos) && data.top_cargos[0];
+  const topTurno = Array.isArray(data.top_turnos) && data.top_turnos[0];
+  const topNivel = Array.isArray(data.top_niveles) && data.top_niveles[0];
 
-        <div class="radar-columns">
-          <div class="radar-box">
-            <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Lo más fuerte dentro de tu radar</h5>
-            <ul class="radar-list">
-              ${(Array.isArray(data.top_distritos) ? data.top_distritos.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(item.label)}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
-            </ul>
-          </div>
-          <div class="radar-box">
-            <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Materias / cargos más presentes</h5>
-            <ul class="radar-list">
-              ${(Array.isArray(data.top_cargos) ? data.top_cargos.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(item.label)}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
-            </ul>
-          </div>
-        </div>
+  const insightLines = [
+    topDistrito?.label ? `Dentro de tus filtros, el distrito más activo viene siendo ${topDistrito.label}.` : '',
+    topCargo?.label ? `La materia / cargo con más movimiento en tu radar es ${topCargo.label}.` : '',
+    topTurno?.label ? `El turno que más aparece dentro de tu selección es ${turnoTexto(topTurno.label)}.` : '',
+    topNivel?.label ? `El nivel/modalidad con más presencia en tu radar es ${topNivel.label}.` : ''
+  ].filter(Boolean);
 
-        <div class="radar-box" style="margin-top:12px;">
-          <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Lectura rápida de tus filtros</h5>
+  box.innerHTML = `
+    <div class="radar-personal">
+      ${renderSemaforoPersonal(data)}
+      ${renderComparativaPersonal(data)}
+      <h4 class="radar-section-title">Tu radar según preferencias</h4>
+      <p class="radar-note">Ahora este radar usa histórico filtrado por tus preferencias reales, separado del resumen general provincial.</p>
+      <div class="radar-prefs">${prefsHtml || '<span class="radar-chip">Sin filtros específicos</span>'}</div>
+
+      <div class="radar-grid" style="margin-bottom:12px;">
+        <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.ofertas_unicas)}</span><span class="radar-stat-l">Ofertas únicas en tu radar</span></div>
+        <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.activas_estimadas)}</span><span class="radar-stat-l">Activas estimadas</span></div>
+        <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.nuevas_7d)}</span><span class="radar-stat-l">Nuevas en 7 días</span></div>
+        <div class="radar-stat"><span class="radar-stat-n">${fmtNum(data.cambios_estado_recientes)}</span><span class="radar-stat-l">Cambios de estado</span></div>
+      </div>
+
+      <div class="radar-columns">
+        <div class="radar-box">
+          <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Distritos más fuertes de tu radar</h5>
           <ul class="radar-list">
-            ${insightLines.map(txt => `<li class="radar-item"><span>${esc(txt)}</span><strong></strong></li>`).join('') || '<li class="radar-item"><span>Todavía no hay suficiente detalle para generar una lectura rápida.</span><strong></strong></li>'}
+            ${(Array.isArray(data.top_distritos) ? data.top_distritos.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(item.label)}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
+          </ul>
+        </div>
+
+        <div class="radar-box">
+          <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Materias / cargos más presentes</h5>
+          <ul class="radar-list">
+            ${(Array.isArray(data.top_cargos) ? data.top_cargos.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(item.label)}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
           </ul>
         </div>
       </div>
-    `;
+
+      <div class="radar-columns" style="margin-top:12px;">
+        <div class="radar-box">
+          <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Turnos más presentes</h5>
+          <ul class="radar-list">
+            ${(Array.isArray(data.top_turnos) ? data.top_turnos.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(turnoTexto(item.label))}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
+          </ul>
+        </div>
+
+        <div class="radar-box">
+          <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Niveles / modalidades</h5>
+          <ul class="radar-list">
+            ${(Array.isArray(data.top_niveles) ? data.top_niveles.slice(0, 4) : []).map(item => `<li class="radar-item"><span>${esc(item.label)}</span><strong>${fmtNum(item.value)}</strong></li>`).join('') || '<li class="radar-item"><span>Sin datos</span><strong>-</strong></li>'}
+          </ul>
+        </div>
+      </div>
+
+      <div class="radar-box" style="margin-top:12px;">
+        <h5 class="radar-section-title" style="font-size:14px;margin-bottom:8px;">Lectura rápida de tus filtros</h5>
+        <ul class="radar-list">
+          ${insightLines.map(txt => `<li class="radar-item"><span>${esc(txt)}</span><strong></strong></li>`).join('') || '<li class="radar-item"><span>Todavía no hay suficiente detalle para generar una lectura rápida.</span><strong></strong></li>'}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+async function loadPersonalRadar() {
+  const token = typeof window.obtenerToken === 'function' ? window.obtenerToken() : '';
+  const box = byId('panel-radar-combinado');
+
+  if (box) {
+    box.innerHTML = '<div class="radar-personal"><p class="ph">Cargando radar según preferencias...</p></div>';
   }
 
-  async function loadPersonalRadar() {
-    const token = typeof window.obtenerToken === 'function' ? window.obtenerToken() : '';
-    const box = byId('panel-radar-combinado');
+  if (!token) {
+    renderPersonalRadar(null);
+    return;
+  }
+
+  try {
+    const data = await obtenerHistoricoRadarPersonal(token, 30);
+    renderPersonalRadar(data);
+  } catch (err) {
+    console.error('ERROR RADAR PREFERENCIAS:', err);
     if (box) {
-      box.innerHTML = '<div class="radar-personal"><p class="ph">Cargando radar según preferencias...</p></div>';
-    }
-    if (!token || typeof window.obtenerHistoricoResumen !== 'function') {
-      renderPersonalRadar(null);
-      return;
-    }
-    try {
-      const data = await window.obtenerHistoricoResumen(token, 30);
-      renderPersonalRadar(data);
-    } catch (err) {
-      console.error('ERROR RADAR PREFERENCIAS:', err);
-      if (box) {
-        box.innerHTML = `<div class="radar-personal"><div class="radar-empty">No se pudo cargar tu radar personalizado. ${esc(err?.message || '')}</div></div>`;
-      }
+      box.innerHTML = `<div class="radar-personal"><div class="radar-empty">No se pudo cargar tu radar personalizado. ${esc(err?.message || '')}</div></div>`;
     }
   }
+}
 
   function bindRefresh() {
     const btn = byId('btn-refresh-radar-combinado');
