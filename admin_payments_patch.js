@@ -20,8 +20,8 @@
 
   async function fetchJson(path) {
     const token = getToken();
-    const base = window.API_URL || '/api'.startsWith('/api') ? window.location.origin : '';
-    const res = await fetch(`${window.API_URL || ''}${path}`, {
+    const base = window.API_URL || 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
+    const res = await fetch(`${base}${path}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
