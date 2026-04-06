@@ -226,3 +226,25 @@
     startScopedObservers();
   }
 })();
+
+(function () {
+  'use strict';
+
+  if (window.__apdAuthSessionPatchLoaderLoaded) return;
+  window.__apdAuthSessionPatchLoaderLoaded = true;
+
+  function loadAuthSessionPatch() {
+    if (document.querySelector('script[data-apd-auth-session-patch="1"]')) return;
+    const script = document.createElement('script');
+    script.src = 'auth_session_patch.js?v=1';
+    script.async = false;
+    script.dataset.apdAuthSessionPatch = '1';
+    document.head.appendChild(script);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadAuthSessionPatch, { once: true });
+  } else {
+    loadAuthSessionPatch();
+  }
+})();
