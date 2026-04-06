@@ -129,6 +129,7 @@
     moveCardById('panel-plan-selector-card', 'plan');
 
     moveCardByContentId('panel-historico-apd', 'mercado');
+    moveCardById('panel-radar-combinado-card', 'mercado');
 
     movePrefsCard();
     moveCardById('admin-panel-card', 'admin');
