@@ -1,5 +1,6 @@
 import baseWorker from "./worker_plan_catalog_hotfix.js";
 
+const API_URL_PREFIX = "/api";
 const PRICE_POLICY_VERSION = "2026-04-05-price-policy-1";
 const PRICE_POLICY_MODE = "next_renewal_uses_current_price";
 const REPRICE_BATCH_LIMIT = 25;
@@ -19,6 +20,11 @@ function json(data, status = 200) {
 
 function norm(v) {
   return String(v || "").trim().toUpperCase();
+}
+
+function getBearerToken(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
 }
 
 function canonicalPlanCode(code) {
@@ -64,6 +70,27 @@ function isCurrentOrUpcomingRecurring(subscription) {
   return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status);
 }
 
+function isSubscriptionCurrent(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus(subscription.status);
+  const planCode = canonicalPlanCode(subscription.plan_code);
+  const now = Date.now();
+
+  if (status === "CANCELLED") return false;
+
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status)) {
+    const end = parseFechaFlexible(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+
+  return false;
+}
+
 async function supabaseRequest(env, path, init = {}) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
@@ -89,6 +116,38 @@ async function supabaseSelect(env, query) {
   return await supabaseRequest(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
 }
 
+async function supabaseInsertReturning(env, table, data) {
+  const rows = await supabaseRequest(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(data)
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+async function getUserById(env, userId) {
+  const rows = await supabaseSelect(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function getSessionByToken(env, token) {
+  const rows = await supabaseSelect(env, `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function resolveAuthUser(env, request) {
+  const bearer = getBearerToken(request);
+  if (!bearer) return null;
+
+  const session = await getSessionByToken(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById(env, session.user_id);
+  }
+
+  return await getUserById(env, bearer);
+}
+
 async function getPlanByCode(env, planCode) {
   const code = canonicalPlanCode(planCode);
   const rows = await supabaseSelect(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags,sort_order&limit=1`).catch(() => []);
@@ -104,6 +163,16 @@ async function getCurrentRecurringSubscription(env, userId) {
   const rows = await supabaseSelect(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&mercadopago_preapproval_id=not.is.null&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc&limit=10`).catch(() => []);
   const items = Array.isArray(rows) ? rows : [];
   return items.find(isCurrentOrUpcomingRecurring) || items[0] || null;
+}
+
+async function getRecentSubscriptionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect(env, `user_subscriptions?select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,mercadopago_payer_email,external_reference,created_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || 200)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getRecentCheckoutSessionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect(env, `mercadopago_checkout_sessions?select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at,updated_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || 200)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
 }
 
 async function mercadoPagoRequest(env, path, init = {}) {
@@ -227,6 +296,47 @@ async function syncRecurringAmountToCurrentPrice(env, subscription, options = {}
   };
 }
 
+function buildAdminPaymentsSummary(subscriptions, checkouts) {
+  const planCounts = {};
+  for (const row of Array.isArray(subscriptions) ? subscriptions : []) {
+    const code = canonicalPlanCode(row?.plan_code || "") || "SIN_PLAN";
+    planCounts[code] = (planCounts[code] || 0) + 1;
+  }
+
+  return {
+    subscriptions_total: subscriptions.length,
+    subscriptions_active: subscriptions.filter(isSubscriptionCurrent).length,
+    subscriptions_trial: subscriptions.filter((row) => canonicalPlanCode(row?.plan_code) === "TRIAL_7D").length,
+    subscriptions_recurring: subscriptions.filter((row) => hasRecurringPreapproval(row)).length,
+    subscriptions_cancelled: subscriptions.filter((row) => normalizeSubscriptionStatus(row?.status) === "CANCELLED").length,
+    checkout_total: checkouts.length,
+    checkout_ready: checkouts.filter((row) => ["ready", "pending_config"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_pending: checkouts.filter((row) => ["pending", "scheduled"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_approved: checkouts.filter((row) => ["approved", "authorized"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_rejected: checkouts.filter((row) => ["rejected", "refunded"].includes(String(row?.status || "").toLowerCase())).length,
+    by_plan: planCounts
+  };
+}
+
+async function handleAdminPagos(request, env) {
+  const user = await resolveAuthUser(env, request);
+  if (!user) return json({ ok: false, error: "No autenticado" }, 401);
+  if (!user.es_admin) return json({ ok: false, error: "No autorizado" }, 403);
+
+  const [subscriptions, checkouts] = await Promise.all([
+    getRecentSubscriptionsAdmin(env, 200),
+    getRecentCheckoutSessionsAdmin(env, 200)
+  ]);
+
+  return json({
+    ok: true,
+    generated_at: new Date().toISOString(),
+    summary: buildAdminPaymentsSummary(subscriptions, checkouts),
+    recent_subscriptions: subscriptions.slice(0, 60),
+    recent_checkouts: checkouts.slice(0, 60)
+  });
+}
+
 async function delegateJson(request, env, ctx) {
   const response = await baseWorker.fetch(request, env, ctx);
   const text = await response.text();
@@ -323,6 +433,14 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === `${API_URL_PREFIX}/admin/pagos` && request.method === "GET") {
+      try {
+        return await handleAdminPagos(request, env);
+      } catch (err) {
+        return json({ ok: false, error: err?.message || "No se pudieron leer los pagos" }, 500);
+      }
+    }
 
     if (path === "/api/mi-plan" && request.method === "GET") {
       try {
