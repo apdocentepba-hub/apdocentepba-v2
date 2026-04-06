@@ -1,0 +1,3 @@
+backend: nuevo endpoint /api/historico-radar-personal
+frontend: radar personal debe consumir ese endpoint
+separar historico general de radar personal
