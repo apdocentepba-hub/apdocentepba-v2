@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-05-plans-ui-8';
+  const PLAN_PATCH_VERSION = '2026-04-05-plans-ui-10';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -14,11 +14,6 @@
     return raw === 'PRO' ? 'PREMIUM' : raw;
   }
 
-  function planBox() {
-    return document.getElementById(PLAN_MSG_ID)?.closest('.panel-card')
-      ? document.getElementById('panel-plan')
-      : document.getElementById('panel-plan');
-  }
   function canalesBox() { return document.getElementById('panel-canales'); }
   function selectorCard() { return document.getElementById(PLAN_SELECTOR_CARD_ID); }
   function selectorBody() { return document.getElementById(PLAN_SELECTOR_BODY_ID); }
@@ -107,6 +102,60 @@
     cleanupCanalesMercadoPago();
   }
 
+  function recurringVisualPatterns() {
+    return [
+      /d[eé]bito autom[aá]tico/i,
+      /debito automatico/i,
+      /renovaci[oó]n autom[aá]tica/i,
+      /renovacion automatica/i,
+      /pr[oó]xima renovaci[oó]n/i,
+      /proxima renovacion/i,
+      /cobro autom[aá]tico/i,
+      /cobro automatico/i,
+      /manual por defecto/i,
+      /apagada por defecto/i,
+      /configuraci[oó]n pendiente/i,
+      /configuracion pendiente/i,
+      /ya est[aá] activa o en proceso de configuraci[oó]n/i
+    ];
+  }
+
+  function matchesRecurringVisual(text) {
+    const value = String(text || '').trim();
+    return !!value && recurringVisualPatterns().some(rx => rx.test(value));
+  }
+
+  function stripRecurringVisuals(root) {
+    if (!root) return;
+
+    [...root.querySelectorAll('button')].forEach(btn => {
+      const text = String(btn.textContent || '').trim();
+      if (!matchesRecurringVisual(text)) return;
+      btn.remove();
+    });
+
+    [...root.querySelectorAll('.msg')].forEach(node => {
+      const text = String(node.textContent || '').trim();
+      if (!matchesRecurringVisual(text)) return;
+      node.textContent = '';
+      node.className = 'msg';
+    });
+
+    [...root.querySelectorAll('span,p,div,small,strong')].forEach(node => {
+      if (node.id === PLAN_MSG_ID || node.id === PLAN_SELECTOR_MSG_ID) return;
+      if (node.querySelector('button,[data-plan-open-tab],[data-plan-refresh],[data-plan-checkout],[data-plan-info]')) return;
+      const text = String(node.textContent || '').trim();
+      if (!text) return;
+      if (/Si el precio cambia, la pr[oó]xima renovaci[oó]n usa el valor vigente del plan\.?/i.test(text)) {
+        node.remove();
+        return;
+      }
+      if (matchesRecurringVisual(text)) {
+        node.remove();
+      }
+    });
+  }
+
   function mpReturnMessage() {
     const params = new URLSearchParams(window.location.search || '');
     const state = String(params.get('mp') || '').trim().toLowerCase();
@@ -182,7 +231,7 @@
         mode: 'upgrade_prorated',
         label: `Subir a ${targetName}`,
         actionLabel: `Pagar diferencia y pasar a ${targetName}`,
-        reason: 'Si subís de plan, pagás la diferencia ahora y el nuevo plan queda activo en este ciclo. La próxima renovación usa el precio vigente del plan nuevo.'
+        reason: 'Si subís de plan, pagás la diferencia ahora y el nuevo plan queda activo en este ciclo.'
       };
     }
 
@@ -190,9 +239,9 @@
       return {
         allowed: true,
         mode: 'downgrade_wait',
-        label: 'Bajar al renovar',
+        label: 'Bajar al próximo ciclo',
         actionLabel: `Programar cambio a ${targetName}`,
-        reason: 'Si bajás de plan, seguís usando el plan actual hasta que termine este ciclo. En la próxima renovación se cobra el valor vigente del plan menor.'
+        reason: 'Si bajás de plan, seguís usando el plan actual hasta que termine este ciclo y el cambio queda programado para el próximo.'
       };
     }
 
@@ -265,8 +314,7 @@
         </div>
         <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
         <div class="soft-meta" style="margin:8px 0 12px 0;">
-          Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio corre en la próxima renovación.
-          Si el precio cambia, la próxima renovación usa el valor vigente del plan.
+          Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio queda programado para el próximo ciclo.
         </div>
         <div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>
         <div id="${PLAN_SELECTOR_BODY_ID}"><p class="ph">Cargando opciones de plan...</p></div>
@@ -358,89 +406,23 @@
     if (mpMsg) setPlanMsg(mpMsg.text, mpMsg.type);
   }
 
-  function recurringStateInfo(planInfo) {
-    const resolved = planInfo?.resolved_state || {};
-    const reconciliation = planInfo?.reconciliation || {};
-    const recurringEnabled = resolved?.recurring_enabled === true || planInfo?.recurring_enabled === true;
-    const remoteStatus = String(reconciliation?.remote_status || '').trim().toUpperCase();
-    const currentStatus = String(resolved?.current_status || '').trim().toUpperCase();
-    const pendingSignal =
-      /proceso de configuración|pendiente|completar/i.test(String(planInfo?.billing_note || '')) ||
-      remoteStatus === 'PENDING' ||
-      currentStatus === 'PENDING';
-
-    if (recurringEnabled && !pendingSignal) {
-      return { mode: 'active', label: 'Activa', buttonLabel: 'Desactivar débito automático mensual' };
-    }
-    if (pendingSignal) {
-      return { mode: 'pending', label: 'Pendiente', buttonLabel: 'Continuar configuración de débito automático' };
-    }
-    return { mode: 'off', label: 'Apagada', buttonLabel: 'Activar débito automático mensual' };
-  }
-
-  function updateChipText(box, from, to) {
-    [...box.querySelectorAll('span,button,div')].forEach(node => {
-      if (String(node.textContent || '').trim() === from) node.textContent = to;
-    });
-  }
-
-  function findAutoRenewButton(box) {
-    return [...box.querySelectorAll('button')].find(btn =>
-      /débito automático|renovación automática/i.test(String(btn.textContent || ''))
-    );
-  }
-
-  function normalizePlanStateCard(planInfo) {
+  function normalizePlanStateCard() {
     const box = document.getElementById('panel-plan');
     if (!box) return;
 
-    const state = recurringStateInfo(planInfo);
-    const accessUntil = planInfo?.resolved_state?.access_until_label || planInfo?.price_policy?.next_renewal_label || '';
-    const notes = {
-      active: accessUntil
-        ? `La renovación automática está activa. El próximo cobro usará el precio vigente del plan al renovar. Próximo vencimiento: ${accessUntil}.`
-        : 'La renovación automática está activa. El próximo cobro usará el precio vigente del plan al renovar.',
-      pending: 'Todavía falta terminar la autorización en Mercado Pago. Tocá el botón para continuar la configuración del débito automático.',
-      off: accessUntil
-        ? `La renovación automática está apagada. Tu acceso actual sigue hasta ${accessUntil}.`
-        : 'La renovación automática está apagada. Cuando venza este ciclo no se vuelve a cobrar solo.'
-    };
+    stripRecurringVisuals(box);
+    stripRecurringVisuals(selectorCard());
 
-    updateChipText(box, 'Manual por defecto', state.mode === 'active' ? 'Cobro automático' : state.mode === 'pending' ? 'Configuración pendiente' : 'Manual');
-    updateChipText(box, 'Apagada por defecto', state.label);
-    updateChipText(box, 'Renovación automática', 'Renovación');
-
-    const autoBtn = findAutoRenewButton(box);
-    if (autoBtn) {
-      autoBtn.textContent = state.buttonLabel;
-      autoBtn.dataset.planRecurringState = state.mode;
-      autoBtn.dataset.planRecurringAction = state.mode === 'active' ? 'cancel' : 'enable';
-
-      if (state.mode === 'active') {
-        autoBtn.classList.remove('btn-primary');
-        autoBtn.classList.add('btn-danger');
-      } else {
-        autoBtn.classList.remove('btn-danger');
-        autoBtn.classList.add('btn-primary');
+    if (!mpReturnMessage()) {
+      const msgNode = document.getElementById(PLAN_MSG_ID);
+      if (msgNode && matchesRecurringVisual(msgNode.textContent || '')) {
+        clearMsg(msgNode);
+      }
+      const selectorMsgNode = document.getElementById(PLAN_SELECTOR_MSG_ID);
+      if (selectorMsgNode && matchesRecurringVisual(selectorMsgNode.textContent || '')) {
+        clearMsg(selectorMsgNode);
       }
     }
-
-    if (!mpReturnMessage()) setPlanMsg(notes[state.mode], state.mode === 'active' ? 'ok' : 'info');
-
-    [...box.querySelectorAll('.msg')].forEach(node => {
-      const text = String(node.textContent || '').trim();
-      if (!text) return;
-
-      if (/Pago aprobado\. Tocá .*Actualizar plan/i.test(text) && !mpReturnMessage()) {
-        node.textContent = '';
-        node.className = 'msg';
-        return;
-      }
-
-      if (/ya está activa o en proceso de configuración/i.test(text)) {
-        setMsg(node, notes[state.mode], state.mode === 'active' ? 'ok' : 'info');
-      }
-    });
   }
 
   async function refreshPlanAndRender(userId, successMessage) {
@@ -450,66 +432,6 @@
     if (successMessage) {
       setPlanMsg(successMessage, 'ok');
       setSelectorMsg(successMessage, 'ok');
-    }
-  }
-
-  async function callRecurringAction(action, button) {
-    const userId = window.obtenerToken ? window.obtenerToken() : '';
-    if (!userId || typeof window.workerFetchJson !== 'function') {
-      setPlanMsg('Tu sesión venció. Volvé a ingresar para continuar.', 'error');
-      return;
-    }
-
-    const state = String(button?.dataset.planRecurringState || '').trim();
-    const endpoint = action === 'cancel' ? '/api/subscription/cancel' : '/api/subscription/enable-auto-renew';
-    const loading = action === 'cancel' ? 'Desactivando...' : state === 'pending' ? 'Abriendo...' : 'Activando...';
-
-    clearPlanMsg();
-    clearSelectorMsg();
-
-    if (button && typeof window.btnLoad === 'function') window.btnLoad(button, loading);
-    else if (button) button.disabled = true;
-
-    try {
-      const data = await window.workerFetchJson(endpoint, {
-        method: 'POST',
-        body: JSON.stringify({ user_id: userId })
-      });
-
-      const msg = String(data?.message || '').trim();
-
-      if (action === 'cancel') {
-        await refreshPlanAndRender(userId, msg || 'La renovación automática quedó desactivada.');
-        return;
-      }
-
-      if (data?.checkout_url) {
-        const opened = window.open(data.checkout_url, '_blank', 'noopener');
-        const infoMsg = msg || (state === 'pending'
-          ? 'Seguimos con la configuración del débito automático en Mercado Pago.'
-          : 'Mercado Pago se abrió para activar el débito automático.');
-
-        if (opened) {
-          setPlanMsg(infoMsg, 'ok');
-          setSelectorMsg(infoMsg, 'ok');
-        } else {
-          const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
-          const html = `${infoMsg}<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
-          setPlanMsgHtml(html, 'info');
-          setSelectorMsgHtml(html, 'info');
-        }
-        return;
-      }
-
-      await refreshPlanAndRender(userId, msg || 'Estado del débito automático actualizado.');
-    } catch (err) {
-      console.error('ERROR RECURRING ACTION:', err);
-      const msg = err?.message || 'No se pudo actualizar el débito automático.';
-      setPlanMsg(msg, 'error');
-      setSelectorMsg(msg, 'error');
-    } finally {
-      if (button && typeof window.btnRestore === 'function') window.btnRestore(button);
-      else if (button) button.disabled = false;
     }
   }
 
@@ -608,7 +530,6 @@
     const recurringBtn = ev.target.closest('[data-plan-recurring-action]');
     if (recurringBtn) {
       ev.preventDefault();
-      await callRecurringAction(recurringBtn.dataset.planRecurringAction, recurringBtn);
       return;
     }
 
@@ -634,7 +555,7 @@
       const prefix = mode === 'trial_blocked'
         ? 'No podés volver a prueba gratis: '
         : mode === 'downgrade_wait'
-          ? 'Baja de plan al renovar: '
+          ? 'Baja de plan al próximo ciclo: '
           : 'Cambio de plan protegido: ';
       setPlanMsg(prefix + msg, 'info');
       setSelectorMsg(prefix + msg, 'info');
