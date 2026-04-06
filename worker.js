@@ -937,6 +937,9 @@ export default {
       if (path === `${API_URL_PREFIX}/historico-resumen` && request.method === "GET") {
         return await handleHistoricoResumen(url, env);
       }
+      if (path === `${API_URL_PREFIX}/historico-radar-personal` && request.method === "GET") {
+  return await handleHistoricoRadarPersonal(url, env);
+}
 
       // ===============================
       // PROVINCIA
@@ -1575,7 +1578,207 @@ async function handleHistoricoResumen(url, env) {
 
   return json(buildHistoricoResumenPayload(matchedRows, days));
 }
+async function handleHistoricoRadarPersonal(url, env) {
+  const userId = String(url.searchParams.get("user_id") || "").trim();
+  const days = clampInt(url.searchParams.get("days"), 7, 120, HISTORICO_DAYS_DEFAULT);
 
+  if (!userId) {
+    return json({ ok: false, message: "Falta user_id" }, 400);
+  }
+
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs || !prefs.alertas_activas) {
+    return json(emptyHistoricoRadarPersonalPayload(days, "Activa alertas y guarda tus preferencias."));
+  }
+
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const distritos = distritosPrefsAPD(prefsCanon);
+
+  if (!distritos.length) {
+    return json(emptyHistoricoRadarPersonalPayload(days, "Configura al menos un distrito."));
+  }
+
+  const globalRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_global_snapshots", distritos, days, 8000);
+  const localRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_historial", distritos, days, 8000);
+  const rawRows = globalRows.length ? globalRows : localRows;
+
+  if (!rawRows.length) {
+    return json(emptyHistoricoRadarPersonalPayload(days, "Todavia no hay historico suficiente."));
+  }
+
+  const matchedRows = rawRows.filter(row =>
+    coincideOfertaConPreferencias(historicoRowToOferta(row), prefsCanon).match
+  );
+
+  if (!matchedRows.length) {
+    return json(emptyHistoricoRadarPersonalPayload(days, "Todavia no hay historico compatible con tus filtros."));
+  }
+
+  const provinciaRows = await fetchProvinciaCurrentRows(env, days).catch(() => []);
+
+  return json(buildHistoricoRadarPersonalPayload(matchedRows, provinciaRows, prefsCanon, days));
+}
+
+function buildHistoricoRadarPersonalPayload(rows, provinciaRows, prefsCanon, days) {
+  const groupedRows = new Map();
+
+  for (const row of rows) {
+    const key = historicoRowKey(row);
+    if (!key) continue;
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
+  }
+
+  const latestRows = [];
+  const firstSeenRows = [];
+  const cambios = [];
+
+  for (const series of groupedRows.values()) {
+    series.sort(sortHistoricoDesc);
+
+    const latest = series[0];
+    const previous = series[1] || null;
+    const first = series[series.length - 1];
+
+    latestRows.push(latest);
+    firstSeenRows.push(first);
+
+    if (previous && estadoHistoricoKey(latest) !== estadoHistoricoKey(previous)) {
+      cambios.push({
+        iddetalle: latest.iddetalle || null,
+        idoferta: latest.idoferta || null,
+        distrito: latest.distrito || "",
+        cargo: latest.cargo || "",
+        area: latest.area || "",
+        escuela: latest.escuela || "",
+        turno: mapTurnoAPD(latest.turno || ""),
+        finoferta: latest.finoferta || "",
+        estado_anterior: estadoHistoricoLabel(previous),
+        estado_actual: estadoHistoricoLabel(latest),
+        captured_at: latest.captured_at || null
+      });
+    }
+  }
+
+  latestRows.sort(sortHistoricoDesc);
+  cambios.sort(sortHistoricoDesc);
+
+  const activeRows = latestRows.filter(ofertaHistoricaActiva);
+  const nowTs = Date.now();
+
+  const nuevas7d = firstSeenRows.filter(row => {
+    const ts = parseFechaFlexible(row.captured_at)?.getTime() || 0;
+    return ts >= nowTs - 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
+  const provinciaActivas = Array.isArray(provinciaRows)
+    ? provinciaRows.filter(ofertaHistoricaActiva)
+    : [];
+
+  const shareVsProvincia = provinciaActivas.length
+    ? Math.round((activeRows.length / provinciaActivas.length) * 1000) / 10
+    : null;
+
+  const indiceMovimiento = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (latestRows.length >= 20 ? 35 : latestRows.length >= 8 ? 20 : latestRows.length * 2) +
+        (activeRows.length >= 5 ? 30 : activeRows.length >= 2 ? 18 : activeRows.length * 5) +
+        (nuevas7d >= 4 ? 25 : nuevas7d >= 1 ? 12 : nuevas7d * 4) +
+        (cambios.length >= 4 ? 10 : cambios.length >= 1 ? 5 : 0)
+      )
+    )
+  );
+
+  return {
+    ok: true,
+    empty: false,
+    personal: true,
+    ventana_dias: days,
+    ultima_captura: latestRows[0]?.captured_at || null,
+    filtros_aplicados: {
+      distritos: unique([prefsCanon?.distrito_principal, ...(prefsCanon?.otros_distritos || [])].filter(Boolean)),
+      cargos: unique([...(prefsCanon?.cargos || []), ...(prefsCanon?.materias || [])].filter(Boolean)),
+      turnos: unique((prefsCanon?.turnos || []).filter(Boolean)),
+      niveles: unique((prefsCanon?.niveles || []).filter(Boolean))
+    },
+    capturas_filtradas: rows.length,
+    ofertas_unicas: latestRows.length,
+    activas_estimadas: activeRows.length,
+    designadas_estimadas: latestRows.filter(row => estadoHistoricoKey(row) === "DESIGNADA").length,
+    anuladas_estimadas: latestRows.filter(row => estadoHistoricoKey(row) === "ANULADA").length,
+    desiertas_estimadas: latestRows.filter(row => estadoHistoricoKey(row) === "DESIERTA").length,
+    nuevas_7d: nuevas7d,
+    cambios_estado_recientes: cambios.length,
+    promedio_postulantes: promedioNumerico(latestRows.map(row => row.total_postulantes), 1),
+    promedio_puntaje_primero: promedioNumerico(latestRows.map(row => row.puntaje_primero), 2),
+    top_distritos: topCountItems(latestRows.map(row => row.distrito), 4),
+    top_cargos: topCountItems(latestRows.map(tituloHistoricoRow), 5),
+    top_turnos: topCountItems(activeRows.map(row => mapTurnoAPD(row.turno || "")), 4),
+    top_niveles: topCountItems(latestRows.map(row => row.nivel_modalidad), 4),
+    ultimos_cambios: cambios.slice(0, 6),
+    ultimas_ofertas: latestRows.slice(0, 6).map(row => ({
+      iddetalle: row.iddetalle || null,
+      idoferta: row.idoferta || null,
+      distrito: row.distrito || "",
+      cargo: row.cargo || "",
+      area: row.area || "",
+      escuela: row.escuela || "",
+      turno: mapTurnoAPD(row.turno || ""),
+      finoferta: row.finoferta || "",
+      estado: estadoHistoricoLabel(row),
+      total_postulantes: row.total_postulantes != null ? Number(row.total_postulantes) : null,
+      puntaje_primero: row.puntaje_primero != null ? Number(row.puntaje_primero) : null,
+      captured_at: row.captured_at || null
+    })),
+    comparativa: {
+      activas_provincia: provinciaActivas.length,
+      share_vs_provincia_pct: shareVsProvincia,
+      indice_movimiento: indiceMovimiento
+    }
+  };
+}
+
+function emptyHistoricoRadarPersonalPayload(days, message) {
+  return {
+    ok: true,
+    empty: true,
+    personal: true,
+    message,
+    ventana_dias: days,
+    ultima_captura: null,
+    filtros_aplicados: {
+      distritos: [],
+      cargos: [],
+      turnos: [],
+      niveles: []
+    },
+    capturas_filtradas: 0,
+    ofertas_unicas: 0,
+    activas_estimadas: 0,
+    designadas_estimadas: 0,
+    anuladas_estimadas: 0,
+    desiertas_estimadas: 0,
+    nuevas_7d: 0,
+    cambios_estado_recientes: 0,
+    promedio_postulantes: null,
+    promedio_puntaje_primero: null,
+    top_distritos: [],
+    top_cargos: [],
+    top_turnos: [],
+    top_niveles: [],
+    ultimos_cambios: [],
+    ultimas_ofertas: [],
+    comparativa: {
+      activas_provincia: 0,
+      share_vs_provincia_pct: null,
+      indice_movimiento: 0
+    }
+  };
+}
 async function handleProvinciaBackfillStatus(env) {
   const state = await obtenerScanState(env);
   const staleRunning = isStaleProvinciaBackfill(state);
