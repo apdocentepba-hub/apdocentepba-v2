@@ -4,7 +4,7 @@
   if (window.__apdPanelListadosPidPatchLoaded) return;
   window.__apdPanelListadosPidPatchLoaded = true;
 
-  const PID_API_URL = 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
+  const PID_API_URL = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const PID_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit';
   const PID_LISTADOS = [
     ['oficial', 'Listado Oficial'],
