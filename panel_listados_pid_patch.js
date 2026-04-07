@@ -58,7 +58,9 @@
       .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
       .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}.pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
       .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}.pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}
-      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left}.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
+      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
+      .pidlist-section-row td{background:#eef4ff;color:#0f3460;font-size:13px;font-weight:800;border-top:1px solid #dbe3f0}
+      .pidlist-muted{color:#64748b}.pidlist-title-cell{min-width:260px;white-space:normal}
       @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}
       @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}
     `;
@@ -100,10 +102,65 @@
     out.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
   }
 
+  function normalizeSectionRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      return {
+        bloque: clean(row && row.bloque || ''),
+        area: clean(row && row.area || ''),
+        titulo: clean(row && row.titulo || ''),
+        porcentaje: clean(row && row.porcentaje || ''),
+        puntaje_total: clean(row && row.puntaje_total || '')
+      };
+    }).filter(function (row) {
+      return row.area || row.titulo || row.porcentaje || row.puntaje_total;
+    });
+  }
+
+  function renderSectionRows(rows) {
+    const groups = [];
+    let currentGroup = null;
+
+    rows.forEach(function (row) {
+      const bloque = row.bloque || '';
+      if (!currentGroup || currentGroup.bloque !== bloque) {
+        currentGroup = { bloque: bloque, rows: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.rows.push(row);
+    });
+
+    return groups.map(function (group) {
+      const title = group.bloque || 'Otros puntajes';
+      const body = group.rows.map(function (row) {
+        return '<tr>' +
+          '<td>' + esc(row.area || '-') + '</td>' +
+          '<td class="pidlist-title-cell">' + esc(row.titulo || '-') + '</td>' +
+          '<td>' + esc(row.porcentaje || '-') + '</td>' +
+          '<td>' + esc(row.puntaje_total || '-') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      return '<tr class="pidlist-section-row"><td colspan="4">' + esc(title) + '</td></tr>' + body;
+    }).join('');
+  }
+
+  function renderLegacyRows(rows) {
+    return rows.length
+      ? rows.map(function (it) {
+          return '<tr><td>' + esc(it.codigo || '-') + '</td><td>' + esc(it.rama || '-') + '</td><td>' + esc(it.puntaje || '-') + '</td><td>' + esc(it.fecha || '-') + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="4">No se encontraron filas.</td></tr>';
+  }
+
+
   function renderResult(result, meta) {
     const out = byId('pidlist-out');
     if (!out) return;
-    const rows = Array.isArray(result && result.items) ? result.items : [];
+
+    const sectionRows = normalizeSectionRows(result && result.section_rows);
+    const legacyRows = Array.isArray(result && result.items) ? result.items : [];
+    const useSectionRows = sectionRows.length > 0;
+
     out.innerHTML = `
       <div class="pidlist-meta">
         <div class="pidlist-box"><span class="pidlist-k">Apellido y nombre</span><strong class="pidlist-v">${esc(result && result.apellido_nombre || '-')}</strong></div>
@@ -114,12 +171,13 @@
       <p class="prefs-hint">Consulta hecha para DNI ${esc(meta.dni)} · listado ${esc(meta.label)} · año ${esc(meta.anio)}.</p>
       <div class="pidlist-table-wrap">
         <table class="pidlist-table">
-          <thead><tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr></thead>
+          <thead>${useSectionRows ? '<tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr>' : '<tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr>'}</thead>
           <tbody>
-            ${rows.length ? rows.map(function (it) { return `<tr><td>${esc(it.codigo || '-')}</td><td>${esc(it.rama || '-')}</td><td>${esc(it.puntaje || '-')}</td><td>${esc(it.fecha || '-')}</td></tr>`; }).join('') : '<tr><td colspan="4">No se encontraron filas.</td></tr>'}
+            ${useSectionRows ? renderSectionRows(sectionRows) : renderLegacyRows(legacyRows)}
           </tbody>
         </table>
       </div>
+      ${useSectionRows ? '<div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Vista adaptada a la estructura real del PID por bloques, áreas y títulos.</div>' : ''}
     `;
   }
 
