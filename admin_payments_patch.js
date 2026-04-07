@@ -109,11 +109,11 @@
 
   function ensureScript() {
     if (byId('apd-pid-lookup-script')) return;
-    if ([...document.scripts].some((s) => s.src && s.src.includes('pid_lookup_patch_v2.js'))) return;
+    if ([...document.scripts].some((s) => s.src && s.src.includes('pid_lookup_patch_v3.js'))) return;
 
     const s = document.createElement('script');
     s.id = 'apd-pid-lookup-script';
-    s.src = 'pid_lookup_patch_v2.js?v=1';
+    s.src = 'pid_lookup_patch_v3.js?v=1';
     s.defer = true;
     document.body.appendChild(s);
   }
