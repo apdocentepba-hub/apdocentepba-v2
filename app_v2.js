@@ -1524,8 +1524,21 @@ const alertasPanel = Array.isArray(alertasResult)
   : [];
 
 console.log("ALERTAS PANEL:", alertasPanel.length, alertasPanel);
-try {
- await workerFetchJson('/api/sync-offers', {
+renderDashboard({
+  docente,
+  preferencias,
+  alertas: alertasPanel,
+  historial: [],
+  planInfo: planActual,
+  estadisticas: {
+    total_alertas: Array.isArray(alertasResult) ? alertasResult.length : 0,
+    alertas_leidas: 0,
+    alertas_no_leidas: Array.isArray(alertasResult) ? alertasResult.length : 0,
+    ultimo_acceso: docente.ultimo_login || new Date().toISOString()
+  }
+});
+
+workerFetchJson('/api/sync-offers', {
   method: 'POST',
   body: JSON.stringify({
     offers: alertasPanel.map(o => ({
@@ -1565,33 +1578,26 @@ try {
       listado_origen_primero: o.listado_origen_primero || ""
     }))
   })
-});
-} catch (err) {
+}).catch(err => {
   console.warn('ERROR SYNC OFFERS:', err);
+});
+ cargarPrefsEnFormulario({ preferencias });
+renderPlanUI(planActual);
+actualizarNav();
+
+if (typeof cargarHistoricoPanel === "function") {
+  cargarHistoricoPanel(token).catch(err => {
+    console.error("ERROR CARGANDO HISTORICO PANEL:", err);
+  });
 }
-    renderDashboard({
-      docente,
-      preferencias,
-alertas: alertasPanel,      historial: [],
-      planInfo: planActual,
-      estadisticas: {
-        total_alertas: Array.isArray(alertasResult) ? alertasResult.length : 0,
-        alertas_leidas: 0,
-        alertas_no_leidas: Array.isArray(alertasResult) ? alertasResult.length : 0,
-        ultimo_acceso: docente.ultimo_login || new Date().toISOString()
-      }
-    });
 
-    cargarPrefsEnFormulario({ preferencias });
-    renderPlanUI(planActual);
-    actualizarNav();
+if (typeof window.cargarExtrasProvincia === "function") {
+  window.cargarExtrasProvincia().catch(err => {
+    console.error("ERROR EXTRAS PROVINCIA:", err);
+  });
+}
 
-    if (typeof window.cargarExtrasProvincia === "function") {
-      window.cargarExtrasProvincia().catch(err => {
-        console.error("ERROR EXTRAS PROVINCIA:", err);
-      });
-    }
-    await adminCheckAccess();
+await adminCheckAccess();
 bindAdminEvents();
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
