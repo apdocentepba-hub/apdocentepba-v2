@@ -1,5 +1,5 @@
 name = "ancient-wildflower-cd37"
-main = "worker_plan_price_policy_hotfix.js"
+main = "worker_pid_lookup_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true

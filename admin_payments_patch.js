@@ -96,3 +96,31 @@
     boot();
   }
 })();
+
+(function () {
+  'use strict';
+
+  if (window.__apdPidLookupScriptLoaderLoaded) return;
+  window.__apdPidLookupScriptLoaderLoaded = true;
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function ensureScript() {
+    if (byId('apd-pid-lookup-script')) return;
+    if ([...document.scripts].some((s) => s.src && s.src.includes('pid_lookup_patch_v2.js'))) return;
+
+    const s = document.createElement('script');
+    s.id = 'apd-pid-lookup-script';
+    s.src = 'pid_lookup_patch_v2.js?v=1';
+    s.defer = true;
+    document.body.appendChild(s);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureScript, { once: true });
+  } else {
+    ensureScript();
+  }
+})();
