@@ -40,7 +40,7 @@
     if (byId('panel-listados-pid-style')) return;
     const style = document.createElement('style');
     style.id = 'panel-listados-pid-style';
-    style.textContent = '\n      .pidlist-card{background:#fff;border:1px solid #dbe3f0;border-radius:16px;padding:20px;display:grid;gap:14px}\n      .pidlist-grid{display:grid;grid-template-columns:1fr 1.15fr .75fr auto;gap:12px;align-items:end}\n      .pidlist-field{display:grid;gap:8px}\n      .pidlist-field label{font-size:13px;color:#5d7088;font-weight:700}\n      .pidlist-field input,.pidlist-field select{width:100%;padding:12px;border:1px solid #dbe3f0;border-radius:12px;font:inherit}\n      .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}.pidlist-info{color:#0f3460}.pidlist-ok{color:#0b7a44}.pidlist-err{color:#b42318}\n      .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}\n      .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}.pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}\n      .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}.pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}\n      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left}.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}\n      .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap}\n      @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}\n      @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}}\n    ';
+    style.textContent = '\n      .panel-tab-grid > .pidlist-card{grid-column:1 / -1;width:100%}\n      .pidlist-card{background:#fff;border:1px solid #dbe3f0;border-radius:18px;padding:22px;display:grid;gap:16px;box-shadow:0 10px 28px rgba(15,52,96,.06)}\n      .pidlist-head{display:grid;gap:6px}\n      .pidlist-grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(240px,1.5fr) minmax(120px,.75fr) auto;gap:12px;align-items:end}\n      .pidlist-field{display:grid;gap:8px}\n      .pidlist-field label{font-size:13px;color:#5d7088;font-weight:700}\n      .pidlist-field input,.pidlist-field select{width:100%;min-height:46px;padding:12px 14px;border:1px solid #dbe3f0;border-radius:12px;font:inherit;background:#fff}\n      .pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}\n      .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}\n      .pidlist-actions .btn,.pidlist-actions a{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}\n      .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}.pidlist-info{color:#0f3460}.pidlist-ok{color:#0b7a44}.pidlist-err{color:#b42318}\n      .pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}\n      .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}\n      .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}.pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}\n      .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}.pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}\n      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left}.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}\n      @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}\n      @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}\n    ';
     document.head.appendChild(style);
   }
 
@@ -62,7 +62,7 @@
   function renderIdle() {
     const out = byId('pidlist-out');
     if (!out) return;
-    out.innerHTML = '<div class="empty-state"><p>Acá vas a ver el resultado del PID por DNI.</p></div>';
+    out.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
   }
 
   function renderResult(result, meta) {
@@ -85,7 +85,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Buscando...'; }
     setMsg('Consultando PID...', 'pidlist-info');
     const out = byId('pidlist-out');
-    if (out) out.innerHTML = '<div class="empty-state"><p>Consultando PID...</p></div>';
+    if (out) out.innerHTML = '<div class="pidlist-empty">Consultando PID...</div>';
 
     try {
       const res = await fetch(PID_API_URL + '/api/pid-consultar', {
@@ -98,7 +98,7 @@
       renderResult(data.result || {}, { dni: dni, anio: anio, label: label });
       setMsg('Consulta PID realizada correctamente.', 'pidlist-ok');
     } catch (err) {
-      if (out) out.innerHTML = '<div class="empty-state"><p>' + esc(err && err.message || 'No se pudo consultar PID.') + '</p></div>';
+      if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(err && err.message || 'No se pudo consultar PID.') + '</div>';
       setMsg(err && err.message || 'No se pudo consultar PID.', 'pidlist-err');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Buscar'; }
@@ -106,7 +106,7 @@
   }
 
   function buildCardHtml() {
-    return '\n      <div class="pidlist-card" id="pidlist-card-inner">\n        <div>\n          <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>\n          <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>\n        </div>\n        <div class="pidlist-grid">\n          <div class="pidlist-field"><label for="pidlist-dni">DNI</label><input id="pidlist-dni" type="text" inputmode="numeric" placeholder="34535989"></div>\n          <div class="pidlist-field"><label for="pidlist-listado">Listado</label><select id="pidlist-listado"></select></div>\n          <div class="pidlist-field"><label for="pidlist-anio">Año</label><input id="pidlist-anio" type="number" min="2015" max="2100"></div>\n          <div class="pidlist-actions"><button id="pidlist-buscar" class="btn btn-primary" type="button">Buscar</button><a class="btn btn-secondary" target="_blank" rel="noopener noreferrer" href="' + PID_SHEET_URL + '">Planilla</a></div>\n        </div>\n        <div id="pidlist-msg" class="pidlist-msg"></div>\n        <div id="pidlist-out"></div>\n      </div>\n    ';
+    return '\n      <div class="pidlist-card" id="pidlist-card-inner">\n        <div class="pidlist-head">\n          <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>\n          <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>\n        </div>\n        <div class="pidlist-grid">\n          <div class="pidlist-field"><label for="pidlist-dni">DNI</label><input id="pidlist-dni" type="text" inputmode="numeric" placeholder="34535989"></div>\n          <div class="pidlist-field"><label for="pidlist-listado">Listado</label><select id="pidlist-listado"></select></div>\n          <div class="pidlist-field"><label for="pidlist-anio">Año</label><input id="pidlist-anio" type="number" min="2015" max="2100"></div>\n          <div class="pidlist-actions"><button id="pidlist-buscar" class="btn btn-primary" type="button">Buscar</button><a class="btn btn-secondary" target="_blank" rel="noopener noreferrer" href="' + PID_SHEET_URL + '">Planilla</a></div>\n        </div>\n        <div id="pidlist-msg" class="pidlist-msg"></div>\n        <div id="pidlist-out"></div>\n      </div>\n    ';
   }
 
   function bindCard() {
