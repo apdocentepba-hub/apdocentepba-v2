@@ -27,15 +27,20 @@
   ];
 
   function byId(id) { return document.getElementById(id); }
+
   function esc(v) {
     return String(v || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/\\"/g, '&quot;');
+      .replace(/"/g, '&quot;');
   }
+
   function clean(v) {
-    return String(v || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(v || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   function injectStyles() {
@@ -55,12 +60,21 @@
       .pidlist-actions .btn,.pidlist-actions a{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}
       .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}.pidlist-info{color:#0f3460}.pidlist-ok{color:#0b7a44}.pidlist-err{color:#b42318}
       .pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}
-      .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
-      .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}.pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
-      .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}.pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}
-      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
+      .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      .pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
+      .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}
+      .pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
+      .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}
+      .pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}
+      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}
+      .pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
       .pidlist-section-row td{background:#eef4ff;color:#0f3460;font-size:13px;font-weight:800;border-top:1px solid #dbe3f0}
-      .pidlist-muted{color:#64748b}.pidlist-title-cell{min-width:260px;white-space:normal}
+      .pidlist-muted{color:#64748b}
+      .pidlist-title-cell{min-width:260px;white-space:normal}
+      .pidlist-subttl{margin:16px 0 6px;font-size:15px;font-weight:800;color:#10243d}
+      .pidlist-counts{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 6px}
+      .pidlist-pill{display:inline-block;background:#eef4ff;color:#0f3460;border:1px solid #d6e4ff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
+      .pidlist-raw{margin-top:10px;background:#0b1220;color:#dbeafe;padding:14px;border-radius:12px;overflow:auto;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
       @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}
       @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}
     `;
@@ -152,14 +166,13 @@
       : '<tr><td colspan="4">No se encontraron filas.</td></tr>';
   }
 
-
-  function renderResult(result, meta) {
+  function renderResult(result, meta, rawData) {
     const out = byId('pidlist-out');
     if (!out) return;
 
     const sectionRows = normalizeSectionRows(result && result.section_rows);
     const legacyRows = Array.isArray(result && result.items) ? result.items : [];
-    const useSectionRows = sectionRows.length > 0;
+    const version = clean(rawData && rawData.version || '-');
 
     out.innerHTML = `
       <div class="pidlist-meta">
@@ -169,15 +182,37 @@
         <div class="pidlist-box"><span class="pidlist-k">Oblea</span><strong class="pidlist-v">${esc(result && result.oblea || '-')}</strong></div>
       </div>
       <p class="prefs-hint">Consulta hecha para DNI ${esc(meta.dni)} · listado ${esc(meta.label)} · año ${esc(meta.anio)}.</p>
+
+      <div class="pidlist-counts">
+        <span class="pidlist-pill">section_rows: ${sectionRows.length}</span>
+        <span class="pidlist-pill">items: ${legacyRows.length}</span>
+        <span class="pidlist-pill">version: ${esc(version)}</span>
+      </div>
+
+      <div class="pidlist-subttl">Estructura real del PID (section_rows)</div>
       <div class="pidlist-table-wrap">
         <table class="pidlist-table">
-          <thead>${useSectionRows ? '<tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr>' : '<tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr>'}</thead>
+          <thead><tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr></thead>
           <tbody>
-            ${useSectionRows ? renderSectionRows(sectionRows) : renderLegacyRows(legacyRows)}
+            ${sectionRows.length ? renderSectionRows(sectionRows) : '<tr><td colspan="4">No vinieron section_rows.</td></tr>'}
           </tbody>
         </table>
       </div>
-      ${useSectionRows ? '<div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Vista adaptada a la estructura real del PID por bloques, áreas y títulos.</div>' : ''}
+      <div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Esta es la tabla completa por bloques, áreas y títulos.</div>
+
+      <div class="pidlist-subttl">Vista reducida heredada (items)</div>
+      <div class="pidlist-table-wrap">
+        <table class="pidlist-table">
+          <thead><tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr></thead>
+          <tbody>
+            ${renderLegacyRows(legacyRows)}
+          </tbody>
+        </table>
+      </div>
+      <div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Esta sección deja visibles los items viejos para control y comparación.</div>
+
+      <div class="pidlist-subttl">Respuesta cruda del worker</div>
+      <pre class="pidlist-raw">${esc(JSON.stringify(rawData || {}, null, 2))}</pre>
     `;
   }
 
@@ -186,7 +221,12 @@
     const listado = clean(byId('pidlist-listado') && byId('pidlist-listado').value || '');
     const anio = clean(byId('pidlist-anio') && byId('pidlist-anio').value || '');
     const btn = byId('pidlist-buscar');
-    const label = clean(byId('pidlist-listado') && byId('pidlist-listado').selectedOptions && byId('pidlist-listado').selectedOptions[0] && byId('pidlist-listado').selectedOptions[0].textContent || listado);
+    const label = clean(
+      byId('pidlist-listado') &&
+      byId('pidlist-listado').selectedOptions &&
+      byId('pidlist-listado').selectedOptions[0] &&
+      byId('pidlist-listado').selectedOptions[0].textContent || listado
+    );
 
     if (!/^\d{7,8}$/.test(dni)) return setMsg('Ingresá un DNI válido.', 'pidlist-err');
     if (!/^\d{4}$/.test(anio)) return setMsg('Ingresá un año válido.', 'pidlist-err');
@@ -204,7 +244,7 @@
       });
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok || !data || !data.ok) throw new Error(data && data.error || 'No se pudo consultar PID.');
-      renderResult(data.result || {}, { dni: dni, anio: anio, label: label });
+      renderResult(data.result || {}, { dni: dni, anio: anio, label: label }, data);
       setMsg('Consulta PID realizada correctamente.', 'pidlist-ok');
     } catch (err) {
       if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(err && err.message || 'No se pudo consultar PID.') + '</div>';
