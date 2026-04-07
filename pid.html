@@ -17,18 +17,21 @@ button,a.btn{padding:12px 16px;border:0;border-radius:12px;background:#0f3460;co
 .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
 .k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}.v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
-.table{overflow:auto;border:1px solid #dbe4f0;border-radius:12px}
+.table{overflow:auto;border:1px solid #dbe4f0;border-radius:12px;margin-top:10px}
 table{width:100%;border-collapse:collapse;min-width:760px}
 th,td{padding:10px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}th{background:#f8fafc}
 .section-row td{background:#eef4ff;color:#0f3460;font-size:13px;font-weight:800;border-top:1px solid #dbe4f0}
 .title-cell{min-width:300px;white-space:normal}
 .hint{font-size:12px;color:#64748b;margin-top:8px}
+.subttl{margin:18px 0 6px;font-size:16px}
+.counts{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px}.pill{display:inline-block;background:#eef4ff;color:#0f3460;border:1px solid #d6e4ff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
+pre.raw{margin-top:12px;background:#0b1220;color:#dbeafe;padding:14px;border-radius:12px;overflow:auto;font-size:12px;line-height:1.45}
 @media(max-width:900px){.grid{grid-template-columns:1fr 1fr}.meta{grid-template-columns:1fr 1fr}}@media(max-width:640px){.grid,.meta{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="card"><h1>Consulta PID por DNI</h1><p>Pantalla separada para consultar PID con la estructura real por bloques, áreas, títulos y puntajes.</p></div>
+<div class="card"><h1>Consulta PID por DNI</h1><p>Pantalla PID completa: muestra <strong>section_rows</strong>, <strong>items</strong> y el bloque de datos devuelto por el worker.</p></div>
 <div class="card">
 <div class="grid">
 <div><label for="dni">DNI</label><input id="dni" type="text" inputmode="numeric" placeholder="34535989"></div>
@@ -71,19 +74,26 @@ function renderSectionRows(rows){
 function renderLegacyRows(rows){
   return rows.length?rows.map(function(it){return '<tr><td>'+esc(it.codigo||'-')+'</td><td>'+esc(it.rama||'-')+'</td><td>'+esc(it.puntaje||'-')+'</td><td>'+esc(it.fecha||'-')+'</td></tr>';}).join(''):'<tr><td colspan="4">No se encontraron filas.</td></tr>';
 }
-function renderResult(r,dni,listado,anio){
+function renderResult(r,dni,listado,anio,data){
   const sectionRows=normalizeSectionRows(r.section_rows);
   const legacyRows=Array.isArray(r.items)?r.items:[];
-  const useSectionRows=sectionRows.length>0;
-  $('out').innerHTML='<div class="meta">'
+  $('out').innerHTML=''
+    +'<div class="meta">'
     +'<div class="box"><span class="k">Apellido y nombre</span><strong class="v">'+esc(r.apellido_nombre||'-')+'</strong></div>'
     +'<div class="box"><span class="k">Distrito de residencia</span><strong class="v">'+esc(r.distrito_residencia||'-')+'</strong></div>'
     +'<div class="box"><span class="k">Distritos solicitados</span><strong class="v">'+esc(r.distritos_solicitados||'-')+'</strong></div>'
     +'<div class="box"><span class="k">Oblea</span><strong class="v">'+esc(r.oblea||'-')+'</strong></div>'
     +'</div>'
     +'<p><strong>Consulta:</strong> DNI '+esc(dni)+' · listado '+esc(listado)+' · año '+esc(anio)+'</p>'
-    +'<div class="table"><table><thead>'+(useSectionRows?'<tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr>':'<tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr>')+'</thead><tbody>'+(useSectionRows?renderSectionRows(sectionRows):renderLegacyRows(legacyRows))+'</tbody></table></div>'
-    +(useSectionRows?'<div class="hint">Vista adaptada a la estructura real del PID por bloques, áreas y títulos.</div>':'');
+    +'<div class="counts"><span class="pill">section_rows: '+sectionRows.length+'</span><span class="pill">items: '+legacyRows.length+'</span><span class="pill">version: '+esc(data.version||'-')+'</span></div>'
+    +'<h3 class="subttl">Estructura real del PID (section_rows)</h3>'
+    +'<div class="table"><table><thead><tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr></thead><tbody>'+(sectionRows.length?renderSectionRows(sectionRows):'<tr><td colspan="4">No vinieron section_rows.</td></tr>')+'</tbody></table></div>'
+    +'<div class="hint">Esta es la tabla completa por bloques, áreas y títulos.</div>'
+    +'<h3 class="subttl">Vista reducida heredada (items)</h3>'
+    +'<div class="table"><table><thead><tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr></thead><tbody>'+(legacyRows.length?renderLegacyRows(legacyRows):'<tr><td colspan="4">No vinieron items.</td></tr>')+'</tbody></table></div>'
+    +'<div class="hint">Esta sección deja visibles los items viejos para control y comparación.</div>'
+    +'<h3 class="subttl">Respuesta cruda del worker</h3>'
+    +'<pre class="raw">'+esc(JSON.stringify(data,null,2))+'</pre>';
 }
 async function run(){
 const dni=$('dni').value.replace(/\D+/g,'');
@@ -96,7 +106,7 @@ try{
 const res=await fetch(API_URL+'/api/pid-consultar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dni,listado,anio:Number(anio)})});
 const data=await res.json().catch(()=>({}));
 if(!res.ok||!data.ok) throw new Error(data.error||'No se pudo consultar PID.');
-renderResult(data.result||{},dni,listadoLabel,anio);
+renderResult(data.result||{},dni,listadoLabel,anio,data);
 setMsg('Consulta PID realizada correctamente.','ok');
 }catch(err){$('out').textContent=err.message||'No se pudo consultar PID.';setMsg(err.message||'No se pudo consultar PID.','err');}
 finally{$('buscar').disabled=false;$('buscar').textContent='Buscar';}
