@@ -55,6 +55,32 @@ function shortCodeLike(value) {
   return /^[A-Z]{1,4}\d{0,3}$/i.test(text);
 }
 
+function blockLabelLike(value) {
+  const norm = normalizeComparable(value);
+  if (!norm) return false;
+  return /^(TECNICO PROFESIONAL|SECUNDARIA|ADULTOS Y CFS|ARTISTICA|SUPERIOR|INICIAL|PRIMARIA|ESPECIAL|PSICOLOGIA|EDUCACION FISICA|FORMACION PROFESIONAL)\s*(\([A-Z]\))?$/.test(norm);
+}
+
+function areaCodeLike(value) {
+  const text = cleanText(value);
+  if (!text) return false;
+  return /^\(?[A-Z]{1,4}(?:\/[A-Z0-9]{1,4})?\)?$/i.test(text);
+}
+
+function itemTitleLike(value) {
+  return /^ITEM\s+\d+/i.test(cleanText(value));
+}
+
+function rowLooksLikeBlockAreaTitleScore(texts) {
+  if (texts.length < 5) return false;
+  const first = texts[0] || "";
+  const second = texts[1] || "";
+  const third = texts[2] || "";
+  const last = texts[texts.length - 1] || "";
+  const prev = texts[texts.length - 2] || "";
+  return blockLabelLike(first) && areaCodeLike(second) && itemTitleLike(third) && isPercentLike(prev) && isNumericLike(last);
+}
+
 export function isLikelySectionHeading(text, cells) {
   const norm = normalizeComparable(text);
   if (!norm) return false;
@@ -126,6 +152,8 @@ export function looksLikeNoiseDataRow(texts) {
   const meaningful = texts.filter(Boolean);
   if (!meaningful.length) return true;
 
+  if (rowLooksLikeBlockAreaTitleScore(meaningful)) return false;
+
   const first = meaningful[0] || "";
   const lastNumeric = pickLastNumeric(meaningful);
   const numericCount = meaningful.filter((text) => isNumericLike(text) || isPercentLike(text)).length;
@@ -142,6 +170,7 @@ export function looksLikeNoiseDataRow(texts) {
 }
 
 export function finalizeSectionRow(candidate, context) {
+  const bloque = cleanText(candidate.bloque || context.currentSection || "");
   let area = cleanText(candidate.area || "");
   let titulo = cleanText(candidate.titulo || "");
   let porcentaje = cleanText(candidate.porcentaje || "");
@@ -152,9 +181,9 @@ export function finalizeSectionRow(candidate, context) {
   if (area && !looksLikeFileSize(area) && !detectFieldKind(area)) context.lastArea = area;
   if (!titulo || detectFieldKind(titulo)) return null;
   if (!puntaje_total && !porcentaje) return null;
-  if (looksLikeDocumentRow(`${area} ${titulo} ${porcentaje} ${puntaje_total}`, "")) return null;
+  if (looksLikeDocumentRow(`${bloque} ${area} ${titulo} ${porcentaje} ${puntaje_total}`, "")) return null;
 
-  return { bloque: cleanText(context.currentSection || ""), area, titulo, porcentaje, puntaje_total };
+  return { bloque, area, titulo, porcentaje, puntaje_total };
 }
 
 export function parseRowWithHeader(cells, headerMap, context) {
@@ -162,6 +191,16 @@ export function parseRowWithHeader(cells, headerMap, context) {
 
   const texts = cells.map((cell) => cleanText(cell.text)).filter(Boolean);
   if (!texts.length) return null;
+
+  if (rowLooksLikeBlockAreaTitleScore(texts)) {
+    return finalizeSectionRow({
+      bloque: texts[0],
+      area: texts[1],
+      titulo: texts[2],
+      porcentaje: texts[texts.length - 2],
+      puntaje_total: texts[texts.length - 1]
+    }, context);
+  }
 
   const candidate = {
     area: headerMap.area != null ? cells[headerMap.area]?.text || "" : "",
@@ -186,6 +225,16 @@ export function parseRowWithHeader(cells, headerMap, context) {
 export function parseRowHeuristically(cells, context) {
   const texts = cells.map((cell) => cleanText(cell.text)).filter(Boolean);
   if (texts.length < 2 || looksLikeNoiseDataRow(texts)) return null;
+
+  if (rowLooksLikeBlockAreaTitleScore(texts)) {
+    return finalizeSectionRow({
+      bloque: texts[0],
+      area: texts[1],
+      titulo: texts[2],
+      porcentaje: texts[texts.length - 2],
+      puntaje_total: texts[texts.length - 1]
+    }, context);
+  }
 
   const first = texts[0] || "";
   const puntaje_total = pickLastNumeric(texts);
