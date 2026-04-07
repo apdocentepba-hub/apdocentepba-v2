@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PID por DNI</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f7fb;color:#10243d;margin:0}
+.wrap{max-width:1000px;margin:0 auto;padding:24px}
+.card{background:#fff;border:1px solid #dbe4f0;border-radius:16px;padding:20px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr 160px auto;gap:12px;align-items:end}
+label{display:block;font-size:13px;margin-bottom:6px;color:#5d7088;font-weight:700}
+input,select{width:100%;padding:12px;border:1px solid #dbe4f0;border-radius:12px}
+button,a.btn{padding:12px 16px;border:0;border-radius:12px;background:#0f3460;color:#fff;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.msg{margin-top:10px;font-weight:700}
+.ok{color:#0b7a44}.err{color:#b42318}.info{color:#0f3460}
+table{width:100%;border-collapse:collapse}.table{overflow:auto;border:1px solid #dbe4f0;border-radius:12px}
+th,td{padding:10px;border-bottom:1px solid #edf2f7;text-align:left}th{background:#f8fafc}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:640px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card"><h1>Consulta PID por DNI</h1><p>Pantalla separada para consultar PID sin tocar el panel actual.</p></div>
+<div class="card">
+<div class="grid">
+<div><label for="dni">DNI</label><input id="dni" type="text" inputmode="numeric" placeholder="34535989"></div>
+<div><label for="listado">Listado</label><select id="listado"></select></div>
+<div><label for="anio">Año</label><input id="anio" type="number" min="2015" max="2100"></div>
+<div><button id="buscar" type="button">Buscar</button></div>
+</div>
+<div id="msg" class="msg"></div>
+</div>
+<div id="out" class="card">Todavía no se consultó ningún DNI.</div>
+</div>
+<script>
+const API_URL='https://ancient-wildflower-cd37.apdocentepba.workers.dev';
+const LISTADOS=[['oficial','Listado Oficial'],['108a','108 A'],['108b','108 B'],['fines','FINES Listado 1'],['108bfines','FINES Listado 2'],['s108a','108 A Terciario'],['s108b','108 B Terciario'],['108ainfine','108 A In Fine'],['108bEncierro','108 B Contextos de Encierro'],['formacionProfesionalPrincipalPreceptores','FP Principal Preceptores'],['formacionProfesionalComplementoPreceptores','FP Complementario Preceptores'],['formacionProfesionalPrincipalPanol','FP Principal Pañol'],['formacionProfesionalComplementarioPanol','FP Complementario Pañol'],['formacionProfesionalPrincipalFp','Formación Profesional Principal'],['formacionProfesionalComplementarioFp','Formación Profesional Complementario']];
+const $=id=>document.getElementById(id);
+function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function setMsg(t,c){$('msg').textContent=t||'';$('msg').className='msg '+(c||'info');}
+$('listado').innerHTML=LISTADOS.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('');
+$('listado').value='oficial';$('anio').value=String(new Date().getFullYear());
+async function run(){
+const dni=$('dni').value.replace(/\D+/g,'');
+const listado=$('listado').value; const anio=$('anio').value.trim();
+if(!/^\d{7,8}$/.test(dni)) return setMsg('Ingresá un DNI válido.','err');
+if(!/^\d{4}$/.test(anio)) return setMsg('Ingresá un año válido.','err');
+$('buscar').disabled=true; $('buscar').textContent='Buscando...'; setMsg('Consultando PID...','info'); $('out').textContent='Consultando...';
+try{
+const res=await fetch(API_URL+'/api/pid-consultar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dni,listado,anio:Number(anio)})});
+const data=await res.json().catch(()=>({}));
+if(!res.ok||!data.ok) throw new Error(data.error||'No se pudo consultar PID.');
+const r=data.result||{}; const rows=Array.isArray(r.items)?r.items:[];
+$('out').innerHTML='<p><strong>Apellido y nombre:</strong> '+esc(r.apellido_nombre||'-')+'</p><p><strong>Distrito de residencia:</strong> '+esc(r.distrito_residencia||'-')+'</p><p><strong>Distritos solicitados:</strong> '+esc(r.distritos_solicitados||'-')+'</p><p><strong>Oblea:</strong> '+esc(r.oblea||'-')+'</p><div class="table"><table><thead><tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr></thead><tbody>'+(rows.length?rows.map(it=>'<tr><td>'+esc(it.codigo||'-')+'</td><td>'+esc(it.rama||'-')+'</td><td>'+esc(it.puntaje||'-')+'</td><td>'+esc(it.fecha||'-')+'</td></tr>').join(''):'<tr><td colspan="4">No se encontraron filas.</td></tr>')+'</tbody></table></div>';
+setMsg('Consulta PID realizada correctamente.','ok');
+}catch(err){$('out').textContent=err.message||'No se pudo consultar PID.';setMsg(err.message||'No se pudo consultar PID.','err');}
+finally{$('buscar').disabled=false;$('buscar').textContent='Buscar';}
+}
+$('buscar').addEventListener('click',run); $('dni').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run();}});
+</script>
+</body>
+</html>
