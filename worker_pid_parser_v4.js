@@ -6,8 +6,16 @@ function getRows(raw) {
 }
 
 function getCells(rowHtml) {
-  const matches = rowHtml.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
-  return matches.map((cellHtml) => ({ text: stripTags(cellHtml), title: "" }));
+  const matches = [...String(rowHtml || "").matchAll(/<t[dh][^>]*([^>]*)>([\s\S]*?)<\/t[dh]>/gi)];
+  return matches.map((match) => {
+    const attrs = String(match[1] || "");
+    const inner = String(match[2] || "");
+    const titleMatch = attrs.match(/title=['"]([^'"]*)['"]/i);
+    return {
+      text: stripTags(inner),
+      title: cleanText(titleMatch?.[1] || "")
+    };
+  });
 }
 
 export function parsePidHtml(html) {
@@ -20,14 +28,34 @@ export function parsePidHtml(html) {
   const context = { currentSection: "", currentHeaderMap: null, lastArea: "", pendingPuntaje: "" };
   const sectionRows = [];
   const legacyFallbackItems = [];
-  const debug = { total_rows: 0, rows_with_cells: 0, heading_rows: 0, header_rows: 0, skipped_document_rows: 0, skipped_meta_rows: 0, parsed_section_rows: 0, parsed_legacy_items: 0 };
+  const debug = {
+    total_rows: 0,
+    rows_with_cells: 0,
+    heading_rows: 0,
+    header_rows: 0,
+    skipped_document_rows: 0,
+    skipped_meta_rows: 0,
+    parsed_section_rows: 0,
+    parsed_legacy_items: 0,
+    heading_samples: [],
+    noise_samples: [],
+    parsed_section_row_samples: []
+  };
 
   for (const rowHtml of getRows(raw)) {
     debug.total_rows += 1;
     const plainRow = stripTags(rowHtml);
     if (!plainRow) continue;
-    if (looksLikeDocumentRow(plainRow, rowHtml)) { debug.skipped_document_rows += 1; continue; }
-    if (looksLikeMetaLabelRow(plainRow)) { debug.skipped_meta_rows += 1; continue; }
+
+    if (looksLikeDocumentRow(plainRow, rowHtml)) {
+      debug.skipped_document_rows += 1;
+      continue;
+    }
+
+    if (looksLikeMetaLabelRow(plainRow)) {
+      debug.skipped_meta_rows += 1;
+      continue;
+    }
 
     const cells = getCells(rowHtml);
     if (!cells.length) continue;
@@ -38,6 +66,12 @@ export function parsePidHtml(html) {
       context.currentHeaderMap = null;
       context.lastArea = "";
       debug.heading_rows += 1;
+      if (debug.heading_samples.length < 10) {
+        debug.heading_samples.push({
+          text: plainRow,
+          cells: cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean)
+        });
+      }
       continue;
     }
 
@@ -48,11 +82,34 @@ export function parsePidHtml(html) {
     }
 
     let parsed = parseRowWithHeader(cells, context.currentHeaderMap, context);
-    if (!parsed) parsed = parseRowHeuristically(cells, context);
+    let parsedBy = parsed ? "header" : "";
+
+    if (!parsed) {
+      parsed = parseRowHeuristically(cells, context);
+      if (parsed) parsedBy = "heuristic";
+    }
+
     if (parsed) {
       sectionRows.push(parsed);
       debug.parsed_section_rows += 1;
+      if (debug.parsed_section_row_samples.length < 10) {
+        debug.parsed_section_row_samples.push({
+          by: parsedBy,
+          text: plainRow,
+          parsed,
+          cells: cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean)
+        });
+      }
       continue;
+    }
+
+    const rowTexts = cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean);
+    if (debug.noise_samples.length < 10) {
+      debug.noise_samples.push({
+        text: plainRow,
+        cells: rowTexts,
+        current_section: context.currentSection
+      });
     }
   }
 
@@ -66,9 +123,21 @@ export function parsePidHtml(html) {
   }
 
   const items = deriveLegacyItems(dedupSectionRows, legacyFallbackItems);
+
   return {
-    result: { oblea: legend, apellido_nombre, distrito_residencia, distritos_solicitados, items, section_rows: dedupSectionRows },
-    parser_debug: { ...debug, final_section_rows: dedupSectionRows.length, final_items: items.length },
+    result: {
+      oblea: legend,
+      apellido_nombre,
+      distrito_residencia,
+      distritos_solicitados,
+      items,
+      section_rows: dedupSectionRows
+    },
+    parser_debug: {
+      ...debug,
+      final_section_rows: dedupSectionRows.length,
+      final_items: items.length
+    },
     html_debug_excerpt: dedupSectionRows.length || items.length ? undefined : buildHtmlDebugExcerpt(raw)
   };
 }
