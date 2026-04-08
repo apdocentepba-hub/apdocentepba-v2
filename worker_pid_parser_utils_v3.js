@@ -64,7 +64,13 @@ function blockLabelLike(value) {
 function areaCodeLike(value) {
   const text = cleanText(value);
   if (!text) return false;
-  return /^\(?[A-Z]{1,4}(?:\/[A-Z0-9]{1,4})?\)?$/i.test(text);
+
+  const inner = text
+    .replace(/^\(/, "")
+    .replace(/\)$/, "")
+    .trim();
+
+  return /^(?:[+\-]?\/?[A-Z0-9]{1,4})(?:\/[A-Z0-9]{1,4})?$/i.test(inner);
 }
 
 function itemTitleLike(value) {
