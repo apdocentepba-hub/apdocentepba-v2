@@ -1,7 +1,7 @@
 import baseWorker from "./worker_pid_lookup_hotfix.js";
 
 const API_URL_PREFIX = "/api";
-const TELEGRAM_VERSION = "2026-04-07-telegram-alerts-1";
+const TELEGRAM_VERSION = "2026-04-07-telegram-alerts-2";
 const TELEGRAM_SWEEP_LIMIT = 200;
 const TELEGRAM_MESSAGE_ALERTS_LIMIT = 5;
 const TELEGRAM_SENT_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -11,7 +11,7 @@ function corsHeaders() {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Telegram-Bot-Api-Secret-Token"
   };
 }
 
@@ -23,6 +23,10 @@ function norm(value) {
   return String(value || "").trim();
 }
 
+function normUpper(value) {
+  return norm(value).toUpperCase();
+}
+
 function getBearerToken(request) {
   const auth = request.headers.get("Authorization") || "";
   return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
@@ -32,11 +36,16 @@ function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(norm(value));
 }
 
-function formatDateAr(value) {
+function parseFechaFlexible(value) {
   const raw = norm(value);
-  if (!raw) return "";
+  if (!raw) return null;
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatDateAr(value) {
+  const d = parseFechaFlexible(value);
+  if (!d) return "";
   return new Intl.DateTimeFormat("es-AR", {
     day: "2-digit",
     month: "2-digit",
@@ -44,6 +53,41 @@ function formatDateAr(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(d);
+}
+
+function canonicalPlanCode(code) {
+  const raw = normUpper(code);
+  if (!raw) return "";
+  if (["FREE", "TRIAL", "PRUEBA", "PRUEBA_7D"].includes(raw)) return "TRIAL_7D";
+  if (raw === "PRO") return "PREMIUM";
+  if (raw === "SIGNATURE") return "INSIGNE";
+  if (raw === "BASIC") return "PLUS";
+  return raw;
+}
+
+function isSubscriptionCurrent(subscription) {
+  if (!subscription) return false;
+  const status = normUpper(subscription.status);
+  if (["CANCELLED", "CANCELED"].includes(status)) return false;
+  const now = Date.now();
+  const planCode = canonicalPlanCode(subscription.plan_code);
+  const end = parseFechaFlexible(
+    planCode === "TRIAL_7D"
+      ? subscription.trial_ends_at || ""
+      : subscription.current_period_ends_at || ""
+  )?.getTime() || 0;
+  if (!end) return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status);
+  return end > now;
+}
+
+function safeJsonParse(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 async function supabaseRequest(env, path, init = {}) {
@@ -71,6 +115,14 @@ async function supabaseSelect(env, query) {
   return await supabaseRequest(env, query, {
     method: "GET",
     headers: { Prefer: "return=representation" }
+  });
+}
+
+async function supabaseInsert(env, table, rows) {
+  return await supabaseRequest(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(Array.isArray(rows) ? rows : [rows])
   });
 }
 
@@ -103,12 +155,62 @@ async function resolveAuthUser(env, request) {
   return await getUserById(env, bearer);
 }
 
+async function getUserSubscriptions(env, userId) {
+  const rows = await supabaseSelect(
+    env,
+    `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,created_at&order=created_at.desc`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getPlanByCode(env, planCode) {
+  const code = canonicalPlanCode(planCode);
+  if (!code) return null;
+  const rows = await supabaseSelect(
+    env,
+    `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,feature_flags&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function resolveTelegramEntitlement(env, userId) {
+  const subscriptions = await getUserSubscriptions(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode(current?.plan_code || "TRIAL_7D");
+  const plan = await getPlanByCode(env, planCode);
+  const flags = safeJsonParse(plan?.feature_flags) || {};
+  let allowed = false;
+  let source = "default_policy";
+
+  if (Object.prototype.hasOwnProperty.call(flags, "telegram")) {
+    allowed = !!flags.telegram;
+    source = "feature_flag_telegram";
+  } else if (Object.prototype.hasOwnProperty.call(flags, "telegram_enabled")) {
+    allowed = !!flags.telegram_enabled;
+    source = "feature_flag_telegram_enabled";
+  } else if (Object.prototype.hasOwnProperty.call(flags, "telegram_included")) {
+    allowed = !!flags.telegram_included;
+    source = "feature_flag_telegram_included";
+  } else {
+    allowed = ["PLUS", "PREMIUM", "INSIGNE"].includes(planCode);
+    source = "default_paid_plan_policy";
+  }
+
+  return {
+    plan_code: planCode,
+    plan_name: norm(plan?.nombre) || planCode || "TRIAL_7D",
+    allowed,
+    source,
+    flags
+  };
+}
+
 function telegramStateKey(userId) {
-  return `telegram:user:${norm(userId)}`;
+  return `telegram:user:${normUpper(userId)}`;
 }
 
 function telegramSentKey(userId, offerKey) {
-  return `telegram:sent:${norm(userId)}:${norm(offerKey)}`;
+  return `telegram:sent:${normUpper(userId)}:${normUpper(offerKey)}`;
 }
 
 function getKv(env) {
@@ -135,7 +237,7 @@ async function saveTelegramState(env, userId, patch) {
   const next = {
     ...current,
     ...patch,
-    user_id: norm(userId),
+    user_id: normUpper(userId),
     updated_at: new Date().toISOString()
   };
 
@@ -147,7 +249,7 @@ function maskChatId(chatId) {
   const raw = norm(chatId);
   if (!raw) return "";
   if (raw.length <= 4) return raw;
-  return `${"•".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+  return `${"• .repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
 }
 
 function buildTelegramBotLink(env, userId) {
@@ -156,20 +258,51 @@ function buildTelegramBotLink(env, userId) {
   return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(norm(userId))}`;
 }
 
-function buildTelegramStatusPayload(env, state) {
+async function insertNotificationDeliveryLogs(env, logs) {
+  const rows = (Array.isArray(logs) ? logs : [logs]).filter(Boolean);
+  if (!rows.length) return;
+  try {
+    await supabaseInsert(env, "notification_delivery_logs", rows);
+  } catch (err) {
+    console.error("NOTIFICATION DELIVERY LOG INSERT ERROR:", err);
+  }
+}
+
+function baseLogRow({userId, channel = "telegram", eventType, deliveryKey = null, status, provider = "telegram", providerMessageId = null, planCode = null, payload = null, errorMessage = null}) {
+  return {
+    user_id: userId || null,
+    channel,
+    event_type: eventType,
+    delivery_key: deliveryKey,
+    status,
+    provider,
+    provider_message_id: providerMessageId,
+    plan_code: planCode || null,
+    payload: payload || {},
+    error_message: errorMessage || null
+  };
+}
+
+function buildTelegramStatusPayload(env, state, entitlement) {
   const connected = !!state?.connected && !!norm(state?.chat_id);
+  const allowedByPlan = !!entitlement?.allowed;
   return {
     ok: true,
     version: TELEGRAM_VERSION,
     connected,
-    alerts_enabled: !!state?.alerts_enabled,
+    alerts_enabled: allowedByPlan ? !!state?.alerts_enabled : false,
+    allowed_by_plan: allowedByPlan,
+    channel_policy: entitlement?.source || "default_policy",
+    plan_code: entitlement?.plan_code || "",
+    plan_name: entitlement?.plan_name || "",
     chat_id_masked: connected ? maskChatId(state?.chat_id) : "",
     username: norm(state?.username),
     first_name: norm(state?.first_name),
     connected_at: norm(state?.connected_at),
     connected_at_label: state?.connected_at ? formatDateAr(state.connected_at) : "",
     bot_username: norm(env.TELEGRAM_BOT_USERNAME).replace(/^@+/, ""),
-    bot_link: buildTelegramBotLink(env, state?.user_id)
+    bot_link: buildTelegramBotLink(env, state?.user_id || entitlement?.user_id || ""),
+    feature_flags: entitlement?.flags || {}
   };
 }
 
@@ -195,28 +328,44 @@ async function sendTelegramText(env, chatId, text) {
   return data;
 }
 
+function requireWebhookSecret(request, env) {
+  const configured = norm(env.TELEGRAM_WEBHOOK_SECRET);
+  if (!configured) {
+    throw new Error("Falta TELEGRAM_WEBHOOK_SECRET");
+  }
+  const provided = norm(request.headers.get("X-Telegram-Bot-Api-Secret-Token"));
+  if (!provided || provided !== configured) {
+    const err = new Error("Webhook Telegram no autorizado");
+    err.status = 401;
+    throw err;
+  }
+}
+
 function extractTelegramStartPayload(update) {
   const message = update?.message;
   const text = norm(message?.text);
-  if (!text.startsWith('/start')) return null;
-  const payload = text.replace(/^\/start\s*/i, '').trim();
+  if (!text.startsWith("/start")) return null;
+  const payload = text.replace(/^\/start\s*/i, "").trim();
   return payload || null;
 }
 
 async function handleTelegramWebhook(request, env) {
+  requireWebhookSecret(request, env);
+
   const update = await request.json().catch(() => ({}));
   const payload = extractTelegramStartPayload(update);
 
   if (!payload || !isUuid(payload)) {
-    return json({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: 'start_payload_missing_or_invalid' });
+    return json({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: "start_payload_missing_or_invalid" });
   }
 
   const chatId = norm(update?.message?.chat?.id);
-  const chatType = norm(update?.message?.chat?.type || 'private');
-  if (!chatId || (chatType && chatType !== 'private')) {
-    return json({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: 'invalid_chat' });
+  const chatType = norm(update?.message?.chat?.type || "private");
+  if (!chatId || (chatType && chatType !== "private")) {
+    return json({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: "invalid_chat" });
   }
 
+  const entitlement = await resolveTelegramEntitlement(env, payload);
   const prev = (await getTelegramState(env, payload)) || {};
   const next = await saveTelegramState(env, payload, {
     connected: true,
@@ -224,38 +373,64 @@ async function handleTelegramWebhook(request, env) {
     username: norm(update?.message?.from?.username),
     first_name: norm(update?.message?.from?.first_name),
     connected_at: prev.connected_at || new Date().toISOString(),
-    alerts_enabled: typeof prev.alerts_enabled === 'boolean' ? prev.alerts_enabled : true,
+    alerts_enabled: entitlement.allowed
+      ? (typeof prev.alerts_enabled === "boolean" ? prev.alerts_enabled : true)
+      : false,
     last_update_id: update?.update_id ?? null
   });
 
-  const confirmText = [
-    '✅ APDocentePBA conectó este chat con tu cuenta.',
-    '',
-    'Ya podés activar o pausar Telegram desde “Editar preferencias reales” en el panel.',
-    'Cuando haya alertas nuevas compatibles, te van a llegar por acá.'
-  ].join('\n');
+  const confirmText = entitlement.allowed
+    ? [
+        "✅ APDocentePBA conectó este chat con tu cuenta.",
+        "",
+        "Ya podés activar o pausar Telegram desde “Editar preferencias reales” en el panel.",
+        "Cuando haya alertas nuevas compatibles, te van a llegar por acá."
+      ].join("\n")
+    : [
+        "✅ APDocentePBA conectó este chat con tu cuenta.",
+        "",
+        `Tu plan actual (${entitlement.plan_name || entitlement.plan_code || "actual"}) todavía no incluye Telegram.`,
+        "Cuando ese canal esté habilitado para tu plan, vas a poder activarlo desde el panel."
+      ].join("\n");
 
-  await sendTelegramText(env, chatId, confirmText).catch(err => {
-    console.error('TELEGRAM CONFIRM SEND ERROR:', err);
+  const sent = await sendTelegramText(env, chatId, confirmText).catch(err => {
+    console.error("TELEGRAM CONFIRM SEND ERROR:", err);
+    return null;
   });
+
+  await insertNotificationDeliveryLogs(env, baseLogRow({
+    userId: payload,
+    eventType: "telegram_connect",
+    deliveryKey: `telegram_connect:${payload}:${chatId}`,
+    status: sent ? "sent" : "error",
+    providerMessageId: sent?.result?.message_id ? String(sent.result.message_id) : null,
+    planCode: entitlement.plan_code,
+    payload: {
+      connected: true,
+      chat_id_masked: maskChatId(chatId),
+      allowed_by_plan: entitlement.allowed,
+      channel_policy: entitlement.source
+    },
+    errorMessage: sent ? null : "No se pudo enviar confirmación de conexión"
+  }));
 
   return json({
     ok: true,
     version: TELEGRAM_VERSION,
     connected: true,
     user_id: payload,
-    state: buildTelegramStatusPayload(env, next)
+    state: buildTelegramStatusPayload(env, next, entitlement)
   });
 }
 
 async function handleTelegramStatus(request, env) {
   const authUser = await resolveAuthUser(env, request);
-  if (!authUser) return json({ ok: false, error: 'No autenticado' }, 401);
+  if (!authUser) return json({ ok: false, error: "No autenticado" }, 401);
 
   const url = new URL(request.url);
-  const requestedUserId = norm(url.searchParams.get('user_id')) || authUser.id;
+  const requestedUserId = normUpper(url.searchParams.get("user_id")) || authUser.id;
   if (requestedUserId !== authUser.id && !authUser.es_admin) {
-    return json({ ok: false, error: 'No autorizado' }, 403);
+    return json({ ok: false, error: "No autorizado" }, 403);
   }
 
   const state = (await getTelegramState(env, requestedUserId)) || {
@@ -263,11 +438,11 @@ async function handleTelegramStatus(request, env) {
     alerts_enabled: false,
     connected: false
   };
-
-  return json(buildTelegramStatusPayload(env, { ...state, user_id: requestedUserId }));
+  const entitlement = await resolveTelegramEntitlement(env, requestedUserId);
+  return json(buildTelegramStatusPayload(env, { ...state, user_id: requestedUserId }, entitlement));
 }
 
-async function delegateJsonRequest(request, env, ctx) {
+async function delegateJsonByRequest(request, env, ctx) {
   const response = await baseWorker.fetch(request, env, ctx);
   const text = await response.text();
   let data = null;
@@ -293,27 +468,55 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
     headers: request.headers,
     body: rawText
   });
-  const delegated = await delegateJsonRequest(delegatedRequest, env, ctx);
+  const delegated = await delegateJsonByRequest(delegatedRequest, env, ctx);
 
   if (!delegated.response.ok || !delegated.data?.ok) {
-    return json(delegated.data || { ok: false, error: 'No se pudieron guardar las preferencias' }, delegated.response.status || 500);
+    return json(delegated.data || { ok: false, error: "No se pudieron guardar las preferencias" }, delegated.response.status || 500);
   }
 
-  const userId = norm(payload?.user_id);
-  const telegramEnabled = !!payload?.preferencias?.alertas_telegram;
+  const userId = normUpper(payload?.user_id);
+  const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
   let telegramStatus = null;
 
   if (userId) {
+    const entitlement = await resolveTelegramEntitlement(env, userId);
     const currentState = await getTelegramState(env, userId);
+    const effectiveEnabled = entitlement.allowed && requestedTelegram && !!currentState?.connected;
+
     const state = await saveTelegramState(env, userId, {
-      alerts_enabled: telegramEnabled,
+      alerts_enabled: effectiveEnabled,
       connected: !!currentState?.connected
     });
-    telegramStatus = buildTelegramStatusPayload(env, { ...state, user_id: userId });
+
+    telegramStatus = buildTelegramStatusPayload(env, { ...state, user_id: userId }, entitlement);
+
+    await insertNotificationDeliveryLogs(env, baseLogRow({
+      userId,
+      eventType: "telegram_preferences_update",
+      deliveryKey: `telegram_preferences_update:${userId}:${new Date().toISOString()}`,
+      status: entitlement.allowed ? "updated" : "skipped",
+      planCode: entitlement.plan_code,
+      payload: {
+        requested_alerts_enabled: requestedTelegram,
+        effective_alerts_enabled: effectiveEnabled,
+        connected: !!currentState?.connected,
+        allowed_by_plan: entitlement.allowed,
+        channel_policy: entitlement.source
+      },
+      errorMessage: entitlement.allowed ? null : "Telegram no habilitado para el plan actual"
+    }));
+  }
+
+  let message = delegated.data?.message || "Preferencias guardadas";
+  if (telegramStatus && !telegramStatus.allowed_by_plan) {
+    message = `${message}. Telegram quedó fuera porque tu plan actual no lo tiene habilitado.`;
+  } else if (telegramStatus && requestedTelegram && !telegramStatus.connected) {
+    message = `${message}. Para activar Telegram, primero tenés que vincular el bot.`;
   }
 
   return json({
-    ...(typeof delegated.data === 'object' && delegated.data ? delegated.data : { ok: true }),
+    ...(typeof delegated.data === "object" && delegated.data ? delegated.data : { ok: true }),
+    message,
     telegram_status: telegramStatus,
     telegram_version: TELEGRAM_VERSION
   }, delegated.response.status || 200);
@@ -327,7 +530,7 @@ async function getActivePreferenceUserIds(env, limit = TELEGRAM_SWEEP_LIMIT) {
 
   const unique = new Set();
   (Array.isArray(rows) ? rows : []).forEach(row => {
-    const userId = norm(row?.user_id);
+    const userId = normUpper(row?.user_id);
     if (userId) unique.add(userId);
   });
   return [...unique];
@@ -335,9 +538,9 @@ async function getActivePreferenceUserIds(env, limit = TELEGRAM_SWEEP_LIMIT) {
 
 async function getUserAlertsFromBase(env, userId) {
   const request = new Request(`https://internal.apdocentepba.dev/api/mis-alertas?user_id=${encodeURIComponent(userId)}`, {
-    method: 'GET'
+    method: "GET"
   });
-  const delegated = await delegateJsonRequest(request, env, {});
+  const delegated = await delegateJsonByRequest(request, env, {});
   if (!delegated.response.ok || !delegated.data?.ok) return [];
   return Array.isArray(delegated.data?.resultados) ? delegated.data.resultados : [];
 }
@@ -359,23 +562,25 @@ function alertOfferKey(alert) {
     norm(alert?.escuela),
     norm(alert?.distrito),
     norm(alert?.finoferta || alert?.fecha_cierre || alert?.fecha_cierre_fmt)
-  ].filter(Boolean).join('|');
+  ].filter(Boolean).join("|");
 }
 
 function alertSummaryLine(alert) {
-  const title = [norm(alert?.cargo), norm(alert?.area)].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(' · ') || 'Oferta APD';
-  const escuela = norm(alert?.escuela) || 'Sin escuela';
-  const distrito = norm(alert?.distrito) || '-';
-  const turno = norm(alert?.turno) || '-';
+  const title = [norm(alert?.cargo), norm(alert?.area)]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(" · ") || "Oferta APD";
+  const escuela = norm(alert?.escuela) || "Sin escuela";
+  const distrito = norm(alert?.distrito) || "-";
+  const turno = norm(alert?.turno) || "-";
   const cierre = norm(alert?.finoferta_label || alert?.fecha_cierre_fmt || alert?.fecha_cierre || alert?.finoferta);
 
-  const lines = [
+  return [
     `• ${title}`,
     `  ${escuela}`,
-    `  ${distrito} · turno ${turno}${cierre ? ` · cierre ${cierre}` : ''}`
-  ];
-
-  return lines.join('\n');
+    `  ${distrito} · turno ${turno}${cierre ? ` · cierre ${cierre}` : ""}`
+  ].join("
+");
 }
 
 function buildTelegramDigestMessage(alerts) {
@@ -384,12 +589,14 @@ function buildTelegramDigestMessage(alerts) {
 
   return [
     `🔔 APDocentePBA detectó ${alerts.length} alerta(s) nueva(s) compatible(s).`,
-    '',
+    "",
     ...visible.map(alertSummaryLine),
-    hiddenCount ? `\n+ ${hiddenCount} alerta(s) más en tu panel.` : '',
-    '',
-    'Entrá al panel para ver el detalle completo y decidir rápido.'
-  ].filter(Boolean).join('\n');
+    hiddenCount ? `
++ ${hiddenCount} alerta(s) más en tu panel.` : "",
+    "",
+    "Entrá al panel para ver el detalle completo y decidir rápido."
+  ].filter(Boolean).join("
+");
 }
 
 async function wasTelegramAlertSent(env, userId, offerKey) {
@@ -409,20 +616,48 @@ async function markTelegramAlertSent(env, userId, offerKey) {
 
 async function runTelegramAlertsSweep(env) {
   if (!norm(env.TELEGRAM_BOT_TOKEN)) {
-    return { ok: true, version: TELEGRAM_VERSION, skipped: true, reason: 'missing_bot_token' };
+    return { ok: true, version: TELEGRAM_VERSION, skipped: true, reason: "missing_bot_token" };
   }
 
   const userIds = await getActivePreferenceUserIds(env, TELEGRAM_SWEEP_LIMIT);
   const results = [];
   let checked = 0;
-  let sent_users = 0;
+  let sentUsers = 0;
 
   for (const userId of userIds) {
     checked += 1;
+
     try {
+      const entitlement = await resolveTelegramEntitlement(env, userId);
       const state = await getTelegramState(env, userId);
+
+      if (!entitlement.allowed) {
+        results.push({ user_id: userId, skipped: true, reason: "plan_not_entitled" });
+        await insertNotificationDeliveryLogs(env, baseLogRow({
+          userId,
+          eventType: "telegram_alert_sweep",
+          deliveryKey: `telegram_sweep:${userId}:${new Date().toISOString()}`,
+          status: "skipped",
+          planCode: entitlement.plan_code,
+          payload: { reason: "plan_not_entitled", channel_policy: entitlement.source }
+        }));
+        continue;
+      }
+
       if (!state?.connected || !state?.alerts_enabled || !norm(state?.chat_id)) {
-        results.push({ user_id: userId, skipped: true, reason: 'telegram_not_ready' });
+        results.push({ user_id: userId, skipped: true, reason: "telegram_not_ready" });
+        await insertNotificationDeliveryLogs(env, baseLogRow({
+          userId,
+          eventType: "telegram_alert_sweep",
+          deliveryKey: `telegram_sweep:${userId}:${new Date().toISOString()}`,
+          status: "skipped",
+          planCode: entitlement.plan_code,
+          payload: {
+            reason: "telegram_not_ready",
+            connected: !!state?.connected,
+            alerts_enabled: !!state?.alerts_enabled
+          }
+        }));
         continue;
       }
 
@@ -432,7 +667,19 @@ async function runTelegramAlertsSweep(env) {
       for (const alert of alerts) {
         const offerKey = alertOfferKey(alert);
         if (!offerKey) continue;
-        if (await wasTelegramAlertSent(env, userId, offerKey)) continue;
+
+        if (await wasTelegramAlertSent(env, userId, offerKey)) {
+          await insertNotificationDeliveryLogs(env, baseLogRow({
+            userId,
+            eventType: "telegram_alert",
+            deliveryKey: offerKey,
+            status: "deduped",
+            planCode: entitlement.plan_code,
+            payload: { source_offer_key: offerKey }
+          }));
+          continue;
+        }
+
         unseen.push({ ...alert, __offer_key: offerKey });
       }
 
@@ -442,16 +689,50 @@ async function runTelegramAlertsSweep(env) {
       }
 
       const message = buildTelegramDigestMessage(unseen);
-      await sendTelegramText(env, state.chat_id, message);
-      for (const alert of unseen) {
-        await markTelegramAlertSent(env, userId, alert.__offer_key);
-      }
+      try {
+        const sent = await sendTelegramText(env, state.chat_id, message);
+        sentUsers += 1;
 
-      sent_users += 1;
-      results.push({ user_id: userId, sent: true, unseen: unseen.length });
+        for (const alert of unseen) {
+          await markTelegramAlertSent(env, userId, alert.__offer_key);
+        }
+
+        await insertNotificationDeliveryLogs(env, unseen.map(alert => baseLogRow({
+          userId,
+          eventType: "telegram_alert",
+          deliveryKey: alert.__offer_key,
+          status: "sent",
+          providerMessageId: sent?.result?.message_id ? String(sent.result.message_id) : null,
+          planCode: entitlement.plan_code,
+          payload: {
+            source_offer_key: alert.__offer_key,
+            cargo: norm(alert?.cargo),
+            area: norm(alert?.area),
+            escuela: norm(alert?.escuela),
+            distrito: norm(alert?.distrito),
+            digest_size: unseen.length
+          }
+        })));
+
+        results.push({ user_id: userId, sent: true, unseen: unseen.length });
+      } catch (err) {
+        await insertNotificationDeliveryLogs(env, unseen.map(alert => baseLogRow({
+          userId,
+          eventType: "telegram_alert",
+          deliveryKey: alert.__offer_key,
+          status: "error",
+          planCode: entitlement.plan_code,
+          payload: {
+            source_offer_key: alert.__offer_key,
+            digest_size: unseen.length
+          },
+          errorMessage: err?.message || "telegram_send_failed"
+        })));
+        throw err;
+      }
     } catch (err) {
-      console.error('TELEGRAM SWEEP USER ERROR:', userId, err);
-      results.push({ user_id: userId, error: err?.message || 'telegram_sweep_error' });
+      console.error("TELEGRAM SWEEP USER ERROR:", userId, err);
+      results.push({ user_id: userId, error: err?.message || "telegram_sweep_error" });
     }
   }
 
@@ -459,44 +740,45 @@ async function runTelegramAlertsSweep(env) {
     ok: true,
     version: TELEGRAM_VERSION,
     checked,
-    sent_users,
+    sent_users: sentUsers,
     results
   };
 }
 
 export default {
   async fetch(request, env, ctx) {
-    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders() });
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
 
     const url = new URL(request.url);
     const path = url.pathname;
 
     try {
-      if (path === `${API_URL_PREFIX}/telegram/status` && request.method === 'GET') {
+      if (path === `${API_URL_PREFIX}/telegram/status` && request.method === "GET") {
         return await handleTelegramStatus(request, env);
       }
 
-      if (path === `${API_URL_PREFIX}/telegram/webhook` && request.method === 'POST') {
+      if (path === `${API_URL_PREFIX}/telegram/webhook` && request.method === "POST") {
         return await handleTelegramWebhook(request, env);
       }
 
-      if (path === `${API_URL_PREFIX}/guardar-preferencias` && request.method === 'POST') {
+      if (path === `${API_URL_PREFIX}/guardar-preferencias` && request.method === "POST") {
         return await handleGuardarPreferenciasTelegramAware(request, env, ctx);
       }
     } catch (err) {
-      return json({ ok: false, error: err?.message || 'Telegram wrapper error', telegram_version: TELEGRAM_VERSION }, 500);
+      const status = Number(err?.status || 500) || 500;
+      return json({ ok: false, error: err?.message || "Telegram wrapper error", telegram_version: TELEGRAM_VERSION }, status);
     }
 
     return baseWorker.fetch(request, env, ctx);
   },
 
   async scheduled(controller, env, ctx) {
-    if (typeof baseWorker?.scheduled === 'function') {
+    if (typeof baseWorker?.scheduled === "function") {
       await baseWorker.scheduled(controller, env, ctx);
     }
 
     ctx.waitUntil(runTelegramAlertsSweep(env).catch(err => {
-      console.error('TELEGRAM SWEEP ERROR:', err);
+      console.error("TELEGRAM SWEEP ERROR:", err);
     }));
   }
 };
