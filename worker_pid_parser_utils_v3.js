@@ -55,6 +55,101 @@ function shortCodeLike(value) {
   return /^[A-Z]{1,4}\d{0,3}$/i.test(text);
 }
 
+function blockLabelLike(value) {
+  const norm = normalizeComparable(value);
+  if (!norm) return false;
+  return /^(TECNICO PROFESIONAL|SECUNDARIA|ADULTOS\s+Y\s+(CFS|CENS)|ARTISTICA|SUPERIOR|INICIAL|PRIMARIA|ESPECIAL|PSICOLOGIA|EDUCACION FISICA|FORMACION PROFESIONAL)\s*(\([A-Z]\))?$/.test(norm);
+}
+
+function areaCodeLike(value) {
+  const text = cleanText(value);
+  if (!text) return false;
+  return /^\(?[A-Z]{1,4}(?:\/[A-Z0-9]{1,4})?\)?$/i.test(text);
+}
+
+function itemTitleLike(value) {
+  return /^ITEM\s+\d+/i.test(cleanText(value));
+}
+
+function rowLooksLikeBlockAreaItem(texts) {
+  const meaningful = texts.filter(Boolean);
+  if (meaningful.length < 5) return false;
+
+  const first = meaningful[0] || "";
+  const second = meaningful[1] || "";
+  const third = meaningful[2] || "";
+  const tail = meaningful.slice(3);
+
+  const hasPercent = tail.some((text) => isPercentLike(text));
+  const hasNumeric = tail.some((text) => isNumericLike(text));
+
+  return blockLabelLike(first) && areaCodeLike(second) && itemTitleLike(third) && hasPercent && hasNumeric;
+}
+
+function parseNumericValue(value) {
+  let text = cleanText(value).replace(/\s+/g, "");
+  if (!text) return NaN;
+
+  const hasDot = text.includes(".");
+  const hasComma = text.includes(",");
+
+  if (hasDot && hasComma) {
+    const lastDot = text.lastIndexOf(".");
+    const lastComma = text.lastIndexOf(",");
+
+    if (lastComma > lastDot) {
+      text = text.replace(/\./g, "").replace(",", ".");
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    text = text.replace(",", ".");
+  } else if (hasDot) {
+    const parts = text.split(".");
+    if (parts.length > 2) {
+      const last = parts[parts.length - 1];
+      if (last.length === 3) {
+        text = parts.join("");
+      } else {
+        text = parts.slice(0, -1).join("") + "." + last;
+      }
+    }
+  }
+
+  const num = Number(text);
+  return Number.isFinite(num) ? num : NaN;
+}
+
+function looksLikeDateText(value) {
+  return /\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b/.test(cleanText(value));
+}
+
+function extractBlockAreaItemCandidate(texts) {
+  const meaningful = texts.filter(Boolean);
+  if (!rowLooksLikeBlockAreaItem(meaningful)) return null;
+
+  const bloque = meaningful[0] || "";
+  const area = meaningful[1] || "";
+  const titulo = meaningful[2] || "";
+  const tail = meaningful.slice(3);
+
+  const porcentaje = tail.find((text) => isPercentLike(text)) || "";
+
+  const numericTail = tail.filter((text) => isNumericLike(text) && !looksLikeDateText(text));
+  const nonZeroNumericTail = numericTail.filter((text) => {
+    const n = parseNumericValue(text);
+    return Number.isFinite(n) && n > 0;
+  });
+
+  const puntaje_total = nonZeroNumericTail.length
+    ? nonZeroNumericTail[nonZeroNumericTail.length - 1]
+    : (numericTail.length ? numericTail[numericTail.length - 1] : "");
+
+  if (!puntaje_total) return null;
+
+  return { bloque, area, titulo, porcentaje, puntaje_total };
+}
+
 export function isLikelySectionHeading(text, cells) {
   const norm = normalizeComparable(text);
   if (!norm) return false;
@@ -65,7 +160,7 @@ export function isLikelySectionHeading(text, cells) {
   const nonNumericTexts = nonEmptyTexts.filter((value) => !isNumericLike(value) && !isPercentLike(value));
   const numericCount = nonEmptyTexts.length - nonNumericTexts.length;
 
-  if (/^(TECNICO PROFESIONAL|SECUNDARIA|ADULTOS Y CFS|ARTISTICA|SUPERIOR|INICIAL|PRIMARIA|ESPECIAL|PSICOLOGIA|EDUCACION FISICA|FORMACION PROFESIONAL)\b/.test(norm)) {
+  if (/^(TECNICO PROFESIONAL|SECUNDARIA|ADULTOS\s+Y\s+(CFS|CENS)|ARTISTICA|SUPERIOR|INICIAL|PRIMARIA|ESPECIAL|PSICOLOGIA|EDUCACION FISICA|FORMACION PROFESIONAL)\b/.test(norm)) {
     return numericCount === 0 && nonNumericTexts.length >= 1;
   }
 
@@ -126,6 +221,8 @@ export function looksLikeNoiseDataRow(texts) {
   const meaningful = texts.filter(Boolean);
   if (!meaningful.length) return true;
 
+  if (rowLooksLikeBlockAreaItem(meaningful)) return false;
+
   const first = meaningful[0] || "";
   const lastNumeric = pickLastNumeric(meaningful);
   const numericCount = meaningful.filter((text) => isNumericLike(text) || isPercentLike(text)).length;
@@ -142,6 +239,7 @@ export function looksLikeNoiseDataRow(texts) {
 }
 
 export function finalizeSectionRow(candidate, context) {
+  const bloque = cleanText(candidate.bloque || context.currentSection || "");
   let area = cleanText(candidate.area || "");
   let titulo = cleanText(candidate.titulo || "");
   let porcentaje = cleanText(candidate.porcentaje || "");
@@ -152,9 +250,9 @@ export function finalizeSectionRow(candidate, context) {
   if (area && !looksLikeFileSize(area) && !detectFieldKind(area)) context.lastArea = area;
   if (!titulo || detectFieldKind(titulo)) return null;
   if (!puntaje_total && !porcentaje) return null;
-  if (looksLikeDocumentRow(`${area} ${titulo} ${porcentaje} ${puntaje_total}`, "")) return null;
+  if (looksLikeDocumentRow(`${bloque} ${area} ${titulo} ${porcentaje} ${puntaje_total}`, "")) return null;
 
-  return { bloque: cleanText(context.currentSection || ""), area, titulo, porcentaje, puntaje_total };
+  return { bloque, area, titulo, porcentaje, puntaje_total };
 }
 
 export function parseRowWithHeader(cells, headerMap, context) {
@@ -162,6 +260,9 @@ export function parseRowWithHeader(cells, headerMap, context) {
 
   const texts = cells.map((cell) => cleanText(cell.text)).filter(Boolean);
   if (!texts.length) return null;
+
+  const shaped = extractBlockAreaItemCandidate(texts);
+  if (shaped) return finalizeSectionRow(shaped, context);
 
   const candidate = {
     area: headerMap.area != null ? cells[headerMap.area]?.text || "" : "",
@@ -186,6 +287,9 @@ export function parseRowWithHeader(cells, headerMap, context) {
 export function parseRowHeuristically(cells, context) {
   const texts = cells.map((cell) => cleanText(cell.text)).filter(Boolean);
   if (texts.length < 2 || looksLikeNoiseDataRow(texts)) return null;
+
+  const shaped = extractBlockAreaItemCandidate(texts);
+  if (shaped) return finalizeSectionRow(shaped, context);
 
   const first = texts[0] || "";
   const puntaje_total = pickLastNumeric(texts);
