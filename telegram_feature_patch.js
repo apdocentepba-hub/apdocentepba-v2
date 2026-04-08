@@ -59,7 +59,6 @@
     const actions = byId('telegram-pref-actions');
     const mini = byId('telegram-pref-mini');
     const checkbox = byId('pref-alertas-telegram');
-    if (checkbox && typeof enabled === 'boolean') checkbox.checked = enabled;
     if (!pill || !note || !actions || !mini) return;
 
     const connected = !!status?.connected;
@@ -67,8 +66,23 @@
     const botUser = String(status?.bot_username || '').replace(/^@+/, '').trim();
     const masked = String(status?.chat_id_masked || '').trim();
     const user = String(status?.username || '').trim();
+    const allowedByPlan = !!status?.allowed_by_plan;
+    const planName = String(status?.plan_name || status?.plan_code || '').trim() || 'tu plan';
 
-    if (connected) {
+    if (checkbox) {
+      checkbox.disabled = !allowedByPlan;
+      checkbox.checked = allowedByPlan ? !!enabled : false;
+    }
+
+    if (!allowedByPlan) {
+      pill.textContent = 'No incluido';
+      pill.style.background = '#f8fafc';
+      pill.style.color = '#475569';
+      pill.style.borderColor = '#cbd5e1';
+      note.textContent = `Telegram no está habilitado para ${planName}.`;
+      actions.innerHTML = '';
+      mini.textContent = 'La política del canal queda alineada al plan activo y sus feature flags.';
+    } else if (connected) {
       pill.textContent = enabled ? 'Conectado y activo' : 'Conectado';
       pill.style.background = enabled ? '#ecfdf3' : '#eef4ff';
       pill.style.color = enabled ? '#166534' : '#0f3460';
@@ -90,7 +104,10 @@
       mini.textContent = 'La vinculación usa un enlace seguro generado para tu cuenta.';
     } else {
       pill.textContent = 'Sin configurar';
-      note.textContent = 'Falta configurar el bot de Telegram en el worker.';
+      pill.style.background = '#fff7ed';
+      pill.style.color = '#9a3412';
+      pill.style.borderColor = '#fed7aa';
+      note.textContent = 'Falta configurar el bot o el secret del webhook en el worker.';
       actions.innerHTML = '';
       mini.textContent = '';
     }
@@ -102,7 +119,14 @@
         resumen.insertAdjacentHTML('beforeend', '<p data-telegram-summary="1"><strong>Telegram:</strong> -</p>');
         node = resumen.querySelector('[data-telegram-summary="1"]');
       }
-      if (node) node.innerHTML = `<strong>Telegram:</strong> ${connected ? (enabled ? 'Conectado y activo' : 'Conectado') : 'No conectado'}`;
+      if (node) {
+        const label = !allowedByPlan
+          ? `No incluido en ${planName}`
+          : connected
+            ? (enabled ? 'Conectado y activo' : 'Conectado')
+            : 'No conectado';
+        node.innerHTML = `<strong>Telegram:</strong> ${esc(label)}`;
+      }
     }
 
     const canales = byId('panel-canales');
@@ -111,8 +135,10 @@
         <div class="plan-stack">
           <div class="plan-pill-row"><span class="plan-pill">📧 Email</span><span class="plan-pill plan-pill-neutral">Incluido</span></div>
           <p class="plan-note">Alertas por email disponibles como canal base.</p>
-          <div class="plan-pill-row"><span class="plan-pill">📨 Telegram</span><span class="plan-pill plan-pill-neutral">${connected ? (enabled ? 'Activo' : 'Conectado') : 'Disponible'}</span></div>
+
+          <div class="plan-pill-row"><span class="plan-pill">📨 Telegram</span><span class="plan-pill plan-pill-neutral">${!allowedByPlan ? 'No incluido' : connected ? (enabled ? 'Activo' : 'Conectado') : 'Disponible'}</span></div>
           <p class="plan-note">${esc(note.textContent)}</p>
+
           <div class="plan-pill-row"><span class="plan-pill">💬 WhatsApp</span><span class="plan-pill plan-pill-neutral">En preparación</span></div>
           <p class="plan-note">WhatsApp sigue reservado para una etapa posterior.</p>
         </div>`;
@@ -138,6 +164,8 @@
         if (status) {
           pref.alertas_telegram = !!status.alerts_enabled;
           pref.telegram_connected = !!status.connected;
+          pref.telegram_allowed_by_plan = !!status.allowed_by_plan;
+          pref.telegram_plan_name = status.plan_name || status.plan_code || '';
           pref.telegram_bot_link = status.bot_link || '';
           pref.telegram_bot_username = status.bot_username || '';
           pref.telegram_chat_id_masked = status.chat_id_masked || '';
@@ -155,6 +183,8 @@
         const pref = data?.preferencias || {};
         renderStatus({
           connected: !!pref.telegram_connected,
+          allowed_by_plan: !!pref.telegram_allowed_by_plan,
+          plan_name: pref.telegram_plan_name || '',
           bot_link: pref.telegram_bot_link || '',
           bot_username: pref.telegram_bot_username || '',
           chat_id_masked: pref.telegram_chat_id_masked || '',
