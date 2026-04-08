@@ -5,16 +5,21 @@ function getRows(raw) {
   return String(raw || "").match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
 }
 
+function cleanExtractedCellText(value) {
+  let text = stripTags(value);
+  text = text.replace(/\b(?:align|valign|width|height|bgcolor|border|cellpadding|cellspacing|rowspan|colspan|style|class|id|title|cargoarea|rpi|onclick|href|target|scope|nowrap|cellstyle|color)\b(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, " ");
+  return cleanText(text);
+}
+
 function getCells(rowHtml) {
   const matches = [...String(rowHtml || "").matchAll(/<t[dh][^>]*([^>]*)>([\s\S]*?)<\/t[dh]>/gi)];
   return matches.map((match) => {
     const attrs = String(match[1] || "");
     const inner = String(match[2] || "");
     const titleMatch = attrs.match(/title=['"]([^'"]*)['"]/i);
-    return {
-      text: stripTags(inner),
-      title: cleanText(titleMatch?.[1] || "")
-    };
+    const title = cleanExtractedCellText(titleMatch?.[1] || "");
+    const text = cleanExtractedCellText(inner);
+    return { text, title };
   });
 }
 
@@ -44,7 +49,13 @@ export function parsePidHtml(html) {
 
   for (const rowHtml of getRows(raw)) {
     debug.total_rows += 1;
-    const plainRow = stripTags(rowHtml);
+
+    const cells = getCells(rowHtml);
+    if (!cells.length) continue;
+    debug.rows_with_cells += 1;
+
+    const rowTexts = cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean);
+    const plainRow = cleanText(rowTexts.join(" "));
     if (!plainRow) continue;
 
     if (looksLikeDocumentRow(plainRow, rowHtml)) {
@@ -57,10 +68,6 @@ export function parsePidHtml(html) {
       continue;
     }
 
-    const cells = getCells(rowHtml);
-    if (!cells.length) continue;
-    debug.rows_with_cells += 1;
-
     if (isLikelySectionHeading(plainRow, cells)) {
       context.currentSection = cleanText(plainRow);
       context.currentHeaderMap = null;
@@ -69,7 +76,7 @@ export function parsePidHtml(html) {
       if (debug.heading_samples.length < 10) {
         debug.heading_samples.push({
           text: plainRow,
-          cells: cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean)
+          cells: rowTexts
         });
       }
       continue;
@@ -97,13 +104,12 @@ export function parsePidHtml(html) {
           by: parsedBy,
           text: plainRow,
           parsed,
-          cells: cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean)
+          cells: rowTexts
         });
       }
       continue;
     }
 
-    const rowTexts = cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean);
     if (debug.noise_samples.length < 10) {
       debug.noise_samples.push({
         text: plainRow,
