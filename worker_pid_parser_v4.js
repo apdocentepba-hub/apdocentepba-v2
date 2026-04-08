@@ -1,8 +1,83 @@
 import { cleanText, extractLabelValue } from "./worker_pid_shared_v3.js";
 import { stripTags, looksLikeDocumentRow, looksLikeMetaLabelRow, isLikelySectionHeading, isHeaderRow, buildHeaderMap, parseRowWithHeader, parseRowHeuristically, deriveLegacyItems, buildHtmlDebugExcerpt } from "./worker_pid_parser_utils_v3.js";
 
+function findTagEnd(html, startIndex) {
+  let quote = "";
+  for (let i = startIndex; i < html.length; i += 1) {
+    const ch = html[i];
+    if (quote) {
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ">") return i;
+  }
+  return -1;
+}
+
+function extractBalancedTagBlocks(html, tagNames) {
+  const source = String(html || "");
+  const wanted = new Set(tagNames.map((t) => String(t).toLowerCase()));
+  const out = [];
+  let i = 0;
+
+  while (i < source.length) {
+    const lt = source.indexOf("<", i);
+    if (lt === -1) break;
+
+    const nameMatch = source.slice(lt).match(/^<([a-zA-Z0-9]+)/);
+    if (!nameMatch) {
+      i = lt + 1;
+      continue;
+    }
+
+    const tagName = nameMatch[1].toLowerCase();
+    if (!wanted.has(tagName)) {
+      i = lt + 1;
+      continue;
+    }
+
+    const openEnd = findTagEnd(source, lt + 1);
+    if (openEnd === -1) break;
+
+    let depth = 1;
+    let cursor = openEnd + 1;
+    while (cursor < source.length && depth > 0) {
+      const nextLt = source.indexOf("<", cursor);
+      if (nextLt === -1) break;
+
+      const closeMatch = source.slice(nextLt).match(new RegExp(`^<\\/${tagName}\\b`, "i"));
+      const openMatch = source.slice(nextLt).match(new RegExp(`^<${tagName}\\b`, "i"));
+      if (!closeMatch && !openMatch) {
+        cursor = nextLt + 1;
+        continue;
+      }
+
+      const tagEnd = findTagEnd(source, nextLt + 1);
+      if (tagEnd === -1) break;
+
+      if (closeMatch) depth -= 1;
+      else if (openMatch && !/\/\s*>$/.test(source.slice(nextLt, tagEnd + 1))) depth += 1;
+
+      cursor = tagEnd + 1;
+    }
+
+    if (depth === 0) {
+      out.push(source.slice(lt, cursor));
+      i = cursor;
+    } else {
+      i = openEnd + 1;
+    }
+  }
+
+  return out;
+}
+
 function getRows(raw) {
-  return String(raw || "").match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+  return extractBalancedTagBlocks(raw, ["tr"]);
 }
 
 function cleanExtractedCellText(value) {
@@ -12,11 +87,12 @@ function cleanExtractedCellText(value) {
 }
 
 function getCells(rowHtml) {
-  const matches = [...String(rowHtml || "").matchAll(/<t[dh][^>]*([^>]*)>([\s\S]*?)<\/t[dh]>/gi)];
-  return matches.map((match) => {
-    const attrs = String(match[1] || "");
-    const inner = String(match[2] || "");
-    const titleMatch = attrs.match(/title=['"]([^'"]*)['"]/i);
+  const cellBlocks = extractBalancedTagBlocks(rowHtml, ["td", "th"]);
+  return cellBlocks.map((block) => {
+    const openEnd = findTagEnd(block, 1);
+    const openTag = openEnd !== -1 ? block.slice(0, openEnd + 1) : "";
+    const inner = openEnd !== -1 ? block.slice(openEnd + 1).replace(/<\/t[dh]\s*>$/i, "") : block;
+    const titleMatch = openTag.match(/title=['"]([^'"]*)['"]/i);
     const title = cleanExtractedCellText(titleMatch?.[1] || "");
     const text = cleanExtractedCellText(inner);
     return { text, title };
