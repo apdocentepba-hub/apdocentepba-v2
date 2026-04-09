@@ -1,5 +1,5 @@
 name = "ancient-wildflower-cd37"
-main = "worker_pid_lookup_hotfix.js"
+main = "worker_telegram_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true
