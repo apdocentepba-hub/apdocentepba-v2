@@ -1,0 +1,55 @@
+--- a/worker_pid_parser_v4.js
++++ b/worker_pid_parser_v4.js
+@@
+ function selectParsingScope(raw) {
+   const fieldsets = getFieldsets(raw);
+   const selectedFieldset = fieldsets.find((block) => /PUNTAJE INGRESO A LA DOCENCIA|Apellido y Nombre|Distrito de Residencia/i.test(stripTags(block))) || "";
+-  const scopeRoot = selectedFieldset || raw;
+-  const tables = getTables(scopeRoot);
+-  const scoredTables = tables.map((tableHtml, index) => scoreTable(tableHtml, index)).sort((a, b) => b.score - a.score);
+-  const selectedTable = scoredTables.find((table) => table.score > 0 && (table.header_rows > 0 || table.data_rows > 0)) || null;
++
++  const candidateSources = [];
++  if (selectedFieldset) candidateSources.push({ source: "fieldset", html: selectedFieldset });
++  candidateSources.push({ source: "raw", html: raw });
++
++  const dedupedTables = [];
++  const seenTables = new Set();
++
++  for (const candidateSource of candidateSources) {
++    const tables = getTables(candidateSource.html);
++    tables.forEach((tableHtml, index) => {
++      const dedupeKey = cleanText(tableHtml);
++      if (!dedupeKey || seenTables.has(dedupeKey)) return;
++      seenTables.add(dedupeKey);
++
++      const scored = scoreTable(tableHtml, index);
++      dedupedTables.push({
++        ...scored,
++        source: candidateSource.source
++      });
++    });
++  }
++
++  const scoredTables = dedupedTables.sort((a, b) => b.score - a.score);
++  const selectedTable = scoredTables.find((table) => table.score > 0 && (table.header_rows > 0 || table.data_rows > 0)) || null;
++  const fallbackScope = selectedFieldset || raw;
+ 
+   return {
+-    scopedHtml: selectedTable ? selectedTable.html : scopeRoot,
++    scopedHtml: selectedTable ? selectedTable.html : fallbackScope,
+     scopeDebug: {
+-      scope_root: selectedFieldset ? "fieldset" : "raw",
+-      tables_found: tables.length,
++      scope_root: selectedFieldset ? "fieldset+raw" : "raw",
++      tables_found: scoredTables.length,
+       selected_table_index: selectedTable ? selectedTable.index : null,
+       selected_table_score: selectedTable ? selectedTable.score : null,
+       selected_table_preview: selectedTable ? selectedTable.preview : "",
++      selected_table_source: selectedTable ? selectedTable.source : null,
+       candidate_tables: scoredTables.slice(0, 10).map((table) => ({
+         index: table.index,
++        source: table.source,
+         score: table.score,
+         row_count: table.row_count,
+         header_rows: table.header_rows,
