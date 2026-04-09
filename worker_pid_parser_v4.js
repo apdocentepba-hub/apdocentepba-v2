@@ -1,5 +1,5 @@
-import { cleanText, extractLabelValue } from "./worker_pid_shared_v3.js";
-import { stripTags, looksLikeDocumentRow, looksLikeMetaLabelRow, isLikelySectionHeading, isHeaderRow, buildHeaderMap, parseRowWithHeader, parseRowHeuristically, deriveLegacyItems, buildHtmlDebugExcerpt, pickLastNumeric, isNumericLike, isPercentLike } from "./worker_pid_parser_utils_v3.js";
+import { cleanText, extractLabelValue, normalizeComparable } from "./worker_pid_shared_v3.js";
+import { stripTags, looksLikeDocumentRow, looksLikeMetaLabelRow, isLikelySectionHeading, isHeaderRow, buildHeaderMap, parseRowWithHeader, parseRowHeuristically, deriveLegacyItems, buildHtmlDebugExcerpt, pickLastNumeric, isNumericLike, isPercentLike, detectFieldKind } from "./worker_pid_parser_utils_v3.js";
 
 function findTagEnd(html, startIndex) {
   let quote = "";
@@ -213,6 +213,22 @@ function selectParsingScope(raw) {
   };
 }
 
+function isRealHeaderRowForOfficial(cells, visibleTexts, visibleRowText, currentHeaderMap) {
+  if (currentHeaderMap) return false;
+  if (!visibleRowText) return false;
+  if (looksLikeDocumentRow(visibleRowText, "") || looksLikeMetaLabelRow(visibleRowText)) return false;
+
+  const norm = normalizeComparable(visibleRowText);
+  const explicitHeader = /\bAREA\b/.test(norm) && /TITULO/.test(norm) && /(PUNTAJE\s*TOTAL|PJE\.?\s*TOTAL)/.test(norm);
+  if (explicitHeader) return true;
+
+  const numericVisible = visibleTexts.some((text) => isNumericLike(text) || isPercentLike(text));
+  if (numericVisible) return false;
+
+  const visibleKinds = cells.map((cell) => detectFieldKind(cell.text || "")).filter(Boolean);
+  return new Set(visibleKinds).size >= 3;
+}
+
 export function parsePidHtml(html) {
   const raw = String(html || "");
   const legend = cleanText((((raw.match(/<legend[^>]*>([\s\S]*?)<\/legend>/i) || [])[1]) || "").replace(/<[^>]+>/g, " "));
@@ -247,8 +263,9 @@ export function parsePidHtml(html) {
     if (!cells.length) continue;
     debug.rows_with_cells += 1;
 
-    const rowTexts = cells.map((cell) => cleanText(cell.text || cell.title || "")).filter(Boolean);
-    const plainRow = cleanText(rowTexts.join(" "));
+    const visibleTexts = cells.map((cell) => cleanText(cell.text || "")).filter(Boolean);
+    const visibleOnlyCells = cells.map((cell) => ({ text: cleanText(cell.text || ""), title: "" }));
+    const plainRow = cleanText(visibleTexts.join(" "));
     if (!plainRow) continue;
 
     if (looksLikeDocumentRow(plainRow, rowHtml)) {
@@ -260,16 +277,16 @@ export function parsePidHtml(html) {
       continue;
     }
 
-    if (isLikelySectionHeading(plainRow, cells)) {
+    if (isLikelySectionHeading(plainRow, visibleOnlyCells)) {
       context.currentSection = cleanText(plainRow);
       context.currentHeaderMap = null;
       context.lastArea = "";
       debug.heading_rows += 1;
-      if (debug.heading_samples.length < 10) debug.heading_samples.push({ text: plainRow, cells: rowTexts });
+      if (debug.heading_samples.length < 10) debug.heading_samples.push({ text: plainRow, cells: visibleTexts });
       continue;
     }
 
-    if (isHeaderRow(cells, plainRow)) {
+    if (isRealHeaderRowForOfficial(visibleOnlyCells, visibleTexts, plainRow, context.currentHeaderMap)) {
       context.currentHeaderMap = buildHeaderMap(cells);
       debug.header_rows += 1;
       continue;
@@ -286,13 +303,13 @@ export function parsePidHtml(html) {
       sectionRows.push(parsed);
       debug.parsed_section_rows += 1;
       if (debug.parsed_section_row_samples.length < 10) {
-        debug.parsed_section_row_samples.push({ by: parsedBy, text: plainRow, parsed, cells: rowTexts });
+        debug.parsed_section_row_samples.push({ by: parsedBy, text: plainRow, parsed, cells: visibleTexts });
       }
       continue;
     }
 
     if (debug.noise_samples.length < 10) {
-      debug.noise_samples.push({ text: plainRow, cells: rowTexts, current_section: context.currentSection });
+      debug.noise_samples.push({ text: plainRow, cells: visibleTexts, current_section: context.currentSection });
     }
   }
 
