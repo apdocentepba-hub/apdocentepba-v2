@@ -365,12 +365,10 @@
         console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
 
         if (String(err?.message || '').includes('tardó demasiado')) {
-          writeLastOk(meta);
-          renderLastOk();
-          msg('La consulta se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
-        } else {
-          msg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
-        }
+  msg('El guardado tardó demasiado en responder. Verificá en la planilla si quedó registrado.', 'pidlist-warn');
+} else {
+  msg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
+}
       }
     } catch (err) {
       if (o) {
