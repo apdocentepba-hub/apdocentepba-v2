@@ -1156,7 +1156,22 @@ function renderDots(total, current) {
     </div>
   `;
 }
+function renderPidMatchBlock(alerta) {
+  if (!alerta?.pid_match) return "";
 
+  return `
+    <div class="alerta-meta-card alerta-pid-card">
+      <div class="alerta-meta-head">Match PID</div>
+      <div class="alerta-meta-grid">
+        ${alertaRow("Área PID", alerta.pid_area)}
+        ${alertaRow("Bloque PID", alerta.pid_bloque)}
+        ${alertaRow("Puntaje total PID", alerta.pid_puntaje_total)}
+        ${alertaRow("Listado PID", alerta.pid_listado)}
+        ${alertaRow("Año PID", alerta.pid_anio)}
+      </div>
+    </div>
+  `;
+}
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -1188,12 +1203,12 @@ function renderAlertaActual() {
   const a = items[alertasState.index];
   const titulo = tituloAlerta(a);
   const horarioLabel = a.dias_horarios || a.horario || "";
-const desdeLabel = a.supl_desde_label || fmtFechaABC(a.supl_desde, "date");
-const hastaLabel = a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date");
-const vigenciaLabel =
-  (desdeLabel || hastaLabel)
-    ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
-    : (a.revista || "Sin fecha informada");
+  const desdeLabel = a.supl_desde_label || fmtFechaABC(a.supl_desde, "date");
+  const hastaLabel = a.supl_hasta_label || fmtFechaABC(a.supl_hasta, "date");
+  const vigenciaLabel =
+    (desdeLabel || hastaLabel)
+      ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
+      : (a.revista || "Sin fecha informada");
   const abcUrl = buildPostulantesUrl(a);
 
   const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
@@ -1223,26 +1238,30 @@ const vigenciaLabel =
 
           ${renderProgress(total, alertasState.index)}
 
-   <div class="alerta-tags">
-  ${a.escuela ? `<span class="tag tag-escuela">${esc(a.escuela)}</span>` : ""}
-  ${a.distrito ? `<span class="tag tag-distrito">${esc(a.distrito)}</span>` : ""}
-  ${a.turno ? `<span class="tag tag-turno">${esc(a.turno)}</span>` : ""}
-  ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
-  ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
-  ${a.revista ? `<span class="tag tag-revista">${esc(a.revista)}</span>` : ""}
-  ${a.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
-</div>
+          <div class="alerta-tags">
+            ${a.escuela ? `<span class="tag tag-escuela">${esc(a.escuela)}</span>` : ""}
+            ${a.distrito ? `<span class="tag tag-distrito">${esc(a.distrito)}</span>` : ""}
+            ${a.turno ? `<span class="tag tag-turno">${esc(a.turno)}</span>` : ""}
+            ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
+            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+            ${a.revista ? `<span class="tag tag-revista">${esc(a.revista)}</span>` : ""}
+            ${a.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
+            ${a.pid_match ? `<span class="tag tag-revista">MATCH PID</span>` : ""}
+          </div>
 
-<div class="alerta-title">${esc(titulo)}</div>
+          <div class="alerta-title">${esc(titulo)}</div>
 
-<div class="alerta-grid alerta-grid-clean">
-  ${alertaRow("Curso / Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
-  ${(a.hsmodulos || a.modulos) ? alertaRow("Módulos", a.hsmodulos || a.modulos) : ""}
-  ${horarioLabel ? alertaRow("Días / horarios", horarioLabel) : ""}
-  ${vigenciaLabel ? alertaRow("Vigencia", vigenciaLabel) : ""}
-  ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
-  ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
-</div>
+          <div class="alerta-grid alerta-grid-clean">
+            ${alertaRow("Curso / Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
+            ${(a.hsmodulos || a.modulos) ? alertaRow("Módulos", a.hsmodulos || a.modulos) : ""}
+            ${horarioLabel ? alertaRow("Días / horarios", horarioLabel) : ""}
+            ${vigenciaLabel ? alertaRow("Vigencia", vigenciaLabel) : ""}
+            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
+            ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+          </div>
+
+          ${renderPidMatchBlock(a)}
+
           <div id="alerta-postulantes-meta" class="alerta-meta-card">
             <div class="alerta-meta-head">Referencia de postulantes</div>
             <div class="alerta-meta-loading">Cargando postulantes...</div>
@@ -1275,7 +1294,6 @@ const vigenciaLabel =
 
   cargarResumenPostulantes(a);
 }
-
 function alertaRow(label, value) {
   const v = String(value || "").trim();
   if (!v) return "";
