@@ -1,8 +1,8 @@
 (function () {
   'use strict';
 
-  if (window.__apdPidPanelV4Loaded) return;
-  window.__apdPidPanelV4Loaded = true;
+  if (window.__apdPidPanelV5Loaded) return;
+  window.__apdPidPanelV5Loaded = true;
 
   const API = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const WEBAPP = 'https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec';
@@ -131,6 +131,13 @@
 
     el.textContent = bits.join(' · ');
     el.style.display = 'block';
+  }
+
+  function commitLastOk(meta) {
+    writeLastOk(meta);
+    renderLastOk();
+    setTimeout(renderLastOk, 0);
+    setTimeout(renderLastOk, 200);
   }
 
   function normalizeRows(result) {
@@ -358,6 +365,8 @@
     renderIdle();
     setMsg('');
     renderLastOk();
+    setTimeout(renderLastOk, 0);
+    setTimeout(renderLastOk, 200);
   }
 
   async function run() {
@@ -424,20 +433,18 @@
 
       save(data, meta)
         .then(function (saved) {
-          writeLastOk(meta);
-          renderLastOk();
+          commitLastOk(meta);
           setMsg(clean(saved?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
         })
         .catch(function (err) {
           console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
 
           if (String(err?.message || '').includes('tardó demasiado')) {
-  writeLastOk(meta);
-  renderLastOk();
-  setMsg('La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
-} else {
-  setMsg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
-}
+            commitLastOk(meta);
+            setMsg('La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
+          } else {
+            setMsg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
+          }
         });
     } catch (err) {
       const text = err?.name === 'AbortError'
@@ -475,12 +482,12 @@
       .pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}
       .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
       .pidlist-actions .btn{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}
+      .pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}
       .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}
       .pidlist-info{color:#0f3460}
       .pidlist-ok{color:#0b7a44}
       .pidlist-err{color:#b42318}
       .pidlist-warn{color:#9a6700}
-      .pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}
       .pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}
       .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
       .pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
@@ -529,8 +536,8 @@
           </div>
         </div>
 
-        <div id="pidlist-msg" class="pidlist-msg"></div>
         <div id="pidlist-lastok" class="pidlist-lastok"></div>
+        <div id="pidlist-msg" class="pidlist-msg"></div>
         <div id="pidlist-out"></div>
       </div>
     `;
@@ -567,6 +574,8 @@
 
     renderIdle();
     renderLastOk();
+    setTimeout(renderLastOk, 0);
+    setTimeout(renderLastOk, 200);
   }
 
   function panelGrid() {
@@ -594,6 +603,8 @@
       bindCard();
     } else {
       renderLastOk();
+      setTimeout(renderLastOk, 0);
+      setTimeout(renderLastOk, 200);
     }
   }
 
