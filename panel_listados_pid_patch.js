@@ -33,7 +33,7 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/\"/g, '&quot;');
   }
 
   function clean(v) {
@@ -64,17 +64,13 @@
       .pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
       .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}
       .pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
+      .pidlist-block{margin-top:12px}
+      .pidlist-block-title{margin:0 0 6px;font-size:15px;font-weight:800;color:#10243d}
       .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}
-      .pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:680px}
+      .pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:420px}
       .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}
       .pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
-      .pidlist-section-row td{background:#eef4ff;color:#0f3460;font-size:13px;font-weight:800;border-top:1px solid #dbe3f0}
-      .pidlist-muted{color:#64748b}
-      .pidlist-title-cell{min-width:260px;white-space:normal}
-      .pidlist-subttl{margin:16px 0 6px;font-size:15px;font-weight:800;color:#10243d}
-      .pidlist-counts{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 6px}
-      .pidlist-pill{display:inline-block;background:#eef4ff;color:#0f3460;border:1px solid #d6e4ff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
-      .pidlist-raw{margin-top:10px;background:#0b1220;color:#dbeafe;padding:14px;border-radius:12px;overflow:auto;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+      .pidlist-table td:last-child,.pidlist-table th:last-child{text-align:right}
       @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}
       @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}
     `;
@@ -116,63 +112,66 @@
     out.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
   }
 
-  function normalizeSectionRows(rows) {
-    return (Array.isArray(rows) ? rows : []).map(function (row) {
+  function normalizePidRows(result) {
+    const rows = Array.isArray(result && result.table_rows)
+      ? result.table_rows
+      : (Array.isArray(result && result.section_rows) ? result.section_rows : []);
+
+    return rows.map(function (row) {
       return {
         bloque: clean(row && row.bloque || ''),
         area: clean(row && row.area || ''),
-        titulo: clean(row && row.titulo || ''),
-        porcentaje: clean(row && row.porcentaje || ''),
         puntaje_total: clean(row && row.puntaje_total || '')
       };
     }).filter(function (row) {
-      return row.area || row.titulo || row.porcentaje || row.puntaje_total;
+      return row.area || row.puntaje_total;
     });
   }
 
-  function renderSectionRows(rows) {
+  function groupRowsByBlock(rows) {
     const groups = [];
-    let currentGroup = null;
+    let current = null;
 
     rows.forEach(function (row) {
-      const bloque = row.bloque || '';
-      if (!currentGroup || currentGroup.bloque !== bloque) {
-        currentGroup = { bloque: bloque, rows: [] };
-        groups.push(currentGroup);
+      const bloque = row.bloque || 'Otros puntajes';
+      if (!current || current.bloque !== bloque) {
+        current = { bloque: bloque, rows: [] };
+        groups.push(current);
       }
-      currentGroup.rows.push(row);
+      current.rows.push(row);
     });
 
-    return groups.map(function (group) {
-      const title = group.bloque || 'Otros puntajes';
-      const body = group.rows.map(function (row) {
-        return '<tr>' +
-          '<td>' + esc(row.area || '-') + '</td>' +
-          '<td class="pidlist-title-cell">' + esc(row.titulo || '-') + '</td>' +
-          '<td>' + esc(row.porcentaje || '-') + '</td>' +
-          '<td>' + esc(row.puntaje_total || '-') + '</td>' +
-        '</tr>';
-      }).join('');
+    return groups;
+  }
 
-      return '<tr class="pidlist-section-row"><td colspan="4">' + esc(title) + '</td></tr>' + body;
+  function renderGroups(groups) {
+    return groups.map(function (group) {
+      return `
+        <div class="pidlist-block">
+          <div class="pidlist-block-title">${esc(group.bloque)}</div>
+          <div class="pidlist-table-wrap">
+            <table class="pidlist-table">
+              <thead>
+                <tr><th>Área</th><th>Puntaje total</th></tr>
+              </thead>
+              <tbody>
+                ${group.rows.map(function (row) {
+                  return `<tr><td>${esc(row.area || '-')}</td><td>${esc(row.puntaje_total || '-')}</td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
     }).join('');
   }
 
-  function renderLegacyRows(rows) {
-    return rows.length
-      ? rows.map(function (it) {
-          return '<tr><td>' + esc(it.codigo || '-') + '</td><td>' + esc(it.rama || '-') + '</td><td>' + esc(it.puntaje || '-') + '</td><td>' + esc(it.fecha || '-') + '</td></tr>';
-        }).join('')
-      : '<tr><td colspan="4">No se encontraron filas.</td></tr>';
-  }
-
-  function renderResult(result, meta, rawData) {
+  function renderResult(result, meta) {
     const out = byId('pidlist-out');
     if (!out) return;
 
-    const sectionRows = normalizeSectionRows(result && result.section_rows);
-    const legacyRows = Array.isArray(result && result.items) ? result.items : [];
-    const version = clean(rawData && rawData.version || '-');
+    const rows = normalizePidRows(result);
+    const groups = groupRowsByBlock(rows);
 
     out.innerHTML = `
       <div class="pidlist-meta">
@@ -182,37 +181,7 @@
         <div class="pidlist-box"><span class="pidlist-k">Oblea</span><strong class="pidlist-v">${esc(result && result.oblea || '-')}</strong></div>
       </div>
       <p class="prefs-hint">Consulta hecha para DNI ${esc(meta.dni)} · listado ${esc(meta.label)} · año ${esc(meta.anio)}.</p>
-
-      <div class="pidlist-counts">
-        <span class="pidlist-pill">section_rows: ${sectionRows.length}</span>
-        <span class="pidlist-pill">items: ${legacyRows.length}</span>
-        <span class="pidlist-pill">version: ${esc(version)}</span>
-      </div>
-
-      <div class="pidlist-subttl">Estructura real del PID (section_rows)</div>
-      <div class="pidlist-table-wrap">
-        <table class="pidlist-table">
-          <thead><tr><th>Área</th><th>Título</th><th>%</th><th>Puntaje total</th></tr></thead>
-          <tbody>
-            ${sectionRows.length ? renderSectionRows(sectionRows) : '<tr><td colspan="4">No vinieron section_rows.</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-      <div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Esta es la tabla completa por bloques, áreas y títulos.</div>
-
-      <div class="pidlist-subttl">Vista reducida heredada (items)</div>
-      <div class="pidlist-table-wrap">
-        <table class="pidlist-table">
-          <thead><tr><th>Código</th><th>Rama</th><th>Puntaje</th><th>Fecha</th></tr></thead>
-          <tbody>
-            ${renderLegacyRows(legacyRows)}
-          </tbody>
-        </table>
-      </div>
-      <div class="pidlist-muted" style="font-size:12px;margin-top:4px;">Esta sección deja visibles los items viejos para control y comparación.</div>
-
-      <div class="pidlist-subttl">Respuesta cruda del worker</div>
-      <pre class="pidlist-raw">${esc(JSON.stringify(rawData || {}, null, 2))}</pre>
+      ${groups.length ? renderGroups(groups) : '<div class="pidlist-empty">No se encontraron filas.</div>'}
     `;
   }
 
@@ -233,6 +202,7 @@
 
     if (btn) { btn.disabled = true; btn.textContent = 'Buscando...'; }
     setMsg('Consultando PID...', 'pidlist-info');
+
     const out = byId('pidlist-out');
     if (out) out.innerHTML = '<div class="pidlist-empty">Consultando PID...</div>';
 
@@ -244,7 +214,7 @@
       });
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok || !data || !data.ok) throw new Error(data && data.error || 'No se pudo consultar PID.');
-      renderResult(data.result || {}, { dni: dni, anio: anio, label: label }, data);
+      renderResult(data.result || {}, { dni: dni, anio: anio, label: label });
       setMsg('Consulta PID realizada correctamente.', 'pidlist-ok');
     } catch (err) {
       if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(err && err.message || 'No se pudo consultar PID.') + '</div>';
