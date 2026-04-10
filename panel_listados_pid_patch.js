@@ -240,30 +240,43 @@
   });
 
   const save = async (data, m) => {
-    const res = await fetch(WEBAPP, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(savePayload(data, m))
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
 
-    const text = await res.text();
-
-    let j = null;
     try {
-      j = text ? JSON.parse(text) : null;
-    } catch (_) {
-      throw new Error('El guardado no devolvió JSON válido');
-    }
+      const res = await fetch(WEBAPP, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(savePayload(data, m)),
+        signal: controller.signal
+      });
 
-    if (!res.ok) {
-      throw new Error(clean(j?.error || j?.message || ('HTTP ' + res.status)));
-    }
+      const text = await res.text();
 
-    if (!j || j.ok !== true) {
-      throw new Error(clean(j?.error || j?.message || 'El guardado no confirmó ok:true'));
-    }
+      let j = null;
+      try {
+        j = text ? JSON.parse(text) : null;
+      } catch (_) {
+        throw new Error('El guardado no devolvió JSON válido');
+      }
 
-    return j;
+      if (!res.ok) {
+        throw new Error(clean(j?.error || j?.message || ('HTTP ' + res.status)));
+      }
+
+      if (!j || j.ok !== true) {
+        throw new Error(clean(j?.error || j?.message || 'El guardado no confirmó ok:true'));
+      }
+
+      return j;
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error('El guardado tardó demasiado en responder');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   const fill = async () => {
@@ -291,10 +304,17 @@
 
   const clearForm = () => {
     const d = $('pidlist-dni');
+    const s = $('pidlist-listado');
+    const a = $('pidlist-anio');
+
     if (d) {
       d.value = '';
       d.focus();
     }
+
+    if (s) s.value = 'oficial';
+    if (a) a.value = String(new Date().getFullYear());
+
     idle();
     msg('');
     renderLastOk();
@@ -343,7 +363,14 @@
         msg(clean(s?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
       } catch (err) {
         console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
-        msg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
+
+        if (String(err?.message || '').includes('tardó demasiado')) {
+          writeLastOk(meta);
+          renderLastOk();
+          msg('La consulta se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
+        } else {
+          msg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
+        }
       }
     } catch (err) {
       if (o) {
