@@ -1,13 +1,12 @@
 (function () {
   'use strict';
 
-  if (window.__apdPidPanelV5Loaded) return;
-  window.__apdPidPanelV5Loaded = true;
+  if (window.__apdPidPanelV6Loaded) return;
+  window.__apdPidPanelV6Loaded = true;
 
   const API = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const WEBAPP = 'https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec';
   const TOK = 'apd_token_v2';
-  const LAST_OK = 'apd_pid_last_save_ok_v1';
 
   const LIST = [
     ['oficial', 'Listado Oficial'],
@@ -61,19 +60,6 @@
     return !!token();
   }
 
-  function fmtDateTime(iso) {
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return clean(iso);
-      return d.toLocaleString('es-AR', {
-        dateStyle: 'short',
-        timeStyle: 'short'
-      });
-    } catch (_) {
-      return clean(iso);
-    }
-  }
-
   function setMsg(text, type) {
     const el = byId('pidlist-msg');
     if (!el) return;
@@ -85,59 +71,6 @@
     const out = byId('pidlist-out');
     if (!out) return;
     out.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
-  }
-
-  function readLastOk() {
-    try {
-      const raw = localStorage.getItem(LAST_OK);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function writeLastOk(meta) {
-    try {
-      localStorage.setItem(
-        LAST_OK,
-        JSON.stringify({
-          dni: clean(meta?.dni || ''),
-          anio: clean(meta?.anio || ''),
-          listado: clean(meta?.listado || ''),
-          label: clean(meta?.label || ''),
-          saved_at: new Date().toISOString()
-        })
-      );
-    } catch (_) {}
-  }
-
-  function renderLastOk() {
-    const el = byId('pidlist-lastok');
-    if (!el) return;
-
-    const info = readLastOk();
-    if (!info || !info.saved_at) {
-      el.style.display = 'none';
-      el.textContent = '';
-      return;
-    }
-
-    const bits = ['Último guardado OK: ' + fmtDateTime(info.saved_at)];
-    if (info.dni) bits.push('DNI ' + info.dni);
-    if (info.label || info.listado) bits.push(info.label || info.listado);
-    if (info.anio) bits.push('año ' + info.anio);
-
-    el.textContent = bits.join(' · ');
-    el.style.display = 'block';
-  }
-
-  function commitLastOk(meta) {
-    writeLastOk(meta);
-    renderLastOk();
-    setTimeout(renderLastOk, 0);
-    setTimeout(renderLastOk, 200);
   }
 
   function normalizeRows(result) {
@@ -238,6 +171,22 @@
     `;
   }
 
+  function labelForListado(value) {
+    const select = byId('pidlist-listado');
+    if (select) {
+      const opt = Array.from(select.options || []).find(function (o) {
+        return String(o.value) === String(value);
+      });
+      if (opt) return clean(opt.textContent || value);
+    }
+
+    const found = LIST.find(function (item) {
+      return String(item[0]) === String(value);
+    });
+
+    return found ? found[1] : clean(value);
+  }
+
   function savePayload(data, meta) {
     const sourceRows = Array.isArray(data?.result?.table_rows)
       ? data.result.table_rows
@@ -269,17 +218,17 @@
     };
   }
 
-  async function save(data, meta) {
+  async function postWebApp(payload, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(function () {
       controller.abort();
-    }, 8000);
+    }, timeoutMs);
 
     try {
       const res = await fetch(WEBAPP, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(savePayload(data, meta)),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
 
@@ -289,21 +238,21 @@
       try {
         parsed = text ? JSON.parse(text) : null;
       } catch (_) {
-        throw new Error('El guardado no devolvió JSON válido');
+        throw new Error('El Web App no devolvió JSON válido');
       }
 
       if (!res.ok) {
         throw new Error(clean(parsed?.error || parsed?.message || ('HTTP ' + res.status)));
       }
 
-      if (!parsed || parsed.ok !== true) {
-        throw new Error(clean(parsed?.error || parsed?.message || 'El guardado no confirmó ok:true'));
+      if (!parsed) {
+        throw new Error('Respuesta vacía del Web App');
       }
 
       return parsed;
     } catch (err) {
       if (err?.name === 'AbortError') {
-        throw new Error('El guardado tardó demasiado en responder');
+        throw new Error('La operación tardó demasiado en responder');
       }
       throw err;
     } finally {
@@ -311,11 +260,68 @@
     }
   }
 
+  async function save(data, meta) {
+    const parsed = await postWebApp(savePayload(data, meta), 8000);
+
+    if (parsed.ok !== true) {
+      throw new Error(clean(parsed?.error || parsed?.message || 'El guardado no confirmó ok:true'));
+    }
+
+    return parsed;
+  }
+
+  async function restoreLastSaved(opts) {
+    if (!hasSession()) return false;
+
+    try {
+      const parsed = await postWebApp({
+        action: 'obtener_ultima_pid_consulta',
+        docente_id: token()
+      }, 8000);
+
+      if (parsed.ok !== true) {
+        throw new Error(clean(parsed?.error || parsed?.message || 'No se pudo obtener la última consulta'));
+      }
+
+      if (!parsed.found || !parsed.result) {
+        return false;
+      }
+
+      const dni = clean(parsed.dni || '');
+      const anio = clean(parsed.anio || '');
+      const listado = clean(parsed.listado || '');
+      const label = labelForListado(listado);
+
+      const dniEl = byId('pidlist-dni');
+      const anioEl = byId('pidlist-anio');
+      const listadoEl = byId('pidlist-listado');
+
+      if (dniEl) dniEl.value = dni;
+      if (anioEl) anioEl.value = anio || currentYear();
+      if (listadoEl && listado) listadoEl.value = listado;
+
+      renderResult(parsed.result, {
+        dni: dni,
+        anio: anio,
+        listado: listado,
+        label: label
+      });
+
+      if (!opts || !opts.silent) {
+        setMsg('Mostrando la última consulta guardada.', 'pidlist-info');
+      }
+
+      return true;
+    } catch (err) {
+      console.error('ERROR OBTENIENDO ÚLTIMA PID:', err);
+      return false;
+    }
+  }
+
   async function fillListados(selectEl) {
     if (!selectEl) return;
 
     let listados = LIST;
-
     const controller = new AbortController();
     const timer = setTimeout(function () {
       controller.abort();
@@ -364,9 +370,6 @@
 
     renderIdle();
     setMsg('');
-    renderLastOk();
-    setTimeout(renderLastOk, 0);
-    setTimeout(renderLastOk, 200);
   }
 
   async function run() {
@@ -433,15 +436,19 @@
 
       save(data, meta)
         .then(function (saved) {
-          commitLastOk(meta);
           setMsg(clean(saved?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
         })
         .catch(function (err) {
           console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
 
-          if (String(err?.message || '').includes('tardó demasiado')) {
-            commitLastOk(meta);
-            setMsg('La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
+          if (String(err?.message || '').includes('demasiado')) {
+            setMsg('La confirmación del guardado tardó demasiado. Voy a reintentar mostrar la última guardada.', 'pidlist-warn');
+            setTimeout(function () {
+              restoreLastSaved({ silent: true });
+            }, 2000);
+            setTimeout(function () {
+              restoreLastSaved({ silent: true });
+            }, 5000);
           } else {
             setMsg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
           }
@@ -482,7 +489,6 @@
       .pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}
       .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
       .pidlist-actions .btn{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}
-      .pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}
       .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}
       .pidlist-info{color:#0f3460}
       .pidlist-ok{color:#0b7a44}
@@ -536,7 +542,6 @@
           </div>
         </div>
 
-        <div id="pidlist-lastok" class="pidlist-lastok"></div>
         <div id="pidlist-msg" class="pidlist-msg"></div>
         <div id="pidlist-out"></div>
       </div>
@@ -573,9 +578,7 @@
     }
 
     renderIdle();
-    renderLastOk();
-    setTimeout(renderLastOk, 0);
-    setTimeout(renderLastOk, 200);
+    restoreLastSaved({ silent: true });
   }
 
   function panelGrid() {
@@ -601,10 +604,6 @@
     if (!byId('pidlist-card-inner')) {
       grid.innerHTML = buildHtml();
       bindCard();
-    } else {
-      renderLastOk();
-      setTimeout(renderLastOk, 0);
-      setTimeout(renderLastOk, 200);
     }
   }
 
