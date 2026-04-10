@@ -1,11 +1,10 @@
 (function () {
   'use strict';
 
-  if (window.__apdPidPanelV6Loaded) return;
-  window.__apdPidPanelV6Loaded = true;
+  if (window.__apdPidPanelV8Loaded) return;
+  window.__apdPidPanelV8Loaded = true;
 
   const API = 'https://jolly-haze-f505.apdocentepba.workers.dev';
-  const WEBAPP = 'https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec';
   const TOK = 'apd_token_v2';
 
   const LIST = [
@@ -195,7 +194,6 @@
         : [];
 
     return {
-      action: 'guardar_pid_consulta',
       docente_id: token(),
       dni: clean(data?.dni || meta?.dni || ''),
       anio: Number(data?.anio || meta?.anio || 0) || null,
@@ -218,38 +216,27 @@
     };
   }
 
-  async function postWebApp(payload, timeoutMs) {
+  async function postApi(path, payload, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(function () {
       controller.abort();
     }, timeoutMs);
 
     try {
-      const res = await fetch(WEBAPP, {
+      const res = await fetch(API + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal
       });
 
-      const text = await res.text();
-
-      let parsed = null;
-      try {
-        parsed = text ? JSON.parse(text) : null;
-      } catch (_) {
-        throw new Error('El Web App no devolvió JSON válido');
-      }
+      const data = await res.json().catch(function () { return {}; });
 
       if (!res.ok) {
-        throw new Error(clean(parsed?.error || parsed?.message || ('HTTP ' + res.status)));
+        throw new Error(clean(data?.error || ('HTTP ' + res.status)));
       }
 
-      if (!parsed) {
-        throw new Error('Respuesta vacía del Web App');
-      }
-
-      return parsed;
+      return data || {};
     } catch (err) {
       if (err?.name === 'AbortError') {
         throw new Error('La operación tardó demasiado en responder');
@@ -261,7 +248,7 @@
   }
 
   async function save(data, meta) {
-    const parsed = await postWebApp(savePayload(data, meta), 8000);
+    const parsed = await postApi('/api/pid-guardar', savePayload(data, meta), 8000);
 
     if (parsed.ok !== true) {
       throw new Error(clean(parsed?.error || parsed?.message || 'El guardado no confirmó ok:true'));
@@ -274,8 +261,7 @@
     if (!hasSession()) return false;
 
     try {
-      const parsed = await postWebApp({
-        action: 'obtener_ultima_pid_consulta',
+      const parsed = await postApi('/api/pid-ultima', {
         docente_id: token()
       }, 8000);
 
@@ -437,6 +423,9 @@
       save(data, meta)
         .then(function (saved) {
           setMsg(clean(saved?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
+          setTimeout(function () {
+            restoreLastSaved({ silent: true });
+          }, 300);
         })
         .catch(function (err) {
           console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
