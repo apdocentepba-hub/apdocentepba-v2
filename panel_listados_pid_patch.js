@@ -1,6 +1,8 @@
 (function () {
-  if (window.__apdPidPanelV3) return;
-  window.__apdPidPanelV3 = 1;
+  'use strict';
+
+  if (window.__apdPidPanelV4Loaded) return;
+  window.__apdPidPanelV4Loaded = true;
 
   const API = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const WEBAPP = 'https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec';
@@ -27,39 +29,39 @@
     ['formacionProfesionalComplementarioFp', 'Listado Complementario Formacion Profesional']
   ];
 
-  const $ = (id) => document.getElementById(id);
+  function byId(id) {
+    return document.getElementById(id);
+  }
 
-  const esc = (v) =>
-    String(v ?? '')
+  function esc(v) {
+    return String(v ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
 
-  const clean = (v) =>
-    String(v ?? '')
+  function clean(v) {
+    return String(v ?? '')
       .replace(/\u00a0/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
 
-  const msg = (t, k = 'pidlist-info') => {
-    const e = $('pidlist-msg');
-    if (!e) return;
-    e.textContent = t || '';
-    e.className = 'pidlist-msg ' + k;
-  };
+  function currentYear() {
+    return String(new Date().getFullYear());
+  }
 
-  const idle = () => {
-    const o = $('pidlist-out');
-    if (o) {
-      o.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
-    }
-  };
+  function token() {
+    return clean(localStorage.getItem(TOK) || '');
+  }
 
-  const token = () => clean(localStorage.getItem(TOK) || '');
+  function hasSession() {
+    return !!token();
+  }
 
-  const fmt = (iso) => {
+  function fmtDateTime(iso) {
     try {
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return clean(iso);
@@ -70,20 +72,33 @@
     } catch (_) {
       return clean(iso);
     }
-  };
+  }
 
-  const readLastOk = () => {
+  function setMsg(text, type) {
+    const el = byId('pidlist-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'pidlist-msg ' + (type || 'pidlist-info');
+  }
+
+  function renderIdle() {
+    const out = byId('pidlist-out');
+    if (!out) return;
+    out.innerHTML = '<div class="pidlist-empty">Acá vas a ver el resultado del PID por DNI.</div>';
+  }
+
+  function readLastOk() {
     try {
       const raw = localStorage.getItem(LAST_OK);
       if (!raw) return null;
-      const j = JSON.parse(raw);
-      return j && typeof j === 'object' ? j : null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
     } catch (_) {
       return null;
     }
-  };
+  }
 
-  const writeLastOk = (meta) => {
+  function writeLastOk(meta) {
     try {
       localStorage.setItem(
         LAST_OK,
@@ -96,179 +111,189 @@
         })
       );
     } catch (_) {}
-  };
+  }
 
-  const renderLastOk = () => {
-    const e = $('pidlist-lastok');
-    if (!e) return;
+  function renderLastOk() {
+    const el = byId('pidlist-lastok');
+    if (!el) return;
 
-    const j = readLastOk();
-    if (!j || !j.saved_at) {
-      e.style.display = 'none';
-      e.textContent = '';
+    const info = readLastOk();
+    if (!info || !info.saved_at) {
+      el.style.display = 'none';
+      el.textContent = '';
       return;
     }
 
-    const bits = [`Último guardado OK: ${fmt(j.saved_at)}`];
-    if (j.dni) bits.push(`DNI ${j.dni}`);
-    if (j.label || j.listado) bits.push(j.label || j.listado);
-    if (j.anio) bits.push(`año ${j.anio}`);
+    const bits = ['Último guardado OK: ' + fmtDateTime(info.saved_at)];
+    if (info.dni) bits.push('DNI ' + info.dni);
+    if (info.label || info.listado) bits.push(info.label || info.listado);
+    if (info.anio) bits.push('año ' + info.anio);
 
-    e.textContent = bits.join(' · ');
-    e.style.display = 'block';
-  };
+    el.textContent = bits.join(' · ');
+    el.style.display = 'block';
+  }
 
-  const rows = (r) =>
-    (
-      (
-        Array.isArray(r?.table_rows)
-          ? r.table_rows
-          : Array.isArray(r?.section_rows)
-            ? r.section_rows
-            : []
-      ) || []
-    )
-      .map((x) => ({
-        bloque: clean(x?.bloque || ''),
-        area: clean(x?.area || ''),
-        puntaje_total: clean(x?.puntaje_total || '')
-      }))
-      .filter((x) => x.area || x.puntaje_total);
+  function normalizeRows(result) {
+    const rows = Array.isArray(result?.table_rows)
+      ? result.table_rows
+      : Array.isArray(result?.section_rows)
+        ? result.section_rows
+        : [];
 
-  const byBlock = (a) => {
-    const g = [];
-    let c = null;
+    return rows
+      .map(function (row) {
+        return {
+          bloque: clean(row?.bloque || ''),
+          area: clean(row?.area || ''),
+          puntaje_total: clean(row?.puntaje_total || '')
+        };
+      })
+      .filter(function (row) {
+        return row.area || row.puntaje_total;
+      });
+  }
 
-    (a || []).forEach((r) => {
-      const b = r.bloque || 'Otros puntajes';
-      if (!c || c.bloque !== b) {
-        c = { bloque: b, rows: [] };
-        g.push(c);
+  function groupRowsByBlock(rows) {
+    const groups = [];
+    let current = null;
+
+    (rows || []).forEach(function (row) {
+      const bloque = row.bloque || 'Otros puntajes';
+      if (!current || current.bloque !== bloque) {
+        current = { bloque: bloque, rows: [] };
+        groups.push(current);
       }
-      c.rows.push(r);
+      current.rows.push(row);
     });
 
-    return g;
-  };
+    return groups;
+  }
 
-  const render = (r, m) => {
-    const o = $('pidlist-out');
-    if (!o) return;
+  function renderResult(result, meta) {
+    const out = byId('pidlist-out');
+    if (!out) return;
 
-    const gs = byBlock(rows(r));
+    const rows = normalizeRows(result);
+    const groups = groupRowsByBlock(rows);
 
-    o.innerHTML = `
+    out.innerHTML = `
       <div class="pidlist-meta">
         <div class="pidlist-box">
           <span class="pidlist-k">Apellido y nombre</span>
-          <strong class="pidlist-v">${esc(r?.apellido_nombre || '-')}</strong>
+          <strong class="pidlist-v">${esc(result?.apellido_nombre || '-')}</strong>
         </div>
         <div class="pidlist-box">
           <span class="pidlist-k">Distrito de residencia</span>
-          <strong class="pidlist-v">${esc(r?.distrito_residencia || '-')}</strong>
+          <strong class="pidlist-v">${esc(result?.distrito_residencia || '-')}</strong>
         </div>
         <div class="pidlist-box">
           <span class="pidlist-k">Distritos solicitados</span>
-          <strong class="pidlist-v">${esc(r?.distritos_solicitados || '-')}</strong>
+          <strong class="pidlist-v">${esc(result?.distritos_solicitados || '-')}</strong>
         </div>
         <div class="pidlist-box">
           <span class="pidlist-k">Oblea</span>
-          <strong class="pidlist-v">${esc(r?.oblea || '-')}</strong>
+          <strong class="pidlist-v">${esc(result?.oblea || '-')}</strong>
         </div>
       </div>
+
       <p class="prefs-hint">
-        Consulta hecha para DNI ${esc(m.dni)} · listado ${esc(m.label)} · año ${esc(m.anio)}.
+        Consulta hecha para DNI ${esc(meta.dni)} · listado ${esc(meta.label)} · año ${esc(meta.anio)}.
       </p>
+
       ${
-        gs.length
-          ? gs
-              .map(
-                (g) => `
-            <div class="pidlist-block">
-              <div class="pidlist-block-title">${esc(g.bloque)}</div>
-              <div class="pidlist-table-wrap">
-                <table class="pidlist-table">
-                  <thead>
-                    <tr><th>Área</th><th>Puntaje total</th></tr>
-                  </thead>
-                  <tbody>
-                    ${g.rows
-                      .map(
-                        (x) => `
-                      <tr>
-                        <td>${esc(x.area || '-')}</td>
-                        <td>${esc(x.puntaje_total || '-')}</td>
-                      </tr>
-                    `
-                      )
-                      .join('')}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          `
-              )
-              .join('')
+        groups.length
+          ? groups.map(function (group) {
+              return `
+                <div class="pidlist-block">
+                  <div class="pidlist-block-title">${esc(group.bloque)}</div>
+                  <div class="pidlist-table-wrap">
+                    <table class="pidlist-table">
+                      <thead>
+                        <tr><th>Área</th><th>Puntaje total</th></tr>
+                      </thead>
+                      <tbody>
+                        ${group.rows.map(function (row) {
+                          return `
+                            <tr>
+                              <td>${esc(row.area || '-')}</td>
+                              <td>${esc(row.puntaje_total || '-')}</td>
+                            </tr>
+                          `;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              `;
+            }).join('')
           : '<div class="pidlist-empty">No se encontraron filas.</div>'
       }
     `;
-  };
+  }
 
-  const savePayload = (data, m) => ({
-    action: 'guardar_pid_consulta',
-    docente_id: token(),
-    dni: clean(data?.dni || m.dni || ''),
-    anio: Number(data?.anio || m.anio || 0) || null,
-    listado: clean(data?.listado || m.listado || ''),
-    version_worker: clean(data?.version || ''),
-    fetched_at: new Date().toISOString(),
-    result: {
-      apellido_nombre: clean(data?.result?.apellido_nombre || ''),
-      distrito_residencia: clean(data?.result?.distrito_residencia || ''),
-      distritos_solicitados: clean(data?.result?.distritos_solicitados || ''),
-      oblea: clean(data?.result?.oblea || ''),
-      table_rows: (
-        Array.isArray(data?.result?.table_rows)
-          ? data.result.table_rows
-          : Array.isArray(data?.result?.section_rows)
-            ? data.result.section_rows
-            : []
-      ).map((r) =>
-        Object.fromEntries(Object.keys(r || {}).map((k) => [k, clean(r[k])]))
-      )
-    }
-  });
+  function savePayload(data, meta) {
+    const sourceRows = Array.isArray(data?.result?.table_rows)
+      ? data.result.table_rows
+      : Array.isArray(data?.result?.section_rows)
+        ? data.result.section_rows
+        : [];
 
-  const save = async (data, m) => {
+    return {
+      action: 'guardar_pid_consulta',
+      docente_id: token(),
+      dni: clean(data?.dni || meta?.dni || ''),
+      anio: Number(data?.anio || meta?.anio || 0) || null,
+      listado: clean(data?.listado || meta?.listado || ''),
+      version_worker: clean(data?.version || ''),
+      fetched_at: new Date().toISOString(),
+      result: {
+        apellido_nombre: clean(data?.result?.apellido_nombre || ''),
+        distrito_residencia: clean(data?.result?.distrito_residencia || ''),
+        distritos_solicitados: clean(data?.result?.distritos_solicitados || ''),
+        oblea: clean(data?.result?.oblea || ''),
+        table_rows: sourceRows.map(function (row) {
+          return Object.fromEntries(
+            Object.keys(row || {}).map(function (k) {
+              return [k, clean(row[k])];
+            })
+          );
+        })
+      }
+    };
+  }
+
+  async function save(data, meta) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(function () {
+      controller.abort();
+    }, 8000);
 
     try {
       const res = await fetch(WEBAPP, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(savePayload(data, m)),
+        body: JSON.stringify(savePayload(data, meta)),
         signal: controller.signal
       });
 
       const text = await res.text();
 
-      let j = null;
+      let parsed = null;
       try {
-        j = text ? JSON.parse(text) : null;
+        parsed = text ? JSON.parse(text) : null;
       } catch (_) {
         throw new Error('El guardado no devolvió JSON válido');
       }
 
       if (!res.ok) {
-        throw new Error(clean(j?.error || j?.message || ('HTTP ' + res.status)));
+        throw new Error(clean(parsed?.error || parsed?.message || ('HTTP ' + res.status)));
       }
 
-      if (!j || j.ok !== true) {
-        throw new Error(clean(j?.error || j?.message || 'El guardado no confirmó ok:true'));
+      if (!parsed || parsed.ok !== true) {
+        throw new Error(clean(parsed?.error || parsed?.message || 'El guardado no confirmó ok:true'));
       }
 
-      return j;
+      return parsed;
     } catch (err) {
       if (err?.name === 'AbortError') {
         throw new Error('El guardado tardó demasiado en responder');
@@ -277,208 +302,260 @@
     } finally {
       clearTimeout(timer);
     }
-  };
+  }
 
-  const fill = async () => {
-    const s = $('pidlist-listado');
-    if (!s) return;
+  async function fillListados(selectEl) {
+    if (!selectEl) return;
 
-    let list = LIST;
+    let listados = LIST;
+
+    const controller = new AbortController();
+    const timer = setTimeout(function () {
+      controller.abort();
+    }, 6000);
 
     try {
-      const res = await fetch(API + '/api/pid-listados');
-      const j = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(j?.listados) && j.listados.length) {
-        list = j.listados
-          .map((x) => [String(x.value || ''), String(x.label || '')])
-          .filter((x) => x[0]);
+      const res = await fetch(API + '/api/pid-listados', {
+        signal: controller.signal
+      });
+
+      const data = await res.json().catch(function () { return {}; });
+
+      if (res.ok && Array.isArray(data?.listados) && data.listados.length) {
+        listados = data.listados
+          .map(function (item) {
+            return [String(item.value || ''), String(item.label || '')];
+          })
+          .filter(function (item) {
+            return item[0];
+          });
       }
-    } catch (_) {}
-
-    s.innerHTML = list
-      .map((x) => `<option value="${esc(x[0])}">${esc(x[1])}</option>`)
-      .join('');
-
-    s.value = 'oficial';
-  };
-
-  const clearForm = () => {
-    const d = $('pidlist-dni');
-    const s = $('pidlist-listado');
-    const a = $('pidlist-anio');
-
-    if (d) {
-      d.value = '';
-      d.focus();
+    } catch (_) {
+      listados = LIST;
+    } finally {
+      clearTimeout(timer);
     }
 
-    if (s) s.value = 'oficial';
-    if (a) a.value = String(new Date().getFullYear());
+    selectEl.innerHTML = listados.map(function (item) {
+      return `<option value="${esc(item[0])}">${esc(item[1])}</option>`;
+    }).join('');
 
-    idle();
-    msg('');
+    selectEl.value = 'oficial';
+  }
+
+  function clearForm() {
+    const dni = byId('pidlist-dni');
+    const listado = byId('pidlist-listado');
+    const anio = byId('pidlist-anio');
+
+    if (dni) {
+      dni.value = '';
+      dni.focus();
+    }
+    if (listado) listado.value = 'oficial';
+    if (anio) anio.value = currentYear();
+
+    renderIdle();
+    setMsg('');
     renderLastOk();
-  };
+  }
 
-  const run = async () => {
-    const dni = clean($('pidlist-dni')?.value || '').replace(/\D+/g, '');
-    const listado = clean($('pidlist-listado')?.value || '');
-    const anio = clean($('pidlist-anio')?.value || '');
-    const btn = $('pidlist-buscar');
-    const label = clean($('pidlist-listado')?.selectedOptions?.[0]?.textContent || listado);
+  async function run() {
+    const dni = clean(byId('pidlist-dni')?.value || '').replace(/\D+/g, '');
+    const listado = clean(byId('pidlist-listado')?.value || '');
+    const anio = clean(byId('pidlist-anio')?.value || '');
+    const btn = byId('pidlist-buscar');
+    const label = clean(byId('pidlist-listado')?.selectedOptions?.[0]?.textContent || listado);
     const meta = { dni, anio, listado, label };
 
-    if (!/^\d{7,8}$/.test(dni)) return msg('Ingresá un DNI válido.', 'pidlist-err');
-    if (!/^\d{4}$/.test(anio)) return msg('Ingresá un año válido.', 'pidlist-err');
+    if (!/^\d{7,8}$/.test(dni)) {
+      setMsg('Ingresá un DNI válido.', 'pidlist-err');
+      return;
+    }
+
+    if (!/^\d{4}$/.test(anio)) {
+      setMsg('Ingresá un año válido.', 'pidlist-err');
+      return;
+    }
 
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Buscando...';
     }
 
-    msg('Consultando PID...');
+    setMsg('Consultando PID...', 'pidlist-info');
 
-    const o = $('pidlist-out');
-    if (o) o.innerHTML = '<div class="pidlist-empty">Consultando PID...</div>';
+    const out = byId('pidlist-out');
+    if (out) {
+      out.innerHTML = '<div class="pidlist-empty">Consultando PID...</div>';
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(function () {
+      controller.abort();
+    }, 12000);
 
     try {
       const res = await fetch(API + '/api/pid-consultar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dni, listado, anio: Number(anio) })
+        body: JSON.stringify({
+          dni: dni,
+          listado: listado,
+          anio: Number(anio)
+        }),
+        signal: controller.signal
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(function () { return {}; });
+
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error || 'No se pudo consultar PID.');
       }
 
-      render(data.result || {}, meta);
-      msg('Consulta PID realizada. Guardando en planilla...');
+      renderResult(data.result || {}, meta);
 
-      try {
-        const s = await save(data, meta);
-        writeLastOk(meta);
-        renderLastOk();
-        msg(clean(s?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
-      } catch (err) {
-        console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
-
-        if (String(err?.message || '').includes('tardó demasiado')) {
-  msg('El guardado tardó demasiado en responder. Verificá en la planilla si quedó registrado.', 'pidlist-warn');
-} else {
-  msg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
-}
-      }
-    } catch (err) {
-      if (o) {
-        o.innerHTML =
-          '<div class="pidlist-empty">' +
-          esc(err?.message || 'No se pudo consultar PID.') +
-          '</div>';
-      }
-      msg(err?.message || 'No se pudo consultar PID.', 'pidlist-err');
-    } finally {
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Buscar';
       }
+
+      setMsg('Consulta PID realizada. Guardando en planilla...', 'pidlist-info');
+
+      save(data, meta)
+        .then(function (saved) {
+          writeLastOk(meta);
+          renderLastOk();
+          setMsg(clean(saved?.message || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
+        })
+        .catch(function (err) {
+          console.error('ERROR GUARDANDO PID EN PLANILLA:', err);
+
+          if (String(err?.message || '').includes('tardó demasiado')) {
+            setMsg('El guardado tardó demasiado en responder. Verificá en la planilla si quedó registrado.', 'pidlist-warn');
+          } else {
+            setMsg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
+          }
+        });
+    } catch (err) {
+      const text = err?.name === 'AbortError'
+        ? 'La consulta PID tardó demasiado en responder.'
+        : (err?.message || 'No se pudo consultar PID.');
+
+      if (out) {
+        out.innerHTML = '<div class="pidlist-empty">' + esc(text) + '</div>';
+      }
+
+      setMsg(text, 'pidlist-err');
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Buscar';
+      }
+    } finally {
+      clearTimeout(timer);
     }
-  };
+  }
 
-  const styles = () => {
-    if ($('panel-listados-pid-style')) return;
+  function injectStyles() {
+    if (byId('panel-listados-pid-style')) return;
 
-    const s = document.createElement('style');
-    s.id = 'panel-listados-pid-style';
-    s.textContent =
-      '.panel-tab-grid>.pidlist-card{grid-column:1/-1;width:100%}' +
-      '.pidlist-card{background:#fff;border:1px solid #dbe3f0;border-radius:18px;padding:22px;display:grid;gap:16px;box-shadow:0 10px 28px rgba(15,52,96,.06)}' +
-      '.pidlist-head{display:grid;gap:6px}' +
-      '.pidlist-grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(240px,1.5fr) minmax(120px,.75fr) auto;gap:12px;align-items:end}' +
-      '.pidlist-field{display:grid;gap:8px}' +
-      '.pidlist-field label{font-size:13px;color:#5d7088;font-weight:700}' +
-      '.pidlist-field input,.pidlist-field select{width:100%;min-height:46px;padding:12px 14px;border:1px solid #dbe3f0;border-radius:12px;font:inherit;background:#fff}' +
-      '.pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}' +
-      '.pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}' +
-      '.pidlist-actions .btn{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}' +
-      '.pidlist-msg{min-height:22px;font-weight:700;font-size:14px}' +
-      '.pidlist-info{color:#0f3460}' +
-      '.pidlist-ok{color:#0b7a44}' +
-      '.pidlist-err{color:#b42318}' +
-      '.pidlist-warn{color:#9a6700}' +
-      '.pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}' +
-      '.pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}' +
-      '.pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}' +
-      '.pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}' +
-      '.pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}' +
-      '.pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}' +
-      '.pidlist-block{margin-top:12px}' +
-      '.pidlist-block-title{margin:0 0 6px;font-size:15px;font-weight:800;color:#10243d}' +
-      '.pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}' +
-      '.pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:420px}' +
-      '.pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}' +
-      '.pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}' +
-      '.pidlist-table td:last-child,.pidlist-table th:last-child{text-align:right}' +
-      '@media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}' +
-      '@media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}';
+    const style = document.createElement('style');
+    style.id = 'panel-listados-pid-style';
+    style.textContent = `
+      .panel-tab-grid > .pidlist-card{grid-column:1 / -1;width:100%}
+      .pidlist-card{background:#fff;border:1px solid #dbe3f0;border-radius:18px;padding:22px;display:grid;gap:16px;box-shadow:0 10px 28px rgba(15,52,96,.06)}
+      .pidlist-head{display:grid;gap:6px}
+      .pidlist-grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(240px,1.5fr) minmax(120px,.75fr) auto;gap:12px;align-items:end}
+      .pidlist-field{display:grid;gap:8px}
+      .pidlist-field label{font-size:13px;color:#5d7088;font-weight:700}
+      .pidlist-field input,.pidlist-field select{width:100%;min-height:46px;padding:12px 14px;border:1px solid #dbe3f0;border-radius:12px;font:inherit;background:#fff}
+      .pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}
+      .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+      .pidlist-actions .btn{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}
+      .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}
+      .pidlist-info{color:#0f3460}
+      .pidlist-ok{color:#0b7a44}
+      .pidlist-err{color:#b42318}
+      .pidlist-warn{color:#9a6700}
+      .pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}
+      .pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}
+      .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      .pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
+      .pidlist-k{display:block;font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px}
+      .pidlist-v{display:block;font-size:15px;color:#10243d;font-weight:800;line-height:1.45}
+      .pidlist-block{margin-top:12px}
+      .pidlist-block-title{margin:0 0 6px;font-size:15px;font-weight:800;color:#10243d}
+      .pidlist-table-wrap{overflow:auto;border:1px solid #dbe3f0;border-radius:14px}
+      .pidlist-table{width:100%;border-collapse:collapse;background:#fff;min-width:420px}
+      .pidlist-table th,.pidlist-table td{padding:10px 12px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}
+      .pidlist-table th{background:#f8fafc;color:#0f3460;font-size:13px;text-transform:uppercase}
+      .pidlist-table td:last-child,.pidlist-table th:last-child{text-align:right}
+      @media (max-width:980px){.pidlist-grid{grid-template-columns:1fr 1fr}.pidlist-meta{grid-template-columns:1fr 1fr}}
+      @media (max-width:640px){.pidlist-grid,.pidlist-meta{grid-template-columns:1fr}.pidlist-actions{display:grid;grid-template-columns:1fr 1fr}}
+    `;
+    document.head.appendChild(style);
+  }
 
-    document.head.appendChild(s);
-  };
+  function buildHtml() {
+    return `
+      <div class="pidlist-card" id="pidlist-card-inner">
+        <div class="pidlist-head">
+          <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>
+          <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>
+        </div>
 
-  const html = () => `
-    <div class="pidlist-card" id="pidlist-card-inner">
-      <div class="pidlist-head">
-        <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>
-        <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>
+        <div class="pidlist-grid">
+          <div class="pidlist-field">
+            <label for="pidlist-dni">DNI</label>
+            <input id="pidlist-dni" type="text" inputmode="numeric" placeholder="34535989">
+          </div>
+
+          <div class="pidlist-field">
+            <label for="pidlist-listado">Listado</label>
+            <select id="pidlist-listado"></select>
+          </div>
+
+          <div class="pidlist-field">
+            <label for="pidlist-anio">Año</label>
+            <input id="pidlist-anio" type="number" min="2015" max="2100">
+          </div>
+
+          <div class="pidlist-actions">
+            <button id="pidlist-buscar" class="btn btn-primary" type="button">Buscar</button>
+            <button id="pidlist-limpiar" class="btn btn-secondary" type="button">Limpiar</button>
+          </div>
+        </div>
+
+        <div id="pidlist-msg" class="pidlist-msg"></div>
+        <div id="pidlist-lastok" class="pidlist-lastok"></div>
+        <div id="pidlist-out"></div>
       </div>
+    `;
+  }
 
-      <div class="pidlist-grid">
-        <div class="pidlist-field">
-          <label for="pidlist-dni">DNI</label>
-          <input id="pidlist-dni" type="text" inputmode="numeric" placeholder="34535989">
-        </div>
+  async function bindCard() {
+    const btn = byId('pidlist-buscar');
+    const clearBtn = byId('pidlist-limpiar');
+    const dni = byId('pidlist-dni');
+    const listado = byId('pidlist-listado');
+    const anio = byId('pidlist-anio');
 
-        <div class="pidlist-field">
-          <label for="pidlist-listado">Listado</label>
-          <select id="pidlist-listado"></select>
-        </div>
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
 
-        <div class="pidlist-field">
-          <label for="pidlist-anio">Año</label>
-          <input id="pidlist-anio" type="number" min="2015" max="2100">
-        </div>
+    if (anio && !anio.value) anio.value = currentYear();
 
-        <div class="pidlist-actions">
-          <button id="pidlist-buscar" class="btn btn-primary" type="button">Buscar</button>
-          <button id="pidlist-limpiar" class="btn btn-secondary" type="button">Limpiar</button>
-        </div>
-      </div>
+    await fillListados(listado);
 
-      <div id="pidlist-msg" class="pidlist-msg"></div>
-      <div id="pidlist-lastok" class="pidlist-lastok"></div>
-      <div id="pidlist-out"></div>
-    </div>
-  `;
+    btn.addEventListener('click', run);
 
-  const bind = async () => {
-    const b = $('pidlist-buscar');
-    const c = $('pidlist-limpiar');
-    const d = $('pidlist-dni');
-    const a = $('pidlist-anio');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', clearForm);
+    }
 
-    if (!b || b.dataset.bound === '1') return;
-    b.dataset.bound = '1';
-
-    await fill();
-
-    if (a && !a.value) a.value = String(new Date().getFullYear());
-
-    b.addEventListener('click', run);
-    if (c) c.addEventListener('click', clearForm);
-
-    if (d) {
-      d.addEventListener('keydown', (ev) => {
+    if (dni) {
+      dni.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') {
           ev.preventDefault();
           run();
@@ -486,55 +563,71 @@
       });
     }
 
-    idle();
+    renderIdle();
     renderLastOk();
-  };
+  }
 
-  const boot = () => {
-    styles();
+  function panelGrid() {
+    return document.querySelector('#panel-tab-pane-perfil .panel-tab-grid');
+  }
 
-    const w = $('panel-listados-pid-card');
-    if (w) w.remove();
+  function boot() {
+    injectStyles();
 
-    const t = document.querySelector('.panel-tab-btn[data-tab-key="perfil"]');
-    if (t && t.textContent !== 'Listados') t.textContent = 'Listados';
+    const wrongCard = byId('panel-listados-pid-card');
+    if (wrongCard) wrongCard.remove();
 
-    const g = document.querySelector('#panel-tab-pane-perfil .panel-tab-grid');
-    if (!g) return;
+    if (!hasSession()) return;
 
-    if (!$('pidlist-card-inner')) {
-      g.innerHTML = html();
-      bind();
+    const tabBtn = document.querySelector('.panel-tab-btn[data-tab-key="perfil"]');
+    if (tabBtn && tabBtn.textContent !== 'Listados') {
+      tabBtn.textContent = 'Listados';
+    }
+
+    const grid = panelGrid();
+    if (!grid) return;
+
+    if (!byId('pidlist-card-inner')) {
+      grid.innerHTML = buildHtml();
+      bindCard();
     } else {
       renderLastOk();
     }
-  };
+  }
 
-  let mo = null;
+  let observer = null;
+  let bootTimer = null;
 
-  const observe = () => {
-    const h = $('panel-tabs-wrap') || $('panel-docente') || document.body;
-    if (!h || mo) return;
+  function scheduleBoot() {
+    clearTimeout(bootTimer);
+    bootTimer = setTimeout(boot, 60);
+  }
 
-    mo = new MutationObserver(() => boot());
-    mo.observe(h, { childList: true, subtree: true });
-  };
+  function startObserver() {
+    const host = document.body;
+    if (!host || observer) return;
+
+    observer = new MutationObserver(function () {
+      scheduleBoot();
+    });
+
+    observer.observe(host, {
+      childList: true,
+      subtree: true
+    });
+  }
 
   if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      () => {
-        boot();
-        setTimeout(boot, 500);
-        setTimeout(boot, 1400);
-        observe();
-      },
-      { once: true }
-    );
+    document.addEventListener('DOMContentLoaded', function () {
+      boot();
+      setTimeout(boot, 500);
+      setTimeout(boot, 1400);
+      startObserver();
+    }, { once: true });
   } else {
     boot();
     setTimeout(boot, 500);
     setTimeout(boot, 1400);
-    observe();
+    startObserver();
   }
 })();
