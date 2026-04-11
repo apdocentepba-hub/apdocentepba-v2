@@ -360,7 +360,10 @@ input::placeholder{color:#b0b7c3}
 }
 
 #panel-alertas{overflow:visible}
-
+.alerta-pid-card.alerta-pid-ok{border:1px solid #b7ebc6;background:#eefbf3}
+.alerta-pid-card.alerta-pid-info{border:1px solid #bfdcff;background:#f2f8ff}
+.alerta-pid-card.alerta-pid-warn{border:1px solid #f0d39a;background:#fff8e8}
+.alerta-meta-note{margin-top:10px;font-size:13px;line-height:1.5;color:#243447}
 .alerta-carousel-shell{position:relative}
 .alerta-stage{position:relative;padding:0 86px}
 
