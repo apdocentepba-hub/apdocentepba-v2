@@ -1172,6 +1172,92 @@ function renderPidMatchBlock(alerta) {
     </div>
   `;
 }
+function parsePidNumber(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function buildPidChanceInfo(alerta, resumen) {
+  if (!alerta?.pid_compatible) {
+    return {
+      tone: "warn",
+      title: "No compatible con tu PID",
+      text: alerta?.pid_reason || "Esta oferta sale por preferencias, pero no por compatibilidad real con tu PID."
+    };
+  }
+
+  const miPuntaje = parsePidNumber(alerta?.pid_puntaje_total);
+  const primero = Number(resumen?.puntaje_primero);
+
+  if (!Number.isFinite(miPuntaje) || !Number.isFinite(primero)) {
+    return {
+      tone: "ok",
+      title: "Compatible con tu PID",
+      text: `Tu puntaje para esta oferta es ${alerta?.pid_puntaje_total || "-"}. Todavía no hay referencia suficiente para estimar chances.`
+    };
+  }
+
+  const diff = miPuntaje - primero;
+
+  if (diff > 0) {
+    return {
+      tone: "ok",
+      title: "Tenés buenas chances",
+      text: `Tu puntaje (${miPuntaje.toFixed(2)}) está por arriba del primero (${primero.toFixed(2)}).`
+    };
+  }
+
+  if (diff === 0) {
+    return {
+      tone: "ok",
+      title: "Estás muy competitivo",
+      text: `Tu puntaje (${miPuntaje.toFixed(2)}) es igual al del primero (${primero.toFixed(2)}).`
+    };
+  }
+
+  if (diff >= -1) {
+    return {
+      tone: "info",
+      title: "Estás cerca",
+      text: `Tu puntaje (${miPuntaje.toFixed(2)}) está apenas por debajo del primero (${primero.toFixed(2)}).`
+    };
+  }
+
+  return {
+    tone: "warn",
+    title: "Hoy quedás abajo del primero",
+    text: `Tu puntaje (${miPuntaje.toFixed(2)}) está por debajo del primero (${primero.toFixed(2)}).`
+  };
+}
+
+function renderPidMatchBlock(alerta, resumen) {
+  const info = buildPidChanceInfo(alerta, resumen);
+
+  const toneClass =
+    info.tone === "ok"
+      ? "alerta-pid-ok"
+      : info.tone === "info"
+        ? "alerta-pid-info"
+        : "alerta-pid-warn";
+
+  return `
+    <div class="alerta-meta-card alerta-pid-card ${toneClass}">
+      <div class="alerta-meta-head">${info.title}</div>
+      <div class="alerta-meta-grid">
+        ${alertaRow("Motivo", alerta?.pid_reason || "-")}
+        ${alertaRow("Área PID", alerta?.pid_area || "-")}
+        ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
+        ${alertaRow("Tu puntaje", alerta?.pid_puntaje_total || "-")}
+        ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
+        ${alertaRow("Año PID", alerta?.pid_anio || "-")}
+      </div>
+      <div class="alerta-meta-note">${info.text}</div>
+    </div>
+  `;
+}
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
