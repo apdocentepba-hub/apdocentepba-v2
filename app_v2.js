@@ -1221,46 +1221,78 @@ function buildPidChanceInfo(alerta, resumen) {
       ? Number(alerta.pid_puntaje_total_final)
       : parsePidNumber(alerta?.pid_puntaje_total);
 
+  const totalPostulantes = Number(resumen?.total_postulantes || 0);
   const primero = parsePidNumber(resumen?.puntaje_primero);
+  const listadoPrimero = String(resumen?.listado_origen_primero || "").trim().toUpperCase();
 
-  if (!Number.isFinite(miPuntaje) || !Number.isFinite(primero)) {
+  // 1) No hay postulantes visibles
+  if (totalPostulantes === 0) {
     return {
       tone: "ok",
+      title: "Sin competencia visible",
+      text: `Por ahora no se ven postulantes cargados. Tu puntaje actual para esta oferta es ${formatPuntaje(miPuntaje)}.`
+    };
+  }
+
+  // 2) Hay postulantes, pero el puntaje del primero no sirve para comparar
+  //    Ej: 0,00 + "SE ENCUENTRA INSCRIPTO Y NO APARECE EN APD"
+  const primeroNoComparable =
+    !Number.isFinite(primero) ||
+    (
+      primero === 0 &&
+      (
+        listadoPrimero.includes("NO APARECE EN APD") ||
+        listadoPrimero.includes("SE ENCUENTRA INSCRIPTO")
+      )
+    );
+
+  if (primeroNoComparable) {
+    return {
+      tone: "info",
+      title: "Postulantes sin puntaje comparable",
+      text: `Hay ${totalPostulantes} postulante${totalPostulantes === 1 ? "" : "s"} visible${totalPostulantes === 1 ? "" : "s"}, pero APD no muestra un puntaje comparable del primero. Tu puntaje actual para esta oferta es ${formatPuntaje(miPuntaje)}.`
+    };
+  }
+
+  // 3) Ya se puede comparar en serio
+  if (!Number.isFinite(miPuntaje)) {
+    return {
+      tone: "info",
       title: "Compatible con tu PID",
-      text: `Tu puntaje para esta oferta es ${formatPuntaje(miPuntaje)}. Todavía no hay referencia suficiente para estimar chances.`
+      text: "No se pudo calcular tu puntaje total para comparar esta oferta."
     };
   }
 
   const diff = miPuntaje - primero;
 
-  if (diff > 0) {
+  if (diff > 2) {
     return {
       tone: "ok",
-      title: "Tenés buenas chances",
-      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está por arriba del primero (${formatPuntaje(primero)}).`
+      title: "Estado actual: Muy favorable",
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está arriba del mejor visible (${formatPuntaje(primero)}), con una diferencia de +${formatPuntaje(diff)}.`
     };
   }
 
-  if (diff === 0) {
+  if (diff > 0) {
     return {
       tone: "ok",
-      title: "Estás muy competitivo",
-      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) es igual al del primero (${formatPuntaje(primero)}).`
+      title: "Estado actual: Favorable",
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está arriba del mejor visible (${formatPuntaje(primero)}), con una diferencia de +${formatPuntaje(diff)}.`
     };
   }
 
   if (diff >= -1) {
     return {
       tone: "info",
-      title: "Estás cerca",
-      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está apenas por debajo del primero (${formatPuntaje(primero)}).`
+      title: "Estado actual: Competida",
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está muy cerca del mejor visible (${formatPuntaje(primero)}). Diferencia: ${formatPuntaje(diff)}.`
     };
   }
 
   return {
     tone: "warn",
-    title: "Hoy quedás abajo del primero",
-    text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está por debajo del primero (${formatPuntaje(primero)}).`
+    title: "Estado actual: Difícil",
+    text: `Tu puntaje (${formatPuntaje(miPuntaje)}) hoy queda por debajo del mejor visible (${formatPuntaje(primero)}). Diferencia: ${formatPuntaje(diff)}.`
   };
 }
 function renderPidMatchBlock(alerta, resumen) {
