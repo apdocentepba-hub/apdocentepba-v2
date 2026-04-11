@@ -6,6 +6,7 @@
 
   const PID_API_URL = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const PID_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit';
+  const PID_STORAGE_KEY = 'apd_pid_panel_state_v3';
   const PID_LISTADOS = [
     ['oficial', 'Listado Oficial'],
     ['108a', 'Listado 108 a'],
@@ -41,6 +42,34 @@
       .replace(/\u00a0/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  function readState() {
+    try {
+      const raw = localStorage.getItem(PID_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeState(patch) {
+    const next = Object.assign({}, readState(), patch || {});
+    try {
+      localStorage.setItem(PID_STORAGE_KEY, JSON.stringify(next));
+    } catch (_) {}
+    return next;
+  }
+
+  function saveFormState() {
+    const select = byId('pidlist-listado');
+    writeState({
+      dni: clean(byId('pidlist-dni') && byId('pidlist-dni').value || ''),
+      listado: clean(select && select.value || ''),
+      label: clean(select && select.selectedOptions && select.selectedOptions[0] && select.selectedOptions[0].textContent || select && select.value || ''),
+      anio: clean(byId('pidlist-anio') && byId('pidlist-anio').value || '')
+    });
   }
 
   function injectStyles() {
@@ -185,6 +214,34 @@
     `;
   }
 
+  function restoreLastState() {
+    const state = readState();
+    const dni = byId('pidlist-dni');
+    const listado = byId('pidlist-listado');
+    const anio = byId('pidlist-anio');
+
+    if (dni && state.dni) dni.value = state.dni;
+    if (anio) anio.value = state.anio || String(new Date().getFullYear());
+    if (listado) {
+      if (state.listado) listado.value = state.listado;
+      if (!listado.value) listado.value = 'oficial';
+    }
+
+    if (state && state.result) {
+      renderResult(state.result, {
+        dni: state.dni || '',
+        anio: state.anio || '',
+        listado: state.listado || '',
+        label: state.label || clean(listado && listado.selectedOptions && listado.selectedOptions[0] && listado.selectedOptions[0].textContent || state.listado || '')
+      });
+      setMsg(state.msg || '', state.msgType || 'pidlist-info');
+      return;
+    }
+
+    renderIdle();
+    if (state.msg) setMsg(state.msg, state.msgType || 'pidlist-info');
+  }
+
   async function runPid() {
     const dni = clean(byId('pidlist-dni') && byId('pidlist-dni').value || '').replace(/\D+/g, '');
     const listado = clean(byId('pidlist-listado') && byId('pidlist-listado').value || '');
@@ -196,6 +253,8 @@
       byId('pidlist-listado').selectedOptions[0] &&
       byId('pidlist-listado').selectedOptions[0].textContent || listado
     );
+
+    saveFormState();
 
     if (!/^\d{7,8}$/.test(dni)) return setMsg('Ingresá un DNI válido.', 'pidlist-err');
     if (!/^\d{4}$/.test(anio)) return setMsg('Ingresá un año válido.', 'pidlist-err');
@@ -214,10 +273,27 @@
       });
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok || !data || !data.ok) throw new Error(data && data.error || 'No se pudo consultar PID.');
-      renderResult(data.result || {}, { dni: dni, anio: anio, label: label });
+      renderResult(data.result || {}, { dni: dni, anio: anio, listado: listado, label: label });
+      writeState({
+        dni: dni,
+        listado: listado,
+        label: label,
+        anio: anio,
+        result: data.result || {},
+        msg: 'Consulta PID realizada correctamente.',
+        msgType: 'pidlist-ok'
+      });
       setMsg('Consulta PID realizada correctamente.', 'pidlist-ok');
     } catch (err) {
       if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(err && err.message || 'No se pudo consultar PID.') + '</div>';
+      writeState({
+        dni: dni,
+        listado: listado,
+        label: label,
+        anio: anio,
+        msg: err && err.message || 'No se pudo consultar PID.',
+        msgType: 'pidlist-err'
+      });
       setMsg(err && err.message || 'No se pudo consultar PID.', 'pidlist-err');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Buscar'; }
@@ -251,9 +327,11 @@
     if (!btn || btn.dataset.bound === '1') return;
     btn.dataset.bound = '1';
     await fillListados(listado);
+    restoreLastState();
     if (anio && !anio.value) anio.value = String(new Date().getFullYear());
     btn.addEventListener('click', runPid);
     if (dni) {
+      dni.addEventListener('input', saveFormState);
       dni.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') {
           ev.preventDefault();
@@ -261,7 +339,8 @@
         }
       });
     }
-    renderIdle();
+    if (listado) listado.addEventListener('change', saveFormState);
+    if (anio) anio.addEventListener('input', saveFormState);
   }
 
   function enforceListadosPane() {
