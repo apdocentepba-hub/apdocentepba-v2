@@ -1015,8 +1015,13 @@ function formatPuntaje(v) {
     : "-";
 }
 
-function renderResumenPostulantes(box, data) {
+function renderResumenPostulantes(box, data, alerta) {
   const total = Number(data?.total_postulantes || 0);
+  const pidBox = document.getElementById("alerta-pid-box");
+
+  if (pidBox) {
+    pidBox.innerHTML = renderPidMatchBlock(alerta, data || null);
+  }
 
   if (!total) {
     box.innerHTML = `
@@ -1047,7 +1052,13 @@ function renderResumenPostulantes(box, data) {
 
 async function cargarResumenPostulantes(alerta) {
   const box = document.getElementById("alerta-postulantes-meta");
+  const pidBox = document.getElementById("alerta-pid-box");
+
   if (!box) return;
+
+  if (pidBox) {
+    pidBox.innerHTML = renderPidMatchBlock(alerta, null);
+  }
 
   const oferta = String(alerta?.idoferta || "").trim();
   const detalle = String(alerta?.iddetalle || "").trim();
@@ -1057,13 +1068,18 @@ async function cargarResumenPostulantes(alerta) {
       <div class="alerta-meta-head">Referencia de postulantes</div>
       <div class="alerta-meta-empty">Esta oferta no trae identificadores para consultar postulantes.</div>
     `;
+
+    if (pidBox) {
+      pidBox.innerHTML = renderPidMatchBlock(alerta, null);
+    }
     return;
   }
 
   const key = `${oferta}|${detalle}`;
 
   if (postulantesResumenCache.has(key)) {
-    renderResumenPostulantes(box, postulantesResumenCache.get(key));
+    const cached = postulantesResumenCache.get(key);
+    renderResumenPostulantes(box, cached, alerta);
     return;
   }
 
@@ -1071,6 +1087,10 @@ async function cargarResumenPostulantes(alerta) {
     <div class="alerta-meta-head">Referencia de postulantes</div>
     <div class="alerta-meta-loading">Cargando postulantes...</div>
   `;
+
+  if (pidBox) {
+    pidBox.innerHTML = renderPidMatchBlock(alerta, null);
+  }
 
   try {
     const res = await fetch(
@@ -1089,16 +1109,20 @@ async function cargarResumenPostulantes(alerta) {
     const currentKey = `${String(actual?.idoferta || "").trim()}|${String(actual?.iddetalle || "").trim()}`;
     if (currentKey !== key) return;
 
-    renderResumenPostulantes(box, data);
+    renderResumenPostulantes(box, data, alerta);
   } catch (err) {
     console.error("ERROR POSTULANTES:", err);
+
+    if (pidBox) {
+      pidBox.innerHTML = renderPidMatchBlock(alerta, null);
+    }
+
     box.innerHTML = `
       <div class="alerta-meta-head">Referencia de postulantes</div>
       <div class="alerta-meta-error">No se pudo leer la lista de postulantes.</div>
     `;
   }
 }
-
 function tituloAlerta(alerta) {
   return [alerta?.cargo, alerta?.area]
     .filter(Boolean)
@@ -1156,22 +1180,7 @@ function renderDots(total, current) {
     </div>
   `;
 }
-function renderPidMatchBlock(alerta) {
-  if (!alerta?.pid_match) return "";
 
-  return `
-    <div class="alerta-meta-card alerta-pid-card">
-      <div class="alerta-meta-head">Match PID</div>
-      <div class="alerta-meta-grid">
-        ${alertaRow("Área PID", alerta.pid_area)}
-        ${alertaRow("Bloque PID", alerta.pid_bloque)}
-        ${alertaRow("Puntaje total PID", alerta.pid_puntaje_total)}
-        ${alertaRow("Listado PID", alerta.pid_listado)}
-        ${alertaRow("Año PID", alerta.pid_anio)}
-      </div>
-    </div>
-  `;
-}
 function parsePidNumber(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -1346,7 +1355,9 @@ function renderAlertaActual() {
             ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
           </div>
 
-          ${renderPidMatchBlock(a)}
+          <div id="alerta-pid-box">
+  ${renderPidMatchBlock(a, null)}
+</div>
 
           <div id="alerta-postulantes-meta" class="alerta-meta-card">
             <div class="alerta-meta-head">Referencia de postulantes</div>
