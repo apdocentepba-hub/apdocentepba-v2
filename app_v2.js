@@ -1195,18 +1195,12 @@ function parsePidNumber(value) {
     const lastComma = raw.lastIndexOf(",");
 
     if (lastComma > lastDot) {
-      // 1.234,56
       raw = raw.replace(/\./g, "").replace(",", ".");
     } else {
-      // 1,234.56
       raw = raw.replace(/,/g, "");
     }
   } else if (hasComma) {
-    // 38,10
     raw = raw.replace(",", ".");
-  } else {
-    // 38.10 -> dejar así
-    // 1234 -> dejar así
   }
 
   const n = Number(raw);
@@ -1222,17 +1216,18 @@ function buildPidChanceInfo(alerta, resumen) {
     };
   }
 
-const miPuntaje =
-  Number.isFinite(Number(alerta?.pid_puntaje_total_final))
-    ? Number(alerta.pid_puntaje_total_final)
-    : parsePidNumber(alerta?.pid_puntaje_total);
-  const primero = Number(resumen?.puntaje_primero);
+  const miPuntaje =
+    Number.isFinite(Number(alerta?.pid_puntaje_total_final))
+      ? Number(alerta.pid_puntaje_total_final)
+      : parsePidNumber(alerta?.pid_puntaje_total);
+
+  const primero = parsePidNumber(resumen?.puntaje_primero);
 
   if (!Number.isFinite(miPuntaje) || !Number.isFinite(primero)) {
     return {
       tone: "ok",
       title: "Compatible con tu PID",
-      text: `Tu puntaje para esta oferta es ${alerta?.pid_puntaje_total || "-"}. Todavía no hay referencia suficiente para estimar chances.`
+      text: `Tu puntaje para esta oferta es ${formatPuntaje(miPuntaje)}. Todavía no hay referencia suficiente para estimar chances.`
     };
   }
 
@@ -1242,7 +1237,7 @@ const miPuntaje =
     return {
       tone: "ok",
       title: "Tenés buenas chances",
-      text: `Tu puntaje (${miPuntaje.toFixed(2)}) está por arriba del primero (${primero.toFixed(2)}).`
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está por arriba del primero (${formatPuntaje(primero)}).`
     };
   }
 
@@ -1250,7 +1245,7 @@ const miPuntaje =
     return {
       tone: "ok",
       title: "Estás muy competitivo",
-      text: `Tu puntaje (${miPuntaje.toFixed(2)}) es igual al del primero (${primero.toFixed(2)}).`
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) es igual al del primero (${formatPuntaje(primero)}).`
     };
   }
 
@@ -1258,17 +1253,16 @@ const miPuntaje =
     return {
       tone: "info",
       title: "Estás cerca",
-      text: `Tu puntaje (${miPuntaje.toFixed(2)}) está apenas por debajo del primero (${primero.toFixed(2)}).`
+      text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está apenas por debajo del primero (${formatPuntaje(primero)}).`
     };
   }
 
   return {
     tone: "warn",
     title: "Hoy quedás abajo del primero",
-    text: `Tu puntaje (${miPuntaje.toFixed(2)}) está por debajo del primero (${primero.toFixed(2)}).`
+    text: `Tu puntaje (${formatPuntaje(miPuntaje)}) está por debajo del primero (${formatPuntaje(primero)}).`
   };
 }
-
 function renderPidMatchBlock(alerta, resumen) {
   const info = buildPidChanceInfo(alerta, resumen);
 
@@ -1279,19 +1273,28 @@ function renderPidMatchBlock(alerta, resumen) {
         ? "alerta-pid-info"
         : "alerta-pid-warn";
 
+  const puntajeBase = Number.isFinite(Number(alerta?.pid_puntaje_total_base))
+    ? Number(alerta.pid_puntaje_total_base)
+    : parsePidNumber(alerta?.pid_puntaje_total);
+
+  const puntajeFinal = Number.isFinite(Number(alerta?.pid_puntaje_total_final))
+    ? Number(alerta.pid_puntaje_total_final)
+    : puntajeBase;
+
   return `
     <div class="alerta-meta-card alerta-pid-card ${toneClass}">
       <div class="alerta-meta-head">${info.title}</div>
       <div class="alerta-meta-grid">
-  ${alertaRow("Motivo", alerta?.pid_reason || "-")}
-  ${alertaRow("Área PID", alerta?.pid_area || "-")}
-  ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
-  ${alertaRow("Tu puntaje", alerta?.pid_puntaje_total || "-")}
-  ${alertaRow("Bonus residencia", alerta?.pid_residencia_bonus_aplicado ? `+${alerta.pid_residencia_bonus_puntos}` : "No")}
-  ${alertaRow("Distrito residencia", alerta?.pid_distrito_residencia || "-")}
-  ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
-  ${alertaRow("Año PID", alerta?.pid_anio || "-")}
-</div>
+        ${alertaRow("Motivo", alerta?.pid_reason || "-")}
+        ${alertaRow("Área PID", alerta?.pid_area || "-")}
+        ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
+        ${alertaRow("Puntaje base", Number.isFinite(puntajeBase) ? formatPuntaje(puntajeBase) : "-")}
+        ${alertaRow("Bonus residencia", alerta?.pid_residencia_bonus_aplicado ? `+${alerta.pid_residencia_bonus_puntos}` : "No")}
+        ${alertaRow("Distrito residencia", alerta?.pid_distrito_residencia || "-")}
+        ${alertaRow("Tu puntaje total", Number.isFinite(puntajeFinal) ? formatPuntaje(puntajeFinal) : "-")}
+        ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
+        ${alertaRow("Año PID", alerta?.pid_anio || "-")}
+      </div>
       <div class="alerta-meta-note">${info.text}</div>
     </div>
   `;
