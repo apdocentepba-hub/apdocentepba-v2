@@ -217,13 +217,11 @@
     removeCardByBodyId('panel-historico-docente');
   }
 
-  function loadUsefulPatches() {
-    ensureScript('autocomplete_fast_patch.js?v=1', 'apd-fast-autocomplete-script');
-    ensureScript('panel_tabs_patch.js?v=1', 'apd-panel-tabs-script');
-    ensureScript('plan_checkout_patch.js?v=1', 'apd-plan-checkout-script');
-    ensureScript('statistics_panel_patch.js?v=1', 'apd-statistics-panel-script');
-  }
-
+ function loadUsefulPatches() {
+  // no-op:
+  // index.html ya carga los scripts vigentes.
+  // no volver a inyectar loaders legacy desde acá.
+}
   function bindDynamicPanelEvents() {
     const g = globalThis;
     const form = byId('form-preferencias');
