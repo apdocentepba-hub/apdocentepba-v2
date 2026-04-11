@@ -35,28 +35,29 @@
       card = document.createElement('div');
       card.id = 'panel-listados-stable-card';
       card.className = 'panel-card span-12';
-      card.innerHTML = `
-        <div class="card-lbl">📚 Listados</div>
-        <div id="panel-listados-docente"></div>
-      `;
+      card.innerHTML = [
+        '<div class="card-lbl">📚 Listados</div>',
+        '<div id="panel-listados-docente"></div>'
+      ].join('');
       root.appendChild(card);
     }
 
     const body = byId('panel-listados-docente');
-    if (!body) return;
+    if (!body || body.dataset.ready === '1') return;
 
-    body.innerHTML = `
-      <p class="prefs-hint">La consulta por DNI ya no se muestra mezclada en Estadísticas. Ahora quedó separada acá.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a class="btn btn-primary" href="./pid.html">Abrir consulta PID</a>
-        <a class="btn btn-secondary" href="https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit" target="_blank" rel="noopener noreferrer">Abrir planilla PID</a>
-      </div>
-    `;
+    body.innerHTML = [
+      '<p class="prefs-hint">La consulta por DNI ya no se muestra mezclada en Estadísticas. Ahora quedó separada acá.</p>',
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;">',
+      '<a class="btn btn-primary" href="./pid.html">Abrir consulta PID</a>',
+      '<a class="btn btn-secondary" href="https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit" target="_blank" rel="noopener noreferrer">Abrir planilla PID</a>',
+      '</div>'
+    ].join('');
+    body.dataset.ready = '1';
   }
 
   function sanitizeStatsCard() {
     const box = byId('panel-estadisticas');
-    if (!box) return;
+    if (!box || box.dataset.pidCleaned === '1') return;
 
     const txt = String(box.textContent || '').toLowerCase();
     const looksLikeOldPid =
@@ -69,17 +70,20 @@
 
     if (!looksLikeOldPid) return;
 
-    box.innerHTML = `
-      <div class="empty-state">
-        <p>La consulta por DNI ya no se muestra en Estadísticas.</p>
-        <p class="empty-hint">Usá la pestaña Listados para abrir PID en una pantalla separada.</p>
-      </div>
-    `;
+    box.innerHTML = [
+      '<div class="empty-state">',
+      '<p>La consulta por DNI ya no se muestra en Estadísticas.</p>',
+      '<p class="empty-hint">Usá la pestaña Listados para abrir PID en una pantalla separada.</p>',
+      '</div>'
+    ].join('');
+    box.dataset.pidCleaned = '1';
   }
 
   function renamePerfilTab() {
     const btn = document.querySelector('.panel-tab-btn[data-tab-key="perfil"]');
-    if (btn) btn.textContent = 'Listados';
+    if (btn && btn.textContent !== 'Listados') {
+      btn.textContent = 'Listados';
+    }
   }
 
   function pass() {
@@ -92,7 +96,7 @@
       window.APD_refreshPanelTabs();
     }
 
-    setTimeout(renamePerfilTab, 0);
+    renamePerfilTab();
     setTimeout(renamePerfilTab, 120);
   }
 
@@ -101,21 +105,10 @@
       pass();
       setTimeout(pass, 300);
       setTimeout(pass, 1200);
-      setTimeout(pass, 2500);
     }, { once: true });
   } else {
     pass();
     setTimeout(pass, 300);
     setTimeout(pass, 1200);
-    setTimeout(pass, 2500);
   }
-
-  const observer = new MutationObserver(function () {
-    pass();
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
 })();
