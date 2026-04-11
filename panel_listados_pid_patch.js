@@ -6,7 +6,7 @@
 
   const PID_API_URL = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const PID_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit';
-  const PID_STORAGE_KEY = 'apd_pid_panel_state_v3';
+  const PID_STORAGE_KEY = 'apd_pid_panel_state_v4';
   const PID_LISTADOS = [
     ['oficial', 'Listado Oficial'],
     ['108a', 'Listado 108 a'],
@@ -302,7 +302,7 @@
 
   function buildCardHtml() {
     return `
-      <div class="pidlist-card" id="pidlist-card-inner">
+      <div class="pidlist-card" id="pidlist-card-inner" data-apd-pid-card="1">
         <div class="pidlist-head">
           <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>
           <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>
@@ -343,11 +343,25 @@
     if (anio) anio.addEventListener('input', saveFormState);
   }
 
+  function moveCardToPerfil(grid) {
+    const existing = byId('pidlist-card-inner');
+    if (existing && grid && existing.parentElement !== grid) {
+      grid.prepend(existing);
+    }
+  }
+
+  function removeWrongPidCards() {
+    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) #panel-listados-pid-card').forEach(function (el) {
+      el.remove();
+    });
+
+    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) [data-apd-pid-card="1"]').forEach(function (el) {
+      el.remove();
+    });
+  }
+
   function enforceListadosPane() {
     injectStyles();
-
-    const wrongCard = byId('panel-listados-pid-card');
-    if (wrongCard) wrongCard.remove();
 
     const tabBtn = document.querySelector('.panel-tab-btn[data-tab-key="perfil"]');
     if (tabBtn && tabBtn.textContent !== 'Listados') tabBtn.textContent = 'Listados';
@@ -355,10 +369,20 @@
     const grid = document.querySelector('#panel-tab-pane-perfil .panel-tab-grid');
     if (!grid) return;
 
+    moveCardToPerfil(grid);
+    removeWrongPidCards();
+
     if (!byId('pidlist-card-inner')) {
-      grid.innerHTML = buildCardHtml();
+      const host = document.createElement('div');
+      host.innerHTML = buildCardHtml();
+      const card = host.firstElementChild;
+      if (card) grid.prepend(card);
       bindCard();
+      return;
     }
+
+    moveCardToPerfil(grid);
+    bindCard();
   }
 
   function bootPass() {
