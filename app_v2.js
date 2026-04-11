@@ -1222,7 +1222,10 @@ function buildPidChanceInfo(alerta, resumen) {
     };
   }
 
-  const miPuntaje = parsePidNumber(alerta?.pid_puntaje_total);
+const miPuntaje =
+  Number.isFinite(Number(alerta?.pid_puntaje_total_final))
+    ? Number(alerta.pid_puntaje_total_final)
+    : parsePidNumber(alerta?.pid_puntaje_total);
   const primero = Number(resumen?.puntaje_primero);
 
   if (!Number.isFinite(miPuntaje) || !Number.isFinite(primero)) {
