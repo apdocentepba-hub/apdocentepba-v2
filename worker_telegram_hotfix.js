@@ -1,7 +1,7 @@
 import baseWorker from "./worker_pid_lookup_hotfix.js";
 
 const API_URL_PREFIX = "/api";
-const TELEGRAM_VERSION = "2026-04-07-telegram-alerts-2";
+const TELEGRAM_VERSION = "2026-04-11-telegram-alerts-3";
 const TELEGRAM_SWEEP_LIMIT = 200;
 const TELEGRAM_MESSAGE_ALERTS_LIMIT = 5;
 const TELEGRAM_SENT_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -179,28 +179,12 @@ async function resolveTelegramEntitlement(env, userId) {
   const planCode = canonicalPlanCode(current?.plan_code || "TRIAL_7D");
   const plan = await getPlanByCode(env, planCode);
   const flags = safeJsonParse(plan?.feature_flags) || {};
-  let allowed = false;
-  let source = "default_policy";
-
-  if (Object.prototype.hasOwnProperty.call(flags, "telegram")) {
-    allowed = !!flags.telegram;
-    source = "feature_flag_telegram";
-  } else if (Object.prototype.hasOwnProperty.call(flags, "telegram_enabled")) {
-    allowed = !!flags.telegram_enabled;
-    source = "feature_flag_telegram_enabled";
-  } else if (Object.prototype.hasOwnProperty.call(flags, "telegram_included")) {
-    allowed = !!flags.telegram_included;
-    source = "feature_flag_telegram_included";
-  } else {
-    allowed = ["PLUS", "PREMIUM", "INSIGNE"].includes(planCode);
-    source = "default_paid_plan_policy";
-  }
 
   return {
     plan_code: planCode,
     plan_name: norm(plan?.nombre) || planCode || "TRIAL_7D",
-    allowed,
-    source,
+    allowed: true,
+    source: "global_opt_in_policy",
     flags
   };
 }
@@ -249,7 +233,7 @@ function maskChatId(chatId) {
   const raw = norm(chatId);
   if (!raw) return "";
   if (raw.length <= 4) return raw;
-  return `${"• .repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+  return `${"•".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
 }
 
 function buildTelegramBotLink(env, userId) {
@@ -379,19 +363,12 @@ async function handleTelegramWebhook(request, env) {
     last_update_id: update?.update_id ?? null
   });
 
-  const confirmText = entitlement.allowed
-    ? [
-        "✅ APDocentePBA conectó este chat con tu cuenta.",
-        "",
-        "Ya podés activar o pausar Telegram desde “Editar preferencias reales” en el panel.",
-        "Cuando haya alertas nuevas compatibles, te van a llegar por acá."
-      ].join("\n")
-    : [
-        "✅ APDocentePBA conectó este chat con tu cuenta.",
-        "",
-        `Tu plan actual (${entitlement.plan_name || entitlement.plan_code || "actual"}) todavía no incluye Telegram.`,
-        "Cuando ese canal esté habilitado para tu plan, vas a poder activarlo desde el panel."
-      ].join("\n");
+  const confirmText = [
+    "✅ APDocentePBA conectó este chat con tu cuenta.",
+    "",
+    "Ya podés activar o pausar Telegram desde “Editar preferencias reales” en el panel.",
+    "Cuando haya alertas nuevas compatibles, te van a llegar por acá."
+  ].join("\n");
 
   const sent = await sendTelegramText(env, chatId, confirmText).catch(err => {
     console.error("TELEGRAM CONFIRM SEND ERROR:", err);
@@ -481,7 +458,7 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
   if (userId) {
     const entitlement = await resolveTelegramEntitlement(env, userId);
     const currentState = await getTelegramState(env, userId);
-    const effectiveEnabled = entitlement.allowed && requestedTelegram && !!currentState?.connected;
+    const effectiveEnabled = requestedTelegram && !!currentState?.connected;
 
     const state = await saveTelegramState(env, userId, {
       alerts_enabled: effectiveEnabled,
@@ -494,7 +471,7 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
       userId,
       eventType: "telegram_preferences_update",
       deliveryKey: `telegram_preferences_update:${userId}:${new Date().toISOString()}`,
-      status: entitlement.allowed ? "updated" : "skipped",
+      status: "updated",
       planCode: entitlement.plan_code,
       payload: {
         requested_alerts_enabled: requestedTelegram,
@@ -503,14 +480,12 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
         allowed_by_plan: entitlement.allowed,
         channel_policy: entitlement.source
       },
-      errorMessage: entitlement.allowed ? null : "Telegram no habilitado para el plan actual"
+      errorMessage: null
     }));
   }
 
   let message = delegated.data?.message || "Preferencias guardadas";
-  if (telegramStatus && !telegramStatus.allowed_by_plan) {
-    message = `${message}. Telegram quedó fuera porque tu plan actual no lo tiene habilitado.`;
-  } else if (telegramStatus && requestedTelegram && !telegramStatus.connected) {
+  if (telegramStatus && requestedTelegram && !telegramStatus.connected) {
     message = `${message}. Para activar Telegram, primero tenés que vincular el bot.`;
   }
 
@@ -579,8 +554,7 @@ function alertSummaryLine(alert) {
     `• ${title}`,
     `  ${escuela}`,
     `  ${distrito} · turno ${turno}${cierre ? ` · cierre ${cierre}` : ""}`
-  ].join("
-");
+  ].join("\n");
 }
 
 function buildTelegramDigestMessage(alerts) {
@@ -591,12 +565,10 @@ function buildTelegramDigestMessage(alerts) {
     `🔔 APDocentePBA detectó ${alerts.length} alerta(s) nueva(s) compatible(s).`,
     "",
     ...visible.map(alertSummaryLine),
-    hiddenCount ? `
-+ ${hiddenCount} alerta(s) más en tu panel.` : "",
+    hiddenCount ? `\n+ ${hiddenCount} alerta(s) más en tu panel.` : "",
     "",
     "Entrá al panel para ver el detalle completo y decidir rápido."
-  ].filter(Boolean).join("
-");
+  ].filter(Boolean).join("\n");
 }
 
 async function wasTelegramAlertSent(env, userId, offerKey) {
@@ -630,19 +602,6 @@ async function runTelegramAlertsSweep(env) {
     try {
       const entitlement = await resolveTelegramEntitlement(env, userId);
       const state = await getTelegramState(env, userId);
-
-      if (!entitlement.allowed) {
-        results.push({ user_id: userId, skipped: true, reason: "plan_not_entitled" });
-        await insertNotificationDeliveryLogs(env, baseLogRow({
-          userId,
-          eventType: "telegram_alert_sweep",
-          deliveryKey: `telegram_sweep:${userId}:${new Date().toISOString()}`,
-          status: "skipped",
-          planCode: entitlement.plan_code,
-          payload: { reason: "plan_not_entitled", channel_policy: entitlement.source }
-        }));
-        continue;
-      }
 
       if (!state?.connected || !state?.alerts_enabled || !norm(state?.chat_id)) {
         results.push({ user_id: userId, skipped: true, reason: "telegram_not_ready" });
