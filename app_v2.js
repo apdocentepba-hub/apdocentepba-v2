@@ -1182,10 +1182,34 @@ function renderDots(total, current) {
 }
 
 function parsePidNumber(value) {
-  const raw = String(value || "").trim();
+  let raw = String(value || "").trim();
   if (!raw) return null;
-  const normalized = raw.replace(/\./g, "").replace(",", ".");
-  const n = Number(normalized);
+
+  raw = raw.replace(/\s+/g, "");
+
+  const hasDot = raw.includes(".");
+  const hasComma = raw.includes(",");
+
+  if (hasDot && hasComma) {
+    const lastDot = raw.lastIndexOf(".");
+    const lastComma = raw.lastIndexOf(",");
+
+    if (lastComma > lastDot) {
+      // 1.234,56
+      raw = raw.replace(/\./g, "").replace(",", ".");
+    } else {
+      // 1,234.56
+      raw = raw.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    // 38,10
+    raw = raw.replace(",", ".");
+  } else {
+    // 38.10 -> dejar así
+    // 1234 -> dejar así
+  }
+
+  const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
 
