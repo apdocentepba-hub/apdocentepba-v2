@@ -71,15 +71,24 @@
       card.appendChild(note);
     }
 
-    note.textContent = planAllowsPidMatch()
+    const nextText = planAllowsPidMatch()
       ? 'Tu plan actual incluye match PID automático dentro de Listados.'
       : 'Listados siguen habilitados. El match PID automático queda reservado para el Plan Insigne.';
+
+    if (note.textContent !== nextText) {
+      note.textContent = nextText;
+    }
   }
 
   function updatePlanDescriptionDom() {
     if (!planAllowsPidMatch()) return;
+
     const note = document.querySelector('#panel-plan .plan-note');
-    if (note) note.textContent = insigneDescription();
+    const nextText = insigneDescription();
+
+    if (note && note.textContent !== nextText) {
+      note.textContent = nextText;
+    }
   }
 
   function removeMatchPidTagsIfNeeded() {
@@ -96,7 +105,10 @@
     if (planAllowsPidMatch()) return;
 
     document.querySelectorAll('#alerta-pid-box').forEach(box => {
-      box.innerHTML = lockedPidHtml();
+      const nextHtml = lockedPidHtml().trim();
+      if (box.innerHTML.trim() !== nextHtml) {
+        box.innerHTML = nextHtml;
+      }
     });
   }
 
@@ -198,13 +210,4 @@
     setTimeout(enforceUi, 300);
     setTimeout(enforceUi, 1200);
   }
-
-  const observer = new MutationObserver(function () {
-    enforceUi();
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
 })();
