@@ -1283,13 +1283,15 @@ function renderPidMatchBlock(alerta, resumen) {
     <div class="alerta-meta-card alerta-pid-card ${toneClass}">
       <div class="alerta-meta-head">${info.title}</div>
       <div class="alerta-meta-grid">
-        ${alertaRow("Motivo", alerta?.pid_reason || "-")}
-        ${alertaRow("Área PID", alerta?.pid_area || "-")}
-        ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
-        ${alertaRow("Tu puntaje", alerta?.pid_puntaje_total || "-")}
-        ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
-        ${alertaRow("Año PID", alerta?.pid_anio || "-")}
-      </div>
+  ${alertaRow("Motivo", alerta?.pid_reason || "-")}
+  ${alertaRow("Área PID", alerta?.pid_area || "-")}
+  ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
+  ${alertaRow("Tu puntaje", alerta?.pid_puntaje_total || "-")}
+  ${alertaRow("Bonus residencia", alerta?.pid_residencia_bonus_aplicado ? `+${alerta.pid_residencia_bonus_puntos}` : "No")}
+  ${alertaRow("Distrito residencia", alerta?.pid_distrito_residencia || "-")}
+  ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
+  ${alertaRow("Año PID", alerta?.pid_anio || "-")}
+</div>
       <div class="alerta-meta-note">${info.text}</div>
     </div>
   `;
