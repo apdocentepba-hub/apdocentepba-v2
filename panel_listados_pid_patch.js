@@ -33,13 +33,13 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/\\\"/g, '&quot;');
+      .replace(/\"/g, '&quot;');
   }
 
   function clean(v) {
     return String(v || '')
-      .replace(/\\u00a0/g, ' ')
-      .replace(/\\s+/g, ' ')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 
@@ -186,7 +186,7 @@
   }
 
   async function runPid() {
-    const dni = clean(byId('pidlist-dni') && byId('pidlist-dni').value || '').replace(/\\D+/g, '');
+    const dni = clean(byId('pidlist-dni') && byId('pidlist-dni').value || '').replace(/\D+/g, '');
     const listado = clean(byId('pidlist-listado') && byId('pidlist-listado').value || '');
     const anio = clean(byId('pidlist-anio') && byId('pidlist-anio').value || '');
     const btn = byId('pidlist-buscar');
@@ -197,8 +197,8 @@
       byId('pidlist-listado').selectedOptions[0].textContent || listado
     );
 
-    if (!/^\\d{7,8}$/.test(dni)) return setMsg('Ingresá un DNI válido.', 'pidlist-err');
-    if (!/^\\d{4}$/.test(anio)) return setMsg('Ingresá un año válido.', 'pidlist-err');
+    if (!/^\d{7,8}$/.test(dni)) return setMsg('Ingresá un DNI válido.', 'pidlist-err');
+    if (!/^\d{4}$/.test(anio)) return setMsg('Ingresá un año válido.', 'pidlist-err');
 
     if (btn) { btn.disabled = true; btn.textContent = 'Buscando...'; }
     setMsg('Consultando PID...', 'pidlist-info');
