@@ -205,17 +205,18 @@
     root.insertAdjacentHTML('beforeend', historicoCardHtml());
   }
 
-  function trimLegacyUiNoise() {
-    byId('panel-market-banner')?.remove();
-    byId('panel-quick-actions')?.remove();
-    byId('panel-premium-reasons')?.remove();
-    byId('panel-safe-quicknav')?.remove();
-    byId('btn-logout')?.remove();
-    removeCardByBodyId('panel-backfill-provincia');
-    removeCardByBodyId('panel-historial');
-    removeCardByBodyId('panel-radar-provincia');
-    removeCardByBodyId('panel-historico-docente');
-  }
+ function trimLegacyUiNoise() {
+  byId('panel-market-banner')?.remove();
+  byId('panel-quick-actions')?.remove();
+  byId('panel-premium-reasons')?.remove();
+  byId('panel-safe-quicknav')?.remove();
+  byId('btn-logout')?.remove();
+  byId('panel-pid-lookup-card')?.remove();
+  removeCardByBodyId('panel-backfill-provincia');
+  removeCardByBodyId('panel-historial');
+  removeCardByBodyId('panel-radar-provincia');
+  removeCardByBodyId('panel-historico-docente');
+}
 
  function loadUsefulPatches() {
   // no-op:
