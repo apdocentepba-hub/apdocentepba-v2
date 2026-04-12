@@ -363,6 +363,9 @@
   function enforceListadosPane() {
     injectStyles();
 
+    const legacyCard = byId('panel-listados-pid-card');
+    if (legacyCard) legacyCard.remove();
+
     const tabBtn = document.querySelector('.panel-tab-btn[data-tab-key="perfil"]');
     if (tabBtn && tabBtn.textContent !== 'Listados') tabBtn.textContent = 'Listados';
 
