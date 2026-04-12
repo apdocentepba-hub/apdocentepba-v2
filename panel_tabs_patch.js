@@ -9,6 +9,7 @@
     { key: 'inicio', label: 'Inicio' },
     { key: 'alertas', label: 'Alertas' },
     { key: 'perfil', label: 'Perfil / listados' },
+    { key: 'repo', label: 'Repositorio' },
     { key: 'plan', label: 'Plan' },
     { key: 'mercado', label: 'Estadísticas' },
     { key: 'preferencias', label: 'Preferencias' },
@@ -41,13 +42,8 @@
     document.head.appendChild(style);
   }
 
-  function getPanelDocente() {
-    return document.getElementById('panel-docente');
-  }
-
-  function getPanelContent() {
-    return document.getElementById('panel-content');
-  }
+  function getPanelDocente() { return document.getElementById('panel-docente'); }
+  function getPanelContent() { return document.getElementById('panel-content'); }
 
   function ensureShell() {
     const section = getPanelDocente();
@@ -66,6 +62,7 @@
         <div id="panel-tab-pane-inicio" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-alertas" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-perfil" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
+        <div id="panel-tab-pane-repo" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-plan" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-mercado" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
         <div id="panel-tab-pane-preferencias" class="panel-tab-pane"><div class="panel-tab-grid"></div></div>
@@ -76,11 +73,8 @@
 
     const nav = wrap.querySelector('#panel-tabs-nav');
     if (nav && !nav.dataset.ready) {
-      nav.innerHTML = TAB_DEFS.map(tab => `
-        <button type="button" class="panel-tab-btn" data-tab-key="${tab.key}">${tab.label}</button>
-      `).join('');
+      nav.innerHTML = TAB_DEFS.map(tab => `<button type="button" class="panel-tab-btn" data-tab-key="${tab.key}">${tab.label}</button>`).join('');
       nav.dataset.ready = '1';
-
       nav.querySelectorAll('[data-tab-key]').forEach(btn => {
         btn.addEventListener('click', () => activateTab(btn.getAttribute('data-tab-key') || 'inicio'));
       });
@@ -90,23 +84,18 @@
     return wrap;
   }
 
-  function paneGrid(key) {
-    return document.querySelector(`#panel-tab-pane-${key} .panel-tab-grid`);
-  }
-
+  function paneGrid(key) { return document.querySelector(`#panel-tab-pane-${key} .panel-tab-grid`); }
   function moveCardByContentId(contentId, tabKey) {
     const content = document.getElementById(contentId);
     const card = content?.closest('.panel-card');
     const grid = paneGrid(tabKey);
     if (card && grid && card.parentElement !== grid) grid.appendChild(card);
   }
-
   function moveCardById(cardId, tabKey) {
     const card = document.getElementById(cardId);
     const grid = paneGrid(tabKey);
     if (card && grid && card.parentElement !== grid) grid.appendChild(card);
   }
-
   function movePrefsCard() {
     const card = document.querySelector('.prefs-card');
     const grid = paneGrid('preferencias');
@@ -119,21 +108,16 @@
     moveCardByContentId('panel-preferencias-resumen', 'inicio');
     moveCardByContentId('panel-plan', 'inicio');
     moveCardByContentId('panel-canales', 'inicio');
-
     moveCardByContentId('panel-alertas', 'alertas');
     moveCardByContentId('panel-estadisticas', 'alertas');
-
     moveCardByContentId('panel-perfil-docente', 'perfil');
     moveCardByContentId('panel-listados-docente', 'perfil');
-
+    moveCardById('panel-repositorio-card', 'repo');
     moveCardById('panel-plan-selector-card', 'plan');
-
     moveCardByContentId('panel-historico-apd', 'mercado');
     moveCardById('panel-radar-combinado-card', 'mercado');
-
     movePrefsCard();
     moveCardById('admin-panel-card', 'admin');
-
     refreshTabVisibility();
   }
 
@@ -155,7 +139,6 @@
       if (!btn) return;
       btn.classList.toggle('hidden', !sectionHasVisibleCards(tab.key));
     });
-
     const current = localStorage.getItem(TAB_STORAGE_KEY) || 'inicio';
     const activeBtn = document.querySelector(`.panel-tab-btn[data-tab-key="${current}"]:not(.hidden)`);
     if (!activeBtn) {
@@ -163,7 +146,6 @@
       if (firstVisible) activateTab(firstVisible.getAttribute('data-tab-key') || 'inicio');
       return;
     }
-
     activateTab(current);
   }
 
@@ -171,9 +153,7 @@
     const visibleBtn = document.querySelector(`.panel-tab-btn[data-tab-key="${key}"]:not(.hidden)`);
     const fallbackBtn = visibleBtn || document.querySelector('.panel-tab-btn[data-tab-key]:not(.hidden)');
     const resolved = fallbackBtn?.getAttribute('data-tab-key') || 'inicio';
-
     localStorage.setItem(TAB_STORAGE_KEY, resolved);
-
     TAB_DEFS.forEach(tab => {
       const btn = document.querySelector(`.panel-tab-btn[data-tab-key="${tab.key}"]`);
       const pane = document.getElementById(`panel-tab-pane-${tab.key}`);
@@ -190,14 +170,10 @@
     }
     repartitionCards();
   }
-
   function scheduleBootTabs() {
     if (bootScheduled) return;
     bootScheduled = true;
-    requestAnimationFrame(() => {
-      bootScheduled = false;
-      bootTabs();
-    });
+    requestAnimationFrame(() => { bootScheduled = false; bootTabs(); });
   }
 
   function startScopedObservers() {
@@ -206,7 +182,6 @@
       contentObserver = new MutationObserver(() => scheduleBootTabs());
       contentObserver.observe(content, { childList: true });
     }
-
     const admin = document.getElementById('admin-panel-card');
     if (admin && !adminObserver) {
       adminObserver = new MutationObserver(() => refreshTabVisibility());
@@ -218,22 +193,16 @@
   window.APD_activatePanelTab = activateTab;
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      scheduleBootTabs();
-      startScopedObservers();
-    }, { once: true });
+    document.addEventListener('DOMContentLoaded', () => { scheduleBootTabs(); startScopedObservers(); }, { once: true });
   } else {
-    scheduleBootTabs();
-    startScopedObservers();
+    scheduleBootTabs(); startScopedObservers();
   }
 })();
 
 (function () {
   'use strict';
-
   if (window.__apdAuthSessionPatchLoaderLoaded) return;
   window.__apdAuthSessionPatchLoaderLoaded = true;
-
   function loadAuthSessionPatch() {
     if (document.querySelector('script[data-apd-auth-session-patch="1"]')) return;
     const script = document.createElement('script');
@@ -242,10 +211,5 @@
     script.dataset.apdAuthSessionPatch = '1';
     document.head.appendChild(script);
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadAuthSessionPatch, { once: true });
-  } else {
-    loadAuthSessionPatch();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAuthSessionPatch, { once: true }); else loadAuthSessionPatch();
 })();
