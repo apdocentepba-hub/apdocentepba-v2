@@ -4,10 +4,13 @@
   if (window.__apdUiCleanupPatchLoaded) return;
   window.__apdUiCleanupPatchLoaded = true;
 
-  function hideWhatsappPreference() {
-    const input = document.getElementById('pref-alertas-whatsapp');
-    const card = input?.closest('label.chk-card.chk-notif');
-    if (card) card.style.display = 'none';
+  function keepNotificationPreferencesVisible() {
+    const ids = ['pref-alertas-email', 'pref-alertas-telegram', 'pref-alertas-whatsapp'];
+    ids.forEach((id) => {
+      const input = document.getElementById(id);
+      const card = input?.closest('label');
+      if (card) card.style.display = '';
+    });
   }
 
   function polishHeroText() {
@@ -28,7 +31,7 @@
   }
 
   function applyCleanup() {
-    hideWhatsappPreference();
+    keepNotificationPreferencesVisible();
     polishHeroText();
     preferAlertasTab();
   }
