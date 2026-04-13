@@ -1475,12 +1475,53 @@ function formatMailNumber(value) {
     maximumFractionDigits: 2
   });
 }
+function hasPidEvidence(payload) {
+  const p = normalizeOfferPayload(payload || {});
 
+  return !!(
+    p.pid_listado ||
+    p.pid_anio ||
+    p.pid_area ||
+    p.pid_bloque ||
+    p.pid_reason ||
+    p.pid_match ||
+    p.pid_compatible ||
+    Number.isFinite(Number(p.pid_puntaje_total_base)) ||
+    Number.isFinite(Number(p.pid_puntaje_total_final))
+  );
+}
+
+function stripPidFromPayload(payload) {
+  const p = normalizeOfferPayload(payload || {});
+
+  return {
+    ...p,
+    pid_match: false,
+    pid_compatible: false,
+    pid_reason: "",
+    pid_area: "",
+    pid_bloque: "",
+    pid_puntaje_total: "",
+    pid_puntaje_total_base: null,
+    pid_puntaje_total_final: null,
+    pid_residencia_bonus_aplicado: false,
+    pid_residencia_bonus_puntos: 0,
+    pid_distrito_residencia: "",
+    pid_listado: "",
+    pid_anio: ""
+  };
+}
 function buildMailChanceInfo(p) {
-  if (!p?.pid_compatible) {
+  const payload = normalizeOfferPayload(p || {});
+
+  if (!hasPidEvidence(payload)) {
+    return null;
+  }
+
+  if (!payload?.pid_compatible) {
     return {
       title: "No compatible con tu PID",
-      text: p?.pid_reason || "La oferta coincide con tus preferencias, pero no con tu PID real.",
+      text: payload?.pid_reason || "La oferta coincide con tus preferencias, pero no con tu PID real.",
       toneBg: "#fff8e8",
       toneBorder: "#f0d39a",
       toneColor: "#9a6700"
@@ -1488,24 +1529,24 @@ function buildMailChanceInfo(p) {
   }
 
   const puntajeBase =
-    Number.isFinite(Number(p?.pid_puntaje_total_base))
-      ? Number(p.pid_puntaje_total_base)
-      : parseMailNumber(p?.pid_puntaje_total);
+    Number.isFinite(Number(payload?.pid_puntaje_total_base))
+      ? Number(payload.pid_puntaje_total_base)
+      : parseMailNumber(payload?.pid_puntaje_total);
 
   const bonusResidencia =
-    p?.pid_residencia_bonus_aplicado
-      ? Number(p?.pid_residencia_bonus_puntos || 0)
+    payload?.pid_residencia_bonus_aplicado
+      ? Number(payload?.pid_residencia_bonus_puntos || 0)
       : 0;
 
   const miPuntaje =
-    Number.isFinite(Number(p?.pid_puntaje_total_final))
-      ? Number(p.pid_puntaje_total_final)
+    Number.isFinite(Number(payload?.pid_puntaje_total_final))
+      ? Number(payload.pid_puntaje_total_final)
       : (Number.isFinite(puntajeBase) ? puntajeBase + bonusResidencia : null);
 
-  const primero = parseMailNumber(p?.puntaje_primero);
+  const primero = parseMailNumber(payload?.puntaje_primero);
 
   if (!Number.isFinite(miPuntaje) || !Number.isFinite(primero)) {
-    if (Number(p?.total_postulantes || 0) === 0) {
+    if (Number(payload?.total_postulantes || 0) === 0) {
       return {
         title: "Sin competencia visible",
         text: `Por ahora no se ven postulantes cargados. Tu puntaje actual para esta oferta es ${formatMailNumber(miPuntaje)}.`,
@@ -1564,10 +1605,10 @@ function buildMailChanceInfo(p) {
     toneColor: "#9a6700"
   };
 }
-
 function renderMailOfferCard(row) {
   const p = normalizeOfferPayload(row?.offer_payload || {});
   const chance = buildMailChanceInfo(p);
+
   const titulo = p.cargo || p.materia || p.title || "Oferta APD";
 
   const puntajeBase =
@@ -1575,15 +1616,14 @@ function renderMailOfferCard(row) {
       ? Number(p.pid_puntaje_total_base)
       : parseMailNumber(p?.pid_puntaje_total);
 
-  const bonusResidencia =
-    p?.pid_residencia_bonus_aplicado
-      ? Number(p?.pid_residencia_bonus_puntos || 0)
-      : 0;
-
   const puntajeFinal =
     Number.isFinite(Number(p?.pid_puntaje_total_final))
       ? Number(p.pid_puntaje_total_final)
-      : (Number.isFinite(puntajeBase) ? puntajeBase + bonusResidencia : null);
+      : (
+          Number.isFinite(puntajeBase)
+            ? puntajeBase + Number(p?.pid_residencia_bonus_puntos || 0)
+            : null
+        );
 
   const tipo = String(p.revista || "").trim() || (
     (
@@ -1599,11 +1639,11 @@ function renderMailOfferCard(row) {
   );
 
   const chanceIcon =
+    !chance ? "" :
     chance.title.includes("Muy favorable") ? "🟢" :
     chance.title.includes("Favorable") ? "🟢" :
     chance.title.includes("Competida") ? "🔵" :
     chance.title.includes("Sin competencia") ? "🟢" :
-    chance.title.includes("No compatible") ? "🟠" :
     "🟠";
 
   return `
@@ -1681,74 +1721,80 @@ function renderMailOfferCard(row) {
                     : ""
                 }
 
-                <div style="margin:0 0 14px 0;padding:14px 14px 12px 14px;background:${chance.toneBg};border:1px solid ${chance.toneBorder};border-radius:14px;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:800;color:${chance.toneColor};margin:0 0 10px 0;">
-                    ${chanceIcon} ${escHtml(chance.title)}
-                  </div>
+                ${
+                  chance
+                    ? `
+                      <div style="margin:0 0 14px 0;padding:14px 14px 12px 14px;background:${chance.toneBg};border:1px solid ${chance.toneBorder};border-radius:14px;">
+                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:800;color:${chance.toneColor};margin:0 0 10px 0;">
+                          ${chanceIcon} ${escHtml(chance.title)}
+                        </div>
 
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
-                    <tr>
-                      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Motivo</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;line-height:1.45;">${escHtml(p.pid_reason || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID"))}</div>
-                        </div>
-                      </td>
-                      <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Área PID</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_area || "-")}</div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bloque PID</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_bloque || "-")}</div>
-                        </div>
-                      </td>
-                      <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Puntaje base</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeBase) ? formatMailNumber(puntajeBase) : "-"}</div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bonus residencia</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${p.pid_residencia_bonus_aplicado ? `+${p.pid_residencia_bonus_puntos}` : "No"}</div>
-                        </div>
-                      </td>
-                      <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Distrito residencia</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_distrito_residencia || "-")}</div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td width="50%" style="padding:0 8px 0 0;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Tu puntaje total</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeFinal) ? formatMailNumber(puntajeFinal) : "-"}</div>
-                        </div>
-                      </td>
-                      <td width="50%" style="padding:0 0 0 8px;vertical-align:top;">
-                        <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Listado / año PID</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml((p.pid_listado || "-") + " · " + (p.pid_anio || "-"))}</div>
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+                          <tr>
+                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Motivo</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;line-height:1.45;">${escHtml(p.pid_reason || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID"))}</div>
+                              </div>
+                            </td>
+                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Área PID</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_area || "-")}</div>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bloque PID</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_bloque || "-")}</div>
+                              </div>
+                            </td>
+                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Puntaje base</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeBase) ? formatMailNumber(puntajeBase) : "-"}</div>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bonus residencia</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${p.pid_residencia_bonus_aplicado ? `+${p.pid_residencia_bonus_puntos}` : "No"}</div>
+                              </div>
+                            </td>
+                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Distrito residencia</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_distrito_residencia || "-")}</div>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td width="50%" style="padding:0 8px 0 0;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Tu puntaje total</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeFinal) ? formatMailNumber(puntajeFinal) : "-"}</div>
+                              </div>
+                            </td>
+                            <td width="50%" style="padding:0 0 0 8px;vertical-align:top;">
+                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Listado / año PID</div>
+                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml((p.pid_listado || "-") + " · " + (p.pid_anio || "-"))}</div>
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
 
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;margin-top:8px;">
-                    ${escHtml(chance.text)}
-                  </div>
-                </div>
+                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;margin-top:8px;">
+                          ${escHtml(chance.text)}
+                        </div>
+                      </div>
+                    `
+                    : ""
+                }
 
                 <div style="margin:0 0 14px 0;padding:14px 14px 12px 14px;background:#f7faff;border:1px solid #dbeafe;border-radius:14px;">
                   <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:800;color:#1d4ed8;margin:0 0 10px 0;">
@@ -1787,18 +1833,18 @@ function renderMailOfferCard(row) {
                       ? `<a href="${escHtml(p.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:11px 16px;margin:4px 8px 0 0;text-decoration:none;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a ABC</a>`
                       : ""
                   }
-                  <a href="https://apdocentepba.github.io" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:11px 16px;margin:4px 8px 0 0;text-decoration:none;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a mi panel</a>
+                  <a href="https://alertasapd.com.ar" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:11px 16px;margin:4px 8px 0 0;text-decoration:none;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a mi panel</a>
                 </div>
 
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
+              </div>
+
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
   `;
 }
-
-
 
 
 
@@ -2166,20 +2212,25 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
   if (!user?.id || !user?.email) {
     return { ok: false, skipped: true, reason: "missing_user_or_email" };
   }
+
   if (!preferencias?.alertas_activas || !preferencias?.alertas_email) {
     return { ok: true, skipped: true, reason: "email_alerts_disabled" };
   }
+
   const existing = await supabaseSelect(
     env,
     `notification_delivery_logs?user_id=eq.${encodeURIComponent(user.id)}&channel=eq.email&template_code=eq.apd_initial_digest&select=id&limit=1`
   ).catch(() => []);
+
   if (Array.isArray(existing) && existing.length > 0) {
     return { ok: true, skipped: true, reason: "already_sent" };
   }
-  const alertData = await construirAlertasParaUsuario(env, user.id).catch((err) => ({
+
+  const alertData = await construirAlertasParaUsuario(env, user.id).catch(err => ({
     ok: false,
     message: err?.message || "No se pudieron construir alertas"
   }));
+
   if (!alertData?.ok) {
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
@@ -2195,9 +2246,16 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
         message: alertData?.message || "No se pudieron construir alertas iniciales"
       }
     }).catch(() => null);
+
     return { ok: false, skipped: true, reason: "build_failed" };
   }
-  const items = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];
+
+  const items = Array.isArray(alertData?.resultados)
+    ? alertData.resultados
+    : Array.isArray(alertData?.alertas)
+      ? alertData.alertas
+      : [];
+
   if (!items.length) {
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
@@ -2210,35 +2268,27 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
         source: options.source || "first_preferences_save"
       },
       provider_response: {
-        message: "No hab\xEDa alertas compatibles al momento del primer guardado"
+        message: "No había alertas compatibles al momento del primer guardado"
       }
     }).catch(() => null);
+
     return { ok: true, skipped: true, reason: "no_alerts" };
   }
-  const alerts = await Promise.all(
-    items.map(async (item) => {
-      const merged = { ...item || {} };
-      const ofertaId = String(item?.idoferta || "").trim();
-      const detalleId = String(item?.iddetalle || "").trim();
-      if (ofertaId || detalleId) {
-        try {
-          const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
-          merged.total_postulantes = resumen.total_postulantes ?? item?.total_postulantes ?? null;
-          merged.puntaje_primero = resumen.puntaje_primero ?? item?.puntaje_primero ?? null;
-          merged.listado_origen_primero = resumen.listado_origen_primero || item?.listado_origen_primero || "";
-        } catch (_) {
-          merged.total_postulantes = item?.total_postulantes ?? null;
-          merged.puntaje_primero = item?.puntaje_primero ?? null;
-          merged.listado_origen_primero = item?.listado_origen_primero || "";
-        }
-      }
-      return {
-        offer_payload: normalizeOfferPayload(merged)
-      };
-    })
-  );
-  const html = buildDigestHtml(alerts, user);
-  const asunto = `APDocentePBA: ${alerts.length} alerta${alerts.length === 1 ? "" : "s"} inicial${alerts.length === 1 ? "" : "es"} para vos`;
+
+  const MAX_VISIBLE = 10;
+  const alerts = await enrichAlertsForRichChannels(env, user, items, MAX_VISIBLE);
+
+  const html = buildDigestHtml(alerts, user, {
+    total_alerts: items.length,
+    max_visible: MAX_VISIBLE,
+    panel_url: "https://alertasapd.com.ar"
+  });
+
+  const asunto =
+    items.length > MAX_VISIBLE
+      ? `APDocentePBA: ${MAX_VISIBLE} de ${items.length} alertas iniciales para vos`
+      : `APDocentePBA: ${items.length} alerta${items.length === 1 ? "" : "s"} inicial${items.length === 1 ? "" : "es"} para vos`;
+
   const send = await enviarMailBrevo(
     user.email,
     user.nombre || "",
@@ -2246,6 +2296,7 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     html,
     env
   );
+
   await supabaseInsert(env, "notification_delivery_logs", {
     user_id: user.id,
     channel: "email",
@@ -2255,14 +2306,15 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     provider_message_id: null,
     payload: {
       source: options.source || "first_preferences_save",
-      total_alerts: alerts.length
+      total_alerts: items.length
     },
     provider_response: send || null
   }).catch(() => null);
+
   return {
     ok: !!send?.ok,
     skipped: false,
-    total_alerts: alerts.length
+    total_alerts: items.length
   };
 }
 __name(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
@@ -3364,131 +3416,292 @@ function buildEmailAlertKey(userId, alertItem) {
   ).trim();
   return key ? `${userId}:${key}` : "";
 }
+async function enriquecerAlertaParaCanales(env, alertItem) {
+  const merged = normalizeOfferPayload(alertItem || {});
+
+  const ofertaId = String(merged.idoferta || "").trim();
+  const detalleId = String(merged.iddetalle || "").trim();
+
+  if (ofertaId || detalleId) {
+    try {
+      const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+      merged.total_postulantes = resumen.total_postulantes ?? merged.total_postulantes ?? null;
+      merged.puntaje_primero = resumen.puntaje_primero ?? merged.puntaje_primero ?? null;
+      merged.listado_origen_primero = resumen.listado_origen_primero || merged.listado_origen_primero || "";
+    } catch (_) {
+      merged.total_postulantes = merged.total_postulantes ?? null;
+      merged.puntaje_primero = merged.puntaje_primero ?? null;
+      merged.listado_origen_primero = merged.listado_origen_primero || "";
+    }
+  }
+
+  return merged;
+}
+
+async function enriquecerAlertasVisiblesParaCanales(env, items, maxVisible = 10) {
+  const source = Array.isArray(items) ? items : [];
+  const limit = Math.max(1, Number(maxVisible || 10));
+  const visible = source.slice(0, limit);
+
+  const enriched = await Promise.all(
+    visible.map(item => enriquecerAlertaParaCanales(env, item))
+  );
+
+  return {
+    total: source.length,
+    shown: enriched.length,
+    hidden: Math.max(0, source.length - enriched.length),
+    items: enriched
+  };
+}
+
+function buildChannelAlertTextBlock(payload, options = {}) {
+  const o = normalizeOfferPayload(payload || {});
+  const showPid = options?.show_pid === true;
+  const index = Number(options?.index || 0);
+
+  const title = [
+    String(o.cargo || "").trim(),
+    String(o.materia || o.area || "").trim()
+  ]
+    .filter(Boolean)
+    .filter((value, idx, arr) => arr.indexOf(value) === idx)
+    .join(" · ") || "Oferta APD";
+
+  const lines = [];
+  lines.push(`${index ? `${index}) ` : ""}${title}`);
+
+  if (o.distrito) lines.push(`📍 ${o.distrito}`);
+  if (o.escuela) lines.push(`🏫 ${o.escuela}`);
+  if (o.turno) lines.push(`🕒 ${o.turno}`);
+  if (o.nivel) lines.push(`🎓 ${o.nivel}`);
+  if (o.jornada) lines.push(`🏷️ ${o.jornada}`);
+  if (o.modulos) lines.push(`📦 Módulos: ${o.modulos}`);
+  if (o.dias_horarios) lines.push(`🗓️ Horario: ${o.dias_horarios}`);
+  if (o.fecha_cierre) lines.push(`⏰ Cierre: ${o.fecha_cierre}`);
+
+  if (
+    o.total_postulantes != null ||
+    o.puntaje_primero != null ||
+    o.listado_origen_primero
+  ) {
+    lines.push(
+      `👥 Postulados: ${
+        o.total_postulantes != null && o.total_postulantes !== ""
+          ? String(o.total_postulantes)
+          : "Sin datos"
+      }`
+    );
+    lines.push(
+      `🥇 Puntaje más alto: ${
+        o.puntaje_primero != null && o.puntaje_primero !== ""
+          ? formatMailNumber(parseMailNumber(o.puntaje_primero))
+          : "Sin datos"
+      }`
+    );
+    lines.push(
+      `📄 Listado del más alto: ${
+        o.listado_origen_primero
+          ? o.listado_origen_primero
+          : "Sin datos"
+      }`
+    );
+  }
+
+  if (showPid) {
+    const puntajeFinal = Number.isFinite(Number(o.pid_puntaje_total_final))
+      ? Number(o.pid_puntaje_total_final)
+      : null;
+
+    const puntajeBase = Number.isFinite(Number(o.pid_puntaje_total_base))
+      ? Number(o.pid_puntaje_total_base)
+      : parseMailNumber(o.pid_puntaje_total);
+
+    if (o.pid_reason) lines.push(`🧾 PID: ${o.pid_reason}`);
+    if (o.pid_area) lines.push(`📚 Área PID: ${o.pid_area}`);
+    if (o.pid_bloque) lines.push(`🧩 Bloque PID: ${o.pid_bloque}`);
+    if (Number.isFinite(puntajeBase)) {
+      lines.push(`🎯 Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
+    }
+    if (o.pid_residencia_bonus_aplicado) {
+      lines.push(`🏠 Bonus residencia: +${Number(o.pid_residencia_bonus_puntos || 0)}`);
+    }
+    if (Number.isFinite(puntajeFinal)) {
+      lines.push(`✅ Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
+    }
+    if (o.pid_listado || o.pid_anio) {
+      lines.push(`📌 PID: ${o.pid_listado || "-"} · ${o.pid_anio || "-"}`);
+    }
+  }
+
+  if (o.link) lines.push(`🔗 ${o.link}`);
+
+  return lines.filter(Boolean).join("\n");
+}
+async function enrichAlertForRichChannels(env, user, alertItem, resolvedPlan = null) {
+  const resolved =
+    resolvedPlan ||
+    await resolverPlanUsuario(env, user?.id || "").catch(() => null);
+
+  const planCode = String(
+    resolved?.plan?.code ||
+    resolved?.subscription?.plan_code ||
+    ""
+  ).trim().toUpperCase();
+
+  let enriched = normalizeOfferPayload(
+    alertItem?.offer_payload || alertItem || {}
+  );
+
+  const ofertaId = String(enriched.idoferta || "").trim();
+  const detalleId = String(enriched.iddetalle || "").trim();
+
+  if (ofertaId || detalleId) {
+    try {
+      const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+
+      enriched.total_postulantes =
+        resumen.total_postulantes ?? enriched.total_postulantes ?? null;
+
+      enriched.puntaje_primero =
+        resumen.puntaje_primero ?? enriched.puntaje_primero ?? null;
+
+      enriched.listado_origen_primero =
+        resumen.listado_origen_primero ||
+        enriched.listado_origen_primero ||
+        "";
+    } catch (_) {
+      enriched.total_postulantes = enriched.total_postulantes ?? null;
+      enriched.puntaje_primero = enriched.puntaje_primero ?? null;
+      enriched.listado_origen_primero =
+        enriched.listado_origen_primero || "";
+    }
+  }
+
+  if (planCode !== "INSIGNE") {
+    enriched = stripPidFromPayload(enriched);
+  }
+
+  return enriched;
+}
+
+async function enrichAlertsForRichChannels(env, user, alerts, limit = 10) {
+  const items = Array.isArray(alerts) ? alerts.slice(0, limit) : [];
+  if (!items.length) return [];
+
+  const resolved = await resolverPlanUsuario(env, user?.id || "").catch(() => null);
+
+  const enriched = await Promise.all(
+    items.map(async (item) => {
+      const offerPayload = await enrichAlertForRichChannels(env, user, item, resolved);
+      return { offer_payload: offerPayload };
+    })
+  );
+
+  return enriched;
+}
 __name(buildEmailAlertKey, "buildEmailAlertKey");
 async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
   const alertKey = buildEmailAlertKey(user?.id, alertItem);
 
-  const payload = {
-    alert_key: alertKey || null,
-    source: options.source || "cron",
-    alert: {
-      source_offer_key: alertItem?.source_offer_key || null,
-      iddetalle: alertItem?.iddetalle || null,
-      idoferta: alertItem?.idoferta || null,
-      distrito: alertItem?.distrito || "",
-      cargo: alertItem?.cargo || "",
-      escuela: alertItem?.escuela || "",
-      turno: alertItem?.turno || "",
-      modulos: alertItem?.modulos || "",
-      desde: alertItem?.desde || "",
-      hasta: alertItem?.hasta || "",
-      nivel: alertItem?.nivel || alertItem?.modalidad || "",
-      finoferta_label: alertItem?.finoferta_label || "",
-      cierre: alertItem?.cierre || "",
-      postulados: alertItem?.postulados || "",
-      primero_puntaje: alertItem?.primero_puntaje || "",
-      abc_url: alertItem?.abc_url || null
-    }
-  };
-
   if (!user?.email) {
+    const payload = {
+      alert_key: alertKey || null,
+      source: options.source || "cron",
+      alert: {}
+    };
+
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user?.id || null,
       channel: "email",
       template_code: "apd_email_alert",
       destination: null,
-      status: "failed_alert",
+      status: "failed_enqueue",
       provider_message_id: null,
       payload,
       provider_response: { message: "Usuario sin email válido" }
     }).catch(() => null);
 
-    return {
-      ok: false,
-      reason: "missing_email",
-      alert_key: alertKey,
-      provider_response: { message: "Usuario sin email válido" }
-    };
+    return { ok: false, reason: "missing_email", alert_key: alertKey };
   }
 
   try {
-    const s = (v) => String(v ?? "");
+    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
+    const canonicalAlert = await enrichAlertForRichChannels(env, user, alertItem, resolved);
 
-    const asunto = "APDocentePBA: nueva alerta para vos";
+    const payload = {
+      alert_key: alertKey || null,
+      source: options.source || "cron",
+      alert: canonicalAlert
+    };
 
-    const html = `<!doctype html>
-<html>
-  <body style="font-family: Arial, Helvetica, sans-serif; background:#f4f6f8; padding:20px; color:#222;">
-    <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #dcdfe4; border-radius:12px; padding:24px;">
-      <h2 style="margin-top:0; color:#0f3460;">APDocentePBA</h2>
-      <p>Hola ${s(user?.nombre || "")}, apareció una alerta compatible con tus preferencias.</p>
-
-      <p><b>Cargo:</b> ${s(alertItem?.cargo)}</p>
-      <p><b>Distrito:</b> ${s(alertItem?.distrito)}</p>
-      <p><b>Escuela:</b> ${s(alertItem?.escuela)}</p>
-      <p><b>Turno:</b> ${s(alertItem?.turno)}</p>
-      <p><b>Nivel:</b> ${s(alertItem?.nivel || alertItem?.modalidad)}</p>
-      <p><b>Módulos:</b> ${s(alertItem?.modulos)}</p>
-      <p><b>Desde:</b> ${s(alertItem?.desde)}</p>
-      <p><b>Hasta:</b> ${s(alertItem?.hasta)}</p>
-      <p><b>Cierre:</b> ${s(alertItem?.finoferta_label || alertItem?.cierre)}</p>
-
-      ${
-        alertItem?.abc_url
-          ? `<p style="margin-top:20px;"><a href="${s(alertItem.abc_url)}" target="_blank" style="display:inline-block; background:#1f66ff; color:#fff; text-decoration:none; padding:10px 14px; border-radius:8px;">Ver en ABC</a></p>`
-          : ""
-      }
-    </div>
-  </body>
-</html>`;
-
-    const send = await enviarMailBrevo(
-      user.email,
-      user.nombre || "",
-      asunto,
-      html,
-      env
-    );
+    await supabaseInsert(env, "pending_notifications", {
+      user_id: user.id,
+      channel: "email",
+      kind: "apd_alert",
+      alert_key: alertKey,
+      payload,
+      status: "pending"
+    });
 
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
       channel: "email",
       template_code: "apd_email_alert",
       destination: user.email,
-      status: send?.ok ? "sent_alert" : "failed_alert",
+      status: "queued",
       provider_message_id: null,
       payload,
-      provider_response: send || null
+      provider_response: { message: "Alerta encolada para envío consolidado" }
     }).catch(() => null);
 
-    if (send?.ok) {
-      return { ok: true, sent: true, alert_key: alertKey };
+    return { ok: true, queued: true, alert_key: alertKey };
+  } catch (err) {
+    const msg = String(err?.message || "");
+
+    if (
+      msg.includes("23505") ||
+      msg.toLowerCase().includes("duplicate key") ||
+      msg.toLowerCase().includes("unique_alert_user") ||
+      msg.toLowerCase().includes("duplicate") ||
+      msg.toLowerCase().includes("unique")
+    ) {
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_alert",
+        destination: user.email,
+        status: "skipped_duplicate",
+        provider_message_id: null,
+        payload: {
+          alert_key: alertKey || null,
+          source: options.source || "cron",
+          alert: {}
+        },
+        provider_response: {
+          message: "Alerta duplicada ignorada por constraint unique_alert_user"
+        }
+      }).catch(() => null);
+
+      return { ok: true, skipped: true, reason: "duplicate", alert_key: alertKey };
     }
 
-    return {
-      ok: false,
-      reason: "send_failed",
-      alert_key: alertKey,
-      provider_response: send || null
-    };
-  } catch (err) {
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
       channel: "email",
       template_code: "apd_email_alert",
       destination: user.email,
-      status: "failed_alert",
+      status: "failed_enqueue",
       provider_message_id: null,
-      payload,
-      provider_response: { message: String(err?.message || "Error enviando alerta") }
+      payload: {
+        alert_key: alertKey || null,
+        source: options.source || "cron",
+        alert: {}
+      },
+      provider_response: { message: msg || "Error al encolar alerta" }
     }).catch(() => null);
 
-    return {
-      ok: false,
-      reason: "send_exception",
-      alert_key: alertKey,
-      provider_response: { message: String(err?.message || "Error enviando alerta") }
-    };
+    return { ok: false, reason: "enqueue_error", alert_key: alertKey };
   }
 }
 __name(sendEmailAlertForUser, "sendEmailAlertForUser");
@@ -3574,13 +3787,16 @@ async function runEmailAlertsSweep(env, options = {}) {
     if (!pendingAlerts.length) continue;
 
     const totalNewAlerts = pendingAlerts.length;
-    const visibleAlerts = pendingAlerts
-      .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
-      .map(entry => ({
-        offer_payload: normalizeOfferPayload(entry.item)
-      }));
+
+    const visibleAlerts = await enrichAlertsForRichChannels(
+      env,
+      user,
+      pendingAlerts.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL).map(entry => entry.item),
+      MAX_VISIBLE_ALERTS_IN_EMAIL
+    );
 
     const shownCount = visibleAlerts.length;
+
     const subject =
       totalNewAlerts > shownCount
         ? `APDocentePBA: ${shownCount} de ${totalNewAlerts} alertas nuevas`
@@ -4522,20 +4738,36 @@ async function construirAlertasParaUsuario(env, userId) {
     };
   }
 
+  const resolvedPlan = await resolverPlanUsuario(env, userId).catch(() => null);
+  const planCode = String(
+    resolvedPlan?.plan?.code ||
+    resolvedPlan?.subscription?.plan_code ||
+    ""
+  ).trim().toUpperCase();
+
+  const pidEnabled = planCode === "INSIGNE";
+
   const catalogos = await cargarCatalogos(env);
-const districtIndex = buildDistrictIndex(catalogos);
-const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const districtIndex = buildDistrictIndex(catalogos);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
 
-  const ultimaPid = await obtenerUltimaPidGuardada(userId).catch(() => null);
-  const pidRows = normalizePidRows(ultimaPid);
-  const pidDistricts = extractPidRequestedDistricts(ultimaPid);
-  const pidMeta = ultimaPid
-    ? {
-        listado: String(ultimaPid?.listado || "").trim(),
-        anio: String(ultimaPid?.anio || "").trim()
-      }
+  const ultimaPid = pidEnabled
+    ? await obtenerUltimaPidGuardada(userId).catch(() => null)
     : null;
+
+  const pidRows = pidEnabled ? normalizePidRows(ultimaPid) : [];
+  const pidDistricts = pidEnabled
+    ? extractPidRequestedDistricts(ultimaPid, districtIndex)
+    : [];
+
+  const pidMeta =
+    pidEnabled && ultimaPid
+      ? {
+          listado: String(ultimaPid?.listado || "").trim(),
+          anio: String(ultimaPid?.anio || "").trim()
+        }
+      : null;
 
   const resultados = [];
   const descartadas = [];
@@ -4608,11 +4840,21 @@ const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
     vistos.add(clave);
 
     const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
-const pidCheck = evaluatePidCompatibility(oferta, ultimaPid, pidRows, districtIndex);
-    const item = buildAlertItem(oferta, evaluacion, {
-      ...pidCheck,
-      meta: pidMeta
-    });
+
+    const pidCheck = pidEnabled
+      ? evaluatePidCompatibility(oferta, ultimaPid, pidRows, districtIndex)
+      : null;
+
+    const item = buildAlertItem(
+      oferta,
+      evaluacion,
+      pidEnabled
+        ? {
+            ...pidCheck,
+            meta: pidMeta
+          }
+        : null
+    );
 
     if (evaluacion.match) {
       resultados.push(item);
@@ -4632,14 +4874,24 @@ const pidCheck = evaluatePidCompatibility(oferta, ultimaPid, pidRows, districtIn
     user,
     preferencias_originales: prefs,
     preferencias_canonizadas: prefsCanon,
-    pid: ultimaPid
-      ? {
-          found: true,
-          listado: pidMeta?.listado || "",
-          anio: pidMeta?.anio || "",
-          total_rows: pidRows.length,
-          distritos_solicitados: pidDistricts
-        }
+    pid: pidEnabled
+      ? (
+          ultimaPid
+            ? {
+                found: true,
+                listado: pidMeta?.listado || "",
+                anio: pidMeta?.anio || "",
+                total_rows: pidRows.length,
+                distritos_solicitados: pidDistricts
+              }
+            : {
+                found: false,
+                listado: "",
+                anio: "",
+                total_rows: 0,
+                distritos_solicitados: []
+              }
+        )
       : {
           found: false,
           listado: "",
@@ -6605,6 +6857,8 @@ async function sendPendingEmailDigests(env, options = {}) {
     200
   );
 
+  const MAX_VISIBLE_ALERTS_IN_EMAIL = 10;
+
   const pendingRows = await supabaseSelect(
     env,
     `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,kind,alert_key,payload,created_at&order=created_at.asc&limit=${maxRows}`
@@ -6642,43 +6896,30 @@ async function sendPendingEmailDigests(env, options = {}) {
 
     processedUsers += 1;
 
-    const alerts = await Promise.all(
-      rows.map(async row => {
-        const payload = row?.payload?.alert || row?.payload || {};
-        const merged = { ...(payload || {}) };
-
-        const ofertaId = String(merged.idoferta || "").trim();
-        const detalleId = String(merged.iddetalle || "").trim();
-
-        if (ofertaId || detalleId) {
-          try {
-            const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
-            merged.total_postulantes = resumen.total_postulantes ?? merged.total_postulantes ?? null;
-            merged.puntaje_primero = resumen.puntaje_primero ?? merged.puntaje_primero ?? null;
-            merged.listado_origen_primero = resumen.listado_origen_primero || merged.listado_origen_primero || "";
-          } catch (_) {
-            merged.total_postulantes = merged.total_postulantes ?? null;
-            merged.puntaje_primero = merged.puntaje_primero ?? null;
-            merged.listado_origen_primero = merged.listado_origen_primero || "";
-          }
-        }
-
-        return {
-          pending_id: row.id,
-          alert_key: row.alert_key || null,
-          offer_payload: normalizeOfferPayload(merged)
-        };
-      })
+    const rawAlerts = rows.map(row => row?.payload?.alert || row?.payload || {});
+    const alerts = await enrichAlertsForRichChannels(
+      env,
+      user,
+      rawAlerts,
+      MAX_VISIBLE_ALERTS_IN_EMAIL
     );
 
     if (!alerts.length) continue;
 
-    const asunto =
-      alerts.length === 1
-        ? "APDocentePBA: 1 nueva alerta para vos"
-        : `APDocentePBA: ${alerts.length} nuevas alertas para vos`;
+    const totalAlerts = rows.length;
+    const shownCount = alerts.length;
 
-    const html = buildDigestHtml(alerts, user);
+    const asunto =
+      totalAlerts > shownCount
+        ? `APDocentePBA: ${shownCount} de ${totalAlerts} alertas nuevas`
+        : `APDocentePBA: ${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} alerta${totalAlerts === 1 ? "" : "s"} para vos`;
+
+    const html = buildDigestHtml(alerts, user, {
+      total_alerts: totalAlerts,
+      max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
+      panel_url: "https://alertasapd.com.ar"
+    });
+
     const send = await enviarMailBrevo(
       user.email,
       user.nombre || "",
@@ -6687,7 +6928,7 @@ async function sendPendingEmailDigests(env, options = {}) {
       env
     );
 
-    const rowIds = alerts.map(item => item.pending_id).filter(Boolean);
+    const rowIds = rows.map(item => item.id).filter(Boolean);
     const rowIdsQuery = rowIds.join(",");
 
     if (send?.ok) {
@@ -6701,8 +6942,8 @@ async function sendPendingEmailDigests(env, options = {}) {
         status: "sent_digest",
         provider_message_id: null,
         payload: {
-          total_alerts: alerts.length,
-          alert_keys: alerts.map(item => item.alert_key).filter(Boolean)
+          total_alerts: totalAlerts,
+          alert_keys: rows.map(item => item.alert_key).filter(Boolean)
         },
         provider_response: send || null
       }).catch(() => null);
@@ -6736,8 +6977,8 @@ async function sendPendingEmailDigests(env, options = {}) {
         status: "failed_digest",
         provider_message_id: null,
         payload: {
-          total_alerts: alerts.length,
-          alert_keys: alerts.map(item => item.alert_key).filter(Boolean)
+          total_alerts: totalAlerts,
+          alert_keys: rows.map(item => item.alert_key).filter(Boolean)
         },
         provider_response: send || null
       }).catch(() => null);
@@ -6804,35 +7045,19 @@ async function sendPendingEmailDigests(env, options = {}) {
 
     processedUsers++;
 
-    const alerts = await Promise.all(
-      nuevas.map(async row => {
-        const payload = row.offer_payload || {};
-        const merged = { ...payload };
-
-        const ofertaId = String(payload.idoferta || "").trim();
-        const detalleId = String(payload.iddetalle || "").trim();
-
-        if (ofertaId || detalleId) {
-          try {
-            const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
-            merged.total_postulantes = resumen.total_postulantes ?? payload.total_postulantes ?? null;
-            merged.puntaje_primero = resumen.puntaje_primero ?? payload.puntaje_primero ?? null;
-            merged.listado_origen_primero = resumen.listado_origen_primero || payload.listado_origen_primero || "";
-          } catch (_) {
-            merged.total_postulantes = payload.total_postulantes ?? null;
-            merged.puntaje_primero = payload.puntaje_primero ?? null;
-            merged.listado_origen_primero = payload.listado_origen_primero || "";
-          }
-        }
-
-        return {
-          row_id: row.id,
-          offer_payload: merged
-        };
-      })
+    const alerts = await enrichAlertsForRichChannels(
+      env,
+      user,
+      nuevas.map(row => row.offer_payload || {}),
+      MAX_VISIBLE_ALERTS_IN_EMAIL
     );
 
-    const html = buildDigestHtml(alerts, user);
+    const html = buildDigestHtml(alerts, user, {
+      total_alerts: nuevas.length,
+      max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
+      panel_url: "https://alertasapd.com.ar"
+    });
+
     const asunto =
       nuevas.length === 1
         ? "APDocentePBA: 1 nueva alerta para vos"
@@ -6859,7 +7084,7 @@ async function sendPendingEmailDigests(env, options = {}) {
         status: "sent_digest_fallback",
         provider_message_id: null,
         payload: {
-          total_alerts: alerts.length
+          total_alerts: nuevas.length
         },
         provider_response: send || null
       }).catch(() => null);
@@ -6899,14 +7124,13 @@ async function sendPendingEmailDigests(env, options = {}) {
     fallback_sent
   };
 }
-
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
 function buildDigestHtml(alerts, user, options = {}) {
   const panelUrl = String(options?.panel_url || "https://alertasapd.com.ar").trim();
-  const normalizedAlerts = (Array.isArray(alerts) ? alerts : []).map(item => {
-    const payload = item?.offer_payload || item || {};
-    return { offer_payload: normalizeOfferPayload(payload) };
-  });
+
+  const normalizedAlerts = (Array.isArray(alerts) ? alerts : []).map(item => ({
+    offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+  }));
 
   const totalAlerts = Math.max(
     Number(options?.total_alerts || 0),
@@ -6931,88 +7155,7 @@ function buildDigestHtml(alerts, user, options = {}) {
     String(options?.intro_text || "").trim() ||
     `Hola ${escHtml(user?.nombre || "")}, estas son las alertas nuevas compatibles con tus preferencias.`;
 
-  const items = visibleAlerts.map(a => {
-    const o = normalizeOfferPayload(a.offer_payload || {});
-
-    const tipo = String(o.revista || "").trim() || (
-      (
-        o.desde &&
-        String(o.desde).trim() &&
-        String(o.desde).trim().toLowerCase() !== "sin fecha" &&
-        o.hasta &&
-        String(o.hasta).trim() &&
-        String(o.hasta).trim().toLowerCase() !== "sin fecha"
-      )
-        ? "Suplencia"
-        : "Provisional"
-    );
-
-    return `
-      <tr>
-        <td style="padding:0 0 16px 0;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dbe3f0;border-radius:14px;background:#ffffff;">
-            <tr>
-              <td style="padding:16px 16px 14px 16px;">
-
-                <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:1.25;font-weight:700;color:#0f3460;margin:0 0 10px 0;">
-                  ${escHtml(o.cargo || o.materia || o.title || "Oferta APD")}
-                </div>
-
-                <div style="margin:0 0 12px 0;">
-                  ${o.escuela ? `<span style="display:inline-block;background:#eef4ff;color:#1f4fa3;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏫 ${escHtml(o.escuela)}</span>` : ""}
-                  ${o.distrito ? `<span style="display:inline-block;background:#e8f0fe;color:#1a4f8a;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📍 ${escHtml(o.distrito)}</span>` : ""}
-                  ${o.turno ? `<span style="display:inline-block;background:#eefbf3;color:#0d7a3e;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🕒 ${escHtml(o.turno)}</span>` : ""}
-                  ${o.jornada ? `<span style="display:inline-block;background:#f3f4f6;color:#374151;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏫 ${escHtml(o.jornada)}</span>` : ""}
-                  ${o.nivel ? `<span style="display:inline-block;background:#fff4e5;color:#9a6700;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🎓 ${escHtml(o.nivel)}</span>` : ""}
-                  ${tipo ? `<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📌 ${escHtml(tipo)}</span>` : ""}
-                </div>
-
-                <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827;">
-                  ${digestRow("Curso / división", o.curso_division)}
-                  ${digestRow("Tipo", tipo)}
-                  ${digestRow("Desde", o.desde)}
-                  ${digestRow("Hasta", o.hasta)}
-                  ${digestRow("Módulos", o.modulos)}
-                  ${digestRow("Días / horarios", o.dias_horarios)}
-                  ${digestRow("Cierre", o.fecha_cierre)}
-                </div>
-
-                ${
-                  o.observaciones
-                    ? `
-                      <div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px;">OBSERVACIONES</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#111827;">${escHtml(o.observaciones)}</div>
-                      </div>
-                    `
-                    : ""
-                }
-
-                <div style="margin-top:12px;padding:10px 12px;background:#f7faff;border:1px solid #dbeafe;border-radius:10px;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px;">RESUMEN DE POSTULANTES</div>
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;">
-                    ${digestRow("Cantidad", (o.total_postulantes != null && o.total_postulantes !== "") ? o.total_postulantes : "Sin postulados informados")}
-                    ${digestRow("Puntaje más alto", (o.puntaje_primero != null && o.puntaje_primero !== "") ? o.puntaje_primero : "Sin datos")}
-                    ${digestRow("Listado del más alto", o.listado_origen_primero ? o.listado_origen_primero : "Sin datos")}
-                  </div>
-                </div>
-
-                <div style="margin-top:14px;">
-                  ${
-                    o.link
-                      ? `<a href="${escHtml(o.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:10px 14px;margin:4px 8px 0 0;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a ABC</a>`
-                      : ""
-                  }
-                  <a href="${panelUrl}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:10px 14px;margin:4px 8px 0 0;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a mi panel</a>
-                </div>
-
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  const items = visibleAlerts.map(renderMailOfferCard).join("");
 
   const moreNote = remainingCount > 0
     ? `
@@ -7028,7 +7171,7 @@ function buildDigestHtml(alerts, user, options = {}) {
         <tr>
           <td align="center">
 
-            <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:620px;max-width:620px;">
+            <table role="presentation" width="700" cellpadding="0" cellspacing="0" border="0" style="width:700px;max-width:700px;">
               <tr>
                 <td style="background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%);color:#ffffff;padding:22px;border-radius:16px 16px 0 0;">
                   <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:700;line-height:1.2;">
@@ -7707,28 +7850,84 @@ function extractTelegramCommand(text) {
   if (normalized.includes("ALERTA")) return { kind: "alertas", payload: "" };
   return { kind: "other", payload: raw };
 }
+function buildRichTextAlertLines(payload, index) {
+  const p = normalizeOfferPayload(payload || {});
+  const title =
+    [String(p.cargo || "").trim(), String(p.materia || "").trim()]
+      .filter(Boolean)
+      .filter((v, i, arr) => arr.indexOf(v) === i)
+      .join(" · ") || "Oferta APD";
+
+  const lines = [
+    `${index + 1}) ${title}`,
+    `📍 ${String(p.distrito || "-").trim() || "-"}`,
+    `🏫 ${String(p.escuela || "Sin escuela").trim() || "Sin escuela"}`,
+    `🕒 ${String(p.turno || "-").trim() || "-"}`,
+    `🎓 ${String(p.nivel || "-").trim() || "-"}`,
+    `⏰ ${String(p.fecha_cierre || p.finoferta_label || "-").trim() || "-"}`
+  ];
+
+  if (p.total_postulantes != null && p.total_postulantes !== "") {
+    lines.push(`👥 Postulados: ${String(p.total_postulantes)}`);
+  }
+
+  if (p.puntaje_primero != null && p.puntaje_primero !== "") {
+    lines.push(`🥇 Puntaje más alto: ${String(p.puntaje_primero)}`);
+  }
+
+  if (p.listado_origen_primero) {
+    lines.push(`📄 Listado del más alto: ${String(p.listado_origen_primero)}`);
+  }
+
+  if (hasPidEvidence(p)) {
+    const chance = buildMailChanceInfo(p);
+
+    if (chance?.title) {
+      lines.push(`🎯 ${chance.title}`);
+    }
+
+    if (p.pid_reason) {
+      lines.push(`🧩 ${String(p.pid_reason)}`);
+    }
+
+    if (p.pid_area || p.pid_bloque) {
+      lines.push(
+        `📚 PID: ${String(p.pid_area || "-")} · ${String(p.pid_bloque || "-")}`
+      );
+    }
+
+    if (Number.isFinite(Number(p.pid_puntaje_total_final))) {
+      lines.push(`🧮 Tu puntaje PID: ${formatMailNumber(Number(p.pid_puntaje_total_final))}`);
+    }
+  }
+
+  if (p.link) {
+    lines.push(`🔗 ${String(p.link)}`);
+  }
+
+  return lines;
+}
 __name(extractTelegramCommand, "extractTelegramCommand");
 function buildTelegramQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
   const visible = all.slice(0, TELEGRAM_QUERY_ALERTS_LIMIT);
   const hidden = Math.max(0, all.length - visible.length);
+
   const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+
   visible.forEach((item, idx) => {
-    const title = [String(item?.cargo || "").trim(), String(item?.area || item?.materia || "").trim()].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
-    const distrito = String(item?.distrito || "-").trim();
-    const turno = String(item?.turno || "-").trim();
-    const escuela = String(item?.escuela || "Sin escuela").trim();
-    const cierre = String(item?.finoferta_label || item?.cierre || item?.fecha_cierre_fmt || "").trim();
-    lines.push(`${idx + 1}) ${title}`);
-    lines.push(`📍 ${distrito}`);
-    lines.push(`🕒 ${turno}`);
-    lines.push(`🏫 ${escuela}`);
-    if (cierre) lines.push(`⏰ ${cierre}`);
+    const payload = item?.offer_payload || item || {};
+    lines.push(...buildRichTextAlertLines(payload, idx));
     lines.push("");
   });
-  if (hidden > 0) lines.push(`+ ${hidden} más en el panel`, "");
+
+  if (hidden > 0) {
+    lines.push(`+ ${hidden} más en el panel`, "");
+  }
+
   lines.push("🌐 https://alertasapd.com.ar");
   lines.push("Escribí ALERTAS para refrescar.");
+
   return lines.filter(Boolean).join("\n");
 }
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
@@ -7736,23 +7935,22 @@ function buildWhatsAppQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
   const visible = all.slice(0, WHATSAPP_QUERY_ALERTS_LIMIT);
   const hidden = Math.max(0, all.length - visible.length);
+
   const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+
   visible.forEach((item, idx) => {
-    const title = [String(item?.cargo || "").trim(), String(item?.area || item?.materia || "").trim()].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
-    const distrito = String(item?.distrito || "-").trim();
-    const turno = String(item?.turno || "-").trim();
-    const escuela = String(item?.escuela || "Sin escuela").trim();
-    const cierre = String(item?.finoferta_label || item?.cierre || item?.fecha_cierre_fmt || "").trim();
-    lines.push(`${idx + 1}) ${title}`);
-    lines.push(`📍 ${distrito}`);
-    lines.push(`🕒 ${turno}`);
-    lines.push(`🏫 ${escuela}`);
-    if (cierre) lines.push(`⏰ ${cierre}`);
+    const payload = item?.offer_payload || item || {};
+    lines.push(...buildRichTextAlertLines(payload, idx));
     lines.push("");
   });
-  if (hidden > 0) lines.push(`+ ${hidden} más en el panel`, "");
+
+  if (hidden > 0) {
+    lines.push(`+ ${hidden} más en el panel`, "");
+  }
+
   lines.push("🌐 https://alertasapd.com.ar");
   lines.push("Escribí ALERTAS para refrescar.");
+
   return lines.filter(Boolean).join("\n");
 }
 __name(buildWhatsAppQueryDigest, "buildWhatsAppQueryDigest");
@@ -7795,8 +7993,10 @@ async function handleTelegramStatus(request, env) {
 __name(handleTelegramStatus, "handleTelegramStatus");
 async function handleTelegramWebhook(request, env) {
   requireTelegramWebhookSecret(request, env);
+
   const update = await request.json().catch(() => ({}));
   const updateId = update?.update_id != null ? String(update.update_id).trim() : "";
+
   if (updateId) {
     const dedupeKey = telegramUpdateDedupeKey(updateId);
     if (await wasInboundEventProcessed(env, dedupeKey)) {
@@ -7804,19 +8004,28 @@ async function handleTelegramWebhook(request, env) {
     }
     await markInboundEventProcessed(env, dedupeKey, TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS).catch(() => null);
   }
+
   const message = update?.message || {};
   const chatId = String(message?.chat?.id || "").trim();
   const chatType = String(message?.chat?.type || "private").trim();
-  if (!chatId || (chatType && chatType !== "private")) return json2({ ok: true, ignored: true, reason: "invalid_chat" });
+
+  if (!chatId || (chatType && chatType !== "private")) {
+    return json2({ ok: true, ignored: true, reason: "invalid_chat" });
+  }
+
   const command = extractTelegramCommand(message?.text || "");
+
   if (command.kind === "start") {
     const userId = String(command.payload || "").trim();
+
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
       await sendTelegramText(env, chatId, "No pude vincular tu cuenta. Entrá desde el panel y tocá el botón de conectar Telegram.").catch(() => null);
       return json2({ ok: true, ignored: true, reason: "invalid_start_payload" });
     }
+
     const entitlement = await resolveTelegramEntitlement(env, userId);
     const prev = await getTelegramState(env, userId) || {};
+
     const next = await saveTelegramState(env, userId, {
       connected: true,
       chat_id: chatId,
@@ -7827,17 +8036,29 @@ async function handleTelegramWebhook(request, env) {
       alerts_enabled: entitlement.allowed ? (typeof prev.alerts_requested === "boolean" ? prev.alerts_requested : true) : false,
       last_inbound_at: new Date().toISOString()
     });
-    await sendTelegramText(env, chatId, "✅ APDocentePBA conectó este chat con tu cuenta.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles.").catch(() => null);
+
+    await sendTelegramText(
+      env,
+      chatId,
+      "✅ APDocentePBA conectó este chat con tu cuenta.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles."
+    ).catch(() => null);
+
     return json2({ ok: true, connected: true, user_id: userId, state: next });
   }
+
   const linkedUserId = await getTelegramUserIdByChat(env, chatId);
   if (!linkedUserId) {
     await sendTelegramText(env, chatId, "Todavía no vinculaste este chat con tu cuenta. Entrá al panel y usá el botón de conectar Telegram.").catch(() => null);
     return json2({ ok: true, ignored: true, reason: "chat_not_linked" });
   }
+
   const user = await obtenerUsuario(env, linkedUserId);
-  if (!user?.id) return json2({ ok: true, ignored: true, reason: "user_not_found" });
+  if (!user?.id) {
+    return json2({ ok: true, ignored: true, reason: "user_not_found" });
+  }
+
   const entitlement = await resolveTelegramEntitlement(env, user.id);
+
   const state = await saveTelegramState(env, user.id, {
     connected: true,
     chat_id: chatId,
@@ -7845,19 +8066,46 @@ async function handleTelegramWebhook(request, env) {
     first_name: String(message?.from?.first_name || "").trim(),
     last_inbound_at: new Date().toISOString()
   });
+
   const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+
   if (command.kind === "alertas") {
     if (!prefs?.alertas_activas || !state?.alerts_enabled) {
       await sendTelegramText(env, chatId, "Telegram todavía no está activo en tus preferencias. Entrá al panel, activalo y después escribí ALERTAS.").catch(() => null);
       return json2({ ok: true, delivered: false, reason: "telegram_not_enabled" });
     }
+
     const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
-    const alerts = Array.isArray(data?.resultados) ? data.resultados : [];
-    const reply = alerts.length ? buildTelegramQueryDigest(alerts) : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+    const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
+
+    const alerts = await enrichAlertsForRichChannels(
+      env,
+      user,
+      rawAlerts,
+      TELEGRAM_QUERY_ALERTS_LIMIT
+    );
+
+    const reply = alerts.length
+      ? buildTelegramQueryDigest(alerts)
+      : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+
     await sendTelegramText(env, chatId, reply).catch(() => null);
-    return json2({ ok: true, delivered: true, total_alerts: alerts.length, plan_code: entitlement.plan_code, channel_mode: "query_only" });
+
+    return json2({
+      ok: true,
+      delivered: true,
+      total_alerts: rawAlerts.length,
+      plan_code: entitlement.plan_code,
+      channel_mode: "query_only"
+    });
   }
-  await sendTelegramText(env, chatId, "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar").catch(() => null);
+
+  await sendTelegramText(
+    env,
+    chatId,
+    "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar"
+  ).catch(() => null);
+
   return json2({ ok: true, delivered: true, help: true, channel_mode: "query_only" });
 }
 __name(handleTelegramWebhook, "handleTelegramWebhook");
@@ -7903,66 +8151,98 @@ async function handleWhatsAppStatus(request, env) {
   return json2({ ok: true, connected: !!state.connected, alerts_enabled: !!(entitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, phone_masked: maskPhone(user?.celular || state?.phone || ""), connect_hint: botNumber ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." });
 }
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
-async function handleWhatsAppWebhookVerify(request, env) {
-  const url = new URL(request.url);
-  const mode = String(url.searchParams.get("hub.mode") || "").trim();
-  const token = String(url.searchParams.get("hub.verify_token") || "").trim();
-  const challenge = String(url.searchParams.get("hub.challenge") || "").trim();
-  if (mode === "subscribe" && token && env.WHATSAPP_VERIFY_TOKEN && token === String(env.WHATSAPP_VERIFY_TOKEN).trim()) return new Response(challenge, { status: 200 });
-  return new Response("forbidden", { status: 403 });
-}
+
 __name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 async function handleWhatsAppWebhook(request, env) {
-  if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) return json2({ ok: true, skipped: true, reason: "missing_config" });
+  if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) {
+    return json2({ ok: true, skipped: true, reason: "missing_config" });
+  }
+
   const body = await request.json().catch(() => ({}));
   const entries = Array.isArray(body?.entry) ? body.entry : [];
+
   for (const entry of entries) {
     const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+
     for (const change of changes) {
       const value = change?.value || {};
       const messages = Array.isArray(value?.messages) ? value.messages : [];
+
       for (const message of messages) {
         const messageId = String(message?.id || "").trim();
+
         if (messageId) {
           const dedupeKey = whatsappMessageDedupeKey(messageId);
           if (await wasInboundEventProcessed(env, dedupeKey)) continue;
           await markInboundEventProcessed(env, dedupeKey, WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS).catch(() => null);
         }
+
         const from = String(message?.from || "").trim();
         if (!from) continue;
+
         const user = await findUserByWhatsAppNumber(env, from);
+
         if (!user?.id) {
           await sendWhatsAppText(env, from, "No encontré una cuenta de APDocentePBA asociada a este número. Guardá tu celular en el panel y probá de nuevo.").catch(() => null);
           continue;
         }
+
         const entitlement = await resolveWhatsAppEntitlement(env, user.id);
+
         if (!entitlement.allowed) {
           await sendWhatsAppText(env, from, "WhatsApp queda reservado para el plan Insigne. En tu plan actual seguís teniendo email y Telegram.").catch(() => null);
           continue;
         }
+
         const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+
         await saveWhatsAppState(env, user.id, {
           connected: true,
           phone: from,
           phone_masked: maskPhone(from),
           last_inbound_at: new Date().toISOString()
         }).catch(() => null);
-        const inboundText = norm(message?.text?.body || message?.button?.text || message?.interactive?.button_reply?.title || "");
+
+        const inboundText = norm(
+          message?.text?.body ||
+          message?.button?.text ||
+          message?.interactive?.button_reply?.title ||
+          ""
+        );
+
         if (!prefs?.alertas_activas || !prefs?.alertas_whatsapp) {
           await sendWhatsAppText(env, from, "Tu canal de WhatsApp todavía no está activo en preferencias. Entrá al panel, activalo y después escribí ALERTAS.").catch(() => null);
           continue;
         }
+
         if (inboundText.includes("ALERTA")) {
           const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
-          const alerts = Array.isArray(data?.resultados) ? data.resultados : [];
-          const reply = alerts.length ? buildWhatsAppQueryDigest(alerts) : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+          const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
+
+          const alerts = await enrichAlertsForRichChannels(
+            env,
+            user,
+            rawAlerts,
+            WHATSAPP_QUERY_ALERTS_LIMIT
+          );
+
+          const reply = alerts.length
+            ? buildWhatsAppQueryDigest(alerts)
+            : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+
           await sendWhatsAppText(env, from, reply).catch(() => null);
           continue;
         }
-        await sendWhatsAppText(env, from, "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar").catch(() => null);
+
+        await sendWhatsAppText(
+          env,
+          from,
+          "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar"
+        ).catch(() => null);
       }
     }
   }
+
   return json2({ ok: true, channel_mode: "query_only" });
 }
 __name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
