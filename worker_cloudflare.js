@@ -6420,26 +6420,52 @@ function canonizarPreferenciasConCatalogo(prefs, catalogos) {
 __name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 async function traerOfertasAPDPorDistritos(prefs) {
   const distritos = distritosPrefsAPD(prefs);
+  const cargos = cargosMateriasPrefsAPD(prefs);
   const todas = [];
   const vistos = new Set();
   const debugDistritos = [];
 
   for (const distritoAPD of distritos) {
-    const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+    let docsDistrito = [];
 
-    debugDistritos.push({
-      distrito_apd: distritoAPD,
-      query_usada: info.query,
-      total_apd_bruto: info.totalBruto,
-      total_apd_filtrado: info.totalFiltrado
-    });
+    if (Array.isArray(cargos) && cargos.length) {
+      for (const cargo of cargos) {
+        const info = await traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargo);
 
-    for (const doc of info.docs || []) {
-      const clave = buildSourceOfferKeyFromOferta(doc);
-      if (vistos.has(clave)) continue;
-      vistos.add(clave);
-      todas.push(doc);
+        debugDistritos.push({
+          distrito_apd: distritoAPD,
+          cargo_query: cargo,
+          query_usada: info.query,
+          total_apd_bruto: info.totalBruto,
+          total_apd_filtrado: info.totalFiltrado
+        });
+
+        for (const doc of info.docs || []) {
+          const clave = buildSourceOfferKeyFromOferta(doc);
+          if (vistos.has(clave)) continue;
+          vistos.add(clave);
+          docsDistrito.push(doc);
+        }
+      }
+    } else {
+      const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+
+      debugDistritos.push({
+        distrito_apd: distritoAPD,
+        query_usada: info.query,
+        total_apd_bruto: info.totalBruto,
+        total_apd_filtrado: info.totalFiltrado
+      });
+
+      for (const doc of info.docs || []) {
+        const clave = buildSourceOfferKeyFromOferta(doc);
+        if (vistos.has(clave)) continue;
+        vistos.add(clave);
+        docsDistrito.push(doc);
+      }
     }
+
+    todas.push(...docsDistrito);
   }
 
   return { ofertas: todas, debugDistritos };
