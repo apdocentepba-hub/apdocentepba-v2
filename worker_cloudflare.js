@@ -6595,38 +6595,223 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders() });
 }
 __name(json, "json");
+
+
 async function sendPendingEmailDigests(env, options = {}) {
-  const users = await supabaseSelect(
+  const maxRows = clampInt(
+    options?.max_rows || env.EMAIL_DIGEST_PENDING_LIMIT,
+    1,
+    500,
+    200
+  );
+
+  const pendingRows = await supabaseSelect(
     env,
-    `users?select=id,nombre,apellido,email,activo&activo=eq.true&email=not.is.null`
+    `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,kind,alert_key,payload,created_at&order=created_at.asc&limit=${maxRows}`
   ).catch(() => []);
+
+  const grouped = new Map();
+
+  for (const row of Array.isArray(pendingRows) ? pendingRows : []) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    if (!grouped.has(userId)) grouped.set(userId, []);
+    grouped.get(userId).push(row);
+  }
+
   let processedUsers = 0;
   let sent = 0;
   let failed = 0;
-  for (const user of users) {
-    if (!user?.id || !user?.email) continue;
+  let pending_rows = Array.isArray(pendingRows) ? pendingRows.length : 0;
+  let fallback_sent = 0;
+
+  for (const [userId, rows] of grouped.entries()) {
+    const user = await obtenerUsuario(env, userId).catch(() => null);
+    if (!user?.id || !user?.email || user?.activo === false) continue;
+
     const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
     if (!resolved || !isPlanActivo(resolved)) continue;
+
     const prefsRows = await supabaseSelect(
       env,
       `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
     ).catch(() => []);
+
     const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
     if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
+
+    processedUsers += 1;
+
+    const alerts = await Promise.all(
+      rows.map(async row => {
+        const payload = row?.payload?.alert || row?.payload || {};
+        const merged = { ...(payload || {}) };
+
+        const ofertaId = String(merged.idoferta || "").trim();
+        const detalleId = String(merged.iddetalle || "").trim();
+
+        if (ofertaId || detalleId) {
+          try {
+            const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+            merged.total_postulantes = resumen.total_postulantes ?? merged.total_postulantes ?? null;
+            merged.puntaje_primero = resumen.puntaje_primero ?? merged.puntaje_primero ?? null;
+            merged.listado_origen_primero = resumen.listado_origen_primero || merged.listado_origen_primero || "";
+          } catch (_) {
+            merged.total_postulantes = merged.total_postulantes ?? null;
+            merged.puntaje_primero = merged.puntaje_primero ?? null;
+            merged.listado_origen_primero = merged.listado_origen_primero || "";
+          }
+        }
+
+        return {
+          pending_id: row.id,
+          alert_key: row.alert_key || null,
+          offer_payload: normalizeOfferPayload(merged)
+        };
+      })
+    );
+
+    if (!alerts.length) continue;
+
+    const asunto =
+      alerts.length === 1
+        ? "APDocentePBA: 1 nueva alerta para vos"
+        : `APDocentePBA: ${alerts.length} nuevas alertas para vos`;
+
+    const html = buildDigestHtml(alerts, user);
+    const send = await enviarMailBrevo(
+      user.email,
+      user.nombre || "",
+      asunto,
+      html,
+      env
+    );
+
+    const rowIds = alerts.map(item => item.pending_id).filter(Boolean);
+    const rowIdsQuery = rowIds.join(",");
+
+    if (send?.ok) {
+      sent += 1;
+
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_digest",
+        destination: user.email,
+        status: "sent_digest",
+        provider_message_id: null,
+        payload: {
+          total_alerts: alerts.length,
+          alert_keys: alerts.map(item => item.alert_key).filter(Boolean)
+        },
+        provider_response: send || null
+      }).catch(() => null);
+
+      if (rowIds.length) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/pending_notifications?id=in.(${rowIdsQuery})`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({
+              status: "sent",
+              sent_at: new Date().toISOString()
+            })
+          }
+        ).catch(() => null);
+      }
+    } else {
+      failed += 1;
+
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_digest",
+        destination: user.email,
+        status: "failed_digest",
+        provider_message_id: null,
+        payload: {
+          total_alerts: alerts.length,
+          alert_keys: alerts.map(item => item.alert_key).filter(Boolean)
+        },
+        provider_response: send || null
+      }).catch(() => null);
+
+      if (rowIds.length) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/pending_notifications?id=in.(${rowIdsQuery})`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({
+              status: "failed"
+            })
+          }
+        ).catch(() => null);
+      }
+    }
+  }
+
+  if (pending_rows > 0) {
+    return {
+      ok: true,
+      mode: "pending_notifications",
+      processed_users: processedUsers,
+      sent,
+      failed,
+      pending_rows
+    };
+  }
+
+  const users = await supabaseSelect(
+    env,
+    `users?select=id,nombre,apellido,email,activo&activo=eq.true&email=not.is.null`
+  ).catch(() => []);
+
+  for (const user of users) {
+    if (!user?.id || !user?.email) continue;
+
+    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
+    if (!resolved || !isPlanActivo(resolved)) continue;
+
+    const prefsRows = await supabaseSelect(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
+    ).catch(() => []);
+
+    const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
+    if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
+
     const rows = await supabaseSelect(
       env,
       `user_offer_state?user_id=eq.${encodeURIComponent(user.id)}&is_active=eq.true&select=id,offer_id,offer_payload,first_emailed_at,last_emailed_at`
     ).catch(() => []);
+
     if (!rows || !rows.length) continue;
-    const nuevas = rows.filter((x) => !x.first_emailed_at);
-    const viejas = rows.filter((x) => !!x.first_emailed_at);
+
+    const nuevas = rows.filter(x => !x.first_emailed_at);
+    if (!nuevas.length) continue;
+
     processedUsers++;
+
     const alerts = await Promise.all(
-      rows.map(async (row) => {
+      nuevas.map(async row => {
         const payload = row.offer_payload || {};
         const merged = { ...payload };
+
         const ofertaId = String(payload.idoferta || "").trim();
         const detalleId = String(payload.iddetalle || "").trim();
+
         if (ofertaId || detalleId) {
           try {
             const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
@@ -6639,13 +6824,20 @@ async function sendPendingEmailDigests(env, options = {}) {
             merged.listado_origen_primero = payload.listado_origen_primero || "";
           }
         }
+
         return {
+          row_id: row.id,
           offer_payload: merged
         };
       })
     );
+
     const html = buildDigestHtml(alerts, user);
-    const asunto = nuevas.length > 0 ? `APDocentePBA: ${nuevas.length} nueva${nuevas.length === 1 ? "" : "s"} y ${viejas.length} ya visible${viejas.length === 1 ? "" : "s"}` : `APDocentePBA: ${viejas.length} oferta${viejas.length === 1 ? "" : "s"} visible${viejas.length === 1 ? "" : "s"} en tu panel`;
+    const asunto =
+      nuevas.length === 1
+        ? "APDocentePBA: 1 nueva alerta para vos"
+        : `APDocentePBA: ${nuevas.length} nuevas alertas para vos`;
+
     const send = await enviarMailBrevo(
       user.email,
       user.nombre || "",
@@ -6653,17 +6845,27 @@ async function sendPendingEmailDigests(env, options = {}) {
       html,
       env
     );
+
     if (send?.ok) {
-      sent++;
-      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      fallback_sent += 1;
+      sent += 1;
+      const nowIso = new Date().toISOString();
+
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_digest_fallback",
+        destination: user.email,
+        status: "sent_digest_fallback",
+        provider_message_id: null,
+        payload: {
+          total_alerts: alerts.length
+        },
+        provider_response: send || null
+      }).catch(() => null);
+
       await Promise.all(
-        rows.map((row) => {
-          const patch = {
-            last_emailed_at: nowIso
-          };
-          if (!row.first_emailed_at) {
-            patch.first_emailed_at = nowIso;
-          }
+        nuevas.map(row => {
           return fetch(
             `${env.SUPABASE_URL}/rest/v1/user_offer_state?id=eq.${encodeURIComponent(row.id)}`,
             {
@@ -6674,22 +6876,30 @@ async function sendPendingEmailDigests(env, options = {}) {
                 Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
                 Prefer: "return=minimal"
               },
-              body: JSON.stringify(patch)
+              body: JSON.stringify({
+                first_emailed_at: nowIso,
+                last_emailed_at: nowIso
+              })
             }
           ).catch(() => null);
         })
       );
     } else {
-      failed++;
+      failed += 1;
     }
   }
+
   return {
     ok: true,
+    mode: "fallback_user_offer_state",
     processed_users: processedUsers,
     sent,
-    failed
+    failed,
+    pending_rows,
+    fallback_sent
   };
 }
+
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
 function buildDigestHtml(alerts, user, options = {}) {
   const panelUrl = String(options?.panel_url || "https://alertasapd.com.ar").trim();
