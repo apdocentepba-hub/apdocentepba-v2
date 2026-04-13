@@ -3409,6 +3409,22 @@ async function getRecentSentEmailAlertKeysForUser(env, userId) {
 
   return keys;
 }
+async function loadPendingEmailAlertKeysForUser(env, userId) {
+  const rows = await supabaseSelect(
+    env,
+    `pending_notifications?user_id=eq.${encodeURIComponent(userId)}&channel=eq.email&status=eq.pending&select=alert_key&order=created_at.desc&limit=200`
+  ).catch(() => []);
+
+  const keys = new Set();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = String(row?.alert_key || "").trim();
+    if (key) keys.add(key);
+  }
+
+  return keys;
+}
+__name(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
 __name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
 function buildEmailAlertKey(userId, alertItem) {
   const key = String(
@@ -3626,8 +3642,9 @@ async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
   }
 
   try {
-    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
-    const canonicalAlert = await enrichAlertForRichChannels(env, user, alertItem, resolved);
+    const canonicalAlert = normalizeOfferPayload(
+      alertItem?.offer_payload || alertItem || {}
+    );
 
     const payload = {
       alert_key: alertKey || null,
@@ -3879,6 +3896,165 @@ async function runEmailAlertsSweep(env, options = {}) {
     failed_samples
   };
 }
+async function runEmailAlertsQueueSweep(env, options = {}) {
+  const MAX_USERS_PER_RUN = clampInt(
+    options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
+    1,
+    2,
+    1
+  );
+
+  const MAX_ALERTS_PER_USER = clampInt(
+    options?.max_alerts_per_user || env.EMAIL_QUEUE_ALERTS_PER_USER,
+    1,
+    5,
+    3
+  );
+
+  const prefRows = await supabaseSelect(
+    env,
+    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
+  ).catch(() => []);
+
+  const allUserIds = unique(
+    (Array.isArray(prefRows) ? prefRows : [])
+      .map(row => String(row?.user_id || "").trim())
+      .filter(Boolean)
+  );
+
+  if (!allUserIds.length) {
+    return {
+      ok: true,
+      mode: "queue_sweep",
+      total_users: 0,
+      users_selected: 0,
+      processed_users: 0,
+      enqueued: 0,
+      skipped: 0,
+      failed: 0,
+      failed_samples: []
+    };
+  }
+
+  let userIdsToProcess = allUserIds;
+
+  const targetUserId = String(options?.target_user_id || "").trim();
+  if (targetUserId) {
+    userIdsToProcess = allUserIds.filter(id => id === targetUserId);
+  } else {
+    const kv = getChannelStateStore(env);
+    let startIndex = 0;
+
+    if (kv) {
+      startIndex = clampInt(
+        await kv.get("email:queue:cursor"),
+        0,
+        Math.max(allUserIds.length - 1, 0),
+        0
+      );
+    }
+
+    const selected = [];
+    for (let i = 0; i < Math.min(MAX_USERS_PER_RUN, allUserIds.length); i += 1) {
+      selected.push(allUserIds[(startIndex + i) % allUserIds.length]);
+    }
+    userIdsToProcess = selected;
+
+    if (kv) {
+      const nextIndex = (startIndex + userIdsToProcess.length) % allUserIds.length;
+      await kv.put("email:queue:cursor", String(nextIndex)).catch(() => null);
+    }
+  }
+
+  let processedUsers = 0;
+  let enqueued = 0;
+  let skipped = 0;
+  let failed = 0;
+  const failed_samples = [];
+
+  for (const userId of userIdsToProcess) {
+    const user = await obtenerUsuario(env, userId).catch(() => null);
+    if (!user?.id || !user?.activo || !String(user?.email || "").trim()) continue;
+
+    const alertData = await construirAlertasParaUsuario(env, userId).catch(err => ({
+      ok: false,
+      message: err?.message || "No se pudieron construir alertas"
+    }));
+
+    if (!alertData?.ok) {
+      failed += 1;
+      if (failed_samples.length < 5) {
+        failed_samples.push({
+          user_id: userId,
+          reason: "build_failed",
+          message: alertData?.message || "No se pudieron construir alertas"
+        });
+      }
+      continue;
+    }
+
+    const items = Array.isArray(alertData?.resultados)
+      ? alertData.resultados
+      : Array.isArray(alertData?.alertas)
+        ? alertData.alertas
+        : [];
+
+    processedUsers += 1;
+
+    if (!items.length) continue;
+
+    const sentKeys = await getRecentSentEmailAlertKeysForUser(env, userId);
+    const pendingKeys = await loadPendingEmailAlertKeysForUser(env, userId);
+
+    let queuedForUser = 0;
+
+    for (const alertItem of items) {
+      if (queuedForUser >= MAX_ALERTS_PER_USER) break;
+
+      const alertKey = buildEmailAlertKey(userId, alertItem);
+
+      if (alertKey && (sentKeys.has(alertKey) || pendingKeys.has(alertKey))) {
+        skipped += 1;
+        continue;
+      }
+
+      const queued = await sendEmailAlertForUser(env, user, alertItem, {
+        source: options.source || "cron_queue"
+      });
+
+      if (queued?.ok && queued?.queued) {
+        enqueued += 1;
+        queuedForUser += 1;
+        if (alertKey) pendingKeys.add(alertKey);
+      } else if (queued?.skipped) {
+        skipped += 1;
+      } else {
+        failed += 1;
+        if (failed_samples.length < 5) {
+          failed_samples.push({
+            user_id: userId,
+            alert_key: alertKey || null,
+            reason: queued?.reason || "enqueue_failed"
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    mode: "queue_sweep",
+    total_users: allUserIds.length,
+    users_selected: userIdsToProcess.length,
+    processed_users: processedUsers,
+    enqueued,
+    skipped,
+    failed,
+    failed_samples
+  };
+}
+__name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
+
 __name(runEmailAlertsSweep, "runEmailAlertsSweep");
 function parseWhatsAppBodyParameters(raw) {
   if (!raw) return [];
@@ -8273,11 +8449,27 @@ var worker_hotfix_default = {
       if (routed) return routed;
     }
     if (path === "/test-email-sweep" && request.method === "GET") {
-  return json2({
-    ok: true,
-    disabled: true,
-    message: "runEmailAlertsSweep desactivado temporalmente por límite de subrequests"
-  });
+  try {
+    const targetUserId = String(url.searchParams.get("user_id") || "").trim();
+
+    const queue = await runEmailAlertsQueueSweep(env, {
+      source: "manual_test",
+      target_user_id: targetUserId || null
+    });
+
+    const digest = await sendPendingEmailDigests(env);
+
+    return json2({
+      ok: true,
+      queue_sweep: queue,
+      digest
+    });
+  } catch (err) {
+    return json2({
+      ok: false,
+      error: err?.message || "No se pudo ejecutar el barrido de cola de email"
+    }, 500);
+  }
 }
     return await worker_default.fetch(request, env, ctx);
   },
@@ -8288,11 +8480,19 @@ var worker_hotfix_default = {
     })
   );
 
-  ctx.waitUntil(
-    sendPendingEmailDigests(env).catch(err => {
+  ctx.waitUntil((async () => {
+    try {
+      await runEmailAlertsQueueSweep(env, { source: "cron" });
+    } catch (err) {
+      console.error("EMAIL QUEUE SWEEP CRON ERROR:", err);
+    }
+
+    try {
+      await sendPendingEmailDigests(env);
+    } catch (err) {
       console.error("EMAIL DIGEST PENDING CRON ERROR:", err);
-    })
-  );
+    }
+  })());
 }
 };
 export {
