@@ -8550,7 +8550,7 @@ var worker_hotfix_default = {
       const pendingExists = await hasPendingEmailNotifications(env);
 
       if (pendingExists) {
-        await sendPendingEmailDigests(env, { target_user_id: targetUserId })
+        await sendPendingEmailDigests(env);
       } else {
         await runEmailAlertsQueueSweep(env, { source: "cron" });
       }
