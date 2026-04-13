@@ -6420,46 +6420,28 @@ function canonizarPreferenciasConCatalogo(prefs, catalogos) {
 __name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 async function traerOfertasAPDPorDistritos(prefs) {
   const distritos = distritosPrefsAPD(prefs);
-  const cargos = cargosMateriasPrefsAPD(prefs);
   const todas = [];
-  const vistos = /* @__PURE__ */ new Set();
+  const vistos = new Set();
   const debugDistritos = [];
+
   for (const distritoAPD of distritos) {
-    let docsDistrito = [];
-    if (Array.isArray(cargos) && cargos.length) {
-      for (const cargo of cargos) {
-        const info = await traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargo);
-        debugDistritos.push({
-          distrito_apd: distritoAPD,
-          cargo_query: cargo,
-          query_usada: info.query,
-          total_apd_bruto: info.totalBruto,
-          total_apd_filtrado: info.totalFiltrado
-        });
-        for (const doc of info.docs) {
-          const clave = buildSourceOfferKeyFromOferta(doc);
-          if (vistos.has(clave)) continue;
-          vistos.add(clave);
-          docsDistrito.push(doc);
-        }
-      }
-    } else {
-      const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
-      debugDistritos.push({
-        distrito_apd: distritoAPD,
-        query_usada: info.query,
-        total_apd_bruto: info.totalBruto,
-        total_apd_filtrado: info.totalFiltrado
-      });
-      for (const doc of info.docs) {
-        const clave = buildSourceOfferKeyFromOferta(doc);
-        if (vistos.has(clave)) continue;
-        vistos.add(clave);
-        docsDistrito.push(doc);
-      }
+    const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+
+    debugDistritos.push({
+      distrito_apd: distritoAPD,
+      query_usada: info.query,
+      total_apd_bruto: info.totalBruto,
+      total_apd_filtrado: info.totalFiltrado
+    });
+
+    for (const doc of info.docs || []) {
+      const clave = buildSourceOfferKeyFromOferta(doc);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      todas.push(doc);
     }
-    todas.push(...docsDistrito);
   }
+
   return { ofertas: todas, debugDistritos };
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
@@ -6876,8 +6858,18 @@ async function sendPendingEmailDigests(env, options = {}) {
   let processedUsers = 0;
   let sent = 0;
   let failed = 0;
-  let pending_rows = Array.isArray(pendingRows) ? pendingRows.length : 0;
-  let fallback_sent = 0;
+  const pending_rows = Array.isArray(pendingRows) ? pendingRows.length : 0;
+
+  if (!pending_rows) {
+    return {
+      ok: true,
+      mode: "pending_notifications",
+      processed_users: 0,
+      sent: 0,
+      failed: 0,
+      pending_rows: 0
+    };
+  }
 
   for (const [userId, rows] of grouped.entries()) {
     const user = await obtenerUsuario(env, userId).catch(() => null);
@@ -7003,125 +6995,13 @@ async function sendPendingEmailDigests(env, options = {}) {
     }
   }
 
-  if (pending_rows > 0) {
-    return {
-      ok: true,
-      mode: "pending_notifications",
-      processed_users: processedUsers,
-      sent,
-      failed,
-      pending_rows
-    };
-  }
-
-  const users = await supabaseSelect(
-    env,
-    `users?select=id,nombre,apellido,email,activo&activo=eq.true&email=not.is.null`
-  ).catch(() => []);
-
-  for (const user of users) {
-    if (!user?.id || !user?.email) continue;
-
-    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
-    if (!resolved || !isPlanActivo(resolved)) continue;
-
-    const prefsRows = await supabaseSelect(
-      env,
-      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
-    ).catch(() => []);
-
-    const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
-    if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
-
-    const rows = await supabaseSelect(
-      env,
-      `user_offer_state?user_id=eq.${encodeURIComponent(user.id)}&is_active=eq.true&select=id,offer_id,offer_payload,first_emailed_at,last_emailed_at`
-    ).catch(() => []);
-
-    if (!rows || !rows.length) continue;
-
-    const nuevas = rows.filter(x => !x.first_emailed_at);
-    if (!nuevas.length) continue;
-
-    processedUsers++;
-
-    const alerts = await enrichAlertsForRichChannels(
-      env,
-      user,
-      nuevas.map(row => row.offer_payload || {}),
-      MAX_VISIBLE_ALERTS_IN_EMAIL
-    );
-
-    const html = buildDigestHtml(alerts, user, {
-      total_alerts: nuevas.length,
-      max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
-      panel_url: "https://alertasapd.com.ar"
-    });
-
-    const asunto =
-      nuevas.length === 1
-        ? "APDocentePBA: 1 nueva alerta para vos"
-        : `APDocentePBA: ${nuevas.length} nuevas alertas para vos`;
-
-    const send = await enviarMailBrevo(
-      user.email,
-      user.nombre || "",
-      asunto,
-      html,
-      env
-    );
-
-    if (send?.ok) {
-      fallback_sent += 1;
-      sent += 1;
-      const nowIso = new Date().toISOString();
-
-      await supabaseInsert(env, "notification_delivery_logs", {
-        user_id: user.id,
-        channel: "email",
-        template_code: "apd_email_digest_fallback",
-        destination: user.email,
-        status: "sent_digest_fallback",
-        provider_message_id: null,
-        payload: {
-          total_alerts: nuevas.length
-        },
-        provider_response: send || null
-      }).catch(() => null);
-
-      await Promise.all(
-        nuevas.map(row => {
-          return fetch(
-            `${env.SUPABASE_URL}/rest/v1/user_offer_state?id=eq.${encodeURIComponent(row.id)}`,
-            {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-                Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-                Prefer: "return=minimal"
-              },
-              body: JSON.stringify({
-                first_emailed_at: nowIso,
-                last_emailed_at: nowIso
-              })
-            }
-          ).catch(() => null);
-        })
-      );
-    } else {
-      failed += 1;
-    }
-  }
-
   return {
     ok: true,
-    mode: "fallback_user_offer_state",
+    mode: "pending_notifications",
     processed_users: processedUsers,
     sent,
     failed,
-    pending_rows,
-    fallback_sent
+    pending_rows
   };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
@@ -8151,7 +8031,23 @@ async function handleWhatsAppStatus(request, env) {
   return json2({ ok: true, connected: !!state.connected, alerts_enabled: !!(entitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, phone_masked: maskPhone(user?.celular || state?.phone || ""), connect_hint: botNumber ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." });
 }
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
+async function handleWhatsAppWebhookVerify(request, env) {
+  const url = new URL(request.url);
+  const mode = String(url.searchParams.get("hub.mode") || "").trim();
+  const token = String(url.searchParams.get("hub.verify_token") || "").trim();
+  const challenge = String(url.searchParams.get("hub.challenge") || "").trim();
 
+  if (
+    mode === "subscribe" &&
+    token &&
+    env.WHATSAPP_VERIFY_TOKEN &&
+    token === String(env.WHATSAPP_VERIFY_TOKEN).trim()
+  ) {
+    return new Response(challenge, { status: 200 });
+  }
+
+  return new Response("forbidden", { status: 403 });
+}
 __name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 async function handleWhatsAppWebhook(request, env) {
   if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) {
@@ -8359,8 +8255,17 @@ var worker_hotfix_default = {
     })
   );
 
-  // ÚNICO envío automático: email digest por usuario.
-  ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
+  ctx.waitUntil(
+    runEmailAlertsSweep(env, { source: "cron" }).catch(err => {
+      console.error("EMAIL SWEEP CRON ERROR:", err);
+    })
+  );
+
+  ctx.waitUntil(
+    sendPendingEmailDigests(env).catch(err => {
+      console.error("EMAIL DIGEST PENDING CRON ERROR:", err);
+    })
+  );
 }
 };
 export {
