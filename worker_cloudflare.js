@@ -3409,6 +3409,8 @@ async function getRecentSentEmailAlertKeysForUser(env, userId) {
 
   return keys;
 }
+__name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
+
 async function loadPendingEmailAlertKeysForUser(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -3424,6 +3426,29 @@ async function loadPendingEmailAlertKeysForUser(env, userId) {
 
   return keys;
 }
+__name(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
+
+async function hasPendingEmailNotifications(env, userId = "") {
+  const filters = [
+    "channel=eq.email",
+    "status=eq.pending",
+    "select=id",
+    "limit=1"
+  ];
+
+  const safeUserId = String(userId || "").trim();
+  if (safeUserId) {
+    filters.unshift(`user_id=eq.${encodeURIComponent(safeUserId)}`);
+  }
+
+  const rows = await supabaseSelect(
+    env,
+    `pending_notifications?${filters.join("&")}`
+  ).catch(() => []);
+
+  return Array.isArray(rows) && rows.length > 0;
+}
+__name(hasPendingEmailNotifications, "hasPendingEmailNotifications");
 __name(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
 __name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
 function buildEmailAlertKey(userId, alertItem) {
@@ -3907,8 +3932,8 @@ async function runEmailAlertsQueueSweep(env, options = {}) {
   const MAX_ALERTS_PER_USER = clampInt(
     options?.max_alerts_per_user || env.EMAIL_QUEUE_ALERTS_PER_USER,
     1,
-    5,
-    3
+    50,
+    50
   );
 
   const prefRows = await supabaseSelect(
@@ -4006,10 +4031,10 @@ async function runEmailAlertsQueueSweep(env, options = {}) {
     const sentKeys = await getRecentSentEmailAlertKeysForUser(env, userId);
     const pendingKeys = await loadPendingEmailAlertKeysForUser(env, userId);
 
-    let queuedForUser = 0;
+    const rowsToInsert = [];
 
     for (const alertItem of items) {
-      if (queuedForUser >= MAX_ALERTS_PER_USER) break;
+      if (rowsToInsert.length >= MAX_ALERTS_PER_USER) break;
 
       const alertKey = buildEmailAlertKey(userId, alertItem);
 
@@ -4018,25 +4043,46 @@ async function runEmailAlertsQueueSweep(env, options = {}) {
         continue;
       }
 
-      const queued = await sendEmailAlertForUser(env, user, alertItem, {
-        source: options.source || "cron_queue"
+      const canonicalAlert = normalizeOfferPayload(
+        alertItem?.offer_payload || alertItem || {}
+      );
+
+      rowsToInsert.push({
+        user_id: user.id,
+        channel: "email",
+        kind: "apd_alert",
+        alert_key: alertKey || null,
+        payload: {
+          alert_key: alertKey || null,
+          source: options.source || "cron_queue",
+          alert: canonicalAlert
+        },
+        status: "pending"
       });
 
-      if (queued?.ok && queued?.queued) {
-        enqueued += 1;
-        queuedForUser += 1;
-        if (alertKey) pendingKeys.add(alertKey);
-      } else if (queued?.skipped) {
-        skipped += 1;
-      } else {
-        failed += 1;
-        if (failed_samples.length < 5) {
-          failed_samples.push({
-            user_id: userId,
-            alert_key: alertKey || null,
-            reason: queued?.reason || "enqueue_failed"
-          });
-        }
+      if (alertKey) pendingKeys.add(alertKey);
+    }
+
+    if (!rowsToInsert.length) continue;
+
+    try {
+      for (let i = 0; i < rowsToInsert.length; i += 50) {
+        await supabaseInsertMany(
+          env,
+          "pending_notifications",
+          rowsToInsert.slice(i, i + 50)
+        );
+      }
+
+      enqueued += rowsToInsert.length;
+    } catch (err) {
+      failed += 1;
+      if (failed_samples.length < 5) {
+        failed_samples.push({
+          user_id: userId,
+          reason: "bulk_enqueue_failed",
+          message: err?.message || "No se pudieron encolar alertas"
+        });
       }
     }
   }
@@ -7045,7 +7091,7 @@ async function sendPendingEmailDigests(env, options = {}) {
 
   const pendingRows = await supabaseSelect(
     env,
-    `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,kind,alert_key,payload,created_at&order=created_at.asc&limit=${maxRows}`
+    `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,kind,alert_key,payload,created_at&order=created_at.desc&limit=${maxRows}`
   ).catch(() => []);
 
   const grouped = new Map();
@@ -8448,21 +8494,29 @@ var worker_hotfix_default = {
       const routed = await handleProfileListadosRoute(request, env);
       if (routed) return routed;
     }
-    if (path === "/test-email-sweep" && request.method === "GET") {
+   if (path === "/test-email-sweep" && request.method === "GET") {
   try {
     const targetUserId = String(url.searchParams.get("user_id") || "").trim();
+    const pendingExists = await hasPendingEmailNotifications(env, targetUserId);
+
+    if (pendingExists) {
+      const digest = await sendPendingEmailDigests(env);
+      return json2({
+        ok: true,
+        mode: "digest_only",
+        digest
+      });
+    }
 
     const queue = await runEmailAlertsQueueSweep(env, {
       source: "manual_test",
       target_user_id: targetUserId || null
     });
 
-    const digest = await sendPendingEmailDigests(env);
-
     return json2({
       ok: true,
-      queue_sweep: queue,
-      digest
+      mode: "queue_only",
+      queue_sweep: queue
     });
   } catch (err) {
     return json2({
@@ -8482,15 +8536,15 @@ var worker_hotfix_default = {
 
   ctx.waitUntil((async () => {
     try {
-      await runEmailAlertsQueueSweep(env, { source: "cron" });
-    } catch (err) {
-      console.error("EMAIL QUEUE SWEEP CRON ERROR:", err);
-    }
+      const pendingExists = await hasPendingEmailNotifications(env);
 
-    try {
-      await sendPendingEmailDigests(env);
+      if (pendingExists) {
+        await sendPendingEmailDigests(env);
+      } else {
+        await runEmailAlertsQueueSweep(env, { source: "cron" });
+      }
     } catch (err) {
-      console.error("EMAIL DIGEST PENDING CRON ERROR:", err);
+      console.error("EMAIL PIPELINE CRON ERROR:", err);
     }
   })());
 }
