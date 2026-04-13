@@ -3449,8 +3449,7 @@ async function hasPendingEmailNotifications(env, userId = "") {
   return Array.isArray(rows) && rows.length > 0;
 }
 __name(hasPendingEmailNotifications, "hasPendingEmailNotifications");
-__name(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
-__name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
+
 function buildEmailAlertKey(userId, alertItem) {
   const key = String(
     alertItem?.source_offer_key || alertItem?.iddetalle || alertItem?.idoferta || alertItem?.codigo || JSON.stringify(alertItem)
@@ -7087,11 +7086,18 @@ async function sendPendingEmailDigests(env, options = {}) {
     200
   );
 
+  const targetUserId = String(options?.target_user_id || "").trim();
   const MAX_VISIBLE_ALERTS_IN_EMAIL = 10;
+
+  const pendingQuery =
+    `pending_notifications?channel=eq.email&status=eq.pending` +
+    `&select=id,user_id,kind,alert_key,payload,created_at` +
+    `${targetUserId ? `&user_id=eq.${encodeURIComponent(targetUserId)}` : ""}` +
+    `&order=created_at.desc&limit=${maxRows}`;
 
   const pendingRows = await supabaseSelect(
     env,
-    `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,kind,alert_key,payload,created_at&order=created_at.desc&limit=${maxRows}`
+    pendingQuery
   ).catch(() => []);
 
   const grouped = new Map();
@@ -7115,7 +7121,8 @@ async function sendPendingEmailDigests(env, options = {}) {
       processed_users: 0,
       sent: 0,
       failed: 0,
-      pending_rows: 0
+      pending_rows: 0,
+      target_user_id: targetUserId || null
     };
   }
 
@@ -7249,7 +7256,8 @@ async function sendPendingEmailDigests(env, options = {}) {
     processed_users: processedUsers,
     sent,
     failed,
-    pending_rows
+    pending_rows,
+    target_user_id: targetUserId || null
   };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
@@ -8500,7 +8508,10 @@ var worker_hotfix_default = {
     const pendingExists = await hasPendingEmailNotifications(env, targetUserId);
 
     if (pendingExists) {
-      const digest = await sendPendingEmailDigests(env);
+      const digest = await sendPendingEmailDigests(env, {
+        target_user_id: targetUserId || null
+      });
+
       return json2({
         ok: true,
         mode: "digest_only",
@@ -8539,7 +8550,7 @@ var worker_hotfix_default = {
       const pendingExists = await hasPendingEmailNotifications(env);
 
       if (pendingExists) {
-        await sendPendingEmailDigests(env);
+        await sendPendingEmailDigests(env, { target_user_id: targetUserId })
       } else {
         await runEmailAlertsQueueSweep(env, { source: "cron" });
       }
