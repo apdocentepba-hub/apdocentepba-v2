@@ -8272,18 +8272,19 @@ var worker_hotfix_default = {
       const routed = await handleProfileListadosRoute(request, env);
       if (routed) return routed;
     }
+    if (path === "/test-email-sweep" && request.method === "GET") {
+  return json2({
+    ok: true,
+    disabled: true,
+    message: "runEmailAlertsSweep desactivado temporalmente por límite de subrequests"
+  });
+}
     return await worker_default.fetch(request, env, ctx);
   },
   async scheduled(_controller, env, ctx) {
   ctx.waitUntil(
     runProvinciaBackfillStep(env, { source: "cron", force: false }).catch(err => {
       console.error("PROVINCIA BACKFILL CRON STEP ERROR:", err);
-    })
-  );
-
-  ctx.waitUntil(
-    runEmailAlertsSweep(env, { source: "cron" }).catch(err => {
-      console.error("EMAIL SWEEP CRON ERROR:", err);
     })
   );
 
