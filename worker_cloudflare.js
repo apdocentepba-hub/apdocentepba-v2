@@ -863,6 +863,10 @@ var PROVINCIA_RUNNING_STALE_MS = 10 * 60 * 1e3;
 var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
 var WHATSAPP_ALERTS_PER_USER_MAX = 3;
 var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
+var WHATSAPP_QUERY_ALERTS_LIMIT = 5;
+var TELEGRAM_QUERY_ALERTS_LIMIT = 5;
+var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
+var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -3672,75 +3676,11 @@ function parseWhatsAppBodyParameters(raw) {
 }
 __name(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 async function runWhatsAppAlertsSweep(env, options = {}) {
-  const templateName = String(env.WHATSAPP_TEMPLATE_ALERTA || "").trim();
-  const templateLang = String(env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
-  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID && !!env.WHATSAPP_ACCESS_TOKEN && !!templateName;
-  if (!configured) {
-    return { ok: true, skipped: true, reason: "missing_config" };
-  }
-  if (isHelloWorldTemplate(templateName)) {
-    return { ok: true, skipped: true, reason: "hello_world_template" };
-  }
-  const maxUsers = clampInt(
-    env.WHATSAPP_ALERT_SWEEP_MAX_USERS,
-    1,
-    200,
-    WHATSAPP_ALERT_SWEEP_MAX_USERS
-  );
-  const maxAlertsPerUser = clampInt(
-    env.WHATSAPP_ALERTS_PER_USER_MAX,
-    1,
-    10,
-    WHATSAPP_ALERTS_PER_USER_MAX
-  );
-  const prefRows = await supabaseSelect(
-    env,
-    `user_preferences?alertas_activas=is.true&alertas_whatsapp=is.true&select=user_id&limit=${maxUsers}`
-  ).catch(() => []);
-  let usersVisited = 0;
-  let usersEligible = 0;
-  let alertsSent = 0;
-  let alertsFailed = 0;
-  for (const row of Array.isArray(prefRows) ? prefRows : []) {
-    const userId = String(row?.user_id || "").trim();
-    if (!userId) continue;
-    usersVisited += 1;
-    const resolved = await resolverPlanUsuario(env, userId).catch(() => null);
-    if (!resolved?.plan?.feature_flags?.whatsapp) continue;
-    const user = await obtenerUsuario(env, userId).catch(() => null);
-    if (!user?.activo || !String(user?.celular || "").trim()) continue;
-    const alertData = await construirAlertasParaUsuario(env, userId).catch((err) => ({
-      ok: false,
-      message: err?.message || "No se pudieron construir alertas"
-    }));
-    if (!alertData?.ok || !Array.isArray(alertData?.resultados) || !alertData.resultados.length) continue;
-    const recentKeys = await loadRecentSentWhatsAppAlertKeys(env, userId);
-    const pendingAlerts = alertData.resultados.filter((item) => {
-      const key = buildWhatsAppAlertKey(userId, item);
-      return key && !recentKeys.has(key);
-    });
-    if (!pendingAlerts.length) continue;
-    usersEligible += 1;
-    for (const alertItem of pendingAlerts.slice(0, maxAlertsPerUser)) {
-      const result = await sendWhatsAppAlertForUser(env, user, alertItem, {
-        templateName,
-        templateLang,
-        source: options.source || "cron"
-      });
-      if (result.ok) {
-        alertsSent += 1;
-        if (result.alert_key) recentKeys.add(result.alert_key);
-      } else {
-        alertsFailed += 1;
-      }
-    }
-  }
   return {
     ok: true,
-    users_visited: usersVisited,
-    users_eligible: usersEligible,
-    alerts_sent: alertsSent,
-    alerts_failed: alertsFailed
+    skipped: true,
+    reason: "query_mode_only",
+    source: options.source || "manual"
   };
 }
 __name(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
@@ -5706,7 +5646,7 @@ function getPlanPreset(code) {
     TRIAL_7D: {
       code: "TRIAL_7D",
       nombre: "Prueba gratis 7 d\xEDas",
-      descripcion: "Prob\xE1 APDocentePBA durante 7 d\xEDas con 1 distrito, hasta 2 materias/cargos y todos los filtros esenciales. Todos los avisos llegan por email.",
+      descripcion: "Probá APDocentePBA durante 7 días con 1 distrito, hasta 2 materias/cargos, email incluido y Telegram por consulta incluido.",
       price_ars: 0,
       trial_days: 7,
       max_distritos: 1,
@@ -5720,7 +5660,7 @@ function getPlanPreset(code) {
       feature_flags: {
         email: true,
         whatsapp: false,
-        telegram: false,
+        telegram: true,
         telegram_coming_soon: false,
         whatsapp_coming_soon: false,
         provincia: false,
@@ -5730,7 +5670,7 @@ function getPlanPreset(code) {
     PLUS: {
       code: "PLUS",
       nombre: "Plan Plus",
-      descripcion: "M\xE1s alcance sin irte de presupuesto: 2 distritos, hasta 4 materias/cargos, filtros completos y alertas por email. Pr\xF3ximamente Telegram.",
+      descripcion: "Más alcance sin irte de presupuesto: 2 distritos, hasta 4 materias/cargos, email incluido y Telegram por consulta incluido.",
       price_ars: 2990,
       trial_days: 0,
       max_distritos: 2,
@@ -5744,8 +5684,8 @@ function getPlanPreset(code) {
       feature_flags: {
         email: true,
         whatsapp: false,
-        telegram: false,
-        telegram_coming_soon: true,
+        telegram: true,
+        telegram_coming_soon: false,
         whatsapp_coming_soon: false,
         provincia: true,
         insights_plus: false
@@ -5754,7 +5694,7 @@ function getPlanPreset(code) {
     PREMIUM: {
       code: "PREMIUM",
       nombre: "Plan Pro",
-      descripcion: "Cobertura fuerte para multiplicar oportunidades: 3 distritos, hasta 6 materias/cargos, filtros completos y alertas por email. Pr\xF3ximamente Telegram.",
+      descripcion: "Cobertura fuerte para multiplicar oportunidades: 3 distritos, hasta 6 materias/cargos, email incluido y Telegram por consulta incluido.",
       price_ars: 4990,
       trial_days: 0,
       max_distritos: 3,
@@ -5768,8 +5708,8 @@ function getPlanPreset(code) {
       feature_flags: {
         email: true,
         whatsapp: false,
-        telegram: false,
-        telegram_coming_soon: true,
+        telegram: true,
+        telegram_coming_soon: false,
         whatsapp_coming_soon: false,
         provincia: true,
         insights_plus: true
@@ -5778,7 +5718,8 @@ function getPlanPreset(code) {
     INSIGNE: {
       code: "INSIGNE",
       nombre: "Plan Insigne",
-descripcion: "Cobertura máxima: 3 distritos principales + 2 de emergencia/chusmeo, hasta 10 materias/cargos, alertas por email y match PID automático para detectar compatibilidad con tu perfil sin revisar todo manualmente. Próximamente WhatsApp.",      price_ars: 7990,
+      descripcion: "Cobertura máxima: 3 distritos principales + 2 de emergencia/chusmeo, hasta 10 materias/cargos, email incluido, Telegram por consulta incluido, WhatsApp por consulta incluido y match PID automático.",
+      price_ars: 7990,
       trial_days: 0,
       max_distritos: 5,
       max_distritos_normales: 3,
@@ -5790,10 +5731,10 @@ descripcion: "Cobertura máxima: 3 distritos principales + 2 de emergencia/chusm
       mercadopago_plan_id: null,
       feature_flags: {
         email: true,
-        whatsapp: false,
-        telegram: false,
+        whatsapp: true,
+        telegram: true,
         telegram_coming_soon: false,
-        whatsapp_coming_soon: true,
+        whatsapp_coming_soon: false,
         provincia: true,
         insights_plus: true,
         emergency_districts: true
@@ -6020,15 +5961,11 @@ function buildPlanFeatures(plan) {
   }
   items.push(`${totalCargos} materias/cargos`);
   items.push("Alertas por email");
+  items.push(flags.telegram ? "Telegram por consulta" : "Telegram no incluido");
+  items.push(flags.whatsapp ? "WhatsApp por consulta" : "WhatsApp solo en Insigne");
   items.push("Turno, nivel y modalidad");
   if (plan?.trial_days) {
     items.push(`${plan.trial_days} d\xEDas de prueba`);
-  }
-  if (flags.telegram_coming_soon) {
-    items.push("Telegram pr\xF3ximamente");
-  }
-  if (flags.whatsapp_coming_soon) {
-    items.push("WhatsApp pr\xF3ximamente");
   }
   return items;
 }
@@ -6087,7 +6024,7 @@ function sanitizarPreferenciasEntrada(raw, plan) {
     turnos,
     alertas_activas: !!raw?.alertas_activas,
     alertas_email: !!raw?.alertas_email,
-    alertas_whatsapp: !!raw?.alertas_whatsapp,
+    alertas_whatsapp: !!raw?.alertas_whatsapp && !!(plan?.feature_flags?.whatsapp),
     _plan_ajuste: {
       distritos_recortados: distritosRecortados,
       cargos_recortados: cargosRecortados,
@@ -6390,7 +6327,7 @@ function unique(arr) {
 }
 __name(unique, "unique");
 function adaptarPreferenciasRow(row) {
-  return { user_id: row.user_id || "", distrito_principal: norm(row.distrito_principal || ""), otros_distritos: unique(arrNorm(row.otros_distritos)), cargos: unique(arrNorm(row.cargos)), materias: unique(arrNorm(row.materias)), niveles: unique(arrNorm(row.niveles)), turnos: unique(arrNorm(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_whatsapp: !!row.alertas_whatsapp };
+  return { user_id: row.user_id || "", distrito_principal: norm(row.distrito_principal || ""), otros_distritos: unique(arrNorm(row.otros_distritos)), cargos: unique(arrNorm(row.cargos)), materias: unique(arrNorm(row.materias)), niveles: unique(arrNorm(row.niveles)), turnos: unique(arrNorm(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_telegram: !!row.alertas_telegram, alertas_whatsapp: !!row.alertas_whatsapp };
 }
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 function distritosPrefsAPD(prefs) {
@@ -6937,7 +6874,7 @@ __name(buildDigestHtml, "buildDigestHtml");
 // worker_hotfix.js
 var API_URL_PREFIX3 = "/api";
 var LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
-var HOTFIX_VERSION = "2026-04-01-hotfix-1";
+var HOTFIX_VERSION = "2026-04-13-hotfix-final-2-alertas";
 var ALERT_ROWS_PER_PAGE = 150;
 var ALERT_MAX_PAGES = 6;
 function corsHeaders2() {
@@ -7256,7 +7193,7 @@ function adaptarPreferenciasRow2(row) {
     if (typeof value === "string" && value.trim()) return value.split(",").map((item) => norm2(item)).filter(Boolean);
     return [];
   }, "arrNorm");
-  return { user_id: row.user_id || "", distrito_principal: norm2(row.distrito_principal || ""), otros_distritos: unique2(arrNorm2(row.otros_distritos)), cargos: unique2(arrNorm2(row.cargos)), materias: unique2(arrNorm2(row.materias)), niveles: unique2(arrNorm2(row.niveles)), turnos: unique2(arrNorm2(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_whatsapp: !!row.alertas_whatsapp };
+  return { user_id: row.user_id || "", distrito_principal: norm2(row.distrito_principal || ""), otros_distritos: unique2(arrNorm2(row.otros_distritos)), cargos: unique2(arrNorm2(row.cargos)), materias: unique2(arrNorm2(row.materias)), niveles: unique2(arrNorm2(row.niveles)), turnos: unique2(arrNorm2(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_telegram: !!row.alertas_telegram, alertas_whatsapp: !!row.alertas_whatsapp };
 }
 __name(adaptarPreferenciasRow2, "adaptarPreferenciasRow");
 async function getUserPrefs(env, userId) {
@@ -7402,6 +7339,423 @@ async function delegateJson(originalWorker, request, env, ctx) {
   return { response, data, text };
 }
 __name(delegateJson, "delegateJson");
+function getChannelStateStore(env) {
+  return env.EMAIL_SWEEP_STATE || env.CHANNEL_STATE || null;
+}
+__name(getChannelStateStore, "getChannelStateStore");
+function telegramStateKey(userId) {
+  return `telegram:user:${String(userId || "").trim().toUpperCase()}`;
+}
+__name(telegramStateKey, "telegramStateKey");
+function telegramChatStateKey(chatId) {
+  return `telegram:chat:${String(chatId || "").trim()}`;
+}
+__name(telegramChatStateKey, "telegramChatStateKey");
+function whatsappStateKey(userId) {
+  return `whatsapp:user:${String(userId || "").trim().toUpperCase()}`;
+}
+__name(whatsappStateKey, "whatsappStateKey");
+async function getTelegramState(env, userId) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !userId) return null;
+  const raw = await kv.get(telegramStateKey(userId));
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+__name(getTelegramState, "getTelegramState");
+async function saveTelegramState(env, userId, patch) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !userId) return null;
+  const current = await getTelegramState(env, userId) || {};
+  const next = { ...current, ...patch, user_id: String(userId || "").trim().toUpperCase(), updated_at: new Date().toISOString() };
+  await kv.put(telegramStateKey(userId), JSON.stringify(next));
+  if (next.connected && next.chat_id) {
+    await kv.put(telegramChatStateKey(next.chat_id), next.user_id);
+  }
+  return next;
+}
+__name(saveTelegramState, "saveTelegramState");
+async function getTelegramUserIdByChat(env, chatId) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !chatId) return "";
+  return String(await kv.get(telegramChatStateKey(chatId)) || "").trim().toUpperCase();
+}
+__name(getTelegramUserIdByChat, "getTelegramUserIdByChat");
+async function getWhatsAppState(env, userId) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !userId) return null;
+  const raw = await kv.get(whatsappStateKey(userId));
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+__name(getWhatsAppState, "getWhatsAppState");
+async function saveWhatsAppState(env, userId, patch) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !userId) return null;
+  const current = await getWhatsAppState(env, userId) || {};
+  const next = { ...current, ...patch, user_id: String(userId || "").trim().toUpperCase(), updated_at: new Date().toISOString() };
+  await kv.put(whatsappStateKey(userId), JSON.stringify(next));
+  return next;
+}
+__name(saveWhatsAppState, "saveWhatsAppState");
+function maskChatId(chatId) {
+  const raw = String(chatId || "").trim();
+  if (!raw) return "";
+  if (raw.length <= 4) return raw;
+  return `${"•".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+}
+__name(maskChatId, "maskChatId");
+function maskPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length <= 4) return digits;
+  return `${"•".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+}
+__name(maskPhone, "maskPhone");
+function buildTelegramBotLink(env, userId) {
+  const username = String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, "");
+  const normalizedUserId = String(userId || "").trim();
+  if (!username || !normalizedUserId) return "";
+  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(normalizedUserId)}`;
+}
+__name(buildTelegramBotLink, "buildTelegramBotLink");
+async function sendTelegramText(env, chatId, text) {
+  const token = String(env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) throw new Error(data?.description || `Telegram HTTP ${res.status}`);
+  return data;
+}
+__name(sendTelegramText, "sendTelegramText");
+function requireTelegramWebhookSecret(request, env) {
+  const configured = String(env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+  if (!configured) return;
+  const provided = String(request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "").trim();
+  if (!provided || provided !== configured) {
+    const err = new Error("Webhook Telegram no autorizado");
+    err.status = 401;
+    throw err;
+  }
+}
+__name(requireTelegramWebhookSecret, "requireTelegramWebhookSecret");
+function telegramUpdateDedupeKey(updateId) {
+  return `telegram:update:${String(updateId || "").trim()}`;
+}
+__name(telegramUpdateDedupeKey, "telegramUpdateDedupeKey");
+function whatsappMessageDedupeKey(messageId) {
+  return `whatsapp:message:${String(messageId || "").trim()}`;
+}
+__name(whatsappMessageDedupeKey, "whatsappMessageDedupeKey");
+async function wasInboundEventProcessed(env, key) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !key) return false;
+  return !!await kv.get(key);
+}
+__name(wasInboundEventProcessed, "wasInboundEventProcessed");
+async function markInboundEventProcessed(env, key, ttlSeconds) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !key) return;
+  await kv.put(key, new Date().toISOString(), { expirationTtl: ttlSeconds });
+}
+__name(markInboundEventProcessed, "markInboundEventProcessed");
+
+async function resolveTelegramEntitlement(env, userId) {
+  const resolved = await resolverPlanUsuario(env, userId);
+  return {
+    plan_code: String(resolved?.plan?.code || resolved?.subscription?.plan_code || "TRIAL_7D").trim().toUpperCase(),
+    plan_name: String(resolved?.plan?.nombre || resolved?.plan?.display_name || resolved?.plan?.code || "TRIAL_7D").trim(),
+    allowed: true,
+    source: "query_mode_all_plans",
+    flags: resolved?.plan?.feature_flags || {}
+  };
+}
+__name(resolveTelegramEntitlement, "resolveTelegramEntitlement");
+async function resolveWhatsAppEntitlement(env, userId) {
+  const resolved = await resolverPlanUsuario(env, userId);
+  const planCode = String(resolved?.plan?.code || resolved?.subscription?.plan_code || "TRIAL_7D").trim().toUpperCase();
+  const flags = resolved?.plan?.feature_flags || {};
+  return {
+    plan_code: planCode,
+    plan_name: String(resolved?.plan?.nombre || resolved?.plan?.display_name || resolved?.plan?.code || "TRIAL_7D").trim(),
+    allowed: !!(flags?.whatsapp || planCode === "INSIGNE"),
+    flags
+  };
+}
+__name(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
+function extractTelegramCommand(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return { kind: "empty", payload: "" };
+  if (/^\/start(?:@\w+)?/i.test(raw)) {
+    return { kind: "start", payload: raw.replace(/^\/start(?:@\w+)?\s*/i, "").trim() };
+  }
+  const normalized = norm(raw);
+  if (normalized.includes("ALERTA")) return { kind: "alertas", payload: "" };
+  return { kind: "other", payload: raw };
+}
+__name(extractTelegramCommand, "extractTelegramCommand");
+function buildTelegramQueryDigest(alerts) {
+  const all = Array.isArray(alerts) ? alerts : [];
+  const visible = all.slice(0, TELEGRAM_QUERY_ALERTS_LIMIT);
+  const hidden = Math.max(0, all.length - visible.length);
+  const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+  visible.forEach((item, idx) => {
+    const title = [String(item?.cargo || "").trim(), String(item?.area || item?.materia || "").trim()].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
+    const distrito = String(item?.distrito || "-").trim();
+    const turno = String(item?.turno || "-").trim();
+    const escuela = String(item?.escuela || "Sin escuela").trim();
+    const cierre = String(item?.finoferta_label || item?.cierre || item?.fecha_cierre_fmt || "").trim();
+    lines.push(`${idx + 1}) ${title}`);
+    lines.push(`📍 ${distrito}`);
+    lines.push(`🕒 ${turno}`);
+    lines.push(`🏫 ${escuela}`);
+    if (cierre) lines.push(`⏰ ${cierre}`);
+    lines.push("");
+  });
+  if (hidden > 0) lines.push(`+ ${hidden} más en el panel`, "");
+  lines.push("🌐 https://alertasapd.com.ar");
+  lines.push("Escribí ALERTAS para refrescar.");
+  return lines.filter(Boolean).join("\n");
+}
+__name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
+function buildWhatsAppQueryDigest(alerts) {
+  const all = Array.isArray(alerts) ? alerts : [];
+  const visible = all.slice(0, WHATSAPP_QUERY_ALERTS_LIMIT);
+  const hidden = Math.max(0, all.length - visible.length);
+  const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+  visible.forEach((item, idx) => {
+    const title = [String(item?.cargo || "").trim(), String(item?.area || item?.materia || "").trim()].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" · ") || "Oferta APD";
+    const distrito = String(item?.distrito || "-").trim();
+    const turno = String(item?.turno || "-").trim();
+    const escuela = String(item?.escuela || "Sin escuela").trim();
+    const cierre = String(item?.finoferta_label || item?.cierre || item?.fecha_cierre_fmt || "").trim();
+    lines.push(`${idx + 1}) ${title}`);
+    lines.push(`📍 ${distrito}`);
+    lines.push(`🕒 ${turno}`);
+    lines.push(`🏫 ${escuela}`);
+    if (cierre) lines.push(`⏰ ${cierre}`);
+    lines.push("");
+  });
+  if (hidden > 0) lines.push(`+ ${hidden} más en el panel`, "");
+  lines.push("🌐 https://alertasapd.com.ar");
+  lines.push("Escribí ALERTAS para refrescar.");
+  return lines.filter(Boolean).join("\n");
+}
+__name(buildWhatsAppQueryDigest, "buildWhatsAppQueryDigest");
+async function sendWhatsAppText(env, destination, text) {
+  const response = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", to: destination, type: "text", text: { body: String(text || "").slice(0, 4096), preview_url: false } })
+  });
+  const rawText = await response.text();
+  let data = null;
+  try { data = rawText ? JSON.parse(rawText) : null; } catch { data = { raw_text: rawText }; }
+  return { response, data };
+}
+__name(sendWhatsAppText, "sendWhatsAppText");
+async function findUserByWhatsAppNumber(env, waId) {
+  const digits = String(waId || "").replace(/\D/g, "");
+  if (!digits) return null;
+  const tail = digits.slice(-8);
+  const rows = await supabaseSelect(env, `users?activo=eq.true&celular=not.is.null&celular=ilike.${encodeURIComponent(`*${tail}*`)}&select=id,nombre,apellido,email,celular,activo&limit=20`).catch(() => []);
+  const candidates = Array.isArray(rows) ? rows : [];
+  return candidates.find((row) => {
+    const variants = whatsappTestDestinations(row?.celular || "");
+    return variants.includes(digits) || variants.includes(whatsappAllowedListVariant(digits));
+  }) || null;
+}
+__name(findUserByWhatsAppNumber, "findUserByWhatsAppNumber");
+async function handleTelegramStatus(request, env) {
+  const url = new URL(request.url);
+  const authUser = await getSessionUserByBearer(env, request);
+  const requestedUserId = String(url.searchParams.get("user_id") || "").trim();
+  let user = authUser;
+  if (!user && requestedUserId) user = await obtenerUsuario(env, requestedUserId);
+  if (!user?.id) return json2({ ok: false, error: "No autenticado" }, 401);
+  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) return json2({ ok: false, error: "No autorizado" }, 403);
+  const state = await getTelegramState(env, user.id) || { user_id: user.id, connected: false, alerts_enabled: false };
+  const entitlement = await resolveTelegramEntitlement(env, user.id);
+  return json2({ ok: true, connected: !!state.connected && !!String(state.chat_id || "").trim(), alerts_enabled: !!state.alerts_enabled, allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", channel_policy: entitlement.source, plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, chat_id_masked: state.chat_id ? maskChatId(state.chat_id) : "", username: String(state.username || "").trim(), first_name: String(state.first_name || "").trim(), connected_at: String(state.connected_at || "").trim() || null, bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""), bot_link: buildTelegramBotLink(env, user.id) });
+}
+__name(handleTelegramStatus, "handleTelegramStatus");
+async function handleTelegramWebhook(request, env) {
+  requireTelegramWebhookSecret(request, env);
+  const update = await request.json().catch(() => ({}));
+  const updateId = update?.update_id != null ? String(update.update_id).trim() : "";
+  if (updateId) {
+    const dedupeKey = telegramUpdateDedupeKey(updateId);
+    if (await wasInboundEventProcessed(env, dedupeKey)) {
+      return json2({ ok: true, duplicate: true, update_id: updateId });
+    }
+    await markInboundEventProcessed(env, dedupeKey, TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS).catch(() => null);
+  }
+  const message = update?.message || {};
+  const chatId = String(message?.chat?.id || "").trim();
+  const chatType = String(message?.chat?.type || "private").trim();
+  if (!chatId || (chatType && chatType !== "private")) return json2({ ok: true, ignored: true, reason: "invalid_chat" });
+  const command = extractTelegramCommand(message?.text || "");
+  if (command.kind === "start") {
+    const userId = String(command.payload || "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+      await sendTelegramText(env, chatId, "No pude vincular tu cuenta. Entrá desde el panel y tocá el botón de conectar Telegram.").catch(() => null);
+      return json2({ ok: true, ignored: true, reason: "invalid_start_payload" });
+    }
+    const entitlement = await resolveTelegramEntitlement(env, userId);
+    const prev = await getTelegramState(env, userId) || {};
+    const next = await saveTelegramState(env, userId, {
+      connected: true,
+      chat_id: chatId,
+      username: String(message?.from?.username || "").trim(),
+      first_name: String(message?.from?.first_name || "").trim(),
+      connected_at: prev.connected_at || new Date().toISOString(),
+      alerts_requested: typeof prev.alerts_requested === "boolean" ? prev.alerts_requested : true,
+      alerts_enabled: entitlement.allowed ? (typeof prev.alerts_requested === "boolean" ? prev.alerts_requested : true) : false,
+      last_inbound_at: new Date().toISOString()
+    });
+    await sendTelegramText(env, chatId, "✅ APDocentePBA conectó este chat con tu cuenta.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles.").catch(() => null);
+    return json2({ ok: true, connected: true, user_id: userId, state: next });
+  }
+  const linkedUserId = await getTelegramUserIdByChat(env, chatId);
+  if (!linkedUserId) {
+    await sendTelegramText(env, chatId, "Todavía no vinculaste este chat con tu cuenta. Entrá al panel y usá el botón de conectar Telegram.").catch(() => null);
+    return json2({ ok: true, ignored: true, reason: "chat_not_linked" });
+  }
+  const user = await obtenerUsuario(env, linkedUserId);
+  if (!user?.id) return json2({ ok: true, ignored: true, reason: "user_not_found" });
+  const entitlement = await resolveTelegramEntitlement(env, user.id);
+  const state = await saveTelegramState(env, user.id, {
+    connected: true,
+    chat_id: chatId,
+    username: String(message?.from?.username || "").trim(),
+    first_name: String(message?.from?.first_name || "").trim(),
+    last_inbound_at: new Date().toISOString()
+  });
+  const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+  if (command.kind === "alertas") {
+    if (!prefs?.alertas_activas || !state?.alerts_enabled) {
+      await sendTelegramText(env, chatId, "Telegram todavía no está activo en tus preferencias. Entrá al panel, activalo y después escribí ALERTAS.").catch(() => null);
+      return json2({ ok: true, delivered: false, reason: "telegram_not_enabled" });
+    }
+    const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
+    const alerts = Array.isArray(data?.resultados) ? data.resultados : [];
+    const reply = alerts.length ? buildTelegramQueryDigest(alerts) : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+    await sendTelegramText(env, chatId, reply).catch(() => null);
+    return json2({ ok: true, delivered: true, total_alerts: alerts.length, plan_code: entitlement.plan_code, channel_mode: "query_only" });
+  }
+  await sendTelegramText(env, chatId, "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar").catch(() => null);
+  return json2({ ok: true, delivered: true, help: true, channel_mode: "query_only" });
+}
+__name(handleTelegramWebhook, "handleTelegramWebhook");
+async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
+  const rawText = await request.text();
+  let payload = {};
+  try { payload = rawText ? JSON.parse(rawText) : {}; } catch { payload = {}; }
+  const delegatedRequest = new Request(request.url, { method: request.method, headers: request.headers, body: rawText });
+  const delegated = await delegateJson(worker_default, delegatedRequest, env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json2(delegated.data || { ok: false, message: "No se pudieron guardar las preferencias" }, delegated.response.status || 500);
+  const userId = String(payload?.user_id || "").trim();
+  const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
+  let telegramStatus = null;
+  let whatsappStatus = null;
+  if (userId) {
+    const tgEntitlement = await resolveTelegramEntitlement(env, userId);
+    const currentTgState = await getTelegramState(env, userId) || {};
+    const nextTgState = await saveTelegramState(env, userId, { alerts_requested: requestedTelegram, alerts_enabled: tgEntitlement.allowed ? (requestedTelegram && !!currentTgState.connected) : false, connected: !!currentTgState.connected, chat_id: currentTgState.chat_id || "", username: currentTgState.username || "", first_name: currentTgState.first_name || "", connected_at: currentTgState.connected_at || null });
+    telegramStatus = { ok: true, connected: !!nextTgState?.connected, alerts_enabled: !!nextTgState?.alerts_enabled, allowed_by_plan: !!tgEntitlement.allowed, channel_mode: "query_only", plan_code: tgEntitlement.plan_code, plan_name: tgEntitlement.plan_name, bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""), bot_link: buildTelegramBotLink(env, userId), chat_id_masked: nextTgState?.chat_id ? maskChatId(nextTgState.chat_id) : "" };
+    const waEntitlement = await resolveWhatsAppEntitlement(env, userId);
+    const prefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+    const waState = await getWhatsAppState(env, userId) || {};
+    const currentUser = await obtenerUsuario(env, userId).catch(() => null);
+    whatsappStatus = { ok: true, connected: !!waState.connected, alerts_enabled: !!(waEntitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!waEntitlement.allowed, channel_mode: "query_only", plan_code: waEntitlement.plan_code, plan_name: waEntitlement.plan_name, phone_masked: maskPhone(currentUser?.celular || waState?.phone || ""), connect_hint: String(env.WHATSAPP_BOT_NUMBER || "").trim() ? `Guardá tu celular en el panel y escribí a ${String(env.WHATSAPP_BOT_NUMBER || "").trim()} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." };
+  }
+  let message = delegated.data?.message || "Preferencias guardadas";
+  if (requestedTelegram && telegramStatus && !telegramStatus.connected) message = `${message}. Para activar Telegram, primero tenés que vincular el bot.`;
+  return json2({ ...(typeof delegated.data === "object" && delegated.data ? delegated.data : { ok: true }), message, telegram_status: telegramStatus, whatsapp_status: whatsappStatus }, delegated.response.status || 200);
+}
+__name(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
+async function handleWhatsAppStatus(request, env) {
+  const url = new URL(request.url);
+  const authUser = await getSessionUserByBearer(env, request);
+  const requestedUserId = String(url.searchParams.get("user_id") || "").trim();
+  let user = authUser;
+  if (!user && requestedUserId) user = await obtenerUsuario(env, requestedUserId);
+  if (!user?.id) return json2({ ok: false, error: "No autenticado" }, 401);
+  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) return json2({ ok: false, error: "No autorizado" }, 403);
+  const entitlement = await resolveWhatsAppEntitlement(env, user.id);
+  const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+  const state = await getWhatsAppState(env, user.id) || {};
+  const botNumber = String(env.WHATSAPP_BOT_NUMBER || "").trim();
+  return json2({ ok: true, connected: !!state.connected, alerts_enabled: !!(entitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, phone_masked: maskPhone(user?.celular || state?.phone || ""), connect_hint: botNumber ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." });
+}
+__name(handleWhatsAppStatus, "handleWhatsAppStatus");
+async function handleWhatsAppWebhookVerify(request, env) {
+  const url = new URL(request.url);
+  const mode = String(url.searchParams.get("hub.mode") || "").trim();
+  const token = String(url.searchParams.get("hub.verify_token") || "").trim();
+  const challenge = String(url.searchParams.get("hub.challenge") || "").trim();
+  if (mode === "subscribe" && token && env.WHATSAPP_VERIFY_TOKEN && token === String(env.WHATSAPP_VERIFY_TOKEN).trim()) return new Response(challenge, { status: 200 });
+  return new Response("forbidden", { status: 403 });
+}
+__name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
+async function handleWhatsAppWebhook(request, env) {
+  if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) return json2({ ok: true, skipped: true, reason: "missing_config" });
+  const body = await request.json().catch(() => ({}));
+  const entries = Array.isArray(body?.entry) ? body.entry : [];
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const value = change?.value || {};
+      const messages = Array.isArray(value?.messages) ? value.messages : [];
+      for (const message of messages) {
+        const messageId = String(message?.id || "").trim();
+        if (messageId) {
+          const dedupeKey = whatsappMessageDedupeKey(messageId);
+          if (await wasInboundEventProcessed(env, dedupeKey)) continue;
+          await markInboundEventProcessed(env, dedupeKey, WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS).catch(() => null);
+        }
+        const from = String(message?.from || "").trim();
+        if (!from) continue;
+        const user = await findUserByWhatsAppNumber(env, from);
+        if (!user?.id) {
+          await sendWhatsAppText(env, from, "No encontré una cuenta de APDocentePBA asociada a este número. Guardá tu celular en el panel y probá de nuevo.").catch(() => null);
+          continue;
+        }
+        const entitlement = await resolveWhatsAppEntitlement(env, user.id);
+        if (!entitlement.allowed) {
+          await sendWhatsAppText(env, from, "WhatsApp queda reservado para el plan Insigne. En tu plan actual seguís teniendo email y Telegram.").catch(() => null);
+          continue;
+        }
+        const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+        await saveWhatsAppState(env, user.id, {
+          connected: true,
+          phone: from,
+          phone_masked: maskPhone(from),
+          last_inbound_at: new Date().toISOString()
+        }).catch(() => null);
+        const inboundText = norm(message?.text?.body || message?.button?.text || message?.interactive?.button_reply?.title || "");
+        if (!prefs?.alertas_activas || !prefs?.alertas_whatsapp) {
+          await sendWhatsAppText(env, from, "Tu canal de WhatsApp todavía no está activo en preferencias. Entrá al panel, activalo y después escribí ALERTAS.").catch(() => null);
+          continue;
+        }
+        if (inboundText.includes("ALERTA")) {
+          const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
+          const alerts = Array.isArray(data?.resultados) ? data.resultados : [];
+          const reply = alerts.length ? buildWhatsAppQueryDigest(alerts) : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+          await sendWhatsAppText(env, from, reply).catch(() => null);
+          continue;
+        }
+        await sendWhatsAppText(env, from, "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar").catch(() => null);
+      }
+    }
+  }
+  return json2({ ok: true, channel_mode: "query_only" });
+}
+__name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
 function safeProvinciaBackfillStatus(message = null) {
   return { ok: true, scope: "PROVINCIA_FULL", status: "idle", district_index: 0, district_name: null, next_page: 0, pages_processed: 0, districts_completed: 0, offers_processed: 0, last_batch_count: 0, total_districts: 0, progress_pct: 0, started_at: null, finished_at: null, last_run_at: null, updated_at: null, last_error: message || null, retryable: false, stale_running: false, failed_page: 0 };
 }
@@ -7416,6 +7770,44 @@ var worker_hotfix_default = {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/version` && request.method === "GET") return json2({ ok: true, version: HOTFIX_VERSION, worker_version: env.WORKER_URL || "ancient-wildflower-cd37" });
+    if (path === `${API_URL_PREFIX3}/telegram/status` && request.method === "GET") {
+      try {
+        return await handleTelegramStatus(request, env);
+      } catch (err) {
+        return json2({ ok: false, error: err?.message || "No se pudo leer Telegram" }, Number(err?.status || 500) || 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/telegram/webhook` && request.method === "POST") {
+      try {
+        return await handleTelegramWebhook(request, env);
+      } catch (err) {
+        return json2({ ok: false, error: err?.message || "No se pudo procesar Telegram" }, Number(err?.status || 500) || 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/whatsapp/status` && request.method === "GET") {
+      try {
+        return await handleWhatsAppStatus(request, env);
+      } catch (err) {
+        return json2({ ok: false, error: err?.message || "No se pudo leer WhatsApp" }, Number(err?.status || 500) || 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/whatsapp/webhook` && request.method === "GET") {
+      return await handleWhatsAppWebhookVerify(request, env);
+    }
+    if (path === `${API_URL_PREFIX3}/whatsapp/webhook` && request.method === "POST") {
+      try {
+        return await handleWhatsAppWebhook(request, env);
+      } catch (err) {
+        return json2({ ok: false, error: err?.message || "No se pudo procesar WhatsApp" }, Number(err?.status || 500) || 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/guardar-preferencias` && request.method === "POST") {
+      try {
+        return await handleGuardarPreferenciasChannelsAware(request, env, ctx);
+      } catch (err) {
+        return json2({ ok: false, message: err?.message || "No se pudieron guardar las preferencias" }, Number(err?.status || 500) || 500);
+      }
+    }
     if (path === `${API_URL_PREFIX3}/login` && request.method === "POST") {
       try {
         return await handleLoginHotfix(request, env);
@@ -7432,15 +7824,7 @@ var worker_hotfix_default = {
     }
     if (path === `${API_URL_PREFIX3}/mis-alertas` && request.method === "GET") {
       try {
-        const delegated = await delegateJson(worker_default, request, env, ctx);
-        if (delegated.response.ok && delegated.data?.ok && Array.isArray(delegated.data?.resultados) && delegated.data.resultados.length > 0) return json2(delegated.data, delegated.response.status);
-      } catch {
-      }
-      try {
-        const userId = String(url.searchParams.get("user_id") || "").trim();
-        if (!userId) return json2({ ok: false, message: "Falta user_id" }, 400);
-        const fallback = await buildAlertResultsFallback(env, userId);
-        return json2(fallback, fallback.ok ? 200 : 400);
+        return await handleMisAlertas(url, env);
       } catch (err) {
         return json2({ ok: false, message: err?.message || "No se pudieron cargar las alertas" }, 500);
       }
@@ -7485,9 +7869,7 @@ var worker_hotfix_default = {
     })
   );
 
-  ctx.waitUntil(runWhatsAppAlertsSweep(env, { source: "cron" }));
-
-  // ÚNICO envío de emails: digest por usuario
+  // ÚNICO envío automático: email digest por usuario.
   ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
 }
 };
