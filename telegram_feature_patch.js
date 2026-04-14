@@ -10,7 +10,7 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/\"/g, '&quot;');
   }
 
   function planDisplayName(raw) {
@@ -100,6 +100,11 @@
     }
   }
 
+  function requestedFlag(status, fallback) {
+    if (status && typeof status.alerts_requested === 'boolean') return status.alerts_requested;
+    return !!fallback;
+  }
+
   function ensureCheck(checks, id, labelText) {
     if (!checks || byId(id)) return;
     const label = document.createElement('label');
@@ -163,7 +168,7 @@
     pill.style.borderColor = border;
   }
 
-  function renderTelegramStatus(status, enabled) {
+  function renderTelegramStatus(status, requested) {
     ensureUi();
 
     const pill = byId('telegram-pref-pill');
@@ -181,10 +186,11 @@
     const user = String(status?.username || '').trim();
     const allowedByPlan = status?.allowed_by_plan !== false;
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
+    const isRequested = requestedFlag(status, requested);
 
     if (checkbox) {
       checkbox.disabled = !allowedByPlan;
-      checkbox.checked = allowedByPlan ? !!enabled : false;
+      checkbox.checked = allowedByPlan ? isRequested : false;
     }
 
     if (!allowedByPlan) {
@@ -198,13 +204,13 @@
     if (connected) {
       setPill(
         pill,
-        enabled ? 'Conectado y activo' : 'Conectado',
-        enabled ? '#ecfdf3' : '#eef4ff',
-        enabled ? '#166534' : '#0f3460',
-        enabled ? '#bbf7d0' : '#d6e4ff'
+        isRequested ? 'Conectado y activo' : 'Conectado',
+        isRequested ? '#ecfdf3' : '#eef4ff',
+        isRequested ? '#166534' : '#0f3460',
+        isRequested ? '#bbf7d0' : '#d6e4ff'
       );
-      note.textContent = enabled
-        ? 'Telegram quedó listo para que el docente consulte alertas desde el bot cuando quiera.'
+      note.textContent = isRequested
+        ? 'Telegram quedó listo para enviar alertas automáticas al chat vinculado.'
         : 'Telegram ya está vinculado, pero el canal está apagado en tus preferencias.';
       actions.innerHTML = botLink ? `<a class="btn btn-outline" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Abrir bot</a>` : '';
       mini.textContent = [planName ? `Plan: ${planName}` : '', masked ? `Chat: ${masked}` : '', user ? `Usuario: @${user}` : '']
@@ -214,9 +220,9 @@
     }
 
     if (botLink) {
-      setPill(pill, 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
+      setPill(pill, isRequested ? 'Pendiente de conexión' : 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
       note.textContent = botUser
-        ? `Abrí el bot @${botUser}, tocá Iniciar y después ya vas a poder consultarle alertas desde el chat.`
+        ? `Abrí el bot @${botUser}, tocá Iniciar y después ya vas a poder recibir alertas en Telegram.`
         : 'Abrí el bot de Telegram y tocá Iniciar para vincular el chat.';
       actions.innerHTML = `<a class="btn btn-primary" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Conectar Telegram</a>`;
       mini.textContent = `Incluido en ${planName || 'tu plan'}.`;
@@ -229,7 +235,7 @@
     mini.textContent = '';
   }
 
-  function renderWhatsAppStatus(status, enabled) {
+  function renderWhatsAppStatus(status, requested) {
     ensureUi();
 
     const pill = byId('whatsapp-pref-pill');
@@ -245,10 +251,11 @@
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
     const phoneMasked = String(status?.phone_masked || '').trim();
     const connectHint = String(status?.connect_hint || '').trim();
+    const isRequested = requestedFlag(status, requested);
 
     if (checkbox) {
       checkbox.disabled = !allowedByPlan;
-      checkbox.checked = allowedByPlan ? !!enabled : false;
+      checkbox.checked = allowedByPlan ? isRequested : false;
     }
 
     if (!allowedByPlan) {
@@ -262,12 +269,12 @@
     if (connected) {
       setPill(
         pill,
-        enabled ? 'Conectado y activo' : 'Conectado',
-        enabled ? '#ecfdf3' : '#eef4ff',
-        enabled ? '#166534' : '#0f3460',
-        enabled ? '#bbf7d0' : '#d6e4ff'
+        isRequested ? 'Conectado y activo' : 'Conectado',
+        isRequested ? '#ecfdf3' : '#eef4ff',
+        isRequested ? '#166534' : '#0f3460',
+        isRequested ? '#bbf7d0' : '#d6e4ff'
       );
-      note.textContent = enabled
+      note.textContent = isRequested
         ? 'WhatsApp quedó listo para consultas desde el número vinculado.'
         : 'WhatsApp ya está vinculado, pero el canal está apagado en tus preferencias.';
       actions.innerHTML = '';
@@ -277,7 +284,7 @@
       return;
     }
 
-    setPill(pill, 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
+    setPill(pill, isRequested ? 'Pendiente de conexión' : 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
     note.textContent = connectHint || 'Escribí al número del bot desde tu WhatsApp para vincularlo y consultar alertas.';
     actions.innerHTML = '';
     mini.textContent = planName ? `Incluido en ${planName}.` : '';
@@ -285,18 +292,20 @@
 
   function renderChannelSummary(pref) {
     const telegramAllowed = pref.telegram_allowed_by_plan !== false;
+    const telegramRequested = !!pref.alertas_telegram;
     const telegramLabel = !telegramAllowed
       ? `No incluido en ${planDisplayName(pref.telegram_plan_name || pref.telegram_plan_code || '')}`
       : pref.telegram_connected
-        ? (pref.alertas_telegram ? 'Conectado y activo' : 'Conectado')
-        : 'No conectado';
+        ? (telegramRequested ? 'Conectado y activo' : 'Conectado')
+        : (telegramRequested ? 'Pendiente de conexión' : 'No conectado');
 
     const whatsappAllowed = !!pref.whatsapp_allowed_by_plan;
+    const whatsappRequested = !!pref.alertas_whatsapp;
     const whatsappLabel = !whatsappAllowed
       ? `Solo disponible en Insigne`
       : pref.whatsapp_connected
-        ? (pref.alertas_whatsapp ? 'Conectado y activo' : 'Conectado')
-        : 'No conectado';
+        ? (whatsappRequested ? 'Conectado y activo' : 'Conectado')
+        : (whatsappRequested ? 'Pendiente de conexión' : 'No conectado');
 
     const resumen = byId('panel-preferencias-resumen');
     if (resumen) {
@@ -323,7 +332,7 @@
           <p class="plan-note">Canal principal estable para recibir digest de alertas por Brevo.</p>
 
           <div class="plan-pill-row"><span class="plan-pill">📨 Telegram</span><span class="plan-pill plan-pill-neutral">${esc(telegramLabel)}</span></div>
-          <p class="plan-note">Telegram queda disponible en todos los planes y se usa en modo consulta al bot.</p>
+          <p class="plan-note">Telegram queda disponible en todos los planes y puede enviar alertas automáticas cuando el chat ya está vinculado.</p>
 
           <div class="plan-pill-row"><span class="plan-pill">💬 WhatsApp</span><span class="plan-pill plan-pill-neutral">${esc(whatsappLabel)}</span></div>
           <p class="plan-note">WhatsApp se reserva para Insigne y queda orientado a consultas para bajar costo.</p>
@@ -354,8 +363,10 @@
           fetchWhatsAppStatus(userId)
         ]);
 
+        pref.alertas_telegram = requestedFlag(tg, pref.alertas_telegram);
+        pref.alertas_whatsapp = requestedFlag(wa, pref.alertas_whatsapp);
+
         if (tg) {
-          pref.alertas_telegram = !!tg.alerts_enabled;
           pref.telegram_connected = !!tg.connected;
           pref.telegram_allowed_by_plan = tg.allowed_by_plan !== false;
           pref.telegram_plan_name = tg.plan_name || tg.plan_code || '';
@@ -369,7 +380,6 @@
         }
 
         if (wa) {
-          pref.alertas_whatsapp = !!wa.alerts_enabled;
           pref.whatsapp_connected = !!wa.connected;
           pref.whatsapp_allowed_by_plan = !!wa.allowed_by_plan;
           pref.whatsapp_plan_name = wa.plan_name || wa.plan_code || '';
@@ -422,16 +432,19 @@
           fetchWhatsAppStatus(userId)
         ]);
 
-        renderTelegramStatus(tg || { allowed_by_plan: true }, !!tg?.alerts_enabled);
-        renderWhatsAppStatus(wa || { allowed_by_plan: false }, !!wa?.alerts_enabled);
+        const telegramRequested = requestedFlag(tg, false);
+        const whatsappRequested = requestedFlag(wa, false);
+
+        renderTelegramStatus(tg || { allowed_by_plan: true }, telegramRequested);
+        renderWhatsAppStatus(wa || { allowed_by_plan: false }, whatsappRequested);
 
         renderChannelSummary({
-          alertas_telegram: !!tg?.alerts_enabled,
+          alertas_telegram: telegramRequested,
           telegram_connected: !!tg?.connected,
           telegram_allowed_by_plan: tg?.allowed_by_plan !== false,
           telegram_plan_name: tg?.plan_name || tg?.plan_code || '',
           telegram_plan_code: tg?.plan_code || '',
-          alertas_whatsapp: !!wa?.alerts_enabled,
+          alertas_whatsapp: whatsappRequested,
           whatsapp_connected: !!wa?.connected,
           whatsapp_allowed_by_plan: !!wa?.allowed_by_plan,
           whatsapp_plan_name: wa?.plan_name || wa?.plan_code || '',
