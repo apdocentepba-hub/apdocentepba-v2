@@ -2322,29 +2322,42 @@ async function handleGuardarPreferencias(request, env) {
   const body = await request.json();
   const userId = String(body?.user_id || "").trim();
   const preferencias = body?.preferencias || {};
+
   if (!userId) {
     return json({ ok: false, message: "Falta user_id" }, 400);
   }
+
   const user = await obtenerUsuario(env, userId);
   if (!user) {
     return json({ ok: false, message: "Usuario no encontrado" }, 404);
   }
+
   const prevPrefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+
   let resolved = await resolverPlanUsuario(env, userId);
   if (!isPlanActivo(resolved)) {
     await ensureTrialIfNoSubscriptions(env, userId, user.email, "trial_auto_preferences");
     resolved = await resolverPlanUsuario(env, userId);
   }
+
   if (!isPlanActivo(resolved)) {
-    return json({
-      ok: false,
-      message: "Tu plan est\xE1 vencido. Suscribite para seguir usando el servicio.",
-      plan: resolved.plan,
-      subscription: resolved.subscription
-    }, 403);
+    return json(
+      {
+        ok: false,
+        message: "Tu plan está vencido. Suscribite para seguir usando el servicio.",
+        plan: resolved.plan,
+        subscription: resolved.subscription
+      },
+      403
+    );
   }
+
   const limpias = sanitizarPreferenciasEntrada(preferencias, resolved.plan);
-  const ajustesPlan = limpias._plan_ajuste || { distritos_recortados: 0, cargos_recortados: 0 };
+  const ajustesPlan = limpias._plan_ajuste || {
+    distritos_recortados: 0,
+    cargos_recortados: 0
+  };
+
   const rows = await supabaseUpsertReturning(
     env,
     "user_preferences",
@@ -2359,15 +2372,29 @@ async function handleGuardarPreferencias(request, env) {
         turnos: limpias.turnos,
         alertas_activas: limpias.alertas_activas,
         alertas_email: limpias.alertas_email,
+        alertas_telegram: limpias.alertas_telegram,
         alertas_whatsapp: limpias.alertas_whatsapp,
-        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        updated_at: new Date().toISOString()
       }
     ],
     "user_id"
   );
+
   const savedPrefs = Array.isArray(rows) ? rows[0] : rows;
-  const firstMeaningfulSave = !prevPrefs || !prevPrefs.distrito_principal && (!Array.isArray(prevPrefs.otros_distritos) || prevPrefs.otros_distritos.length === 0) && (!Array.isArray(prevPrefs.cargos) || prevPrefs.cargos.length === 0) && (!Array.isArray(prevPrefs.materias) || prevPrefs.materias.length === 0) && (!Array.isArray(prevPrefs.niveles) || prevPrefs.niveles.length === 0) && (!Array.isArray(prevPrefs.turnos) || prevPrefs.turnos.length === 0);
+
+  const firstMeaningfulSave =
+    !prevPrefs ||
+    (
+      !prevPrefs.distrito_principal &&
+      (!Array.isArray(prevPrefs.otros_distritos) || prevPrefs.otros_distritos.length === 0) &&
+      (!Array.isArray(prevPrefs.cargos) || prevPrefs.cargos.length === 0) &&
+      (!Array.isArray(prevPrefs.materias) || prevPrefs.materias.length === 0) &&
+      (!Array.isArray(prevPrefs.niveles) || prevPrefs.niveles.length === 0) &&
+      (!Array.isArray(prevPrefs.turnos) || prevPrefs.turnos.length === 0)
+    );
+
   let initialEmail = null;
+
   if (firstMeaningfulSave && limpias.alertas_activas && limpias.alertas_email) {
     initialEmail = await sendInitialAlertsDigestIfNeeded(env, user, savedPrefs, {
       source: "first_preferences_save"
@@ -2378,9 +2405,13 @@ async function handleGuardarPreferencias(request, env) {
       message: err?.message || "No se pudo enviar el digest inicial"
     }));
   }
+
   return json({
     ok: true,
-    message: ajustesPlan.distritos_recortados || ajustesPlan.cargos_recortados ? `Preferencias guardadas. Se ajustaron filtros al limite de tu plan (${resolved.plan?.max_distritos || 0} distrito(s) y ${resolved.plan?.max_cargos || 0} cargo(s) o materia(s)).` : "Preferencias guardadas",
+    message:
+      ajustesPlan.distritos_recortados || ajustesPlan.cargos_recortados
+        ? `Preferencias guardadas. Se ajustaron filtros al limite de tu plan (${resolved.plan?.max_distritos || 0} distrito(s) y ${resolved.plan?.max_cargos || 0} cargo(s) o materia(s)).`
+        : "Preferencias guardadas",
     preferencias: savedPrefs,
     plan: resolved.plan,
     subscription: resolved.subscription,
@@ -6462,32 +6493,42 @@ function sanitizarPreferenciasEntrada(raw, plan) {
     raw?.distrito_principal,
     ...Array.isArray(raw?.otros_distritos) ? raw.otros_distritos : []
   ]);
+
   const cargos = uniqueUpper([
     ...Array.isArray(raw?.cargos) ? raw.cargos : [],
     ...Array.isArray(raw?.materias) ? raw.materias : []
   ]);
+
   const niveles = uniqueUpper(
     (Array.isArray(raw?.niveles) ? raw.niveles : []).map(canonicalizarNivelPreferencia)
   );
+
   const turnos = uniqueUpper(
-    (Array.isArray(raw?.turnos) ? raw.turnos : []).map(canonicalizarTurnoPreferencia).filter(Boolean)
+    (Array.isArray(raw?.turnos) ? raw.turnos : [])
+      .map(canonicalizarTurnoPreferencia)
+      .filter(Boolean)
   ).slice(0, 1);
+
   const maxDistritos = clampPlanLimit(
     plan?.max_distritos_total ?? plan?.max_distritos,
     1,
     10,
     5
   );
+
   const maxCargos = clampPlanLimit(
     plan?.max_cargos_total ?? plan?.max_cargos,
     1,
     10,
     5
   );
+
   const distritosAjustados = distritos.slice(0, maxDistritos);
   const cargosAjustados = cargos.slice(0, maxCargos);
+
   const distritosRecortados = Math.max(0, distritos.length - distritosAjustados.length);
   const cargosRecortados = Math.max(0, cargos.length - cargosAjustados.length);
+
   return {
     distrito_principal: distritosAjustados[0] || null,
     otros_distritos: distritosAjustados.slice(1),
@@ -6497,6 +6538,7 @@ function sanitizarPreferenciasEntrada(raw, plan) {
     turnos,
     alertas_activas: !!raw?.alertas_activas,
     alertas_email: !!raw?.alertas_email,
+    alertas_telegram: !!raw?.alertas_telegram,
     alertas_whatsapp: !!raw?.alertas_whatsapp && !!(plan?.feature_flags?.whatsapp),
     _plan_ajuste: {
       distritos_recortados: distritosRecortados,
@@ -8118,13 +8160,52 @@ async function handleTelegramStatus(request, env) {
   const url = new URL(request.url);
   const authUser = await getSessionUserByBearer(env, request);
   const requestedUserId = String(url.searchParams.get("user_id") || "").trim();
+
   let user = authUser;
   if (!user && requestedUserId) user = await obtenerUsuario(env, requestedUserId);
-  if (!user?.id) return json2({ ok: false, error: "No autenticado" }, 401);
-  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) return json2({ ok: false, error: "No autorizado" }, 403);
-  const state = await getTelegramState(env, user.id) || { user_id: user.id, connected: false, alerts_enabled: false };
+
+  if (!user?.id) {
+    return json2({ ok: false, error: "No autenticado" }, 401);
+  }
+
+  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) {
+    return json2({ ok: false, error: "No autorizado" }, 403);
+  }
+
+  const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+  const state = await getTelegramState(env, user.id) || {
+    user_id: user.id,
+    connected: false,
+    alerts_enabled: false,
+    alerts_requested: false
+  };
   const entitlement = await resolveTelegramEntitlement(env, user.id);
-  return json2({ ok: true, connected: !!state.connected && !!String(state.chat_id || "").trim(), alerts_enabled: !!state.alerts_enabled, allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", channel_policy: entitlement.source, plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, chat_id_masked: state.chat_id ? maskChatId(state.chat_id) : "", username: String(state.username || "").trim(), first_name: String(state.first_name || "").trim(), connected_at: String(state.connected_at || "").trim() || null, bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""), bot_link: buildTelegramBotLink(env, user.id) });
+
+  const alertsRequested =
+    typeof state?.alerts_requested === "boolean"
+      ? state.alerts_requested
+      : !!prefs?.alertas_telegram;
+
+  const connected = !!state.connected && !!String(state.chat_id || "").trim();
+  const alertsEnabled = !!(entitlement.allowed && alertsRequested && connected);
+
+  return json2({
+    ok: true,
+    connected,
+    alerts_requested: alertsRequested,
+    alerts_enabled: alertsEnabled,
+    allowed_by_plan: !!entitlement.allowed,
+    channel_mode: "query_only",
+    channel_policy: entitlement.source,
+    plan_code: entitlement.plan_code,
+    plan_name: entitlement.plan_name,
+    chat_id_masked: state.chat_id ? maskChatId(state.chat_id) : "",
+    username: String(state.username || "").trim(),
+    first_name: String(state.first_name || "").trim(),
+    connected_at: String(state.connected_at || "").trim() || null,
+    bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""),
+    bot_link: buildTelegramBotLink(env, user.id)
+  });
 }
 __name(handleTelegramStatus, "handleTelegramStatus");
 async function handleTelegramWebhook(request, env) {
@@ -8247,44 +8328,150 @@ async function handleTelegramWebhook(request, env) {
 __name(handleTelegramWebhook, "handleTelegramWebhook");
 async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
   const rawText = await request.text();
+
   let payload = {};
-  try { payload = rawText ? JSON.parse(rawText) : {}; } catch { payload = {}; }
-  const delegatedRequest = new Request(request.url, { method: request.method, headers: request.headers, body: rawText });
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = {};
+  }
+
+  const delegatedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: rawText
+  });
+
   const delegated = await delegateJson(worker_default, delegatedRequest, env, ctx);
-  if (!delegated.response.ok || !delegated.data?.ok) return json2(delegated.data || { ok: false, message: "No se pudieron guardar las preferencias" }, delegated.response.status || 500);
+
+  if (!delegated.response.ok || !delegated.data?.ok) {
+    return json2(
+      delegated.data || { ok: false, message: "No se pudieron guardar las preferencias" },
+      delegated.response.status || 500
+    );
+  }
+
   const userId = String(payload?.user_id || "").trim();
-  const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
   let telegramStatus = null;
   let whatsappStatus = null;
+
   if (userId) {
+    const savedPrefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+
+    const requestedTelegram = !!savedPrefs?.alertas_telegram;
+    const requestedWhatsApp = !!savedPrefs?.alertas_whatsapp;
+
     const tgEntitlement = await resolveTelegramEntitlement(env, userId);
     const currentTgState = await getTelegramState(env, userId) || {};
-    const nextTgState = await saveTelegramState(env, userId, { alerts_requested: requestedTelegram, alerts_enabled: tgEntitlement.allowed ? (requestedTelegram && !!currentTgState.connected) : false, connected: !!currentTgState.connected, chat_id: currentTgState.chat_id || "", username: currentTgState.username || "", first_name: currentTgState.first_name || "", connected_at: currentTgState.connected_at || null });
-    telegramStatus = { ok: true, connected: !!nextTgState?.connected, alerts_enabled: !!nextTgState?.alerts_enabled, allowed_by_plan: !!tgEntitlement.allowed, channel_mode: "query_only", plan_code: tgEntitlement.plan_code, plan_name: tgEntitlement.plan_name, bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""), bot_link: buildTelegramBotLink(env, userId), chat_id_masked: nextTgState?.chat_id ? maskChatId(nextTgState.chat_id) : "" };
+
+    const nextTgState = await saveTelegramState(env, userId, {
+      alerts_requested: requestedTelegram,
+      alerts_enabled: tgEntitlement.allowed
+        ? (requestedTelegram && !!currentTgState.connected)
+        : false,
+      connected: !!currentTgState.connected,
+      chat_id: currentTgState.chat_id || "",
+      username: currentTgState.username || "",
+      first_name: currentTgState.first_name || "",
+      connected_at: currentTgState.connected_at || null
+    });
+
+    telegramStatus = {
+      ok: true,
+      connected: !!nextTgState?.connected,
+      alerts_requested: !!nextTgState?.alerts_requested,
+      alerts_enabled: !!nextTgState?.alerts_enabled,
+      allowed_by_plan: !!tgEntitlement.allowed,
+      channel_mode: "query_only",
+      plan_code: tgEntitlement.plan_code,
+      plan_name: tgEntitlement.plan_name,
+      bot_username: String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, ""),
+      bot_link: buildTelegramBotLink(env, userId),
+      chat_id_masked: nextTgState?.chat_id ? maskChatId(nextTgState.chat_id) : ""
+    };
+
     const waEntitlement = await resolveWhatsAppEntitlement(env, userId);
-    const prefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
     const waState = await getWhatsAppState(env, userId) || {};
     const currentUser = await obtenerUsuario(env, userId).catch(() => null);
-    whatsappStatus = { ok: true, connected: !!waState.connected, alerts_enabled: !!(waEntitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!waEntitlement.allowed, channel_mode: "query_only", plan_code: waEntitlement.plan_code, plan_name: waEntitlement.plan_name, phone_masked: maskPhone(currentUser?.celular || waState?.phone || ""), connect_hint: String(env.WHATSAPP_BOT_NUMBER || "").trim() ? `Guardá tu celular en el panel y escribí a ${String(env.WHATSAPP_BOT_NUMBER || "").trim()} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." };
+
+    whatsappStatus = {
+      ok: true,
+      connected: !!waState.connected,
+      alerts_requested: requestedWhatsApp,
+      alerts_enabled: !!(waEntitlement.allowed && requestedWhatsApp && !!waState.connected),
+      allowed_by_plan: !!waEntitlement.allowed,
+      channel_mode: "query_only",
+      plan_code: waEntitlement.plan_code,
+      plan_name: waEntitlement.plan_name,
+      phone_masked: maskPhone(currentUser?.celular || waState?.phone || ""),
+      connect_hint: String(env.WHATSAPP_BOT_NUMBER || "").trim()
+        ? `Guardá tu celular en el panel y escribí a ${String(env.WHATSAPP_BOT_NUMBER || "").trim()} por WhatsApp para consultar alertas.`
+        : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
+    };
   }
+
   let message = delegated.data?.message || "Preferencias guardadas";
-  if (requestedTelegram && telegramStatus && !telegramStatus.connected) message = `${message}. Para activar Telegram, primero tenés que vincular el bot.`;
-  return json2({ ...(typeof delegated.data === "object" && delegated.data ? delegated.data : { ok: true }), message, telegram_status: telegramStatus, whatsapp_status: whatsappStatus }, delegated.response.status || 200);
+
+  if (telegramStatus && telegramStatus.alerts_requested && !telegramStatus.connected) {
+    message = `${message}. Telegram quedó pedido en tu cuenta, pero todavía falta vincular el bot.`;
+  }
+
+  if (whatsappStatus && whatsappStatus.alerts_requested && !whatsappStatus.connected && whatsappStatus.allowed_by_plan) {
+    message = `${message}. WhatsApp quedó pedido en tu cuenta, pero todavía falta vincular el canal.`;
+  }
+
+  return json2(
+    {
+      ...(typeof delegated.data === "object" && delegated.data
+        ? delegated.data
+        : { ok: true }),
+      message,
+      telegram_status: telegramStatus,
+      whatsapp_status: whatsappStatus
+    },
+    delegated.response.status || 200
+  );
 }
 __name(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
 async function handleWhatsAppStatus(request, env) {
   const url = new URL(request.url);
   const authUser = await getSessionUserByBearer(env, request);
   const requestedUserId = String(url.searchParams.get("user_id") || "").trim();
+
   let user = authUser;
   if (!user && requestedUserId) user = await obtenerUsuario(env, requestedUserId);
-  if (!user?.id) return json2({ ok: false, error: "No autenticado" }, 401);
-  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) return json2({ ok: false, error: "No autorizado" }, 403);
+
+  if (!user?.id) {
+    return json2({ ok: false, error: "No autenticado" }, 401);
+  }
+
+  if (authUser?.id && requestedUserId && requestedUserId !== authUser.id && !authUser.es_admin) {
+    return json2({ ok: false, error: "No autorizado" }, 403);
+  }
+
   const entitlement = await resolveWhatsAppEntitlement(env, user.id);
   const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
   const state = await getWhatsAppState(env, user.id) || {};
+
   const botNumber = String(env.WHATSAPP_BOT_NUMBER || "").trim();
-  return json2({ ok: true, connected: !!state.connected, alerts_enabled: !!(entitlement.allowed && prefs?.alertas_whatsapp), allowed_by_plan: !!entitlement.allowed, channel_mode: "query_only", plan_code: entitlement.plan_code, plan_name: entitlement.plan_name, phone_masked: maskPhone(user?.celular || state?.phone || ""), connect_hint: botNumber ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.` : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas." });
+  const alertsRequested = !!prefs?.alertas_whatsapp;
+  const connected = !!state.connected;
+  const alertsEnabled = !!(entitlement.allowed && alertsRequested && connected);
+
+  return json2({
+    ok: true,
+    connected,
+    alerts_requested: alertsRequested,
+    alerts_enabled: alertsEnabled,
+    allowed_by_plan: !!entitlement.allowed,
+    channel_mode: "query_only",
+    plan_code: entitlement.plan_code,
+    plan_name: entitlement.plan_name,
+    phone_masked: maskPhone(user?.celular || state?.phone || ""),
+    connect_hint: botNumber
+      ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.`
+      : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
+  });
 }
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
 async function handleWhatsAppWebhookVerify(request, env) {
