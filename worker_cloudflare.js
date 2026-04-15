@@ -8181,10 +8181,8 @@ async function handleTelegramStatus(request, env) {
   };
   const entitlement = await resolveTelegramEntitlement(env, user.id);
 
-  const alertsRequested =
-    typeof state?.alerts_requested === "boolean"
-      ? state.alerts_requested
-      : !!prefs?.alertas_telegram;
+  // FUENTE CANÓNICA: la preferencia guardada en cuenta
+  const alertsRequested = !!prefs?.alertas_telegram;
 
   const connected = !!state.connected && !!String(state.chat_id || "").trim();
   const alertsEnabled = !!(entitlement.allowed && alertsRequested && connected);
