@@ -3955,8 +3955,8 @@ async function runEmailAlertsQueueSweep(env, options = {}) {
   const MAX_USERS_PER_RUN = clampInt(
     options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
     1,
-    2,
-    1
+    50,
+    20
   );
 
   const MAX_ALERTS_PER_USER = clampInt(
@@ -4126,7 +4126,9 @@ async function runEmailAlertsQueueSweep(env, options = {}) {
     enqueued,
     skipped,
     failed,
-    failed_samples
+    failed_samples,
+    max_users_per_run: MAX_USERS_PER_RUN,
+    max_alerts_per_user: MAX_ALERTS_PER_USER
   };
 }
 __name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
