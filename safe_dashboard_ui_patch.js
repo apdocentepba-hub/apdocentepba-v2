@@ -219,9 +219,7 @@
 }
 
  function loadUsefulPatches() {
-  // no-op:
-  // index.html ya carga los scripts vigentes.
-  // no volver a inyectar loaders legacy desde acá.
+  ensureScript('channel_persistence_hotfix.js?v=1', 'apd-channel-persistence-hotfix-loader');
 }
   function bindDynamicPanelEvents() {
     const g = globalThis;
