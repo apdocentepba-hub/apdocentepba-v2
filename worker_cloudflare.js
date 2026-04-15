@@ -2275,7 +2275,7 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     return { ok: true, skipped: true, reason: "no_alerts" };
   }
 
-  const MAX_VISIBLE = 10;
+  const MAX_VISIBLE = 5;
   const alerts = await enrichAlertsForRichChannels(env, user, items, MAX_VISIBLE);
 
   const html = buildDigestHtml(alerts, user, {
@@ -3784,8 +3784,15 @@ async function runEmailAlertsSweep(env, options = {}) {
   ).catch(() => []);
 
   const total = Array.isArray(prefRows) ? prefRows.length : 0;
-  const MAX_DIGEST_EMAILS_PER_RUN = 4;
-  const MAX_VISIBLE_ALERTS_IN_EMAIL = 10;
+
+  const MAX_DIGEST_EMAILS_PER_RUN = clampInt(
+    options?.max_users || env.EMAIL_DIGEST_MAX_USERS_PER_RUN,
+    1,
+    500,
+    200
+  );
+
+  const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
 
   if (!total) {
     return {
@@ -3839,43 +3846,49 @@ async function runEmailAlertsSweep(env, options = {}) {
 
     if (!items.length) continue;
 
-    const sentKeys = await getRecentSentEmailAlertKeysForUser(env, userId);
+    const sortedLatest = items
+      .slice()
+      .sort((a, b) => {
+        const ta =
+          parseFechaFlexible(
+            a?.raw?.ult_movimiento ||
+            a?.ult_movimiento ||
+            a?.raw?.finoferta ||
+            a?.finoferta ||
+            ""
+          )?.getTime() || 0;
 
-    const pendingAlerts = [];
-    for (const alertItem of items) {
-      const alertKey = buildEmailAlertKey(userId, alertItem);
+        const tb =
+          parseFechaFlexible(
+            b?.raw?.ult_movimiento ||
+            b?.ult_movimiento ||
+            b?.raw?.finoferta ||
+            b?.finoferta ||
+            ""
+          )?.getTime() || 0;
 
-      if (alertKey && sentKeys.has(alertKey)) {
-        skippedAlerts += 1;
-        continue;
-      }
-
-      pendingAlerts.push({
-        item: alertItem,
-        alert_key: alertKey
+        return tb - ta;
       });
-    }
 
-    if (!pendingAlerts.length) continue;
-
-    const totalNewAlerts = pendingAlerts.length;
+    const totalAlerts = sortedLatest.length;
+    const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
     const visibleAlerts = await enrichAlertsForRichChannels(
       env,
       user,
-      pendingAlerts.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL).map(entry => entry.item),
+      visibleSource,
       MAX_VISIBLE_ALERTS_IN_EMAIL
     );
 
     const shownCount = visibleAlerts.length;
 
     const subject =
-      totalNewAlerts > shownCount
-        ? `APDocentePBA: ${shownCount} de ${totalNewAlerts} alertas nuevas`
-        : `APDocentePBA: ${totalNewAlerts} alerta${totalNewAlerts === 1 ? "" : "s"} nueva${totalNewAlerts === 1 ? "" : "s"}`;
+      totalAlerts > shownCount
+        ? `${shownCount} nuevas ofertas de ${totalAlerts}`
+        : `${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} oferta${totalAlerts === 1 ? "" : "s"}`;
 
     const html = buildDigestHtml(visibleAlerts, user, {
-      total_alerts: totalNewAlerts,
+      total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
       panel_url: "https://alertasapd.com.ar"
     });
@@ -3892,15 +3905,12 @@ async function runEmailAlertsSweep(env, options = {}) {
 
     const payload = {
       source: options.source || "cron",
-      total_alerts: totalNewAlerts,
+      total_alerts: totalAlerts,
       shown_alerts: shownCount,
-      alert_keys: pendingAlerts
-        .map(x => String(x.alert_key || "").trim())
+      visible_alert_keys: visibleSource
+        .map(item => buildEmailAlertKey(userId, item))
         .filter(Boolean),
-      visible_alert_keys: pendingAlerts
-        .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
-        .map(x => String(x.alert_key || "").trim())
-        .filter(Boolean)
+      cycle_mode: "always_send_latest_5"
     };
 
     await supabaseInsert(env, "notification_delivery_logs", {
@@ -3916,11 +3926,7 @@ async function runEmailAlertsSweep(env, options = {}) {
 
     if (send?.ok) {
       sentDigests += 1;
-      notifiedAlertsCount += totalNewAlerts;
-
-      for (const entry of pendingAlerts) {
-        if (entry.alert_key) sentKeys.add(entry.alert_key);
-      }
+      notifiedAlertsCount += shownCount;
     } else {
       failedDigests += 1;
 
@@ -3928,7 +3934,7 @@ async function runEmailAlertsSweep(env, options = {}) {
         failed_samples.push({
           user_id: userId,
           destination: user.email || null,
-          total_alerts: totalNewAlerts,
+          total_alerts: totalAlerts,
           shown_alerts: shownCount,
           reason: "digest_send_failed",
           provider_response: send || null
@@ -7131,7 +7137,7 @@ async function sendPendingEmailDigests(env, options = {}) {
   );
 
   const targetUserId = String(options?.target_user_id || "").trim();
-  const MAX_VISIBLE_ALERTS_IN_EMAIL = 10;
+  const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
 
   const pendingQuery =
     `pending_notifications?channel=eq.email&status=eq.pending` +
@@ -7326,10 +7332,10 @@ function buildDigestHtml(alerts, user, options = {}) {
   const showingCount = visibleAlerts.length;
   const remainingCount = Math.max(0, totalAlerts - showingCount);
 
-  const title =
-    totalAlerts > showingCount
-      ? `${showingCount} de ${totalAlerts} alertas nuevas`
-      : `${totalAlerts} alerta${totalAlerts === 1 ? "" : "s"} nueva${totalAlerts === 1 ? "" : "s"}`;
+ const title =
+  totalAlerts > showingCount
+    ? `${showingCount} nuevas ofertas de ${totalAlerts}`
+    : `${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} oferta${totalAlerts === 1 ? "" : "s"}`;
 
   const intro =
     String(options?.intro_text || "").trim() ||
@@ -8691,35 +8697,12 @@ var worker_hotfix_default = {
     }
    if (path === "/test-email-sweep" && request.method === "GET") {
   try {
-    const targetUserId = String(url.searchParams.get("user_id") || "").trim();
-    const pendingExists = await hasPendingEmailNotifications(env, targetUserId);
-
-    if (pendingExists) {
-      const digest = await sendPendingEmailDigests(env, {
-        target_user_id: targetUserId || null
-      });
-
-      return json2({
-        ok: true,
-        mode: "digest_only",
-        digest
-      });
-    }
-
-    const queue = await runEmailAlertsQueueSweep(env, {
-      source: "manual_test",
-      target_user_id: targetUserId || null
-    });
-
-    return json2({
-      ok: true,
-      mode: "queue_only",
-      queue_sweep: queue
-    });
+    const r = await runEmailAlertsSweep(env, { source: "manual_test" });
+    return json2(r, 200);
   } catch (err) {
     return json2({
       ok: false,
-      error: err?.message || "No se pudo ejecutar el barrido de cola de email"
+      error: err?.message || "No se pudo ejecutar el barrido de email"
     }, 500);
   }
 }
@@ -8727,38 +8710,13 @@ var worker_hotfix_default = {
   },
   async scheduled(_controller, env, ctx) {
   ctx.waitUntil(
-    runProvinciaBackfillStep(env, { source: "cron", force: false }).catch(err => {
+    runProvinciaBackfillStep(env, { source: "cron", force: false }).catch((err) => {
       console.error("PROVINCIA BACKFILL CRON STEP ERROR:", err);
     })
   );
-
-  ctx.waitUntil((async () => {
-    try {
-      const queue = await runEmailAlertsQueueSweep(env, { source: "cron" });
-
-      const pendingExists = await hasPendingEmailNotifications(env);
-
-      const digest = pendingExists
-        ? await sendPendingEmailDigests(env)
-        : {
-            ok: true,
-            mode: "pending_notifications",
-            processed_users: 0,
-            sent: 0,
-            failed: 0,
-            pending_rows: 0,
-            skipped: true,
-            reason: "no_pending_notifications"
-          };
-
-      console.log("EMAIL PIPELINE CRON OK", {
-        queue,
-        digest
-      });
-    } catch (err) {
-      console.error("EMAIL PIPELINE CRON ERROR:", err);
-    }
-  })());
+  ctx.waitUntil(runWhatsAppAlertsSweep(env, { source: "cron" }));
+  ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
+  ctx.waitUntil(sendPendingEmailDigests(env));
 }
 };
 export {
