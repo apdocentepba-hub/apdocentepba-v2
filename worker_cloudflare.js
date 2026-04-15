@@ -8734,13 +8734,27 @@ var worker_hotfix_default = {
 
   ctx.waitUntil((async () => {
     try {
+      const queue = await runEmailAlertsQueueSweep(env, { source: "cron" });
+
       const pendingExists = await hasPendingEmailNotifications(env);
 
-      if (pendingExists) {
-        await sendPendingEmailDigests(env);
-      } else {
-        await runEmailAlertsQueueSweep(env, { source: "cron" });
-      }
+      const digest = pendingExists
+        ? await sendPendingEmailDigests(env)
+        : {
+            ok: true,
+            mode: "pending_notifications",
+            processed_users: 0,
+            sent: 0,
+            failed: 0,
+            pending_rows: 0,
+            skipped: true,
+            reason: "no_pending_notifications"
+          };
+
+      console.log("EMAIL PIPELINE CRON OK", {
+        queue,
+        digest
+      });
     } catch (err) {
       console.error("EMAIL PIPELINE CRON ERROR:", err);
     }
