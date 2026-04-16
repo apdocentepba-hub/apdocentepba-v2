@@ -8708,15 +8708,48 @@ var worker_hotfix_default = {
 }
     return await worker_default.fetch(request, env, ctx);
   },
-  async scheduled(_controller, env, ctx) {
+ async scheduled(_controller, env, ctx) {
+  console.log("CRON scheduled() START", new Date().toISOString());
+
   ctx.waitUntil(
-    runProvinciaBackfillStep(env, { source: "cron", force: false }).catch((err) => {
-      console.error("PROVINCIA BACKFILL CRON STEP ERROR:", err);
-    })
+    runProvinciaBackfillStep(env, { source: "cron", force: false })
+      .then((r) => {
+        console.log("CRON BACKFILL OK", JSON.stringify(r || {}));
+      })
+      .catch((err) => {
+        console.error("CRON BACKFILL ERROR:", err);
+      })
   );
-  ctx.waitUntil(runWhatsAppAlertsSweep(env, { source: "cron" }));
-  ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
-  ctx.waitUntil(sendPendingEmailDigests(env));
+
+  ctx.waitUntil(
+    runWhatsAppAlertsSweep(env, { source: "cron" })
+      .then((r) => {
+        console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
+      })
+      .catch((err) => {
+        console.error("CRON WHATSAPP SWEEP ERROR:", err);
+      })
+  );
+
+  ctx.waitUntil(
+    runEmailAlertsSweep(env, { source: "cron" })
+      .then((r) => {
+        console.log("CRON EMAIL SWEEP OK", JSON.stringify(r || {}));
+      })
+      .catch((err) => {
+        console.error("CRON EMAIL SWEEP ERROR:", err);
+      })
+  );
+
+  ctx.waitUntil(
+    sendPendingEmailDigests(env)
+      .then((r) => {
+        console.log("CRON EMAIL DIGEST OK", JSON.stringify(r || {}));
+      })
+      .catch((err) => {
+        console.error("CRON EMAIL DIGEST ERROR:", err);
+      })
+  );
 }
 };
 export {
