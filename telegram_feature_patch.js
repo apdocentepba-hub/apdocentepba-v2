@@ -330,6 +330,9 @@
     }
   }
 
+  let lastTelegramStatus = null;
+  let lastWhatsAppStatus = null;
+
   function patchFunctions() {
     patchWorkerFetchJson();
 
@@ -402,7 +405,7 @@
         if (tgCheck) tgCheck.checked = tgRequested;
         if (waCheck) waCheck.checked = waRequested;
 
-        renderTelegramStatus({
+        lastTelegramStatus = {
           connected: !!pref.telegram_connected,
           allowed_by_plan: pref.telegram_allowed_by_plan !== false,
           plan_name: pref.telegram_plan_name || '',
@@ -411,16 +414,19 @@
           bot_username: pref.telegram_bot_username || '',
           chat_id_masked: pref.telegram_chat_id_masked || '',
           username: pref.telegram_username || ''
-        }, tgRequested);
+        };
 
-        renderWhatsAppStatus({
+        lastWhatsAppStatus = {
           connected: !!pref.whatsapp_connected,
           allowed_by_plan: !!pref.whatsapp_allowed_by_plan,
           plan_name: pref.whatsapp_plan_name || '',
           plan_code: pref.whatsapp_plan_code || '',
           phone_masked: pref.whatsapp_phone_masked || '',
           connect_hint: pref.whatsapp_connect_hint || ''
-        }, waRequested);
+        };
+
+        renderTelegramStatus(lastTelegramStatus, tgRequested);
+        renderWhatsAppStatus(lastWhatsAppStatus, waRequested);
 
         renderChannelSummary(pref);
         return out;
@@ -435,9 +441,9 @@
     box.addEventListener('change', () => {
       const requested = !!box.checked;
       if (type === 'telegram') {
-        renderTelegramStatus({ allowed_by_plan: true }, requested);
+        renderTelegramStatus(lastTelegramStatus || { allowed_by_plan: true }, requested);
       } else {
-        renderWhatsAppStatus({ allowed_by_plan: !box.disabled }, requested);
+        renderWhatsAppStatus(lastWhatsAppStatus || { allowed_by_plan: !box.disabled }, requested);
       }
     });
     box.dataset.channelsBound = '1';
