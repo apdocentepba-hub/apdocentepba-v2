@@ -8248,6 +8248,8 @@ async function handleTelegramWebhook(request, env) {
 
     const entitlement = await resolveTelegramEntitlement(env, userId);
     const prev = await getTelegramState(env, userId) || {};
+    const prefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+    const alertsRequested = !!prefs?.alertas_telegram;
 
     const next = await saveTelegramState(env, userId, {
       connected: true,
@@ -8255,8 +8257,8 @@ async function handleTelegramWebhook(request, env) {
       username: String(message?.from?.username || "").trim(),
       first_name: String(message?.from?.first_name || "").trim(),
       connected_at: prev.connected_at || new Date().toISOString(),
-      alerts_requested: typeof prev.alerts_requested === "boolean" ? prev.alerts_requested : true,
-      alerts_enabled: entitlement.allowed ? (typeof prev.alerts_requested === "boolean" ? prev.alerts_requested : true) : false,
+      alerts_requested: alertsRequested,
+      alerts_enabled: !!(entitlement.allowed && alertsRequested),
       last_inbound_at: new Date().toISOString()
     });
 
@@ -8293,9 +8295,33 @@ async function handleTelegramWebhook(request, env) {
   const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
 
   if (command.kind === "alertas") {
-    if (!prefs?.alertas_activas || !state?.alerts_enabled) {
-      await sendTelegramText(env, chatId, "Telegram todavía no está activo en tus preferencias. Entrá al panel, activalo y después escribí ALERTAS.").catch(() => null);
-      return json2({ ok: true, delivered: false, reason: "telegram_not_enabled" });
+    const telegramConnected = !!state?.connected && !!String(state?.chat_id || "").trim();
+    const telegramEnabledNow =
+      !!prefs?.alertas_activas &&
+      !!prefs?.alertas_telegram &&
+      !!entitlement.allowed &&
+      telegramConnected;
+
+    await saveTelegramState(env, user.id, {
+      alerts_requested: !!prefs?.alertas_telegram,
+      alerts_enabled: telegramEnabledNow
+    }).catch(() => null);
+
+    if (!telegramEnabledNow) {
+      await sendTelegramText(
+        env,
+        chatId,
+        "Telegram todavía no está activo en tus preferencias. Entrá al panel, activalo y después escribí ALERTAS."
+      ).catch(() => null);
+
+      return json2({
+        ok: true,
+        delivered: false,
+        reason: "telegram_not_enabled",
+        connected: telegramConnected,
+        alerts_requested: !!prefs?.alertas_telegram,
+        alerts_enabled: telegramEnabledNow
+      });
     }
 
     const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
