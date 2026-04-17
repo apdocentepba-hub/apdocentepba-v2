@@ -864,7 +864,7 @@ var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
 var WHATSAPP_ALERTS_PER_USER_MAX = 3;
 var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
 var WHATSAPP_QUERY_ALERTS_LIMIT = 5;
-var TELEGRAM_QUERY_ALERTS_LIMIT = 5;
+var TELEGRAM_QUERY_ALERTS_LIMIT = 10;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 function jsonResponse(obj, status = 200) {
@@ -4987,47 +4987,13 @@ async function construirAlertasParaUsuario(env, userId) {
       descartadas_total: 0,
       descartadas_preview: [],
       debug_distritos: [],
-      resultados: [],
-      pid: {
-        found: false,
-        listado: "",
-        anio: "",
-        total_rows: 0,
-        distritos_solicitados: []
-      }
+      resultados: []
     };
   }
 
-  const resolvedPlan = await resolverPlanUsuario(env, userId).catch(() => null);
-  const planCode = String(
-    resolvedPlan?.plan?.code ||
-    resolvedPlan?.subscription?.plan_code ||
-    ""
-  ).trim().toUpperCase();
-
-  const pidEnabled = planCode === "INSIGNE";
-
   const catalogos = await cargarCatalogos(env);
-  const districtIndex = buildDistrictIndex(catalogos);
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
-
-  const ultimaPid = pidEnabled
-    ? await obtenerUltimaPidGuardada(userId).catch(() => null)
-    : null;
-
-  const pidRows = pidEnabled ? normalizePidRows(ultimaPid) : [];
-  const pidDistricts = pidEnabled
-    ? extractPidRequestedDistricts(ultimaPid, districtIndex)
-    : [];
-
-  const pidMeta =
-    pidEnabled && ultimaPid
-      ? {
-          listado: String(ultimaPid?.listado || "").trim(),
-          anio: String(ultimaPid?.anio || "").trim()
-        }
-      : null;
 
   const resultados = [];
   const descartadas = [];
@@ -5049,41 +5015,27 @@ async function construirAlertasParaUsuario(env, userId) {
       ""
     ).trim().toUpperCase();
 
-    if ([
-      "CERRADA",
-      "FINALIZADA",
-      "FINALIZADO",
-      "VENCIDA",
-      "VENCIDO",
-      "ANULADA",
-      "ANULADO",
-      "DESIERTA",
-      "DESIERTO",
-      "DESIGNADA",
-      "DESIGNADO",
-      "NO VIGENTE"
-    ].includes(estado)) {
+    if (
+      [
+        "CERRADA",
+        "CERRADO",
+        "FINALIZADA",
+        "FINALIZADO",
+        "VENCIDA",
+        "VENCIDO",
+        "ANULADA",
+        "ANULADO",
+        "DESIERTA",
+        "DESIERTO",
+        "DESIGNADA",
+        "DESIGNADO",
+        "NO VIGENTE"
+      ].includes(estado)
+    ) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
         motivo: "estado_no_vigente",
         estado
-      });
-      continue;
-    }
-
-    const cierre = parseFechaFlexible(
-      oferta?.finoferta ||
-      oferta?.fecha_cierre ||
-      oferta?.fecha_cierre_raw ||
-      oferta?.cierre ||
-      ""
-    );
-
-    if (cierre && cierre.getTime() < Date.now()) {
-      descartadas.push({
-        iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "fecha_vencida",
-        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null
       });
       continue;
     }
@@ -5100,26 +5052,25 @@ async function construirAlertasParaUsuario(env, userId) {
     vistos.add(clave);
 
     const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+    const item = buildAlertItem(oferta, evaluacion);
 
-    const pidCheck = pidEnabled
-      ? evaluatePidCompatibility(oferta, ultimaPid, pidRows, districtIndex)
-      : null;
-
-    const item = buildAlertItem(
-      oferta,
-      evaluacion,
-      pidEnabled
-        ? {
-            ...pidCheck,
-            meta: pidMeta
-          }
-        : null
+    const cierre = parseFechaFlexible(
+      oferta?.finoferta ||
+      oferta?.fecha_cierre ||
+      oferta?.fecha_cierre_raw ||
+      oferta?.cierre ||
+      ""
     );
+
+    item.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
 
     if (evaluacion.match) {
       resultados.push(item);
     } else {
-      descartadas.push({ ...item, motivo: "no_coincide_preferencias" });
+      descartadas.push({
+        ...item,
+        motivo: "no_coincide_preferencias"
+      });
     }
   }
 
@@ -5134,31 +5085,6 @@ async function construirAlertasParaUsuario(env, userId) {
     user,
     preferencias_originales: prefs,
     preferencias_canonizadas: prefsCanon,
-    pid: pidEnabled
-      ? (
-          ultimaPid
-            ? {
-                found: true,
-                listado: pidMeta?.listado || "",
-                anio: pidMeta?.anio || "",
-                total_rows: pidRows.length,
-                distritos_solicitados: pidDistricts
-              }
-            : {
-                found: false,
-                listado: "",
-                anio: "",
-                total_rows: 0,
-                distritos_solicitados: []
-              }
-        )
-      : {
-          found: false,
-          listado: "",
-          anio: "",
-          total_rows: 0,
-          distritos_solicitados: []
-        },
     total_fuente: ofertas.length,
     total: resultados.length,
     descartadas_total: descartadas.length,
@@ -6827,12 +6753,29 @@ function escaparSolr(text) {
 }
 __name(escaparSolr, "escaparSolr");
 function ofertaEsVisibleParaAlerta(oferta) {
-  const estado = norm(oferta?.estado || "");
-  const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
-  const ahora = Date.now();
-  if (estado.includes("ANULADA")) return false;
-  if (estado.includes("DESIGNADA")) return false;
-  if (fin && fin < ahora - 48 * 60 * 60 * 1e3) return false;
+  const estado = norm(
+    oferta?.estado ||
+    oferta?.estado_oferta ||
+    oferta?.estado_actual ||
+    ""
+  );
+
+  if (
+    estado.includes("ANULADA") ||
+    estado.includes("ANULADO") ||
+    estado.includes("DESIGNADA") ||
+    estado.includes("DESIGNADO") ||
+    estado.includes("DESIERTA") ||
+    estado.includes("DESIERTO") ||
+    estado.includes("NO VIGENTE") ||
+    estado.includes("CERRADA") ||
+    estado.includes("CERRADO") ||
+    estado.includes("FINALIZADA") ||
+    estado.includes("FINALIZADO")
+  ) {
+    return false;
+  }
+
   return true;
 }
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
@@ -8099,22 +8042,27 @@ function buildTelegramQueryDigest(alerts) {
   const visible = all.slice(0, TELEGRAM_QUERY_ALERTS_LIMIT);
   const hidden = Math.max(0, all.length - visible.length);
 
-  const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+  const header = `🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`;
 
-  visible.forEach((item, idx) => {
+  const blocks = visible.map((item, idx) => {
     const payload = item?.offer_payload || item || {};
-    lines.push(...buildRichTextAlertLines(payload, idx));
-    lines.push("");
-  });
+    return buildRichTextAlertLines(payload, idx).join("\n");
+  }).filter(Boolean);
 
-  if (hidden > 0) {
-    lines.push(`+ ${hidden} más en el panel`, "");
+  let text = header;
+
+  if (blocks.length) {
+    text += "\n\n" + blocks.join("\n\n━━━━━━━━━━━━\n\n");
   }
 
-  lines.push("🌐 https://alertasapd.com.ar");
-  lines.push("Escribí ALERTAS para refrescar.");
+  if (hidden > 0) {
+    text += `\n\n+ ${hidden} más en el panel`;
+  }
 
-  return lines.filter(Boolean).join("\n");
+  text += "\n\n🌐 https://alertasapd.com.ar";
+  text += "\nEscribí ALERTAS para refrescar.";
+
+  return text;
 }
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 function buildWhatsAppQueryDigest(alerts) {
@@ -8122,22 +8070,27 @@ function buildWhatsAppQueryDigest(alerts) {
   const visible = all.slice(0, WHATSAPP_QUERY_ALERTS_LIMIT);
   const hidden = Math.max(0, all.length - visible.length);
 
-  const lines = [`🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`, ""];
+  const header = `🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`;
 
-  visible.forEach((item, idx) => {
+  const blocks = visible.map((item, idx) => {
     const payload = item?.offer_payload || item || {};
-    lines.push(...buildRichTextAlertLines(payload, idx));
-    lines.push("");
-  });
+    return buildRichTextAlertLines(payload, idx).join("\n");
+  }).filter(Boolean);
 
-  if (hidden > 0) {
-    lines.push(`+ ${hidden} más en el panel`, "");
+  let text = header;
+
+  if (blocks.length) {
+    text += "\n\n" + blocks.join("\n\n━━━━━━━━━━━━\n\n");
   }
 
-  lines.push("🌐 https://alertasapd.com.ar");
-  lines.push("Escribí ALERTAS para refrescar.");
+  if (hidden > 0) {
+    text += `\n\n+ ${hidden} más en el panel`;
+  }
 
-  return lines.filter(Boolean).join("\n");
+  text += "\n\n🌐 https://alertasapd.com.ar";
+  text += "\nEscribí ALERTAS para refrescar.";
+
+  return text;
 }
 __name(buildWhatsAppQueryDigest, "buildWhatsAppQueryDigest");
 async function sendWhatsAppText(env, destination, text) {
