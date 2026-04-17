@@ -1,0 +1,23 @@
+{
+  "source_url": "http://servicios.abc.gov.ar/servaddo/cargos.areas/",
+  "total_pages": 232,
+  "last_capture_total_unique_rows": 2194,
+  "notes": [
+    "El total visual de ABC puede mostrar 2320 registros, pero hay filas repetidas. La captura actual quedó deduplicada en 2194 filas únicas.",
+    "El script browser en tools/catalogo_cargos_areas_sync_browser.js vuelve a recorrer las 232 páginas y genera JSON y CSV listos para importar en Supabase.",
+    "La idea es usar este catálogo como semilla local y luego refrescarlo cuando ABC agregue o cambie cargos/áreas."
+  ],
+  "target_schema": {
+    "table": "catalogo_cargos_areas",
+    "columns": [
+      "codigo",
+      "codigo_norm",
+      "nombre",
+      "nombre_norm",
+      "apd_nombre",
+      "apd_nombre_norm",
+      "fuente",
+      "pagina"
+    ]
+  }
+}
