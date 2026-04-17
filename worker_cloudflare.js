@@ -6576,12 +6576,7 @@ const CARGO_EQUIV = {
   ]
 };
 
-function stripCargoCodeSuffix(value) {
-  const raw = norm(value);
-  if (!raw) return "";
-  const m = raw.match(/^(.*?)\s+\(([A-Z0-9./-]{2,20})\)$/);
-  return m ? norm(m[1] || "") : raw;
-}
+
 
 function cargoVariants(value) {
   const base = norm(value);
@@ -6617,24 +6612,7 @@ function cargoVariants(value) {
   return [...out].filter(Boolean);
 }
 
-function cargoTokensExpanded(value) {
-  const stop = new Set([
-    "DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A", "AL",
-    "CON", "SIN", "POR", "PARA", "E", "INF", "COMP"
-  ]);
 
-  const tokens = new Set();
-
-  for (const variant of cargoVariants(value)) {
-    for (const token of variant.split(" ")) {
-      const t = norm(token);
-      if (!t || t.length < 2 || stop.has(t)) continue;
-      tokens.add(t);
-    }
-  }
-
-  return [...tokens];
-}
 
 function cargoTextOferta(oferta) {
   return norm([
@@ -6704,12 +6682,79 @@ function canonizarListaDistritos(lista, catalogo) {
   return { humanos: unique(humanos), apd: unique(apd) };
 }
 __name(canonizarListaDistritos, "canonizarListaDistritos");
+
+
+function stripCargoCodeSuffix(value) {
+  const raw = norm(value);
+  if (!raw) return "";
+  const m = raw.match(/^(.*?)\s+\(([A-Z0-9./-]{2,20})\)$/);
+  return m ? norm(m[1] || "") : raw;
+}
+
+
+function cargoTokensExpanded(value) {
+  const stop = new Set([
+    "DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A", "AL",
+    "CON", "SIN", "POR", "PARA", "E", "INF", "COMP"
+  ]);
+
+  const tokens = new Set();
+
+  for (const variant of cargoVariants(value)) {
+    for (const token of variant.split(" ")) {
+      const t = norm(token);
+      if (!t || t.length < 2 || stop.has(t)) continue;
+      tokens.add(t);
+    }
+  }
+
+  return [...tokens];
+}
+
+function buscarCargoEnCatalogo(lista, valor) {
+  const variants = cargoVariants(valor);
+  if (!variants.length) return null;
+
+  for (const variant of variants) {
+    const variantNoSpaces = variant.replace(/\s+/g, "");
+
+    const exacto = (lista || []).find((item) => {
+      const nombre = norm(item?.nombre_norm || item?.nombre || "");
+      const apd = norm(item?.apd_nombre_norm || item?.apd_nombre || "");
+      const codigo = norm(item?.codigo || "").replace(/\s+/g, "");
+
+      return (
+        nombre === variant ||
+        apd === variant ||
+        (codigo && codigo === variantNoSpaces)
+      );
+    });
+
+    if (exacto) return exacto;
+  }
+
+  for (const variant of variants) {
+    const hit = (lista || []).find((item) => {
+      const nombre = norm(item?.nombre_norm || item?.nombre || "");
+      const apd = norm(item?.apd_nombre_norm || item?.apd_nombre || "");
+
+      return (
+        (nombre && (nombre.includes(variant) || variant.includes(nombre))) ||
+        (apd && (apd.includes(variant) || variant.includes(apd)))
+      );
+    });
+
+    if (hit) return hit;
+  }
+
+  return null;
+}
 function canonizarListaCargosOMaterias(lista, catalogo) {
   const humanos = [];
   const apd = [];
 
   for (const item of lista || []) {
-    const hit = buscarEnCatalogo(catalogo, item);
+    const hit = buscarCargoEnCatalogo(catalogo, item);
 
     if (hit) {
       humanos.push(norm(hit.nombre || item));
@@ -6718,10 +6763,14 @@ function canonizarListaCargosOMaterias(lista, catalogo) {
       const codigo = norm(hit.codigo || "").replace(/\s+/g, "");
       if (codigo && CARGO_EQUIV[codigo]) {
         for (const eq of CARGO_EQUIV[codigo]) {
-          humanos.push(norm(eq));
-          apd.push(norm(eq));
+          const n = norm(eq);
+          if (n) {
+            humanos.push(n);
+            apd.push(n);
+          }
         }
       }
+
       continue;
     }
 
@@ -6991,28 +7040,33 @@ function matchCargosMaterias(oferta, prefs) {
     return { ok: true, motivo: "Sin filtro de cargo o materia" };
   }
 
-  const textoOferta = cargoTextOferta(oferta);
+  const textoOferta = norm([
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ].filter(Boolean).join(" "));
 
   if (!textoOferta) {
     return { ok: false, motivo: "La oferta no trae cargo o materia" };
   }
 
   const offerTokens = new Set(
-    textoOferta.split(" ").map(t => norm(t)).filter(Boolean)
+    textoOferta.split(" ").map((t) => norm(t)).filter(Boolean)
   );
 
-  const ok = prefsCM.some(pref => {
+  const ok = prefsCM.some((pref) => {
     const variants = cargoVariants(pref);
 
-    return variants.some(variant => {
+    return variants.some((variant) => {
       if (!variant) return false;
 
-      // match directo por includes
       if (textoOferta.includes(variant) || variant.includes(textoOferta)) {
         return true;
       }
 
-      // match por tokens expandidos
       const prefTokens = cargoTokensExpanded(variant);
       if (!prefTokens.length) return false;
 
@@ -7023,7 +7077,6 @@ function matchCargosMaterias(oferta, prefs) {
 
       const coverage = overlap / Math.max(prefTokens.length, 1);
 
-      // umbral razonable: 60% o al menos 2 tokens fuertes compartidos
       return coverage >= 0.6 || overlap >= 2;
     });
   });
