@@ -9,7 +9,7 @@
     const codigo = String(row?.codigo || "").trim().toUpperCase();
     const nombre = String(row?.nombre || row?.apd_nombre || "").trim().toUpperCase();
     if (!nombre) return "";
-    return codigo ? `${nombre} (${codigo})` : nombre;
+    return codigo ? `(${codigo}) ${nombre}` : nombre;
   }
 
   async function buscarSugerenciasCargosSupabasePattern(term, mode) {
