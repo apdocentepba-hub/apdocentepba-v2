@@ -5079,9 +5079,46 @@ async function construirAlertasParaUsuario(env, userId) {
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
 
+  const resolved = await resolverPlanUsuario(env, userId).catch(() => null);
+  const planCode = String(
+    resolved?.plan?.code ||
+    resolved?.subscription?.plan_code ||
+    ""
+  ).trim().toUpperCase();
+
+  const pidEnabled = planCode === "INSIGNE";
+
+  let pidData = null;
+  let pidRows = [];
+  let districtIndex = new Map();
+  let pidMeta = null;
+
+  if (pidEnabled) {
+    pidData = await obtenerUltimaPidGuardada(userId).catch(() => null);
+    pidRows = normalizePidRows(pidData);
+    districtIndex = buildDistrictIndex(catalogos);
+
+    pidMeta = {
+      listado: String(
+        pidData?.result?.listado ||
+        pidData?.result?.tipo_listado ||
+        pidData?.result?.listado_tipo ||
+        pidData?.listado ||
+        ""
+      ).trim(),
+      anio: String(
+        pidData?.result?.anio ||
+        pidData?.result?.year ||
+        pidData?.anio ||
+        ""
+      ).trim()
+    };
+  }
+
   const resultados = [];
   const descartadas = [];
   const vistos = new Set();
+  const compatiblesParaPostulantes = [];
 
   for (const oferta of ofertas) {
     if (!ofertaEsVisibleParaAlerta(oferta)) {
@@ -5136,7 +5173,6 @@ async function construirAlertasParaUsuario(env, userId) {
     vistos.add(clave);
 
     const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
-    const item = buildAlertItem(oferta, evaluacion);
 
     const cierre = parseFechaFlexible(
       oferta?.finoferta ||
@@ -5146,15 +5182,80 @@ async function construirAlertasParaUsuario(env, userId) {
       ""
     );
 
-    item.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
+    if (!evaluacion.match) {
+      const itemDescartado = buildAlertItem(oferta, evaluacion, null);
+      itemDescartado.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
 
-    if (evaluacion.match) {
-      resultados.push(item);
-    } else {
       descartadas.push({
-        ...item,
+        ...itemDescartado,
         motivo: "no_coincide_preferencias"
       });
+      continue;
+    }
+
+    let pidInfo = null;
+
+    if (pidEnabled) {
+      if (!pidData) {
+        pidInfo = {
+          compatible: false,
+          reason: "Sin PID guardada",
+          district_ok: false,
+          area_ok: false,
+          bloque_ok: false,
+          match: null,
+          pid_distritos: [],
+          meta: pidMeta
+        };
+      } else if (!pidRows.length) {
+        pidInfo = {
+          compatible: false,
+          reason: "Tu PID guardada no tiene filas utilizables todavía",
+          district_ok: false,
+          area_ok: false,
+          bloque_ok: false,
+          match: null,
+          pid_distritos: [],
+          meta: pidMeta
+        };
+      } else {
+        pidInfo = {
+          ...evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex),
+          meta: pidMeta
+        };
+      }
+    }
+
+    const item = buildAlertItem(oferta, evaluacion, pidInfo);
+    item.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
+
+    if (pidEnabled && pidInfo?.compatible && (item.idoferta || item.iddetalle)) {
+      compatiblesParaPostulantes.push(item);
+    }
+
+    resultados.push(item);
+  }
+
+  if (pidEnabled && compatiblesParaPostulantes.length) {
+    for (let i = 0; i < compatiblesParaPostulantes.length; i += 5) {
+      const chunk = compatiblesParaPostulantes.slice(i, i + 5);
+
+      const enriched = await Promise.all(
+        chunk.map(async (item) => {
+          try {
+            const resumen = await obtenerResumenPostulantesABC(item.idoferta, item.iddetalle);
+            return { item, resumen };
+          } catch {
+            return { item, resumen: null };
+          }
+        })
+      );
+
+      for (const { item, resumen } of enriched) {
+        item.total_postulantes = resumen?.total_postulantes ?? null;
+        item.puntaje_primero = resumen?.puntaje_primero ?? null;
+        item.listado_origen_primero = resumen?.listado_origen_primero || "";
+      }
     }
   }
 
