@@ -864,7 +864,7 @@ var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
 var WHATSAPP_ALERTS_PER_USER_MAX = 3;
 var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
 var WHATSAPP_QUERY_ALERTS_LIMIT = 5;
-var TELEGRAM_QUERY_ALERTS_LIMIT = 10;
+var TELEGRAM_QUERY_ALERTS_LIMIT = 5;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 function jsonResponse(obj, status = 200) {
@@ -8464,16 +8464,102 @@ __name(buildTelegramBotLink, "buildTelegramBotLink");
 async function sendTelegramText(env, chatId, text) {
   const token = String(env.TELEGRAM_BOT_TOKEN || "").trim();
   if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
+
+  const safeText = String(text || "").trim();
+  if (!safeText) throw new Error("Mensaje Telegram vacío");
+
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true })
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: safeText,
+      disable_web_page_preview: true
+    })
   });
+
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.ok) throw new Error(data?.description || `Telegram HTTP ${res.status}`);
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || `Telegram HTTP ${res.status}`);
+  }
+
   return data;
 }
 __name(sendTelegramText, "sendTelegramText");
+function splitTelegramText(text, maxLen = 3500) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const chunks = [];
+  const blocks = raw.split("\n\n");
+  let current = "";
+
+  const pushCurrent = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = "";
+  };
+
+  for (const block of blocks) {
+    const candidate = current ? `${current}\n\n${block}` : block;
+
+    if (candidate.length <= maxLen) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) pushCurrent();
+
+    if (block.length <= maxLen) {
+      current = block;
+      continue;
+    }
+
+    const lines = block.split("\n");
+    let lineChunk = "";
+
+    for (const line of lines) {
+      const lineCandidate = lineChunk ? `${lineChunk}\n${line}` : line;
+
+      if (lineCandidate.length <= maxLen) {
+        lineChunk = lineCandidate;
+        continue;
+      }
+
+      if (lineChunk.trim()) {
+        chunks.push(lineChunk.trim());
+        lineChunk = "";
+      }
+
+      if (line.length <= maxLen) {
+        lineChunk = line;
+      } else {
+        for (let i = 0; i < line.length; i += maxLen) {
+          chunks.push(line.slice(i, i + maxLen));
+        }
+      }
+    }
+
+    if (lineChunk.trim()) {
+      chunks.push(lineChunk.trim());
+    }
+  }
+
+  if (current.trim()) pushCurrent();
+
+  return chunks.filter(Boolean);
+}
+
+async function sendTelegramLongText(env, chatId, text, maxLen = 3500) {
+  const parts = splitTelegramText(text, maxLen);
+  let last = null;
+
+  for (const part of parts) {
+    last = await sendTelegramText(env, chatId, part);
+  }
+
+  return last;
+}
 function requireTelegramWebhookSecret(request, env) {
   const configured = String(env.TELEGRAM_WEBHOOK_SECRET || "").trim();
   if (!configured) return;
@@ -8848,18 +8934,28 @@ async function handleTelegramWebhook(request, env) {
     );
 
     const reply = alerts.length
-      ? buildTelegramQueryDigest(alerts)
-      : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+  ? buildTelegramQueryDigest(alerts)
+  : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
 
-    await sendTelegramText(env, chatId, reply).catch(() => null);
+try {
+  await sendTelegramLongText(env, chatId, reply);
+} catch (err) {
+  console.error("TELEGRAM ALERTS SEND ERROR:", err);
 
-    return json2({
-      ok: true,
-      delivered: true,
-      total_alerts: rawAlerts.length,
-      plan_code: entitlement.plan_code,
-      channel_mode: "query_only"
-    });
+  const fallback = rawAlerts.length
+    ? `Encontré ${rawAlerts.length} alerta(s) compatibles, pero el detalle fue demasiado largo para Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
+    : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+
+  await sendTelegramText(env, chatId, fallback).catch(() => null);
+}
+
+return json2({
+  ok: true,
+  delivered: true,
+  total_alerts: rawAlerts.length,
+  plan_code: entitlement.plan_code,
+  channel_mode: "query_only"
+});
   }
 
   await sendTelegramText(
