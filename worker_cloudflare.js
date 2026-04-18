@@ -8941,15 +8941,7 @@ var worker_hotfix_default = {
       })
   );
 
-  ctx.waitUntil(
-    sendPendingEmailDigests(env)
-      .then((r) => {
-        console.log("CRON EMAIL DIGEST OK", JSON.stringify(r || {}));
-      })
-      .catch((err) => {
-        console.error("CRON EMAIL DIGEST ERROR:", err);
-      })
-  );
+  
 }
 };
 export {
