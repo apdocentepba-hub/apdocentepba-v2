@@ -3983,19 +3983,13 @@ async function runEmailAlertsSweep(env, options = {}) {
     const totalAlerts = sortedLatest.length;
     const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
-    const visibleAlerts = await enrichAlertsForRichChannels(
-      env,
-      user,
-      visibleSource,
-      MAX_VISIBLE_ALERTS_IN_EMAIL
-    );
+    const visibleAlerts = visibleSource.map((item) => ({
+  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+}));
 
-    const shownCount = visibleAlerts.length;
+const shownCount = visibleAlerts.length;
 
-    const subject =
-      totalAlerts > shownCount
-        ? `${shownCount} nuevas ofertas de ${totalAlerts}`
-        : `${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} oferta${totalAlerts === 1 ? "" : "s"}`;
+    const subject = `Tus ${shownCount} alertas más recientes de APDocentePBA`;
 
     const payload = {
       source: options.source || "cron",
@@ -7714,17 +7708,16 @@ async function sendPendingEmailDigests(env, options = {}) {
     processedUsers += 1;
 
     const rawAlerts = rows.map(row => row?.payload?.alert || row?.payload || {});
-    const alerts = await enrichAlertsForRichChannels(
-      env,
-      user,
-      rawAlerts,
-      MAX_VISIBLE_ALERTS_IN_EMAIL
-    );
+const alerts = rawAlerts
+  .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
+  .map((item) => ({
+    offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+  }));
 
-    if (!alerts.length) continue;
+if (!alerts.length) continue;
 
-    const totalAlerts = rows.length;
-    const shownCount = alerts.length;
+const totalAlerts = rows.length;
+const shownCount = alerts.length;
 
     const asunto =
       totalAlerts > shownCount
@@ -7852,10 +7845,7 @@ function buildDigestHtml(alerts, user, options = {}) {
   const showingCount = visibleAlerts.length;
   const remainingCount = Math.max(0, totalAlerts - showingCount);
 
- const title =
-  totalAlerts > showingCount
-    ? `${showingCount} nuevas ofertas de ${totalAlerts}`
-    : `${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} oferta${totalAlerts === 1 ? "" : "s"}`;
+ 
 
   const intro =
     String(options?.intro_text || "").trim() ||
