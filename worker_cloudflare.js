@@ -5337,15 +5337,24 @@ async function construirAlertasParaUsuario(env, userId) {
     if (vistos.has(clave)) continue;
     vistos.add(clave);
 
-    const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
-
     const cierre = parseFechaFlexible(
-      oferta?.finoferta ||
-      oferta?.fecha_cierre ||
-      oferta?.fecha_cierre_raw ||
-      oferta?.cierre ||
-      ""
-    );
+  oferta?.finoferta ||
+  oferta?.fecha_cierre ||
+  oferta?.fecha_cierre_raw ||
+  oferta?.cierre ||
+  ""
+);
+
+if (cierre && cierre.getTime() < Date.now()) {
+  descartadas.push({
+    iddetalle: oferta.iddetalle || oferta.id || null,
+    motivo: "cierre_pasado",
+    finoferta: oferta?.finoferta || oferta?.fecha_cierre || ""
+  });
+  continue;
+}
+
+const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
 
     if (!evaluacion.match) {
       const itemDescartado = buildAlertItem(oferta, evaluacion, null);
