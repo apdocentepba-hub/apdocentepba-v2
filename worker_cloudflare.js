@@ -7718,12 +7718,7 @@ if (!alerts.length) continue;
 
 const totalAlerts = rows.length;
 const shownCount = alerts.length;
-
-    const asunto =
-      totalAlerts > shownCount
-        ? `APDocentePBA: ${shownCount} de ${totalAlerts} alertas nuevas`
-        : `APDocentePBA: ${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} alerta${totalAlerts === 1 ? "" : "s"} para vos`;
-
+const asunto = `Tus ${shownCount} alertas más recientes de APDocentePBA`;
     const html = buildDigestHtml(alerts, user, {
       total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
@@ -7845,18 +7840,18 @@ function buildDigestHtml(alerts, user, options = {}) {
   const showingCount = visibleAlerts.length;
   const remainingCount = Math.max(0, totalAlerts - showingCount);
 
- 
+  const title = `Tus ${showingCount} alertas más recientes`;
 
   const intro =
     String(options?.intro_text || "").trim() ||
-    `Hola ${escHtml(user?.nombre || "")}, estas son las alertas nuevas compatibles con tus preferencias.`;
+    `Hola ${escHtml(user?.nombre || "")}, estas son las alertas compatibles más recientes con tus preferencias.`;
 
   const items = visibleAlerts.map(renderMailOfferCard).join("");
 
   const moreNote = remainingCount > 0
     ? `
       <div style="margin-top:14px;padding:12px 14px;background:#fff8e8;border:1px solid #f2d38b;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b4e00;">
-        Mostramos las ${showingCount} más nuevas. Tenés ${remainingCount} alerta${remainingCount === 1 ? "" : "s"} más para revisar en el panel.
+        Te enviamos las ${showingCount} alertas más recientes compatibles con tus preferencias. Para revisar el resto, entrá al panel.
       </div>
     `
     : "";
@@ -7918,8 +7913,6 @@ function buildDigestHtml(alerts, user, options = {}) {
     </div>
   `;
 }
-__name(buildDigestHtml, "buildDigestHtml");
-
 // worker_hotfix.js
 var API_URL_PREFIX3 = "/api";
 var LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
