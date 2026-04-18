@@ -4152,11 +4152,79 @@ function parseWhatsAppBodyParameters(raw) {
 }
 __name(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 async function runWhatsAppAlertsSweep(env, options = {}) {
+  const source = options.source || "cron";
+
+  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID &&
+                     !!env.WHATSAPP_ACCESS_TOKEN &&
+                     !!env.WHATSAPP_TEMPLATE_ALERTA;
+  if (!configured) {
+    return { ok: true, skipped: true, reason: "not_configured", source };
+  }
+
+  const prefRows = await supabaseSelect(
+    env,
+    `user_preferences?alertas_activas=is.true&alertas_whatsapp=is.true&select=user_id&order=user_id.asc`
+  ).catch(() => []);
+
+  const total = Array.isArray(prefRows) ? prefRows.length : 0;
+  if (!total) {
+    return { ok: true, processed_users: 0, sent_count: 0, source, message: "Sin usuarios con WhatsApp activo" };
+  }
+
+  const MAX_USERS = clampInt(env.WHATSAPP_ALERT_SWEEP_MAX_USERS, 1, 100, WHATSAPP_ALERT_SWEEP_MAX_USERS);
+  const rowsToProcess = options?.target_user_id
+    ? prefRows.filter(r => String(r?.user_id || "").trim() === String(options.target_user_id).trim())
+    : prefRows.slice(0, MAX_USERS);
+
+  let processedUsers = 0;
+  let sentCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  for (const row of rowsToProcess) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    processedUsers += 1;
+    try {
+      const user = await obtenerUsuario(env, userId).catch(() => null);
+      if (!user?.activo) { skippedCount++; continue; }
+      if (!String(user?.whatsapp_number || "").trim()) { skippedCount++; continue; }
+
+      const alertData = await construirAlertasParaUsuario(env, userId).catch(() => null);
+      if (!alertData?.ok) { skippedCount++; continue; }
+
+      const items = Array.isArray(alertData?.resultados)
+        ? alertData.resultados
+        : Array.isArray(alertData?.alertas)
+          ? alertData.alertas
+          : [];
+
+      if (!items.length) { skippedCount++; continue; }
+
+      const alertsToSend = items.slice(0, WHATSAPP_ALERTS_PER_USER_MAX);
+      for (const alertItem of alertsToSend) {
+        try {
+          await sendWhatsAppAlertForUser(env, user, alertItem, { source });
+          sentCount++;
+        } catch (err) {
+          console.error("WA SEND ERROR user:", userId, err?.message);
+          failedCount++;
+        }
+      }
+    } catch (err) {
+      console.error("WA SWEEP USER ERROR:", userId, err?.message);
+      failedCount++;
+    }
+  }
+
   return {
     ok: true,
-    skipped: true,
-    reason: "query_mode_only",
-    source: options.source || "manual"
+    source,
+    processed_users: processedUsers,
+    sent_count: sentCount,
+    skipped_count: skippedCount,
+    failed_count: failedCount,
+    total_users: total
   };
 }
 __name(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
@@ -4275,11 +4343,27 @@ async function handleImportarCatalogoCargos(url, env) {
   let totalInsertados = 0;
   const debug = [];
   for (let pagina = desde; pagina <= hasta; pagina += 1) {
-    const paginaUrl = `https://servicios.abc.gov.ar/servaddo/cargos.areas/?page=${pagina}`;
-    const res = await fetch(paginaUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`ABC pagina ${pagina} respondio ${res.status}: ${txt.slice(0, 300)}`);
+    const ABC_CATALOGO_URLS = [
+      `https://servicios.abc.gov.ar/servaddo/cargos.areas/?page=${pagina}`,
+      `https://servicios3.abc.gob.ar/servaddo/cargos.areas/?page=${pagina}`
+    ];
+    let res = null;
+    let lastFetchErr = null;
+    for (const paginaUrl of ABC_CATALOGO_URLS) {
+      try {
+        res = await fetch(paginaUrl, {
+          headers: { "User-Agent": "Mozilla/5.0" },
+          cf: { minTLSVersion: "1.0" }
+        });
+        if (res.ok) break;
+      } catch (e) {
+        lastFetchErr = e;
+        res = null;
+      }
+    }
+    if (!res || !res.ok) {
+      const txt = res ? await res.text() : String(lastFetchErr?.message || "fetch failed");
+      throw new Error(`ABC pagina ${pagina} respondio ${res?.status ?? "ERR"}: ${txt.slice(0, 300)}`);
     }
     const html = await res.text();
     const items = parsearCargosDesdeHTML(html);
@@ -8941,7 +9025,29 @@ var worker_hotfix_default = {
       })
   );
 
-  
+  ctx.waitUntil(
+    sendPendingEmailDigests(env)
+      .then((r) => {
+        console.log("CRON EMAIL DIGESTS OK", JSON.stringify(r || {}));
+      })
+      .catch((err) => {
+        console.error("CRON EMAIL DIGESTS ERROR:", err);
+      })
+  );
+
+  ctx.waitUntil(
+    (async () => {
+      if (new Date().getDay() !== 1) return;
+      try {
+        const fakeUrl = new URL("https://worker/api/importar-catalogo-cargos?desde=1&hasta=20");
+        const result = await handleImportarCatalogoCargos(fakeUrl, env);
+        console.log("CRON CATALOGO SYNC OK", JSON.stringify(result));
+      } catch (err) {
+        console.error("CRON CATALOGO SYNC ERROR:", err);
+      }
+    })()
+  );
+
 }
 };
 export {

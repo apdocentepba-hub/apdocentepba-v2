@@ -2466,27 +2466,34 @@ function mergeSuggestionItems(...groups) {
 }
 
 async function buscarSugerenciasCargosSupabasePattern(pattern) {
+  // Delegar al patch si ya está cargado (cargo_autocomplete_catalog_patch.js)
+  if (typeof window.buscarSugerenciasCargosSupabasePattern === "function") {
+    const mode = pattern.startsWith("*") ? "contains" : "prefix";
+    return window.buscarSugerenciasCargosSupabasePattern(pattern, mode);
+  }
   const orFilter = encodeURIComponent(
     `(nombre_norm.ilike.${pattern},apd_nombre_norm.ilike.${pattern})`
   );
-
   const rows = await supabaseFetch(
-    `catalogo_cargos_areas?select=nombre,apd_nombre,nombre_norm,apd_nombre_norm&or=${orFilter}&order=nombre.asc&limit=${AUTOCOMPLETE_LIMIT}`
+    `catalogo_cargos_areas?select=codigo,nombre,apd_nombre,nombre_norm,apd_nombre_norm&or=${orFilter}&order=nombre.asc&limit=${AUTOCOMPLETE_LIMIT}`
   );
-
   return labelsUnicos(rows).slice(0, AUTOCOMPLETE_LIMIT).map(label => ({ label }));
 }
 
 async function buscarSugerenciasCargosSupabase(q) {
+  // Delegar al patch si ya está cargado (cargo_autocomplete_catalog_patch.js)
+  if (
+    typeof window.buscarSugerenciasCargosSupabase === "function" &&
+    window.buscarSugerenciasCargosSupabase !== buscarSugerenciasCargosSupabase
+  ) {
+    return window.buscarSugerenciasCargosSupabase(q);
+  }
   const needle = normalizarBusqueda(q);
   if (!needle || needle.length < 2) return [];
-
   const prefix = await buscarSugerenciasCargosSupabasePattern(`${needle}*`);
-
   if (prefix.length >= AUTOCOMPLETE_LIMIT || needle.length < 3) {
     return prefix;
   }
-
   const contains = await buscarSugerenciasCargosSupabasePattern(`*${needle}*`);
   return mergeSuggestionItems(prefix, contains).slice(0, AUTOCOMPLETE_LIMIT);
 }
