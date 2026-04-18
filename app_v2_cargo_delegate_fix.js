@@ -10,6 +10,16 @@
 
   let canonicalizeSeq = 0;
 
+  function getCargoInputIds() {
+    if (typeof CARGO_INPUT_IDS !== 'undefined' && Array.isArray(CARGO_INPUT_IDS)) {
+      return CARGO_INPUT_IDS;
+    }
+    if (Array.isArray(window.CARGO_INPUT_IDS)) {
+      return window.CARGO_INPUT_IDS;
+    }
+    return [];
+  }
+
   function formatCargoValue(raw) {
     const text = String(raw || '').trim();
     if (!text) return '';
@@ -67,11 +77,12 @@
   }
 
   async function canonicalizeCargoInputs() {
-    if (!Array.isArray(window.CARGO_INPUT_IDS)) return;
+    const cargoInputIds = getCargoInputIds();
+    if (!cargoInputIds.length) return;
 
     const seq = ++canonicalizeSeq;
 
-    for (const id of window.CARGO_INPUT_IDS) {
+    for (const id of cargoInputIds) {
       const input = document.getElementById(id);
       if (!input) continue;
 
@@ -103,8 +114,8 @@
         ? normalizeCacheKey(state.tipo, q)
         : `${state.tipo}|${q}`;
 
-      if (window.suggestionCache?.has(cacheKey)) {
-        renderACItems(state, normalizeCargoItems(window.suggestionCache.get(cacheKey)));
+      if (typeof suggestionCache !== 'undefined' && suggestionCache.has(cacheKey)) {
+        renderACItems(state, normalizeCargoItems(suggestionCache.get(cacheKey)));
         return;
       }
 
