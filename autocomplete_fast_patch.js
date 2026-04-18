@@ -4,6 +4,13 @@
   if (window.__apdAutocompleteFastPatchLoaded) return;
   window.__apdAutocompleteFastPatchLoaded = true;
 
+  const CARGO_ALIAS_MAP = {
+    CCD: 'CONSTRUCCION DE LA CIUDADANIA',
+    NTICX: 'NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD',
+    ACO: 'ENCARGADO MEDIOS APOYO TEC-PED.CONSTRUCCIONES',
+    EMATP: 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.'
+  };
+
   function normalizeCode(raw) {
     return String(raw || '')
       .toUpperCase()
@@ -16,36 +23,51 @@
     const text = String(raw || '').trim();
     if (!text) return { raw: '', name: '', code: '' };
 
-    const match = text.match(/^(.*?)(?:\s*\(([^()]{1,16})\))\s*$/);
-    if (!match) {
-      return { raw: text, name: text, code: '' };
+    const suffixMatch = text.match(/^(.*?)(?:\s*\(([^()]{1,16})\))\s*$/);
+    if (suffixMatch) {
+      const name = String(suffixMatch[1] || '').trim();
+      const code = normalizeCode(suffixMatch[2] || '');
+      if (name && code) return { raw: text, name, code };
     }
 
-    const name = String(match[1] || '').trim();
-    const code = normalizeCode(match[2] || '');
-
-    if (!name || !code) {
-      return { raw: text, name: text, code: '' };
+    const prefixMatch = text.match(/^\(([^()]{1,16})\)\s*(.*?)\s*$/);
+    if (prefixMatch) {
+      const code = normalizeCode(prefixMatch[1] || '');
+      const name = String(prefixMatch[2] || '').trim();
+      if (name && code) return { raw: text, name, code };
     }
 
-    return { raw: text, name, code };
+    const maybeCode = normalizeCode(text);
+    if (maybeCode && CARGO_ALIAS_MAP[maybeCode]) {
+      return { raw: text, name: CARGO_ALIAS_MAP[maybeCode], code: maybeCode };
+    }
+
+    return { raw: text, name: text, code: '' };
   }
 
-  function formatCargoDisplay(raw) {
+  function formatCargoDisplay(raw, explicitCode) {
     const info = splitCargoCode(raw);
-    if (!info.raw) return '';
-    if (!info.code) return info.name.toUpperCase();
-    return `(${info.code}) ${info.name}`.toUpperCase();
+    const code = normalizeCode(explicitCode || info.code);
+    const name = String(info.name || raw || '').trim().toUpperCase();
+    if (!name) return '';
+
+    const finalName = !code && CARGO_ALIAS_MAP[normalizeCode(name)]
+      ? CARGO_ALIAS_MAP[normalizeCode(name)]
+      : name;
+
+    return code ? `${finalName} (${code})`.toUpperCase() : finalName.toUpperCase();
   }
 
-  function buildCargoSearch(raw, display) {
+  function buildCargoSearch(raw, display, code) {
     const info = splitCargoCode(raw);
+    const cleanCode = normalizeCode(code || info.code);
     return normalizarBusqueda([
       display,
       info.raw,
       info.name,
-      info.code,
-      info.code ? `${info.code} ${info.name}` : ''
+      cleanCode,
+      cleanCode ? `${cleanCode} ${info.name}` : '',
+      cleanCode && CARGO_ALIAS_MAP[cleanCode] ? CARGO_ALIAS_MAP[cleanCode] : ''
     ].filter(Boolean).join(' '));
   }
 
@@ -54,11 +76,13 @@
     const seen = new Set();
 
     (Array.isArray(rows) ? rows : []).forEach(row => {
+      const code = normalizeCode(row?.codigo || '');
+
       [row?.nombre, row?.apd_nombre].forEach(raw => {
         const text = String(raw || '').trim();
         if (!text) return;
 
-        const label = formatCargoDisplay(text);
+        const label = formatCargoDisplay(text, code);
         const key = normalizarBusqueda(label);
         if (!label || !key || seen.has(key)) return;
 
@@ -66,7 +90,8 @@
         out.push({
           label,
           raw: text,
-          search: buildCargoSearch(text, label)
+          code,
+          search: buildCargoSearch(text, label, code)
         });
       });
     });
@@ -85,7 +110,7 @@
 
     catalogoAutocomplete.cargos.loading = (async () => {
       const rows = await supabaseFetch(
-        'catalogo_cargos_areas?select=nombre,apd_nombre&order=nombre.asc&limit=5000'
+        'catalogo_cargos_areas?select=codigo,nombre,apd_nombre&order=nombre.asc&limit=5000'
       );
       catalogoAutocomplete.cargos.items = buildCargoCatalogItems(rows);
       catalogoAutocomplete.cargos.ready = true;
@@ -126,7 +151,7 @@
       return String(a.item.label || '').localeCompare(String(b.item.label || ''), 'es');
     });
 
-    return scored.slice(0, AUTOCOMPLETE_LIMIT).map(entry => ({ label: entry.item.label, raw: entry.item.raw }));
+    return scored.slice(0, AUTOCOMPLETE_LIMIT).map(entry => ({ label: entry.item.label, raw: entry.item.raw, code: entry.item.code }));
   }
 
   function formatCargoInputValue(value) {
@@ -209,7 +234,7 @@
     if (state?.tipo === 'cargo_area') {
       const item = state.items[index];
       if (!item) return;
-      state.input.value = formatCargoInputValue(item.label || item.raw || '');
+      state.input.value = formatCargoDisplay(item.label || item.raw || '', item.code || '');
       hideAC(state);
       return;
     }
