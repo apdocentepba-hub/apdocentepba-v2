@@ -13,7 +13,8 @@
     ],
     EMATP: [
       "ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.",
-      "ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO"
+      "ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO",
+      "ENCARGADO DE MEDIOS DE APOYO TÉCNICO PEDAGÓGICO"
     ]
   };
 
@@ -51,6 +52,55 @@
     if (!codigo) return nombre;
     if (nombre.includes(`(${codigo})`)) return nombre;
     return `${nombre} (${codigo})`;
+  }
+
+  function normalizeCargoPreferenceInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const upper = raw.toUpperCase().replace(/\s+/g, " ").trim();
+    const normalized = normalizarBusqueda(upper);
+
+    if (normalized && CARGO_ALIAS_MAP[normalized]?.length) {
+      return buildCargoSuggestionLabel({
+        codigo: normalized,
+        nombre: CARGO_ALIAS_MAP[normalized][0]
+      });
+    }
+
+    const withCode = upper.match(/^(.*?)\s*\(([A-Z0-9./-]{2,20})\)\s*$/);
+    if (withCode) {
+      const nombre = String(withCode[1] || "").trim();
+      const codigo = normalizarBusqueda(withCode[2] || "");
+
+      if (nombre && codigo) {
+        return buildCargoSuggestionLabel({ codigo, nombre });
+      }
+
+      if (codigo && CARGO_ALIAS_MAP[codigo]?.length) {
+        return buildCargoSuggestionLabel({
+          codigo,
+          nombre: CARGO_ALIAS_MAP[codigo][0]
+        });
+      }
+    }
+
+    return upper;
+  }
+
+  function normalizeCargoPreferenceArray(items) {
+    const out = [];
+    const seen = new Set();
+
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const cleaned = normalizeCargoPreferenceInput(item);
+      const key = normalizarBusqueda(cleaned);
+      if (!cleaned || !key || seen.has(key)) return;
+      seen.add(key);
+      out.push(cleaned);
+    });
+
+    return out;
   }
 
   async function buscarSugerenciasCargosSupabasePattern(term, mode) {
@@ -96,6 +146,49 @@
     return mergeSuggestionItems(prefixItems, mergedContains).slice(0, AUTOCOMPLETE_LIMIT);
   }
 
+  function patchBuildPreferenciasPayload() {
+    const original = window.buildPreferenciasPayload;
+    if (typeof original !== "function") return false;
+    if (original.__cargoNormalizationPatched === true) return true;
+
+    function wrappedBuildPreferenciasPayload() {
+      const payload = original.apply(this, arguments) || {};
+      return {
+        ...payload,
+        cargos: normalizeCargoPreferenceArray(payload.cargos),
+        materias: normalizeCargoPreferenceArray(payload.materias)
+      };
+    }
+
+    wrappedBuildPreferenciasPayload.__cargoNormalizationPatched = true;
+    wrappedBuildPreferenciasPayload.__original = original;
+    window.buildPreferenciasPayload = wrappedBuildPreferenciasPayload;
+    return true;
+  }
+
+  function patchCargoAutocompleteFunctions() {
+    if (typeof window.buscarSugerenciasCargosSupabasePattern === "function") {
+      window.buscarSugerenciasCargosSupabasePattern = buscarSugerenciasCargosSupabasePattern;
+    }
+
+    if (typeof window.buscarSugerenciasCargosSupabase === "function") {
+      window.buscarSugerenciasCargosSupabase = buscarSugerenciasCargosSupabase;
+    }
+  }
+
+  function ensurePatches(retries = 20) {
+    patchCargoAutocompleteFunctions();
+    const ok = patchBuildPreferenciasPayload();
+    if (ok) return;
+    if (retries <= 0) return;
+    setTimeout(() => ensurePatches(retries - 1), 250);
+  }
+
+  window.buildCargoSuggestionLabel = buildCargoSuggestionLabel;
   window.buscarSugerenciasCargosSupabasePattern = buscarSugerenciasCargosSupabasePattern;
   window.buscarSugerenciasCargosSupabase = buscarSugerenciasCargosSupabase;
+  window.normalizeCargoPreferenceInput = normalizeCargoPreferenceInput;
+  window.normalizeCargoPreferenceArray = normalizeCargoPreferenceArray;
+
+  ensurePatches();
 })();
