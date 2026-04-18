@@ -9093,7 +9093,7 @@ var worker_hotfix_default = {
 }
     return await worker_default.fetch(request, env, ctx);
   },
- async scheduled(_controller, env, ctx) {
+async scheduled(_controller, env, ctx) {
   console.log("CRON scheduled() START", new Date().toISOString());
 
   ctx.waitUntil(
@@ -9127,16 +9127,6 @@ var worker_hotfix_default = {
   );
 
   ctx.waitUntil(
-    sendPendingEmailDigests(env)
-      .then((r) => {
-        console.log("CRON EMAIL DIGESTS OK", JSON.stringify(r || {}));
-      })
-      .catch((err) => {
-        console.error("CRON EMAIL DIGESTS ERROR:", err);
-      })
-  );
-
-  ctx.waitUntil(
     (async () => {
       if (new Date().getDay() !== 1) return;
       try {
@@ -9148,7 +9138,6 @@ var worker_hotfix_default = {
       }
     })()
   );
-
 }
 };
 export {
