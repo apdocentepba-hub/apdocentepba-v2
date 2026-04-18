@@ -8,6 +8,8 @@
   const originalSeleccionarAC = window.seleccionarAC;
   const originalCargarPrefsEnFormulario = window.cargarPrefsEnFormulario;
 
+  let canonicalizeSeq = 0;
+
   function formatCargoValue(raw) {
     const text = String(raw || '').trim();
     if (!text) return '';
@@ -29,6 +31,62 @@
     return text.toUpperCase();
   }
 
+  function normalizeCargoItems(items) {
+    return (Array.isArray(items) ? items : [])
+      .map(item => ({
+        ...item,
+        label: formatCargoValue(item?.label || item?.nombre || item?.apd_nombre || '')
+      }))
+      .filter(item => item.label);
+  }
+
+  async function resolveCatalogLabel(rawValue) {
+    const text = String(rawValue || '').trim();
+    if (!text) return '';
+
+    const formatted = formatCargoValue(text);
+    if (/^\([^)]+\)\s+/.test(formatted)) {
+      return formatted;
+    }
+
+    try {
+      if (typeof window.buscarSugerenciasCargosSupabase !== 'function') {
+        return formatted;
+      }
+
+      const suggestions = await window.buscarSugerenciasCargosSupabase(text);
+      const first = Array.isArray(suggestions)
+        ? suggestions.find(item => String(item?.label || '').trim())
+        : null;
+
+      return first ? formatCargoValue(first.label) : formatted;
+    } catch (err) {
+      console.error('ERROR RESOLVIENDO CARGO CATALOGADO:', err);
+      return formatted;
+    }
+  }
+
+  async function canonicalizeCargoInputs() {
+    if (!Array.isArray(window.CARGO_INPUT_IDS)) return;
+
+    const seq = ++canonicalizeSeq;
+
+    for (const id of window.CARGO_INPUT_IDS) {
+      const input = document.getElementById(id);
+      if (!input) continue;
+
+      const current = String(input.value || '').trim();
+      if (!current) continue;
+
+      const next = await resolveCatalogLabel(current);
+      if (seq !== canonicalizeSeq) return;
+
+      if (next) {
+        input.value = next;
+      }
+    }
+  }
+
   if (typeof originalBuscarSugerenciasState === 'function') {
     window.buscarSugerenciasState = async function patchedBuscarSugerenciasState(state) {
       if (!state || state.tipo !== 'cargo_area') {
@@ -46,7 +104,7 @@
         : `${state.tipo}|${q}`;
 
       if (window.suggestionCache?.has(cacheKey)) {
-        renderACItems(state, suggestionCache.get(cacheKey));
+        renderACItems(state, normalizeCargoItems(window.suggestionCache.get(cacheKey)));
         return;
       }
 
@@ -60,10 +118,12 @@
           items = await window.buscarSugerenciasCargosSupabase(q);
         }
 
+        items = normalizeCargoItems(items);
+
         if (!items.length) {
           const data = await fetchSugerenciasRemotas(state.tipo, q);
           items = data.ok && Array.isArray(data.items)
-            ? data.items.map(item => ({ label: formatCargoValue(item?.label || item?.nombre || '') })).filter(it => it.label)
+            ? normalizeCargoItems(data.items)
             : [];
         }
 
@@ -75,10 +135,7 @@
       } catch (err) {
         console.error('ERROR CARGO DELEGATE FIX:', err);
         if (requestId !== state.requestSeq) return;
-        renderACStatus(state, 'No se pudo cargar');
-        setTimeout(() => {
-          if (state.lista.textContent.includes('No se pudo')) hideAC(state);
-        }, 900);
+        renderACItems(state, []);
       }
     };
   }
@@ -99,15 +156,14 @@
   if (typeof originalCargarPrefsEnFormulario === 'function') {
     window.cargarPrefsEnFormulario = function patchedCargarPrefsEnFormulario(data) {
       const result = originalCargarPrefsEnFormulario(data);
-      if (Array.isArray(window.CARGO_INPUT_IDS)) {
-        window.CARGO_INPUT_IDS.forEach(id => {
-          const input = document.getElementById(id);
-          if (!input) return;
-          const next = formatCargoValue(input.value);
-          if (next) input.value = next;
+      setTimeout(() => {
+        canonicalizeCargoInputs().catch(err => {
+          console.error('ERROR CANONICALIZANDO CARGOS GUARDADOS:', err);
         });
-      }
+      }, 0);
       return result;
     };
   }
+
+  window.formatCargoValue = formatCargoValue;
 })();
