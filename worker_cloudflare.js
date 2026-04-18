@@ -1958,12 +1958,28 @@ var worker_default = {
         });
       }
       if (path === "/test-email-sweep" && request.method === "GET") {
-        const r = await runEmailAlertsSweep(env, { source: "manual_test" });
-        return new Response(JSON.stringify(r, null, 2), {
-          status: 200,
-          headers: { "Content-Type": "application/json; charset=utf-8" }
-        });
-      }
+  const targetUserId = String(
+    url.searchParams.get("target_user_id") ||
+    url.searchParams.get("user_id") ||
+    ""
+  ).trim();
+
+  const debug = url.searchParams.get("debug") === "1";
+  const dryRun = url.searchParams.get("dry_run") === "1";
+
+  const r = await runEmailAlertsSweep(env, {
+    source: "manual_test",
+    target_user_id: targetUserId || undefined,
+    debug,
+    debug_user_id: targetUserId || "",
+    dry_run: dryRun
+  });
+
+  return new Response(JSON.stringify(r, null, 2), {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8" }
+  });
+}
       if (path === "/test-digest" && request.method === "GET") {
         const r = await sendPendingEmailDigests(env);
         return new Response(JSON.stringify(r, null, 2), {
@@ -3784,6 +3800,14 @@ async function runEmailAlertsSweep(env, options = {}) {
   );
 
   const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
+  const targetUserId = String(options?.target_user_id || "").trim();
+  const debugEnabled =
+    options?.debug === true ||
+    !!String(options?.debug_user_id || "").trim();
+  const debugUserId = String(
+    options?.debug_user_id || targetUserId || ""
+  ).trim();
+  const dryRun = options?.dry_run === true;
 
   if (!total) {
     return {
@@ -3798,13 +3822,46 @@ async function runEmailAlertsSweep(env, options = {}) {
       limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
       stopped_early: false,
       failed_samples: [],
-      message: "No hay usuarios con alertas por email activas"
+      message: "No hay usuarios con alertas por email activas",
+      debug_enabled: debugEnabled,
+      debug_user_id: debugUserId || null,
+      dry_run: dryRun,
+      debug_users: []
     };
   }
 
-  const rowsToProcess = options?.target_user_id
-    ? prefRows.filter(r => String(r?.user_id || "").trim() === String(options.target_user_id).trim())
+  const rowsToProcess = targetUserId
+    ? prefRows.filter(
+        (r) => String(r?.user_id || "").trim() === targetUserId
+      )
     : prefRows;
+
+  if (targetUserId && !rowsToProcess.length) {
+    return {
+      ok: true,
+      processed_users: 0,
+      send_attempts: 0,
+      sent_count: 0,
+      notified_alerts_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      total_users: total,
+      limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
+      stopped_early: false,
+      failed_samples: [],
+      debug_enabled: debugEnabled,
+      debug_user_id: debugUserId || null,
+      dry_run: dryRun,
+      debug_users: [
+        {
+          user_id: targetUserId,
+          stage: "pref_lookup",
+          skipped: true,
+          reason: "user_not_in_email_pref_rows"
+        }
+      ]
+    };
+  }
 
   let processedUsers = 0;
   let attemptedDigests = 0;
@@ -3813,6 +3870,18 @@ async function runEmailAlertsSweep(env, options = {}) {
   let skippedAlerts = 0;
   let failedDigests = 0;
   const failed_samples = [];
+  const debug_users = [];
+
+  const pushDebug = (entry = {}) => {
+    if (!debugEnabled) return;
+
+    const entryUserId = String(entry?.user_id || "").trim();
+
+    if (debugUserId && entryUserId && entryUserId !== debugUserId) return;
+    if (!debugUserId && debug_users.length >= 10) return;
+
+    debug_users.push(entry);
+  };
 
   for (const row of rowsToProcess) {
     if (attemptedDigests >= MAX_DIGEST_EMAILS_PER_RUN) break;
@@ -3823,11 +3892,50 @@ async function runEmailAlertsSweep(env, options = {}) {
     processedUsers += 1;
 
     const user = await obtenerUsuario(env, userId).catch(() => null);
-    if (!user?.activo) continue;
-    if (!String(user?.email || "").trim()) continue;
 
-    const alertData = await construirAlertasParaUsuario(env, userId).catch(() => null);
-    if (!alertData?.ok) continue;
+    if (!user?.activo) {
+      skippedAlerts += 1;
+      pushDebug({
+        user_id: userId,
+        stage: "user_check",
+        skipped: true,
+        reason: "inactive_user",
+        destination: user?.email || null
+      });
+      continue;
+    }
+
+    if (!String(user?.email || "").trim()) {
+      skippedAlerts += 1;
+      pushDebug({
+        user_id: userId,
+        stage: "user_check",
+        skipped: true,
+        reason: "missing_email",
+        destination: null
+      });
+      continue;
+    }
+
+    const alertData = await construirAlertasParaUsuario(env, userId).catch(
+      (err) => ({
+        ok: false,
+        message: err?.message || "No se pudieron construir alertas"
+      })
+    );
+
+    if (!alertData?.ok) {
+      skippedAlerts += 1;
+      pushDebug({
+        user_id: userId,
+        stage: "build_alerts",
+        skipped: true,
+        reason: "build_failed",
+        destination: user.email,
+        message: alertData?.message || null
+      });
+      continue;
+    }
 
     const items = Array.isArray(alertData?.resultados)
       ? alertData.resultados
@@ -3835,7 +3943,18 @@ async function runEmailAlertsSweep(env, options = {}) {
         ? alertData.alertas
         : [];
 
-    if (!items.length) continue;
+    if (!items.length) {
+      skippedAlerts += 1;
+      pushDebug({
+        user_id: userId,
+        stage: "alerts_ready",
+        skipped: true,
+        reason: "no_alerts",
+        destination: user.email,
+        total_alerts: 0
+      });
+      continue;
+    }
 
     const sortedLatest = items
       .slice()
@@ -3878,13 +3997,62 @@ async function runEmailAlertsSweep(env, options = {}) {
         ? `${shownCount} nuevas ofertas de ${totalAlerts}`
         : `${totalAlerts} nueva${totalAlerts === 1 ? "" : "s"} oferta${totalAlerts === 1 ? "" : "s"}`;
 
+    const payload = {
+      source: options.source || "cron",
+      total_alerts: totalAlerts,
+      shown_alerts: shownCount,
+      visible_alert_keys: visibleSource
+        .map((item) => buildEmailAlertKey(userId, item))
+        .filter(Boolean),
+      cycle_mode: "always_send_latest_5"
+    };
+
+    const visibleOfferIds = visibleSource
+      .map((item) =>
+        String(
+          item?.source_offer_key ||
+          item?.iddetalle ||
+          item?.idoferta ||
+          item?.codigo ||
+          ""
+        ).trim()
+      )
+      .filter(Boolean);
+
+    const sampleTitles = visibleAlerts
+      .map((item) => {
+        const p = normalizeOfferPayload(item?.offer_payload || item || {});
+        return String(
+          p.cargo || p.materia || p.title || "Oferta APD"
+        ).trim();
+      })
+      .filter(Boolean);
+
+    attemptedDigests += 1;
+
+    if (dryRun) {
+      pushDebug({
+        user_id: userId,
+        stage: "dry_run",
+        destination: user.email,
+        total_alerts: totalAlerts,
+        shown_alerts: shownCount,
+        subject,
+        visible_alert_keys: payload.visible_alert_keys,
+        visible_offer_ids: visibleOfferIds,
+        sample_titles: sampleTitles,
+        send_ok: null,
+        send_status: null,
+        dry_run: true
+      });
+      continue;
+    }
+
     const html = buildDigestHtml(visibleAlerts, user, {
       total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
       panel_url: "https://alertasapd.com.ar"
     });
-
-    attemptedDigests += 1;
 
     const send = await enviarMailBrevo(
       user.email,
@@ -3893,16 +4061,6 @@ async function runEmailAlertsSweep(env, options = {}) {
       html,
       env
     );
-
-    const payload = {
-      source: options.source || "cron",
-      total_alerts: totalAlerts,
-      shown_alerts: shownCount,
-      visible_alert_keys: visibleSource
-        .map(item => buildEmailAlertKey(userId, item))
-        .filter(Boolean),
-      cycle_mode: "always_send_latest_5"
-    };
 
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
@@ -3914,6 +4072,24 @@ async function runEmailAlertsSweep(env, options = {}) {
       payload,
       provider_response: send || null
     }).catch(() => null);
+
+    pushDebug({
+      user_id: userId,
+      stage: "send_attempt",
+      destination: user.email,
+      total_alerts: totalAlerts,
+      shown_alerts: shownCount,
+      subject,
+      visible_alert_keys: payload.visible_alert_keys,
+      visible_offer_ids: visibleOfferIds,
+      sample_titles: sampleTitles,
+      send_ok: !!send?.ok,
+      send_status: send?.status || null,
+      send_data:
+        typeof send?.data === "string"
+          ? send.data.slice(0, 500)
+          : send?.data || null
+    });
 
     if (send?.ok) {
       sentDigests += 1;
@@ -3945,7 +4121,11 @@ async function runEmailAlertsSweep(env, options = {}) {
     total_users: total,
     limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
     stopped_early: attemptedDigests >= MAX_DIGEST_EMAILS_PER_RUN,
-    failed_samples
+    failed_samples,
+    debug_enabled: debugEnabled,
+    debug_user_id: debugUserId || null,
+    dry_run: dryRun,
+    debug_users
   };
 }
 async function runEmailAlertsQueueSweep(env, options = {}) {
@@ -9071,9 +9251,25 @@ var worker_hotfix_default = {
       const routed = await handleProfileListadosRoute(request, env);
       if (routed) return routed;
     }
-   if (path === "/test-email-sweep" && request.method === "GET") {
+  if (path === "/test-email-sweep" && request.method === "GET") {
   try {
-    const r = await runEmailAlertsSweep(env, { source: "manual_test" });
+    const targetUserId = String(
+      url.searchParams.get("target_user_id") ||
+      url.searchParams.get("user_id") ||
+      ""
+    ).trim();
+
+    const debug = url.searchParams.get("debug") === "1";
+    const dryRun = url.searchParams.get("dry_run") === "1";
+
+    const r = await runEmailAlertsSweep(env, {
+      source: "manual_test",
+      target_user_id: targetUserId || undefined,
+      debug,
+      debug_user_id: targetUserId || "",
+      dry_run: dryRun
+    });
+
     return json2(r, 200);
   } catch (err) {
     return json2({
