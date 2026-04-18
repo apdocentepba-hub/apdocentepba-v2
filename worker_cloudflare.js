@@ -2079,16 +2079,7 @@ if (path === `${API_URL_PREFIX2}/subscription/cancel` && request.method === "POS
       return json({ ok: false, error: err?.message || "Error interno" }, 500);
     }
   },
-  async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(
-      runProvinciaBackfillStep(env, { source: "cron", force: false }).catch((err) => {
-        console.error("PROVINCIA BACKFILL CRON STEP ERROR:", err);
-      })
-    );
-    ctx.waitUntil(runWhatsAppAlertsSweep(env, { source: "cron" }));
-    ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
-    ctx.waitUntil(sendPendingEmailDigests(env));
-  }
+  
 };
 async function handleLogin(request, env) {
   const body = await request.json();
