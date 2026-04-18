@@ -864,7 +864,7 @@ var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
 var WHATSAPP_ALERTS_PER_USER_MAX = 3;
 var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
 var WHATSAPP_QUERY_ALERTS_LIMIT = 5;
-var TELEGRAM_QUERY_ALERTS_LIMIT = 5;
+var TELEGRAM_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 function jsonResponse(obj, status = 200) {
@@ -8685,8 +8685,8 @@ function buildRichTextAlertLines(payload, index) {
 __name(extractTelegramCommand, "extractTelegramCommand");
 function buildTelegramQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
-  const visible = all.slice(0, TELEGRAM_QUERY_ALERTS_LIMIT);
-  const hidden = Math.max(0, all.length - visible.length);
+const visible = all;
+const hidden = 0;
 
   const header = `🔔 APDocentePBA encontró ${all.length} alerta(s) compatibles`;
 
@@ -8923,17 +8923,32 @@ async function handleTelegramWebhook(request, env) {
       });
     }
 
-    const data = await construirAlertasParaUsuario(env, user.id).catch(() => null);
-    const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
+    let rawAlerts = [];
 
-    const alerts = await enrichAlertsForRichChannels(
-      env,
-      user,
-      rawAlerts,
-      TELEGRAM_QUERY_ALERTS_LIMIT
-    );
+try {
+  const data = await construirAlertasParaUsuario(env, user.id);
+  rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
+} catch (err) {
+  console.error("TELEGRAM ALERTS BUILD ERROR:", err);
 
-    const reply = alerts.length
+  await sendTelegramText(
+    env,
+    chatId,
+    "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\n🌐 https://alertasapd.com.ar"
+  ).catch(() => null);
+
+  return json2({
+    ok: true,
+    delivered: false,
+    reason: "build_failed",
+    channel_mode: "query_only"
+  });
+}
+
+const alerts = rawAlerts.map((item) => ({
+  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+}));
+const reply = alerts.length
   ? buildTelegramQueryDigest(alerts)
   : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
 
@@ -8943,11 +8958,19 @@ try {
   console.error("TELEGRAM ALERTS SEND ERROR:", err);
 
   const fallback = rawAlerts.length
-    ? `Encontré ${rawAlerts.length} alerta(s) compatibles, pero el detalle fue demasiado largo para Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
+    ? `Encontré ${rawAlerts.length} alerta(s) compatibles, pero no pude mandarte el detalle completo por Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
     : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
 
   await sendTelegramText(env, chatId, fallback).catch(() => null);
 }
+
+return json2({
+  ok: true,
+  delivered: true,
+  total_alerts: rawAlerts.length,
+  plan_code: entitlement.plan_code,
+  channel_mode: "query_only"
+});
 
 return json2({
   ok: true,
