@@ -253,7 +253,7 @@
     const checkbox = byId('pref-alertas-whatsapp');
     if (!pill || !note || !actions || !mini || !checkbox) return;
 
-    const allowedByPlan = !!status?.allowed_by_plan;
+    const allowedByPlan = status?.allowed_by_plan !== false;
     const connected = !!status?.connected;
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
     const phoneMasked = String(status?.phone_masked || '').trim();
