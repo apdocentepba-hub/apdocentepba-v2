@@ -198,21 +198,6 @@ async function resolveTelegramEntitlement(env, userId) {
   };
 }
 
-async function resolveWhatsAppEntitlement(env, userId) {
-  const subscriptions = await getUserSubscriptions(env, userId);
-  const current = subscriptions.find(isSubscriptionCurrent) || subscriptions[0] || null;
-  const planCode = canonicalPlanCode(current?.plan_code || "TRIAL_7D");
-  const plan = await getPlanByCode(env, planCode);
-  const flags = safeJsonParse(plan?.feature_flags) || {};
-  return {
-    plan_code: planCode,
-    plan_name: norm(plan?.nombre) || planCode || "TRIAL_7D",
-    allowed: flags.whatsapp !== false && planCode === "INSIGNE",
-    source: "plan_feature_flag",
-    flags
-  };
-}
-
 function telegramStateKey(userId) {
   return `telegram:user:${normUpper(userId)}`;
 }
@@ -314,76 +299,6 @@ function buildTelegramStatusPayload(env, state, entitlement) {
   };
 }
 
-function normalizeWhatsAppPhone(value) {
-  let digits = String(value || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("549")) return digits;
-  if (digits.startsWith("54")) return `549${digits.slice(2)}`;
-  if (digits.startsWith("9") && digits.length >= 11) return `54${digits}`;
-  if (digits.startsWith("15") && digits.length > 8) digits = digits.slice(2);
-  return `549${digits}`;
-}
-
-function whatsappPhoneVariants(value) {
-  const normalized = normalizeWhatsAppPhone(value);
-  if (!normalized) return [];
-  const local = normalized.startsWith("549") ? normalized.slice(3) : normalized;
-  const withoutMobileNine = normalized.startsWith("549") ? `54${normalized.slice(3)}` : normalized;
-  return [...new Set([
-    normalized,
-    `+${normalized}`,
-    withoutMobileNine,
-    `+${withoutMobileNine}`,
-    local,
-    `0${local}`,
-    local.length > 8 ? `15${local}` : ""
-  ].filter(Boolean))];
-}
-
-async function findUserByWhatsAppPhone(env, fromPhone) {
-  const variants = whatsappPhoneVariants(fromPhone);
-  for (const candidate of variants) {
-    const rows = await supabaseSelect(
-      env,
-      `users?celular=eq.${encodeURIComponent(candidate)}&select=id,nombre,apellido,email,celular,activo&limit=1`
-    ).catch(() => []);
-    if (Array.isArray(rows) && rows[0]) return rows[0];
-  }
-  const tail = normalizeWhatsAppPhone(fromPhone).slice(-8);
-  if (tail) {
-    const rows = await supabaseSelect(
-      env,
-      `users?celular=ilike.*${encodeURIComponent(tail)}*&select=id,nombre,apellido,email,celular,activo&limit=5`
-    ).catch(() => []);
-    const hit = (Array.isArray(rows) ? rows : []).find((row) => normalizeWhatsAppPhone(row?.celular || "") === normalizeWhatsAppPhone(fromPhone));
-    if (hit) return hit;
-  }
-  return null;
-}
-
-function buildWhatsAppStatusPayload(user, prefs, entitlement) {
-  const connected = !!normalizeWhatsAppPhone(user?.celular || "");
-  const requested = !!prefs?.alertas_whatsapp;
-  return {
-    ok: true,
-    version: TELEGRAM_VERSION,
-    connected,
-    alerts_enabled: entitlement.allowed ? requested : false,
-    alerts_requested: requested,
-    allowed_by_plan: !!entitlement.allowed,
-    channel_mode: "query_only",
-    channel_policy: entitlement.source || "default_policy",
-    plan_code: entitlement.plan_code || "",
-    plan_name: entitlement.plan_name || "",
-    phone_masked: connected ? `••••${normalizeWhatsAppPhone(user?.celular || "").slice(-4)}` : "",
-    connect_hint: connected
-      ? "Escribí ALERTAS en el chat de WhatsApp para pedir tus alertas del momento."
-      : "Guardá un celular válido y escribí ALERTAS desde ese número para usar WhatsApp.",
-    feature_flags: entitlement.flags || {}
-  };
-}
-
 async function sendTelegramText(env, chatId, text) {
   const token = norm(env.TELEGRAM_BOT_TOKEN);
   if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
@@ -406,32 +321,6 @@ async function sendTelegramText(env, chatId, text) {
   return data;
 }
 
-async function sendWhatsAppText(env, to, body) {
-  const phoneNumberId = norm(env.WHATSAPP_PHONE_NUMBER_ID);
-  const accessToken = norm(env.WHATSAPP_ACCESS_TOKEN);
-  if (!phoneNumberId || !accessToken) throw new Error("Faltan credenciales de WhatsApp");
-  const payload = {
-    messaging_product: "whatsapp",
-    to: normalizeWhatsAppPhone(to),
-    type: "text",
-    text: {
-      preview_url: false,
-      body: String(body || "")
-    }
-  };
-  const res = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error?.message || `WhatsApp HTTP ${res.status}`);
-  return data;
-}
-
 function requireWebhookSecret(request, env) {
   const configured = norm(env.TELEGRAM_WEBHOOK_SECRET);
   if (!configured) {
@@ -451,56 +340,6 @@ function extractTelegramStartPayload(update) {
   if (!text.startsWith("/start")) return null;
   const payload = text.replace(/^\/start\s*/i, "").trim();
   return payload || null;
-}
-
-function extractWhatsAppMessages(payload) {
-  const out = [];
-  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
-  for (const entry of entries) {
-    for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
-      const value = change?.value || {};
-      for (const msg of Array.isArray(value?.messages) ? value.messages : []) {
-        out.push({
-          from: normalizeWhatsAppPhone(msg?.from || ""),
-          text: norm(msg?.text?.body || ""),
-          id: norm(msg?.id),
-          raw: msg,
-          metadata: value?.metadata || {}
-        });
-      }
-    }
-  }
-  return out;
-}
-
-function buildWhatsAppDigestMessage(user, alerts) {
-  const visible = alerts.slice(0, 5);
-  const lines = [
-    `Hola ${norm(user?.nombre) || "Docente"}.`,
-    visible.length
-      ? `Estas son tus alertas del momento (${alerts.length}):`
-      : "Ahora mismo no hay alertas compatibles con tus filtros.",
-    ""
-  ];
-  if (!visible.length) {
-    lines.push("Podés volver a escribir ALERTAS más tarde.");
-    return lines.join("\n");
-  }
-  visible.forEach((item, idx) => {
-    lines.push(`${idx + 1}) ${norm(item?.cargo || item?.area || "Oferta APD")}`);
-    if (item?.escuela) lines.push(`   ${norm(item.escuela)}`);
-    lines.push(`   ${norm(item?.distrito || "-")} · turno ${norm(item?.turno || "-")}`);
-    if (item?.finoferta_label || item?.fecha_cierre || item?.cierre) {
-      lines.push(`   cierre ${norm(item?.finoferta_label || item?.fecha_cierre || item?.cierre)}`);
-    }
-    lines.push("");
-  });
-  if (alerts.length > visible.length) {
-    lines.push(`+ ${alerts.length - visible.length} alerta(s) más en tu panel.`);
-    lines.push("");
-  }
-  lines.push("Volvé a escribir ALERTAS cuando quieras consultar otra vez.");
-  return lines.join("\n");
 }
 
 async function handleTelegramWebhook(request, env) {
@@ -589,24 +428,6 @@ async function handleTelegramStatus(request, env) {
   return json(buildTelegramStatusPayload(env, { ...state, user_id: requestedUserId }, entitlement));
 }
 
-async function handleWhatsAppStatus(request, env) {
-  const authUser = await resolveAuthUser(env, request);
-  if (!authUser) return json({ ok: false, error: "No autenticado" }, 401);
-  const url = new URL(request.url);
-  const requestedUserId = normUpper(url.searchParams.get("user_id")) || authUser.id;
-  if (requestedUserId !== authUser.id && !authUser.es_admin) {
-    return json({ ok: false, error: "No autorizado" }, 403);
-  }
-  const user = await getUserById(env, requestedUserId);
-  const prefsRows = await supabaseSelect(
-    env,
-    `user_preferences?user_id=eq.${encodeURIComponent(requestedUserId)}&select=alertas_activas,alertas_whatsapp&limit=1`
-  ).catch(() => []);
-  const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
-  const entitlement = await resolveWhatsAppEntitlement(env, requestedUserId);
-  return json(buildWhatsAppStatusPayload(user, prefs, entitlement));
-}
-
 async function delegateJsonByRequest(request, env, ctx) {
   const response = await baseWorker.fetch(request, env, ctx);
   const text = await response.text();
@@ -643,7 +464,6 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
   const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
   const requestedWhatsApp = !!payload?.preferencias?.alertas_whatsapp;
   let telegramStatus = null;
-  let whatsappStatus = null;
 
   if (userId) {
     const entitlement = await resolveTelegramEntitlement(env, userId);
@@ -669,10 +489,6 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
       console.error("WHATSAPP PREF PERSIST ERROR:", err);
       return null;
     });
-
-    const user = await getUserById(env, userId);
-    const waEntitlement = await resolveWhatsAppEntitlement(env, userId);
-    whatsappStatus = buildWhatsAppStatusPayload(user, { alertas_whatsapp: requestedWhatsApp }, waEntitlement);
 
     if (delegated.data?.preferencias && typeof delegated.data.preferencias === "object") {
       delegated.data.preferencias.alertas_whatsapp = requestedWhatsApp;
@@ -705,96 +521,8 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
     ...(typeof delegated.data === "object" && delegated.data ? delegated.data : { ok: true }),
     message,
     telegram_status: telegramStatus,
-    whatsapp_status: whatsappStatus,
     telegram_version: TELEGRAM_VERSION
   }, delegated.response.status || 200);
-}
-
-async function handleWhatsAppWebhook(request, env, ctx) {
-  const payload = await request.json().catch(() => ({}));
-  const messages = extractWhatsAppMessages(payload);
-  if (!messages.length) {
-    return json({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: "no_messages" });
-  }
-
-  const results = [];
-  for (const message of messages) {
-    const user = await findUserByWhatsAppPhone(env, message.from);
-    if (!user?.id || user.activo === false) {
-      const text = "No pude vincular este número con una cuenta activa de APDocentePBA. Revisá tu celular en el panel y volvé a escribir ALERTAS.";
-      const sent = await sendWhatsAppText(env, message.from, text).catch(() => null);
-      results.push({ from: message.from, ok: false, reason: "user_not_found", sent: !!sent });
-      continue;
-    }
-
-    const prefsRows = await supabaseSelect(
-      env,
-      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_whatsapp&limit=1`
-    ).catch(() => []);
-    const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
-    const entitlement = await resolveWhatsAppEntitlement(env, user.id);
-
-    if (message.text !== "ALERTAS") {
-      const text = "Escribí ALERTAS para recibir tus alertas del momento por WhatsApp.";
-      const sent = await sendWhatsAppText(env, message.from, text).catch(() => null);
-      results.push({ from: message.from, ok: true, reason: "help_sent", sent: !!sent });
-      continue;
-    }
-
-    if (!entitlement.allowed) {
-      const text = `Tu plan actual no tiene WhatsApp habilitado. Con ${entitlement.plan_name || "tu plan"} podés usar email y Telegram.`;
-      const sent = await sendWhatsAppText(env, message.from, text).catch(() => null);
-      results.push({ from: message.from, ok: false, reason: "not_allowed_by_plan", sent: !!sent });
-      continue;
-    }
-
-    if (!prefs?.alertas_activas) {
-      const text = "Tus alertas generales están apagadas en preferencias. Activá alertas en el panel y después escribí ALERTAS otra vez.";
-      const sent = await sendWhatsAppText(env, message.from, text).catch(() => null);
-      results.push({ from: message.from, ok: false, reason: "alerts_inactive", sent: !!sent });
-      continue;
-    }
-
-    const internalRequest = new Request(`https://internal.apdocentepba.dev/api/mis-alertas?user_id=${encodeURIComponent(user.id)}`, {
-      method: "GET"
-    });
-    const delegated = await delegateJsonByRequest(internalRequest, env, ctx);
-    const alerts = delegated.response.ok && delegated.data?.ok && Array.isArray(delegated.data?.resultados)
-      ? delegated.data.resultados
-      : [];
-    const reply = buildWhatsAppDigestMessage(user, alerts);
-    const sent = await sendWhatsAppText(env, message.from, reply).catch(async (err) => {
-      await insertNotificationDeliveryLogs(env, baseLogRow({
-        userId: user.id,
-        channel: "whatsapp",
-        eventType: "whatsapp_query_only_alertas",
-        deliveryKey: `whatsapp_alertas:${user.id}:${message.id || new Date().toISOString()}`,
-        status: "error",
-        provider: "whatsapp",
-        planCode: entitlement.plan_code,
-        payload: { from: message.from, alerts_count: alerts.length },
-        errorMessage: err?.message || "whatsapp_send_failed"
-      }));
-      return null;
-    });
-
-    await insertNotificationDeliveryLogs(env, baseLogRow({
-      userId: user.id,
-      channel: "whatsapp",
-      eventType: "whatsapp_query_only_alertas",
-      deliveryKey: `whatsapp_alertas:${user.id}:${message.id || new Date().toISOString()}`,
-      status: sent ? "sent" : "error",
-      provider: "whatsapp",
-      providerMessageId: sent?.messages?.[0]?.id ? String(sent.messages[0].id) : null,
-      planCode: entitlement.plan_code,
-      payload: { from: message.from, alerts_count: alerts.length, requested_flag: !!prefs?.alertas_whatsapp },
-      errorMessage: sent ? null : "No se pudo enviar respuesta por WhatsApp"
-    }));
-
-    results.push({ from: message.from, ok: !!sent, alerts: alerts.length, user_id: user.id });
-  }
-
-  return json({ ok: true, version: TELEGRAM_VERSION, results });
 }
 
 async function getActivePreferenceUserIds(env, limit = TELEGRAM_SWEEP_LIMIT) {
@@ -1016,16 +744,8 @@ export default {
         return await handleTelegramStatus(request, env);
       }
 
-      if (path === `${API_URL_PREFIX}/whatsapp/status` && request.method === "GET") {
-        return await handleWhatsAppStatus(request, env);
-      }
-
       if (path === `${API_URL_PREFIX}/telegram/webhook` && request.method === "POST") {
         return await handleTelegramWebhook(request, env);
-      }
-
-      if (path === `${API_URL_PREFIX}/whatsapp/webhook` && request.method === "POST") {
-        return await handleWhatsAppWebhook(request, env, ctx);
       }
 
       if (path === `${API_URL_PREFIX}/guardar-preferencias` && request.method === "POST") {
