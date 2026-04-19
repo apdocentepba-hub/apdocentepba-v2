@@ -1640,11 +1640,11 @@ function renderMailOfferCard(row) {
 
   const chanceIcon =
     !chance ? "" :
-    chance.title.includes("Muy favorable") ? "??" :
-    chance.title.includes("Favorable") ? "??" :
-    chance.title.includes("Competida") ? "??" :
-    chance.title.includes("Sin competencia") ? "??" :
-    "??";
+    chance.title.includes("Muy favorable") ? "🟢" :
+    chance.title.includes("Favorable") ? "🟢" :
+    chance.title.includes("Competida") ? "🔵" :
+    chance.title.includes("Sin competencia") ? "🟢" :
+    "🟠";
 
   return `
     <tr>
@@ -1660,12 +1660,12 @@ function renderMailOfferCard(row) {
                 </div>
 
                 <div style="margin:0 0 4px 0;">
-                  ${p.escuela ? `<span style="display:inline-block;background:#eef4ff;color:#1f4fa3;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">?? ${escHtml(p.escuela)}</span>` : ""}
-                  ${p.distrito ? `<span style="display:inline-block;background:#eef1f4;color:#29435c;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">?? ${escHtml(p.distrito)}</span>` : ""}
-                  ${p.turno ? `<span style="display:inline-block;background:#edf9f0;color:#0b7a44;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">?? ${escHtml(p.turno)}</span>` : ""}
-                  ${p.jornada ? `<span style="display:inline-block;background:#f3f4f6;color:#374151;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">??? ${escHtml(p.jornada)}</span>` : ""}
-                  ${p.nivel ? `<span style="display:inline-block;background:#fff5e8;color:#9a6700;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">?? ${escHtml(p.nivel)}</span>` : ""}
-                  ${tipo ? `<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">?? ${escHtml(tipo)}</span>` : ""}
+                  ${p.escuela ? `<span style="display:inline-block;background:#eef4ff;color:#1f4fa3;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏫 ${escHtml(p.escuela)}</span>` : ""}
+                  ${p.distrito ? `<span style="display:inline-block;background:#eef1f4;color:#29435c;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📍 ${escHtml(p.distrito)}</span>` : ""}
+                  ${p.turno ? `<span style="display:inline-block;background:#edf9f0;color:#0b7a44;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🕒 ${escHtml(p.turno)}</span>` : ""}
+                  ${p.jornada ? `<span style="display:inline-block;background:#f3f4f6;color:#374151;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏷️ ${escHtml(p.jornada)}</span>` : ""}
+                  ${p.nivel ? `<span style="display:inline-block;background:#fff5e8;color:#9a6700;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🎓 ${escHtml(p.nivel)}</span>` : ""}
+                  ${tipo ? `<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📌 ${escHtml(tipo)}</span>` : ""}
                 </div>
               </div>
 
@@ -1696,7 +1696,7 @@ function renderMailOfferCard(row) {
                     <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
                       <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
                         <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Vigencia</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;line-height:1.45;">${escHtml((p.desde || "-") + (p.hasta ? " ? " + p.hasta : ""))}</div>
+                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;line-height:1.45;">${escHtml((p.desde || "-") + (p.hasta ? " → " + p.hasta : ""))}</div>
                       </div>
                     </td>
                   </tr>
@@ -1845,7 +1845,6 @@ function renderMailOfferCard(row) {
     </tr>
   `;
 }
-
 
 
 
@@ -3984,12 +3983,12 @@ async function runEmailAlertsSweep(env, options = {}) {
     const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
     const visibleAlerts = visibleSource.map((item) => ({
-  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-}));
+      offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+    }));
 
-const shownCount = visibleAlerts.length;
+    const shownCount = visibleAlerts.length;
 
-    const subject = `Tus ${shownCount} alertas más recientes de APDocentePBA`;
+    const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
 
     const payload = {
       source: options.source || "cron",
@@ -4122,6 +4121,7 @@ const shownCount = visibleAlerts.length;
     debug_users
   };
 }
+
 async function runEmailAlertsQueueSweep(env, options = {}) {
   const MAX_USERS_PER_RUN = clampInt(
     options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
@@ -7717,17 +7717,18 @@ async function sendPendingEmailDigests(env, options = {}) {
     processedUsers += 1;
 
     const rawAlerts = rows.map(row => row?.payload?.alert || row?.payload || {});
-const alerts = rawAlerts
-  .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
-  .map((item) => ({
-    offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-  }));
+    const alerts = rawAlerts
+      .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
+      .map((item) => ({
+        offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+      }));
 
-if (!alerts.length) continue;
+    if (!alerts.length) continue;
 
-const totalAlerts = rows.length;
-const shownCount = alerts.length;
-const asunto = `Tus ${shownCount} alertas más recientes de APDocentePBA`;
+    const totalAlerts = rows.length;
+    const shownCount = alerts.length;
+    const asunto = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+
     const html = buildDigestHtml(alerts, user, {
       total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
@@ -7849,18 +7850,18 @@ function buildDigestHtml(alerts, user, options = {}) {
   const showingCount = visibleAlerts.length;
   const remainingCount = Math.max(0, totalAlerts - showingCount);
 
-  const title = `Tus ${showingCount} alertas más recientes`;
+  const title = `${showingCount} nuevas ofertas de ${totalAlerts}`;
 
   const intro =
     String(options?.intro_text || "").trim() ||
-    `Hola ${escHtml(user?.nombre || "")}, estas son las alertas compatibles más recientes con tus preferencias.`;
+    `Hola ${escHtml(user?.nombre || "docente")}, estas son las alertas nuevas compatibles con tus preferencias.`;
 
   const items = visibleAlerts.map(renderMailOfferCard).join("");
 
   const moreNote = remainingCount > 0
     ? `
       <div style="margin-top:14px;padding:12px 14px;background:#fff8e8;border:1px solid #f2d38b;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b4e00;">
-        Te enviamos las ${showingCount} alertas más recientes compatibles con tus preferencias. Para revisar el resto, entrá al panel.
+        Te mostramos ${showingCount} nuevas ofertas de ${totalAlerts}. Si querés ver el resto, entrá al panel.
       </div>
     `
     : "";
@@ -8704,7 +8705,7 @@ function buildTelegramQueryDigest(alerts) {
   }
 
   const header =
-    `APDocentePBA\n\n` +
+    `📚 APDocentePBA\n\n` +
     `Se encontraron ${all.length} alerta(s) compatibles.\n`;
 
   const blocks = all.map((item, idx) => {
@@ -8751,30 +8752,30 @@ function buildTelegramQueryDigest(alerts) {
 
     const lines = [
       `${idx + 1}) ${cargo}`,
-      `${distrito}`,
-      `${escuela}`,
-      `${turno}`,
-      `${nivel}`,
-      `${cierre}`,
-      `Postulados: ${postulados}`,
-      `Puntaje más alto: ${puntajeMasAlto}`,
-      `Listado del más alto: ${listadoMasAlto}`
+      `📍 ${distrito}`,
+      `🏫 ${escuela}`,
+      `🕒 ${turno}`,
+      `🎓 ${nivel}`,
+      `⏰ ${cierre}`,
+      `👥 Postulados: ${postulados}`,
+      `📈 Puntaje más alto: ${puntajeMasAlto}`,
+      `📄 Listado del más alto: ${listadoMasAlto}`
     ];
 
     if (estadoActual && estadoActual !== "-") {
-      lines.push(`Estado actual: ${estadoActual}`);
+      lines.push(`🟠 Estado actual: ${estadoActual}`);
     }
 
     if (pid) {
-      lines.push(`PID: ${pid}`);
+      lines.push(`🧾 PID: ${pid}`);
     }
 
     if (puntajePid !== "" && puntajePid !== null && puntajePid !== undefined) {
-      lines.push(`Tu puntaje PID: ${puntajePid}`);
+      lines.push(`⭐ Tu puntaje PID: ${puntajePid}`);
     }
 
     if (link) {
-      lines.push(link);
+      lines.push(`🔗 ${link}`);
     }
 
     return lines.join("\n");
@@ -8783,8 +8784,8 @@ function buildTelegramQueryDigest(alerts) {
   return (
     header +
     `\n` +
-    blocks.join(`\n\n--------------------\n\n`) +
-    `\n\nhttps://alertasapd.com.ar` +
+    blocks.join(`\n\n━━━━━━━━━━━━\n\n`) +
+    `\n\n🌐 https://alertasapd.com.ar` +
     `\nEscribí ALERTAS para refrescar.`
   );
 }
