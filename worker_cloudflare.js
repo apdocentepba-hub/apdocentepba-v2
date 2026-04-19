@@ -9496,7 +9496,6 @@ async function handleWhatsAppWebhook(request, env) {
   return json2({ ok: true, channel_mode: "query_only" });
 }
 __name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
-
 function safeProvinciaBackfillStatus(message = null) {
   return { ok: true, scope: "PROVINCIA_FULL", status: "idle", district_index: 0, district_name: null, next_page: 0, pages_processed: 0, districts_completed: 0, offers_processed: 0, last_batch_count: 0, total_districts: 0, progress_pct: 0, started_at: null, finished_at: null, last_run_at: null, updated_at: null, last_error: message || null, retryable: false, stale_running: false, failed_page: 0 };
 }
