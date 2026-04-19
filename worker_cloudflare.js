@@ -9444,10 +9444,19 @@ async function handleWhatsAppWebhook(request, env) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    const entry = body?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value || {};
-    const message = value?.messages?.[0];
+   const entry = body?.entry?.[0];
+const changes = entry?.changes?.[0];
+const value = changes?.value || {};
+const message = value?.messages?.[0];
+
+if (!message || typeof message !== "object") {
+  return json2({ ok: true, ignored: true, reason: "no_message_object" });
+}
+
+if (!message.from) {
+  return json2({ ok: true, ignored: true, reason: "missing_from" });
+}  // TEMPORALMENTE DESACTIVADO PARA NO ROMPER LA CORRIDA DE MAIL
+
 
     if (!message) {
       return json2({ ok: true, ignored: true, reason: "no_message" });
@@ -9769,22 +9778,29 @@ async scheduled(_controller, env, ctx) {
       })
   );
 
-  ctx.waitUntil(
-    runWhatsAppAlertsSweep(env, { source: "cron" })
-      .then((r) => {
-        console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
-      })
-      .catch((err) => {
-        console.error("CRON WHATSAPP SWEEP ERROR:", err);
-      })
-  );
+  // ctx.waitUntil(
+//   runWhatsAppAlertsSweep(env, { source: "cron" })
+//     .then((r) => {
+//       console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
+//     })
+//     .catch((err) => {
+//       console.error("CRON WHATSAPP SWEEP ERROR:", err);
+//     })
+// );
 
   ctx.waitUntil(
   (async () => {
     try {
-      const queueResult = await runEmailAlertsQueueSweep(env, { source: "cron" });
-      const digestResult = await sendPendingEmailDigests(env, { source: "cron" });
+      const queueResult = await runEmailAlertsQueueSweep(env, {
+  source: "cron",
+  max_users: 10,
+  max_alerts_per_user: 5
+});
 
+const digestResult = await sendPendingEmailDigests(env, {
+  source: "cron",
+  max_rows: 20
+});
       console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
       console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
     } catch (err) {
