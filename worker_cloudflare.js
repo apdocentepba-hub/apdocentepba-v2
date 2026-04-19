@@ -9444,22 +9444,17 @@ async function handleWhatsAppWebhook(request, env) {
   try {
     const body = await request.json().catch(() => ({}));
 
-   const entry = body?.entry?.[0];
-const changes = entry?.changes?.[0];
-const value = changes?.value || {};
-const message = value?.messages?.[0];
+    const entry = body?.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value || {};
+    const message = value?.messages?.[0];
 
-if (!message || typeof message !== "object") {
-  return json2({ ok: true, ignored: true, reason: "no_message_object" });
-}
+    if (!message || typeof message !== "object") {
+      return json2({ ok: true, ignored: true, reason: "no_message_object" });
+    }
 
-if (!message.from) {
-  return json2({ ok: true, ignored: true, reason: "missing_from" });
-}  // TEMPORALMENTE DESACTIVADO PARA NO ROMPER LA CORRIDA DE MAIL
-
-
-    if (!message) {
-      return json2({ ok: true, ignored: true, reason: "no_message" });
+    if (!message.from) {
+      return json2({ ok: true, ignored: true, reason: "missing_from" });
     }
 
     const messageId = String(message?.id || "").trim();
@@ -9468,15 +9463,15 @@ if (!message.from) {
       if (await wasInboundEventProcessed(env, dedupeKey)) {
         return json2({ ok: true, duplicate: true, message_id: messageId });
       }
-      await markInboundEventProcessed(env, dedupeKey, WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS).catch(() => null);
+      await markInboundEventProcessed(
+        env,
+        dedupeKey,
+        WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS
+      ).catch(() => null);
     }
 
-    const from = String(message?.from || "").trim();
+    const from = String(message.from || "").trim();
     const inboundText = String(message?.text?.body || "").trim();
-
-    if (!from) {
-      return json2({ ok: true, ignored: true, reason: "missing_from" });
-    }
 
     if (!norm2(inboundText).includes("ALERTA")) {
       return json2({ ok: true, ignored: true, reason: "not_alert_command" });
@@ -9778,36 +9773,38 @@ async scheduled(_controller, env, ctx) {
       })
   );
 
+  // TEMPORALMENTE DESACTIVADO PARA NO ROMPER LA CORRIDA DE MAIL
   // ctx.waitUntil(
-//   runWhatsAppAlertsSweep(env, { source: "cron" })
-//     .then((r) => {
-//       console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
-//     })
-//     .catch((err) => {
-//       console.error("CRON WHATSAPP SWEEP ERROR:", err);
-//     })
-// );
+  //   runWhatsAppAlertsSweep(env, { source: "cron" })
+  //     .then((r) => {
+  //       console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
+  //     })
+  //     .catch((err) => {
+  //       console.error("CRON WHATSAPP SWEEP ERROR:", err);
+  //     })
+  // );
 
   ctx.waitUntil(
-  (async () => {
-    try {
-      const queueResult = await runEmailAlertsQueueSweep(env, {
-  source: "cron",
-  max_users: 10,
-  max_alerts_per_user: 5
-});
+    (async () => {
+      try {
+        const queueResult = await runEmailAlertsQueueSweep(env, {
+          source: "cron",
+          max_users: 10,
+          max_alerts_per_user: 5
+        });
 
-const digestResult = await sendPendingEmailDigests(env, {
-  source: "cron",
-  max_rows: 20
-});
-      console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
-      console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
-    } catch (err) {
-      console.error("CRON EMAIL QUEUE/DIGEST ERROR:", err);
-    }
-  })()
-);
+        const digestResult = await sendPendingEmailDigests(env, {
+          source: "cron",
+          max_rows: 20
+        });
+
+        console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
+        console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
+      } catch (err) {
+        console.error("CRON EMAIL QUEUE/DIGEST ERROR:", err);
+      }
+    })()
+  );
 
   ctx.waitUntil(
     (async () => {
