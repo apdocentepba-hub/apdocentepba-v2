@@ -863,7 +863,7 @@ var PROVINCIA_RUNNING_STALE_MS = 10 * 60 * 1e3;
 var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
 var WHATSAPP_ALERTS_PER_USER_MAX = 3;
 var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
-var WHATSAPP_QUERY_ALERTS_LIMIT = 5;
+var WHATSAPP_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
@@ -8694,58 +8694,171 @@ function buildRichTextAlertLines(payload, index) {
 __name(extractTelegramCommand, "extractTelegramCommand");
 function buildTelegramQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
-const visible = all;
-const hidden = 0;
 
-  const header = `?? APDocentePBA encontró ${all.length} alerta(s) compatibles`;
+  if (!all.length) {
+    return (
+      `APDocentePBA\n\n` +
+      `No hay alertas compatibles con tus filtros en este momento.\n\n` +
+      `Escribí ALERTAS para refrescar.`
+    );
+  }
 
-  const blocks = visible.map((item, idx) => {
+  const header =
+    `APDocentePBA\n\n` +
+    `Se encontraron ${all.length} alerta(s) compatibles.\n`;
+
+  const blocks = all.map((item, idx) => {
     const payload = item?.offer_payload || item || {};
-    return buildRichTextAlertLines(payload, idx).join("\n");
-  }).filter(Boolean);
 
-  let text = header;
+    const cargo =
+      String(payload?.cargo || payload?.area || payload?.title || "Oferta APD").trim() || "Oferta APD";
 
-  if (blocks.length) {
-    text += "\n\n" + blocks.join("\n\n????????????\n\n");
-  }
+    const distrito =
+      String(payload?.distrito || "-").trim() || "-";
 
-  if (hidden > 0) {
-    text += `\n\n+ ${hidden} más en el panel`;
-  }
+    const escuela =
+      String(payload?.escuela || "-").trim() || "-";
 
-  text += "\n\n?? https://alertasapd.com.ar";
-  text += "\nEscribí ALERTAS para refrescar.";
+    const turno =
+      String(payload?.turno || "-").trim() || "-";
 
-  return text;
+    const nivel =
+      String(payload?.nivel || payload?.nivel_modalidad || payload?.modalidad || "-").trim() || "-";
+
+    const cierre =
+      String(payload?.finoferta_label || payload?.fecha_cierre || payload?.cierre || "-").trim() || "-";
+
+    const postulados =
+      payload?.postulados ?? payload?.total_postulantes ?? "-";
+
+    const puntajeMasAlto =
+      payload?.primero_puntaje ?? payload?.puntaje_primero ?? "-";
+
+    const listadoMasAlto =
+      String(payload?.listado_origen_primero || "-").trim() || "-";
+
+    const estadoActual =
+      String(payload?.estado_actual || payload?.estado || "-").trim() || "-";
+
+    const pid =
+      String(payload?.pid_codigo || payload?.pid || "").trim();
+
+    const puntajePid =
+      payload?.puntaje_pid ?? payload?.tu_puntaje_pid ?? "";
+
+    const link =
+      String(payload?.abc_url || payload?.abc_postulantes_url || payload?.link || "").trim();
+
+    const lines = [
+      `${idx + 1}) ${cargo}`,
+      `${distrito}`,
+      `${escuela}`,
+      `${turno}`,
+      `${nivel}`,
+      `${cierre}`,
+      `Postulados: ${postulados}`,
+      `Puntaje más alto: ${puntajeMasAlto}`,
+      `Listado del más alto: ${listadoMasAlto}`
+    ];
+
+    if (estadoActual && estadoActual !== "-") {
+      lines.push(`Estado actual: ${estadoActual}`);
+    }
+
+    if (pid) {
+      lines.push(`PID: ${pid}`);
+    }
+
+    if (puntajePid !== "" && puntajePid !== null && puntajePid !== undefined) {
+      lines.push(`Tu puntaje PID: ${puntajePid}`);
+    }
+
+    if (link) {
+      lines.push(link);
+    }
+
+    return lines.join("\n");
+  });
+
+  return (
+    header +
+    `\n` +
+    blocks.join(`\n\n--------------------\n\n`) +
+    `\n\nhttps://alertasapd.com.ar` +
+    `\nEscribí ALERTAS para refrescar.`
+  );
 }
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 function buildWhatsAppQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
-  const visible = all.slice(0, WHATSAPP_QUERY_ALERTS_LIMIT);
-  const hidden = Math.max(0, all.length - visible.length);
 
-  const header = `?? APDocentePBA encontró ${all.length} alerta(s) compatibles`;
+  if (!all.length) {
+    return (
+      `APDocentePBA\n\n` +
+      `No hay alertas compatibles con tus filtros en este momento.\n\n` +
+      `Escribí ALERTAS para refrescar.`
+    );
+  }
 
-  const blocks = visible.map((item, idx) => {
+  const header = `APDocentePBA\n\nSe encontraron ${all.length} alerta(s) compatibles.`;
+
+  const blocks = all.map((item, idx) => {
     const payload = item?.offer_payload || item || {};
-    return buildRichTextAlertLines(payload, idx).join("\n");
-  }).filter(Boolean);
 
-  let text = header;
+    const cargo =
+      String(payload?.cargo || payload?.area || payload?.title || "Oferta APD").trim() || "Oferta APD";
 
-  if (blocks.length) {
-    text += "\n\n" + blocks.join("\n\n????????????\n\n");
-  }
+    const distrito =
+      String(payload?.distrito || "-").trim() || "-";
 
-  if (hidden > 0) {
-    text += `\n\n+ ${hidden} más en el panel`;
-  }
+    const escuela =
+      String(payload?.escuela || "-").trim() || "-";
 
-  text += "\n\n?? https://alertasapd.com.ar";
-  text += "\nEscribí ALERTAS para refrescar.";
+    const turno =
+      String(payload?.turno || "-").trim() || "-";
 
-  return text;
+    const nivel =
+      String(payload?.nivel || payload?.nivel_modalidad || payload?.modalidad || "-").trim() || "-";
+
+    const cierre =
+      String(payload?.finoferta_label || payload?.fecha_cierre || payload?.cierre || "-").trim() || "-";
+
+    const postulados =
+      payload?.postulados ?? payload?.total_postulantes ?? "-";
+
+    const puntajeMasAlto =
+      payload?.primero_puntaje ?? payload?.puntaje_primero ?? "-";
+
+    const listadoMasAlto =
+      String(payload?.listado_origen_primero || "-").trim() || "-";
+
+    const link =
+      String(payload?.abc_url || payload?.abc_postulantes_url || payload?.link || "").trim();
+
+    const lines = [
+      `${idx + 1}) ${cargo}`,
+      `Distrito: ${distrito}`,
+      `Escuela: ${escuela}`,
+      `Turno: ${turno}`,
+      `Nivel: ${nivel}`,
+      `Cierre: ${cierre}`,
+      `Postulados: ${postulados}`,
+      `Puntaje más alto: ${puntajeMasAlto}`,
+      `Listado del más alto: ${listadoMasAlto}`
+    ];
+
+    if (link) lines.push(`Link: ${link}`);
+
+    return lines.join("\n");
+  });
+
+  return (
+    header +
+    `\n\n` +
+    blocks.join(`\n\n--------------------\n\n`) +
+    `\n\nPanel: https://alertasapd.com.ar` +
+    `\nEscribí ALERTAS para refrescar.`
+  );
 }
 __name(buildWhatsAppQueryDigest, "buildWhatsAppQueryDigest");
 async function sendWhatsAppText(env, destination, text) {
@@ -9459,14 +9572,18 @@ async scheduled(_controller, env, ctx) {
   );
 
   ctx.waitUntil(
-    runEmailAlertsSweep(env, { source: "cron" })
-      .then((r) => {
-        console.log("CRON EMAIL SWEEP OK", JSON.stringify(r || {}));
-      })
-      .catch((err) => {
-        console.error("CRON EMAIL SWEEP ERROR:", err);
-      })
-  );
+  (async () => {
+    try {
+      const queueResult = await runEmailAlertsQueueSweep(env, { source: "cron" });
+      const digestResult = await sendPendingEmailDigests(env, { source: "cron" });
+
+      console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
+      console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
+    } catch (err) {
+      console.error("CRON EMAIL QUEUE/DIGEST ERROR:", err);
+    }
+  })()
+);
 
   ctx.waitUntil(
     (async () => {
