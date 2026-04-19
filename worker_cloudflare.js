@@ -3548,14 +3548,14 @@ function buildChannelAlertTextBlock(payload, options = {}) {
   const lines = [];
   lines.push(`${index ? `${index}) ` : ""}${title}`);
 
-  if (o.distrito) lines.push(`?? ${o.distrito}`);
-  if (o.escuela) lines.push(`?? ${o.escuela}`);
-  if (o.turno) lines.push(`?? ${o.turno}`);
-  if (o.nivel) lines.push(`?? ${o.nivel}`);
-  if (o.jornada) lines.push(`??? ${o.jornada}`);
-  if (o.modulos) lines.push(`?? Módulos: ${o.modulos}`);
-  if (o.dias_horarios) lines.push(`??? Horario: ${o.dias_horarios}`);
-  if (o.fecha_cierre) lines.push(`? Cierre: ${o.fecha_cierre}`);
+  if (o.distrito) lines.push(`📍 ${o.distrito}`);
+  if (o.escuela) lines.push(`🏫 ${o.escuela}`);
+  if (o.turno) lines.push(`🕒 ${o.turno}`);
+  if (o.nivel) lines.push(`🎓 ${o.nivel}`);
+  if (o.jornada) lines.push(`🏷️ ${o.jornada}`);
+  if (o.modulos) lines.push(`📦 Módulos: ${o.modulos}`);
+  if (o.dias_horarios) lines.push(`🗓️ Horario: ${o.dias_horarios}`);
+  if (o.fecha_cierre) lines.push(`⏰ Cierre: ${o.fecha_cierre}`);
 
   if (
     o.total_postulantes != null ||
@@ -3563,21 +3563,21 @@ function buildChannelAlertTextBlock(payload, options = {}) {
     o.listado_origen_primero
   ) {
     lines.push(
-      `?? Postulados: ${
+      `👥 Postulados: ${
         o.total_postulantes != null && o.total_postulantes !== ""
           ? String(o.total_postulantes)
           : "Sin datos"
       }`
     );
     lines.push(
-      `?? Puntaje más alto: ${
+      `📈 Puntaje más alto: ${
         o.puntaje_primero != null && o.puntaje_primero !== ""
           ? formatMailNumber(parseMailNumber(o.puntaje_primero))
           : "Sin datos"
       }`
     );
     lines.push(
-      `?? Listado del más alto: ${
+      `📄 Listado del más alto: ${
         o.listado_origen_primero
           ? o.listado_origen_primero
           : "Sin datos"
@@ -3594,24 +3594,24 @@ function buildChannelAlertTextBlock(payload, options = {}) {
       ? Number(o.pid_puntaje_total_base)
       : parseMailNumber(o.pid_puntaje_total);
 
-    if (o.pid_reason) lines.push(`?? PID: ${o.pid_reason}`);
-    if (o.pid_area) lines.push(`?? Área PID: ${o.pid_area}`);
-    if (o.pid_bloque) lines.push(`?? Bloque PID: ${o.pid_bloque}`);
+    if (o.pid_reason) lines.push(`🧾 PID: ${o.pid_reason}`);
+    if (o.pid_area) lines.push(`📚 Área PID: ${o.pid_area}`);
+    if (o.pid_bloque) lines.push(`🗂️ Bloque PID: ${o.pid_bloque}`);
     if (Number.isFinite(puntajeBase)) {
-      lines.push(`?? Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
+      lines.push(`📊 Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
     }
     if (o.pid_residencia_bonus_aplicado) {
-      lines.push(`?? Bonus residencia: +${Number(o.pid_residencia_bonus_puntos || 0)}`);
+      lines.push(`➕ Bonus residencia: +${Number(o.pid_residencia_bonus_puntos || 0)}`);
     }
     if (Number.isFinite(puntajeFinal)) {
-      lines.push(`? Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
+      lines.push(`⭐ Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
     }
     if (o.pid_listado || o.pid_anio) {
-      lines.push(`?? PID: ${o.pid_listado || "-"} · ${o.pid_anio || "-"}`);
+      lines.push(`🧷 PID: ${o.pid_listado || "-"} · ${o.pid_anio || "-"}`);
     }
   }
 
-  if (o.link) lines.push(`?? ${o.link}`);
+  if (o.link) lines.push(`🔗 ${o.link}`);
 
   return lines.filter(Boolean).join("\n");
 }
@@ -3980,15 +3980,14 @@ async function runEmailAlertsSweep(env, options = {}) {
       });
 
     const totalAlerts = sortedLatest.length;
-    const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
+const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
-    const visibleAlerts = visibleSource.map((item) => ({
-      offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-    }));
+const visibleAlerts = visibleSource.map((item) => ({
+  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+}));
 
-    const shownCount = visibleAlerts.length;
-
-    const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+const shownCount = visibleAlerts.length;
+const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
 
     const payload = {
       source: options.source || "cron",
@@ -4124,11 +4123,11 @@ async function runEmailAlertsSweep(env, options = {}) {
 
 async function runEmailAlertsQueueSweep(env, options = {}) {
   const MAX_USERS_PER_RUN = clampInt(
-    options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
-    1,
-    50,
-    20
-  );
+  options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
+  1,
+  500,
+  200
+);
 
   const MAX_ALERTS_PER_USER = clampInt(
     options?.max_alerts_per_user || env.EMAIL_QUEUE_ALERTS_PER_USER,
@@ -7726,8 +7725,8 @@ async function sendPendingEmailDigests(env, options = {}) {
     if (!alerts.length) continue;
 
     const totalAlerts = rows.length;
-    const shownCount = alerts.length;
-    const asunto = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+const shownCount = alerts.length;
+const asunto = `${shownCount} nuevas ofertas de ${totalAlerts}`;
 
     const html = buildDigestHtml(alerts, user, {
       total_alerts: totalAlerts,
@@ -8637,6 +8636,7 @@ function extractTelegramCommand(text) {
 }
 function buildRichTextAlertLines(payload, index) {
   const p = normalizeOfferPayload(payload || {});
+
   const title =
     [String(p.cargo || "").trim(), String(p.materia || "").trim()]
       .filter(Boolean)
@@ -8644,50 +8644,89 @@ function buildRichTextAlertLines(payload, index) {
       .join(" · ") || "Oferta APD";
 
   const lines = [
-    `${index + 1}) ${title}`,
-    `?? ${String(p.distrito || "-").trim() || "-"}`,
-    `?? ${String(p.escuela || "Sin escuela").trim() || "Sin escuela"}`,
-    `?? ${String(p.turno || "-").trim() || "-"}`,
-    `?? ${String(p.nivel || "-").trim() || "-"}`,
-    `? ${String(p.fecha_cierre || p.finoferta_label || "-").trim() || "-"}`
+    `${index + 1}) ${title}`
   ];
 
+  if (p.distrito) lines.push(`📍 Distrito: ${String(p.distrito).trim()}`);
+  if (p.escuela) lines.push(`🏫 Escuela: ${String(p.escuela).trim()}`);
+  if (p.turno) lines.push(`🕒 Turno: ${String(p.turno).trim()}`);
+  if (p.jornada) lines.push(`🏷️ Jornada: ${String(p.jornada).trim()}`);
+  if (p.nivel) lines.push(`🎓 Nivel: ${String(p.nivel).trim()}`);
+  if (p.curso_division) lines.push(`👥 Curso/división: ${String(p.curso_division).trim()}`);
+  if (p.modulos) lines.push(`📦 Módulos: ${String(p.modulos).trim()}`);
+  if (p.dias_horarios) lines.push(`🗓️ Días y horarios: ${String(p.dias_horarios).trim()}`);
+
+  const vigencia = [String(p.desde || "").trim(), String(p.hasta || "").trim()]
+    .filter(Boolean)
+    .join(" → ");
+  if (vigencia) lines.push(`📅 Vigencia: ${vigencia}`);
+
+  if (p.fecha_cierre || p.finoferta_label) {
+    lines.push(`⏰ Cierre: ${String(p.fecha_cierre || p.finoferta_label).trim()}`);
+  }
+
+  if (p.observaciones) {
+    lines.push(`📝 Observaciones: ${String(p.observaciones).trim()}`);
+  }
+
   if (p.total_postulantes != null && p.total_postulantes !== "") {
-    lines.push(`?? Postulados: ${String(p.total_postulantes)}`);
+    lines.push(`👥 Postulados: ${String(p.total_postulantes)}`);
   }
 
   if (p.puntaje_primero != null && p.puntaje_primero !== "") {
-    lines.push(`?? Puntaje más alto: ${String(p.puntaje_primero)}`);
+    lines.push(`📈 Puntaje más alto: ${String(p.puntaje_primero)}`);
   }
 
   if (p.listado_origen_primero) {
-    lines.push(`?? Listado del más alto: ${String(p.listado_origen_primero)}`);
+    lines.push(`📄 Listado del más alto: ${String(p.listado_origen_primero)}`);
   }
 
   if (hasPidEvidence(p)) {
     const chance = buildMailChanceInfo(p);
 
     if (chance?.title) {
-      lines.push(`?? ${chance.title}`);
+      lines.push(`🧠 PID: ${chance.title}`);
     }
 
     if (p.pid_reason) {
-      lines.push(`?? ${String(p.pid_reason)}`);
+      lines.push(`🧾 Motivo PID: ${String(p.pid_reason)}`);
     }
 
-    if (p.pid_area || p.pid_bloque) {
-      lines.push(
-        `?? PID: ${String(p.pid_area || "-")} · ${String(p.pid_bloque || "-")}`
-      );
+    if (p.pid_area) {
+      lines.push(`📚 Área PID: ${String(p.pid_area)}`);
     }
 
-    if (Number.isFinite(Number(p.pid_puntaje_total_final))) {
-      lines.push(`?? Tu puntaje PID: ${formatMailNumber(Number(p.pid_puntaje_total_final))}`);
+    if (p.pid_bloque) {
+      lines.push(`🗂️ Bloque PID: ${String(p.pid_bloque)}`);
+    }
+
+    const puntajeBase = Number.isFinite(Number(p.pid_puntaje_total_base))
+      ? Number(p.pid_puntaje_total_base)
+      : parseMailNumber(p.pid_puntaje_total);
+
+    if (Number.isFinite(puntajeBase)) {
+      lines.push(`📊 Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
+    }
+
+    if (p.pid_residencia_bonus_aplicado) {
+      lines.push(`➕ Bonus residencia: +${Number(p.pid_residencia_bonus_puntos || 0)}`);
+    }
+
+    const puntajeFinal = Number.isFinite(Number(p.pid_puntaje_total_final))
+      ? Number(p.pid_puntaje_total_final)
+      : null;
+
+    if (Number.isFinite(puntajeFinal)) {
+      lines.push(`⭐ Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
+    }
+
+    if (p.pid_listado || p.pid_anio) {
+      lines.push(`🧷 Listado/año PID: ${p.pid_listado || "-"} · ${p.pid_anio || "-"}`);
     }
   }
 
   if (p.link) {
-    lines.push(`?? ${String(p.link)}`);
+    lines.push(`🔗 ${String(p.link).trim()}`);
   }
 
   return lines;
@@ -8698,7 +8737,7 @@ function buildTelegramQueryDigest(alerts) {
 
   if (!all.length) {
     return (
-      `APDocentePBA\n\n` +
+      `📚 APDocentePBA\n\n` +
       `No hay alertas compatibles con tus filtros en este momento.\n\n` +
       `Escribí ALERTAS para refrescar.`
     );
@@ -8710,158 +8749,124 @@ function buildTelegramQueryDigest(alerts) {
 
   const blocks = all.map((item, idx) => {
     const payload = item?.offer_payload || item || {};
-
-    const cargo =
-      String(payload?.cargo || payload?.area || payload?.title || "Oferta APD").trim() || "Oferta APD";
-
-    const distrito =
-      String(payload?.distrito || "-").trim() || "-";
-
-    const escuela =
-      String(payload?.escuela || "-").trim() || "-";
-
-    const turno =
-      String(payload?.turno || "-").trim() || "-";
-
-    const nivel =
-      String(payload?.nivel || payload?.nivel_modalidad || payload?.modalidad || "-").trim() || "-";
-
-    const cierre =
-      String(payload?.finoferta_label || payload?.fecha_cierre || payload?.cierre || "-").trim() || "-";
-
-    const postulados =
-      payload?.postulados ?? payload?.total_postulantes ?? "-";
-
-    const puntajeMasAlto =
-      payload?.primero_puntaje ?? payload?.puntaje_primero ?? "-";
-
-    const listadoMasAlto =
-      String(payload?.listado_origen_primero || "-").trim() || "-";
-
-    const estadoActual =
-      String(payload?.estado_actual || payload?.estado || "-").trim() || "-";
-
-    const pid =
-      String(payload?.pid_codigo || payload?.pid || "").trim();
-
-    const puntajePid =
-      payload?.puntaje_pid ?? payload?.tu_puntaje_pid ?? "";
-
-    const link =
-      String(payload?.abc_url || payload?.abc_postulantes_url || payload?.link || "").trim();
-
-    const lines = [
-      `${idx + 1}) ${cargo}`,
-      `📍 ${distrito}`,
-      `🏫 ${escuela}`,
-      `🕒 ${turno}`,
-      `🎓 ${nivel}`,
-      `⏰ ${cierre}`,
-      `👥 Postulados: ${postulados}`,
-      `📈 Puntaje más alto: ${puntajeMasAlto}`,
-      `📄 Listado del más alto: ${listadoMasAlto}`
-    ];
-
-    if (estadoActual && estadoActual !== "-") {
-      lines.push(`🟠 Estado actual: ${estadoActual}`);
-    }
-
-    if (pid) {
-      lines.push(`🧾 PID: ${pid}`);
-    }
-
-    if (puntajePid !== "" && puntajePid !== null && puntajePid !== undefined) {
-      lines.push(`⭐ Tu puntaje PID: ${puntajePid}`);
-    }
-
-    if (link) {
-      lines.push(`🔗 ${link}`);
-    }
-
-    return lines.join("\n");
+    return buildRichTextAlertLines(payload, idx).join("\n");
   });
 
   return (
     header +
     `\n` +
     blocks.join(`\n\n━━━━━━━━━━━━\n\n`) +
-    `\n\n🌐 https://alertasapd.com.ar` +
+    `\n\n🌐 Panel: https://alertasapd.com.ar` +
     `\nEscribí ALERTAS para refrescar.`
   );
 }
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
-function buildWhatsAppQueryDigest(alerts) {
+function buildWhatsAppQueryDigestParts(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
 
   if (!all.length) {
-    return (
-      `APDocentePBA\n\n` +
-      `No hay alertas compatibles con tus filtros en este momento.\n\n` +
-      `Escribí ALERTAS para refrescar.`
-    );
+    return [
+      `APDocentePBA\n\nNo hay alertas compatibles con tus filtros en este momento.\n\nEscribí ALERTAS para refrescar.`
+    ];
   }
 
-  const header = `APDocentePBA\n\nSe encontraron ${all.length} alerta(s) compatibles.`;
-
-  const blocks = all.map((item, idx) => {
-    const payload = item?.offer_payload || item || {};
-
-    const cargo =
-      String(payload?.cargo || payload?.area || payload?.title || "Oferta APD").trim() || "Oferta APD";
-
-    const distrito =
-      String(payload?.distrito || "-").trim() || "-";
-
-    const escuela =
-      String(payload?.escuela || "-").trim() || "-";
-
-    const turno =
-      String(payload?.turno || "-").trim() || "-";
-
-    const nivel =
-      String(payload?.nivel || payload?.nivel_modalidad || payload?.modalidad || "-").trim() || "-";
-
-    const cierre =
-      String(payload?.finoferta_label || payload?.fecha_cierre || payload?.cierre || "-").trim() || "-";
-
-    const postulados =
-      payload?.postulados ?? payload?.total_postulantes ?? "-";
-
-    const puntajeMasAlto =
-      payload?.primero_puntaje ?? payload?.puntaje_primero ?? "-";
-
-    const listadoMasAlto =
-      String(payload?.listado_origen_primero || "-").trim() || "-";
-
-    const link =
-      String(payload?.abc_url || payload?.abc_postulantes_url || payload?.link || "").trim();
-
-    const lines = [
-      `${idx + 1}) ${cargo}`,
-      `Distrito: ${distrito}`,
-      `Escuela: ${escuela}`,
-      `Turno: ${turno}`,
-      `Nivel: ${nivel}`,
-      `Cierre: ${cierre}`,
-      `Postulados: ${postulados}`,
-      `Puntaje más alto: ${puntajeMasAlto}`,
-      `Listado del más alto: ${listadoMasAlto}`
-    ];
-
-    if (link) lines.push(`Link: ${link}`);
-
-    return lines.join("\n");
-  });
-
-  return (
-    header +
-    `\n\n` +
-    blocks.join(`\n\n--------------------\n\n`) +
-    `\n\nPanel: https://alertasapd.com.ar` +
-    `\nEscribí ALERTAS para refrescar.`
+  const parts = [];
+  parts.push(
+    `APDocentePBA\n\nSe encontraron ${all.length} alerta(s) compatibles.`
   );
+
+  for (let idx = 0; idx < all.length; idx++) {
+    const p = normalizeOfferPayload(all[idx]?.offer_payload || all[idx] || {});
+
+    const title =
+      [String(p.cargo || "").trim(), String(p.materia || "").trim()]
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .join(" · ") || "Oferta APD";
+
+    const lines = [`${idx + 1}) ${title}`];
+
+    if (p.distrito) lines.push(`Distrito: ${String(p.distrito).trim()}`);
+    if (p.escuela) lines.push(`Escuela: ${String(p.escuela).trim()}`);
+    if (p.turno) lines.push(`Turno: ${String(p.turno).trim()}`);
+    if (p.jornada) lines.push(`Jornada: ${String(p.jornada).trim()}`);
+    if (p.nivel) lines.push(`Nivel: ${String(p.nivel).trim()}`);
+    if (p.curso_division) lines.push(`Curso/división: ${String(p.curso_division).trim()}`);
+    if (p.modulos) lines.push(`Módulos: ${String(p.modulos).trim()}`);
+    if (p.dias_horarios) lines.push(`Días y horarios: ${String(p.dias_horarios).trim()}`);
+
+    const vigencia = [String(p.desde || "").trim(), String(p.hasta || "").trim()]
+      .filter(Boolean)
+      .join(" -> ");
+    if (vigencia) lines.push(`Vigencia: ${vigencia}`);
+
+    if (p.fecha_cierre || p.finoferta_label) {
+      lines.push(`Cierre: ${String(p.fecha_cierre || p.finoferta_label).trim()}`);
+    }
+
+    if (p.observaciones) {
+      lines.push(`Observaciones: ${String(p.observaciones).trim()}`);
+    }
+
+    if (p.total_postulantes != null && p.total_postulantes !== "") {
+      lines.push(`Postulados: ${String(p.total_postulantes)}`);
+    }
+
+    if (p.puntaje_primero != null && p.puntaje_primero !== "") {
+      lines.push(`Puntaje más alto: ${String(p.puntaje_primero)}`);
+    }
+
+    if (p.listado_origen_primero) {
+      lines.push(`Listado del más alto: ${String(p.listado_origen_primero)}`);
+    }
+
+    if (hasPidEvidence(p)) {
+      const chance = buildMailChanceInfo(p);
+
+      if (chance?.title) lines.push(`PID: ${chance.title}`);
+      if (p.pid_reason) lines.push(`Motivo PID: ${String(p.pid_reason)}`);
+      if (p.pid_area) lines.push(`Área PID: ${String(p.pid_area)}`);
+      if (p.pid_bloque) lines.push(`Bloque PID: ${String(p.pid_bloque)}`);
+
+      const puntajeBase = Number.isFinite(Number(p.pid_puntaje_total_base))
+        ? Number(p.pid_puntaje_total_base)
+        : parseMailNumber(p.pid_puntaje_total);
+
+      if (Number.isFinite(puntajeBase)) {
+        lines.push(`Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
+      }
+
+      if (p.pid_residencia_bonus_aplicado) {
+        lines.push(`Bonus residencia: +${Number(p.pid_residencia_bonus_puntos || 0)}`);
+      }
+
+      const puntajeFinal = Number.isFinite(Number(p.pid_puntaje_total_final))
+        ? Number(p.pid_puntaje_total_final)
+        : null;
+
+      if (Number.isFinite(puntajeFinal)) {
+        lines.push(`Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
+      }
+
+      if (p.pid_listado || p.pid_anio) {
+        lines.push(`Listado/año PID: ${p.pid_listado || "-"} · ${p.pid_anio || "-"}`);
+      }
+    }
+
+    if (p.link) {
+      lines.push(`Link: ${String(p.link).trim()}`);
+    }
+
+    parts.push(lines.join("\n"));
+  }
+
+  parts.push(
+    `Panel: https://alertasapd.com.ar\nEscribí ALERTAS para refrescar.`
+  );
+
+  return parts;
 }
-__name(buildWhatsAppQueryDigest, "buildWhatsAppQueryDigest");
+__name(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
 async function sendWhatsAppText(env, destination, text) {
   const response = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
     method: "POST",
@@ -9111,13 +9116,7 @@ return json2({
   channel_mode: "query_only"
 });
 
-return json2({
-  ok: true,
-  delivered: true,
-  total_alerts: rawAlerts.length,
-  plan_code: entitlement.plan_code,
-  channel_mode: "query_only"
-});
+
   }
 
   await sendTelegramText(
