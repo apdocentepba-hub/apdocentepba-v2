@@ -8897,18 +8897,44 @@ function buildWhatsAppQueryDigestParts(alerts) {
 }
 __name(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
 async function sendWhatsAppText(env, destination, text) {
-  const response = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ messaging_product: "whatsapp", to: destination, type: "text", text: { body: String(text || "").slice(0, 4096), preview_url: false } })
-  });
+  const response = await fetch(
+    `https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: destination,
+        type: "text",
+        text: {
+          body: String(text || "").slice(0, 4096),
+          preview_url: false
+        }
+      })
+    }
+  );
+
   const rawText = await response.text();
   let data = null;
-  try { data = rawText ? JSON.parse(rawText) : null; } catch { data = { raw_text: rawText }; }
+
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { raw_text: rawText };
+  }
+
   if (!response.ok) {
     throw new Error(data?.error?.message || `WhatsApp HTTP ${response.status}`);
   }
-  return { response, data };
+
+  return {
+    ok: true,
+    status: response.status,
+    data
+  };
 }
 __name(sendWhatsAppText, "sendWhatsAppText");
 async function trySendWhatsAppText(env, destination, text, context = "unknown") {
@@ -8920,7 +8946,12 @@ async function trySendWhatsAppText(env, destination, text, context = "unknown") 
       destination,
       error: err?.message || String(err || "send_failed")
     });
-    return null;
+
+    return {
+      ok: false,
+      status: 500,
+      error: err?.message || String(err || "send_failed")
+    };
   }
 }
 __name(trySendWhatsAppText, "trySendWhatsAppText");
