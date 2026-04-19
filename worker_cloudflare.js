@@ -4318,9 +4318,11 @@ __name(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 async function runWhatsAppAlertsSweep(env, options = {}) {
   const source = options.source || "cron";
 
-  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID &&
-                     !!env.WHATSAPP_ACCESS_TOKEN &&
-                     !!env.WHATSAPP_TEMPLATE_ALERTA;
+  const configured =
+    !!env.WHATSAPP_PHONE_NUMBER_ID &&
+    !!env.WHATSAPP_ACCESS_TOKEN &&
+    !!env.WHATSAPP_TEMPLATE_ALERTA;
+
   if (!configured) {
     return { ok: true, skipped: true, reason: "not_configured", source };
   }
@@ -4331,13 +4333,28 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
   ).catch(() => []);
 
   const total = Array.isArray(prefRows) ? prefRows.length : 0;
+
   if (!total) {
-    return { ok: true, processed_users: 0, sent_count: 0, source, message: "Sin usuarios con WhatsApp activo" };
+    return {
+      ok: true,
+      processed_users: 0,
+      sent_count: 0,
+      source,
+      message: "Sin usuarios con WhatsApp activo"
+    };
   }
 
-  const MAX_USERS = clampInt(env.WHATSAPP_ALERT_SWEEP_MAX_USERS, 1, 100, WHATSAPP_ALERT_SWEEP_MAX_USERS);
+  const MAX_USERS = clampInt(
+    env.WHATSAPP_ALERT_SWEEP_MAX_USERS,
+    1,
+    100,
+    WHATSAPP_ALERT_SWEEP_MAX_USERS
+  );
+
   const rowsToProcess = options?.target_user_id
-    ? prefRows.filter(r => String(r?.user_id || "").trim() === String(options.target_user_id).trim())
+    ? prefRows.filter(
+        (r) => String(r?.user_id || "").trim() === String(options.target_user_id).trim()
+      )
     : prefRows.slice(0, MAX_USERS);
 
   let processedUsers = 0;
@@ -4348,14 +4365,28 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
   for (const row of rowsToProcess) {
     const userId = String(row?.user_id || "").trim();
     if (!userId) continue;
+
     processedUsers += 1;
+
     try {
       const user = await obtenerUsuario(env, userId).catch(() => null);
-      if (!user?.activo) { skippedCount++; continue; }
-      if (!String(user?.whatsapp_number || "").trim()) { skippedCount++; continue; }
+
+      if (!user?.activo) {
+        skippedCount++;
+        continue;
+      }
+
+      if (!String(user?.celular || "").trim()) {
+        skippedCount++;
+        continue;
+      }
 
       const alertData = await construirAlertasParaUsuario(env, userId).catch(() => null);
-      if (!alertData?.ok) { skippedCount++; continue; }
+
+      if (!alertData?.ok) {
+        skippedCount++;
+        continue;
+      }
 
       const items = Array.isArray(alertData?.resultados)
         ? alertData.resultados
@@ -4363,9 +4394,13 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
           ? alertData.alertas
           : [];
 
-      if (!items.length) { skippedCount++; continue; }
+      if (!items.length) {
+        skippedCount++;
+        continue;
+      }
 
       const alertsToSend = items.slice(0, WHATSAPP_ALERTS_PER_USER_MAX);
+
       for (const alertItem of alertsToSend) {
         try {
           await sendWhatsAppAlertForUser(env, user, alertItem, { source });
