@@ -304,7 +304,7 @@
         ? (telegramRequested ? 'Conectado y activo' : 'Conectado')
         : (telegramRequested ? 'Pendiente de conexión' : 'No conectado');
 
-    const whatsappAllowed = !!pref.whatsapp_allowed_by_plan;
+    const whatsappAllowed = pref.whatsapp_allowed_by_plan !== false;
     const whatsappRequested = !!pref.alertas_whatsapp;
     const whatsappLabel = !whatsappAllowed
       ? 'Solo disponible en Insigne'
@@ -378,7 +378,7 @@
 
         if (wa) {
           pref.whatsapp_connected = !!wa.connected;
-          pref.whatsapp_allowed_by_plan = !!wa.allowed_by_plan;
+          pref.whatsapp_allowed_by_plan = wa.allowed_by_plan !== false;
           pref.whatsapp_plan_name = wa.plan_name || wa.plan_code || '';
           pref.whatsapp_plan_code = wa.plan_code || '';
           pref.whatsapp_phone_masked = wa.phone_masked || '';
@@ -418,7 +418,7 @@
 
         lastWhatsAppStatus = {
           connected: !!pref.whatsapp_connected,
-          allowed_by_plan: !!pref.whatsapp_allowed_by_plan,
+          allowed_by_plan: pref.whatsapp_allowed_by_plan !== false,
           plan_name: pref.whatsapp_plan_name || '',
           plan_code: pref.whatsapp_plan_code || '',
           phone_masked: pref.whatsapp_phone_masked || '',
@@ -443,7 +443,7 @@
       if (type === 'telegram') {
         renderTelegramStatus(lastTelegramStatus || { allowed_by_plan: true }, requested);
       } else {
-        renderWhatsAppStatus(lastWhatsAppStatus || { allowed_by_plan: !box.disabled }, requested);
+        renderWhatsAppStatus(lastWhatsAppStatus || { allowed_by_plan: true }, requested);
       }
     });
     box.dataset.channelsBound = '1';
