@@ -9149,20 +9149,38 @@ async function handleWhatsAppStatus(request, env) {
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
 async function handleWhatsAppWebhookVerify(request, env) {
   const url = new URL(request.url);
-  const mode = String(url.searchParams.get("hub.mode") || "").trim();
-  const token = String(url.searchParams.get("hub.verify_token") || "").trim();
-  const challenge = String(url.searchParams.get("hub.challenge") || "").trim();
 
-  if (
-    mode === "subscribe" &&
-    token &&
-    env.WHATSAPP_VERIFY_TOKEN &&
-    token === String(env.WHATSAPP_VERIFY_TOKEN).trim()
-  ) {
-    return new Response(challenge, { status: 200 });
+  const mode = url.searchParams.get("hub.mode");
+  const token = url.searchParams.get("hub.verify_token");
+  const challenge = url.searchParams.get("hub.challenge");
+
+  const expectedToken = String(
+    env.WHATSAPP_VERIFY_TOKEN || "apdocente_token"
+  ).trim();
+
+  console.log("WA VERIFY", {
+    path: url.pathname,
+    mode,
+    token_received: token,
+    token_expected: expectedToken,
+    has_challenge: !!challenge
+  });
+
+  if (mode === "subscribe" && token === expectedToken) {
+    return new Response(challenge || "", {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8"
+      }
+    });
   }
 
-  return new Response("forbidden", { status: 403 });
+  return new Response("Forbidden", {
+    status: 403,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8"
+    }
+  });
 }
 __name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 async function handleWhatsAppWebhook(request, env) {
