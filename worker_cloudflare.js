@@ -9078,7 +9078,7 @@ try {
   await sendTelegramText(
     env,
     chatId,
-    "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\n?? https://alertasapd.com.ar"
+    "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\n🌐 https://alertasapd.com.ar"
   ).catch(() => null);
 
   return json2({
@@ -9094,7 +9094,7 @@ const alerts = rawAlerts.map((item) => ({
 }));
 const reply = alerts.length
   ? buildTelegramQueryDigest(alerts)
-  : "No encontré alertas compatibles en este momento.\n\n?? https://alertasapd.com.ar";
+  : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
 
 try {
   await sendTelegramLongText(env, chatId, reply);
@@ -9103,7 +9103,7 @@ try {
 
   const fallback = rawAlerts.length
     ? `Encontré ${rawAlerts.length} alerta(s) compatibles, pero no pude mandarte el detalle completo por Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
-    : "No encontré alertas compatibles en este momento.\n\n?? https://alertasapd.com.ar";
+    : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
 
   await sendTelegramText(env, chatId, fallback).catch(() => null);
 }
@@ -9122,7 +9122,7 @@ return json2({
   await sendTelegramText(
     env,
     chatId,
-    "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n?? https://alertasapd.com.ar"
+    "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar"
   ).catch(() => null);
 
   return json2({ ok: true, delivered: true, help: true, channel_mode: "query_only" });
@@ -9380,17 +9380,26 @@ async function handleWhatsAppWebhook(request, env) {
             const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
 
             const alerts = await enrichAlertsForRichChannels(
-              env,
-              user,
-              rawAlerts,
-              WHATSAPP_QUERY_ALERTS_LIMIT
-            );
+  env,
+  user,
+  rawAlerts,
+  WHATSAPP_QUERY_ALERTS_LIMIT
+);
 
-            const reply = alerts.length
-              ? buildWhatsAppQueryDigest(alerts)
-              : "No encontré alertas compatibles en este momento.\n\nhttps://alertasapd.com.ar";
+if (alerts.length) {
+  const parts = buildWhatsAppQueryDigestParts(alerts);
 
-            await trySendWhatsAppText(env, from, reply, "alert_query_reply");
+  for (const part of parts) {
+    await trySendWhatsAppText(env, from, part, "alert_query_reply");
+  }
+} else {
+  await trySendWhatsAppText(
+    env,
+    from,
+    "No encontré alertas compatibles en este momento.\n\nhttps://alertasapd.com.ar",
+    "alert_query_reply"
+  );
+}
           } catch (err) {
             console.error("WHATSAPP ALERT QUERY ERROR:", {
               user_id: user.id,
