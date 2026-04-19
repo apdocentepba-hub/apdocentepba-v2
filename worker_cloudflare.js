@@ -8770,13 +8770,12 @@ function buildWhatsAppQueryDigestParts(alerts) {
     ];
   }
 
+  const MAX_PART_LEN = 3200;
   const parts = [];
-  parts.push(
-    `APDocentePBA\n\nSe encontraron ${all.length} alerta(s) compatibles.`
-  );
+  const header = `APDocentePBA\n\nSe encontraron ${all.length} alertas compatibles.`;
 
-  for (let idx = 0; idx < all.length; idx++) {
-    const p = normalizeOfferPayload(all[idx]?.offer_payload || all[idx] || {});
+  const blocks = all.map((item, idx) => {
+    const p = normalizeOfferPayload(item?.offer_payload || item || {});
 
     const title =
       [String(p.cargo || "").trim(), String(p.materia || "").trim()]
@@ -8823,7 +8822,7 @@ function buildWhatsAppQueryDigestParts(alerts) {
     if (hasPidEvidence(p)) {
       const chance = buildMailChanceInfo(p);
 
-      if (chance?.title) lines.push(`PID: ${chance.title}`);
+      if (chance?.title) lines.push(`Estado PID: ${chance.title}`);
       if (p.pid_reason) lines.push(`Motivo PID: ${String(p.pid_reason)}`);
       if (p.pid_area) lines.push(`Área PID: ${String(p.pid_area)}`);
       if (p.pid_bloque) lines.push(`Bloque PID: ${String(p.pid_bloque)}`);
@@ -8857,12 +8856,42 @@ function buildWhatsAppQueryDigestParts(alerts) {
       lines.push(`Link: ${String(p.link).trim()}`);
     }
 
-    parts.push(lines.join("\n"));
+    return lines.join("\n");
+  });
+
+  let current = header;
+
+  for (const block of blocks) {
+    const separator = current === header ? "\n\n" : "\n\n--------------------\n\n";
+    const candidate = `${current}${separator}${block}`;
+
+    if (candidate.length > MAX_PART_LEN && current !== header) {
+      parts.push(current.trim());
+      current = block;
+    } else if (candidate.length > MAX_PART_LEN && current === header) {
+      parts.push(`${header}\n\n${block}`.trim());
+      current = "";
+    } else {
+      current = candidate;
+    }
   }
 
-  parts.push(
-    `Panel: https://alertasapd.com.ar\nEscribí ALERTAS para refrescar.`
-  );
+  if (current && current.trim()) {
+    parts.push(current.trim());
+  }
+
+  const footer = `Panel: https://alertasapd.com.ar\nEscribí ALERTAS para refrescar.`;
+
+  if (!parts.length) {
+    return [header, footer];
+  }
+
+  const lastIdx = parts.length - 1;
+  if ((parts[lastIdx] + `\n\n${footer}`).length <= MAX_PART_LEN) {
+    parts[lastIdx] = `${parts[lastIdx]}\n\n${footer}`;
+  } else {
+    parts.push(footer);
+  }
 
   return parts;
 }
@@ -9333,7 +9362,11 @@ async function handleWhatsAppWebhook(request, env) {
         if (messageId) {
           const dedupeKey = whatsappMessageDedupeKey(messageId);
           if (await wasInboundEventProcessed(env, dedupeKey)) continue;
-          await markInboundEventProcessed(env, dedupeKey, WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS).catch(() => null);
+          await markInboundEventProcessed(
+            env,
+            dedupeKey,
+            WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS
+          ).catch(() => null);
         }
 
         const from = String(message?.from || "").trim();
@@ -9342,14 +9375,24 @@ async function handleWhatsAppWebhook(request, env) {
         const user = await findUserByWhatsAppNumber(env, from);
 
         if (!user?.id) {
-          await trySendWhatsAppText(env, from, "No encontré una cuenta de APDocentePBA asociada a este número. Guardá tu celular en el panel y probá de nuevo.", "user_not_found");
+          await trySendWhatsAppText(
+            env,
+            from,
+            "No encontré una cuenta de APDocentePBA asociada a este número. Guardá tu celular en el panel y probá de nuevo.",
+            "user_not_found"
+          );
           continue;
         }
 
         const entitlement = await resolveWhatsAppEntitlement(env, user.id);
 
         if (!entitlement.allowed) {
-          await trySendWhatsAppText(env, from, "WhatsApp queda reservado para el plan Insigne. En tu plan actual seguís teniendo email y Telegram.", "not_allowed_by_plan");
+          await trySendWhatsAppText(
+            env,
+            from,
+            "WhatsApp queda reservado para el plan Insigne. En tu plan actual seguís teniendo email y Telegram.",
+            "not_allowed_by_plan"
+          );
           continue;
         }
 
@@ -9370,7 +9413,12 @@ async function handleWhatsAppWebhook(request, env) {
         );
 
         if (!prefs?.alertas_activas || !prefs?.alertas_whatsapp) {
-          await trySendWhatsAppText(env, from, "Tu canal de WhatsApp todavía no está activo en preferencias. Entrá al panel, activalo y después escribí ALERTAS.", "alerts_not_enabled");
+          await trySendWhatsAppText(
+            env,
+            from,
+            "Tu canal de WhatsApp todavía no está activo en preferencias. Entrá al panel, activalo y después escribí ALERTAS.",
+            "alerts_not_enabled"
+          );
           continue;
         }
 
@@ -9380,34 +9428,58 @@ async function handleWhatsAppWebhook(request, env) {
             const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
 
             const alerts = await enrichAlertsForRichChannels(
-  env,
-  user,
-  rawAlerts,
-  WHATSAPP_QUERY_ALERTS_LIMIT
-);
+              env,
+              user,
+              rawAlerts,
+              WHATSAPP_QUERY_ALERTS_LIMIT
+            );
 
-if (alerts.length) {
-  const parts = buildWhatsAppQueryDigestParts(alerts);
+            if (alerts.length) {
+              const parts = buildWhatsAppQueryDigestParts(alerts);
 
-  for (const part of parts) {
-    await trySendWhatsAppText(env, from, part, "alert_query_reply");
-  }
-} else {
-  await trySendWhatsAppText(
-    env,
-    from,
-    "No encontré alertas compatibles en este momento.\n\nhttps://alertasapd.com.ar",
-    "alert_query_reply"
-  );
-}
+              for (let i = 0; i < parts.length; i++) {
+                const sendResult = await trySendWhatsAppText(
+                  env,
+                  from,
+                  parts[i],
+                  "alert_query_reply"
+                );
+
+                if (!sendResult?.ok) {
+                  console.error("WHATSAPP PART SEND ERROR", {
+                    user_id: user.id,
+                    from,
+                    index: i,
+                    total_parts: parts.length,
+                    status: sendResult?.status || null,
+                    error: sendResult?.error || sendResult?.data || null
+                  });
+                  break;
+                }
+              }
+            } else {
+              await trySendWhatsAppText(
+                env,
+                from,
+                "No encontré alertas compatibles en este momento.\n\nhttps://alertasapd.com.ar",
+                "alert_query_reply"
+              );
+            }
           } catch (err) {
             console.error("WHATSAPP ALERT QUERY ERROR:", {
               user_id: user.id,
               from,
               error: err?.message || String(err || "alert_query_failed")
             });
-            await trySendWhatsAppText(env, from, "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\nhttps://alertasapd.com.ar", "alert_query_error_fallback");
+
+            await trySendWhatsAppText(
+              env,
+              from,
+              "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\nhttps://alertasapd.com.ar",
+              "alert_query_error_fallback"
+            );
           }
+
           continue;
         }
 
@@ -9424,6 +9496,7 @@ if (alerts.length) {
   return json2({ ok: true, channel_mode: "query_only" });
 }
 __name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
+
 function safeProvinciaBackfillStatus(message = null) {
   return { ok: true, scope: "PROVINCIA_FULL", status: "idle", district_index: 0, district_name: null, next_page: 0, pages_processed: 0, districts_completed: 0, offers_processed: 0, last_batch_count: 0, total_districts: 0, progress_pct: 0, started_at: null, finished_at: null, last_run_at: null, updated_at: null, last_error: message || null, retryable: false, stale_running: false, failed_page: 0 };
 }
