@@ -126,6 +126,15 @@ async function supabaseInsert(env, table, rows) {
   });
 }
 
+async function supabasePatchReturning(env, table, filter, payload) {
+  const rows = await supabaseRequest(env, `${table}?${filter}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
 async function getUserById(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -453,6 +462,7 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
 
   const userId = normUpper(payload?.user_id);
   const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
+  const requestedWhatsApp = !!payload?.preferencias?.alertas_whatsapp;
   let telegramStatus = null;
 
   if (userId) {
@@ -467,6 +477,23 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
 
     telegramStatus = buildTelegramStatusPayload(env, { ...state, user_id: userId }, entitlement);
 
+    await supabasePatchReturning(
+      env,
+      "user_preferences",
+      `user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        alertas_whatsapp: requestedWhatsApp,
+        updated_at: new Date().toISOString()
+      }
+    ).catch(err => {
+      console.error("WHATSAPP PREF PERSIST ERROR:", err);
+      return null;
+    });
+
+    if (delegated.data?.preferencias && typeof delegated.data.preferencias === "object") {
+      delegated.data.preferencias.alertas_whatsapp = requestedWhatsApp;
+    }
+
     await insertNotificationDeliveryLogs(env, baseLogRow({
       userId,
       eventType: "telegram_preferences_update",
@@ -478,7 +505,8 @@ async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
         effective_alerts_enabled: effectiveEnabled,
         connected: !!currentState?.connected,
         allowed_by_plan: entitlement.allowed,
-        channel_policy: entitlement.source
+        channel_policy: entitlement.source,
+        requested_whatsapp_enabled: requestedWhatsApp
       },
       errorMessage: null
     }));
