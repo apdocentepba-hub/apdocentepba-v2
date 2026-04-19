@@ -3829,11 +3829,22 @@ async function runEmailAlertsSweep(env, options = {}) {
     };
   }
 
-  const rowsToProcess = targetUserId
-    ? prefRows.filter(
-        (r) => String(r?.user_id || "").trim() === targetUserId
-      )
-    : prefRows;
+ const rowsBase = targetUserId
+  ? prefRows.filter(
+      (r) => String(r?.user_id || "").trim() === targetUserId
+    )
+  : prefRows;
+
+const MANUAL_SWEEP_LIMIT = clampInt(
+  options?.manual_limit || env.EMAIL_MANUAL_SWEEP_LIMIT,
+  1,
+  10,
+  1
+);
+
+const rowsToProcess = targetUserId
+  ? rowsBase
+  : rowsBase.slice(0, MANUAL_SWEEP_LIMIT);
 
   if (targetUserId && !rowsToProcess.length) {
     return {
@@ -3845,7 +3856,7 @@ async function runEmailAlertsSweep(env, options = {}) {
       skipped_count: 0,
       failed_count: 0,
       total_users: total,
-      limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
+      limit_per_run: targetUserId ? 1 : MANUAL_SWEEP_LIMIT,
       stopped_early: false,
       failed_samples: [],
       debug_enabled: debugEnabled,
@@ -8797,137 +8808,134 @@ function buildTelegramQueryDigest(alerts) {
 }
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 function buildWhatsAppQueryDigestParts(alerts) {
-  const all = Array.isArray(alerts) ? alerts : [];
+  const safe = (v) => String(v ?? "").trim();
 
-  if (!all.length) {
-    return [
-      `APDocentePBA\n\nNo hay alertas compatibles con tus filtros en este momento.\n\nEscribí ALERTAS para refrescar.`
-    ];
+  if (!Array.isArray(alerts) || alerts.length === 0) {
+    return ["No encontré alertas activas para vos en este momento."];
   }
 
-  const MAX_PART_LEN = 3200;
   const parts = [];
-  const header = `APDocentePBA\n\nSe encontraron ${all.length} alertas compatibles.`;
+  parts.push(`Encontré ${alerts.length} alertas para vos.`);
 
-  const blocks = all.map((item, idx) => {
-    const p = normalizeOfferPayload(item?.offer_payload || item || {});
+  for (let i = 0; i < alerts.length; i++) {
+    const a = alerts[i] || {};
 
-    const title =
-      [String(p.cargo || "").trim(), String(p.materia || "").trim()]
-        .filter(Boolean)
-        .filter((v, i, arr) => arr.indexOf(v) === i)
-        .join(" · ") || "Oferta APD";
+    const cargo =
+      safe(a.cargo) ||
+      safe(a.descripcioncargo) ||
+      safe(a.title) ||
+      "-";
 
-    const lines = [`${idx + 1}) ${title}`];
+    const distrito =
+      safe(a.distrito) ||
+      safe(a.descdistrito) ||
+      "-";
 
-    if (p.distrito) lines.push(`Distrito: ${String(p.distrito).trim()}`);
-    if (p.escuela) lines.push(`Escuela: ${String(p.escuela).trim()}`);
-    if (p.turno) lines.push(`Turno: ${String(p.turno).trim()}`);
-    if (p.jornada) lines.push(`Jornada: ${String(p.jornada).trim()}`);
-    if (p.nivel) lines.push(`Nivel: ${String(p.nivel).trim()}`);
-    if (p.curso_division) lines.push(`Curso/división: ${String(p.curso_division).trim()}`);
-    if (p.modulos) lines.push(`Módulos: ${String(p.modulos).trim()}`);
-    if (p.dias_horarios) lines.push(`Días y horarios: ${String(p.dias_horarios).trim()}`);
+    const escuela =
+      safe(a.escuela) ||
+      safe(a.establecimiento) ||
+      safe(a.servicio) ||
+      "-";
 
-    const vigencia = [String(p.desde || "").trim(), String(p.hasta || "").trim()]
-      .filter(Boolean)
-      .join(" -> ");
-    if (vigencia) lines.push(`Vigencia: ${vigencia}`);
+    const turno =
+      safe(a.turno) || "-";
 
-    if (p.fecha_cierre || p.finoferta_label) {
-      lines.push(`Cierre: ${String(p.fecha_cierre || p.finoferta_label).trim()}`);
-    }
+    const jornada =
+      safe(a.jornada) || "-";
 
-    if (p.observaciones) {
-      lines.push(`Observaciones: ${String(p.observaciones).trim()}`);
-    }
+    const nivel =
+      safe(a.nivel) ||
+      safe(a.descnivelmodalidad) ||
+      "-";
 
-    if (p.total_postulantes != null && p.total_postulantes !== "") {
-      lines.push(`Postulados: ${String(p.total_postulantes)}`);
-    }
+    const curso =
+      safe(a.curso) || "-";
 
-    if (p.puntaje_primero != null && p.puntaje_primero !== "") {
-      lines.push(`Puntaje más alto: ${String(p.puntaje_primero)}`);
-    }
+    const modulos =
+      safe(a.modulos) || "-";
 
-    if (p.listado_origen_primero) {
-      lines.push(`Listado del más alto: ${String(p.listado_origen_primero)}`);
-    }
+    const dias =
+      safe(a.dias) || "-";
 
-    if (hasPidEvidence(p)) {
-      const chance = buildMailChanceInfo(p);
+    const vigencia =
+      safe(a.vigencia) ||
+      [safe(a.desdefecha), safe(a.hastafecha)].filter(Boolean).join(" / ") ||
+      "-";
 
-      if (chance?.title) lines.push(`Estado PID: ${chance.title}`);
-      if (p.pid_reason) lines.push(`Motivo PID: ${String(p.pid_reason)}`);
-      if (p.pid_area) lines.push(`Área PID: ${String(p.pid_area)}`);
-      if (p.pid_bloque) lines.push(`Bloque PID: ${String(p.pid_bloque)}`);
+    const cierre =
+      safe(a.finoferta) ||
+      safe(a.cierre) ||
+      "-";
 
-      const puntajeBase = Number.isFinite(Number(p.pid_puntaje_total_base))
-        ? Number(p.pid_puntaje_total_base)
-        : parseMailNumber(p.pid_puntaje_total);
+    const postulados =
+      safe(a.total_postulantes) || "-";
 
-      if (Number.isFinite(puntajeBase)) {
-        lines.push(`Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
-      }
+    const puntaje1 =
+      safe(a.puntaje_primero) || "-";
 
-      if (p.pid_residencia_bonus_aplicado) {
-        lines.push(`Bonus residencia: +${Number(p.pid_residencia_bonus_puntos || 0)}`);
-      }
+    const listado1 =
+      safe(a.listado_origen_primero) || "-";
 
-      const puntajeFinal = Number.isFinite(Number(p.pid_puntaje_total_final))
-        ? Number(p.pid_puntaje_total_final)
-        : null;
+    const estadoPid =
+      safe(a.pid_estado) || safe(a.estado_pid) || "-";
 
-      if (Number.isFinite(puntajeFinal)) {
-        lines.push(`Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
-      }
+    const motivoPid =
+      safe(a.pid_motivo) || safe(a.motivo_pid) || "-";
 
-      if (p.pid_listado || p.pid_anio) {
-        lines.push(`Listado/año PID: ${p.pid_listado || "-"} · ${p.pid_anio || "-"}`);
-      }
-    }
+    const areaPid =
+      safe(a.pid_area) || safe(a.area_pid) || "-";
 
-    if (p.link) {
-      lines.push(`Link: ${String(p.link).trim()}`);
-    }
+    const bloquePid =
+      safe(a.pid_bloque) || safe(a.bloque_pid) || "-";
 
-    return lines.join("\n");
-  });
+    const puntajeBasePid =
+      safe(a.pid_puntaje_base) || safe(a.puntaje_pid_base) || "-";
 
-  let current = header;
+    const bonusResidencia =
+      safe(a.pid_bonus_residencia) || safe(a.bonus_residencia) || "-";
 
-  for (const block of blocks) {
-    const separator = current === header ? "\n\n" : "\n\n--------------------\n\n";
-    const candidate = `${current}${separator}${block}`;
+    const puntajeFinalPid =
+      safe(a.pid_puntaje_final) || safe(a.puntaje_pid_final) || "-";
 
-    if (candidate.length > MAX_PART_LEN && current !== header) {
-      parts.push(current.trim());
-      current = block;
-    } else if (candidate.length > MAX_PART_LEN && current === header) {
-      parts.push(`${header}\n\n${block}`.trim());
-      current = "";
-    } else {
-      current = candidate;
-    }
+    const listadoPid =
+      safe(a.pid_listado) || safe(a.listado_pid) || "-";
+
+    const link =
+      safe(a.link) ||
+      safe(a.url) ||
+      safe(a.postular_url) ||
+      safe(a.oferta_url) ||
+      "-";
+
+    const msg =
+`${i + 1}) ${cargo}
+Distrito: ${distrito}
+Escuela: ${escuela}
+Turno: ${turno}
+Jornada: ${jornada}
+Nivel: ${nivel}
+Curso/división: ${curso}
+Módulos: ${modulos}
+Días y horarios: ${dias}
+Vigencia: ${vigencia}
+Cierre: ${cierre}
+Postulados: ${postulados}
+Puntaje más alto: ${puntaje1}
+Listado del más alto: ${listado1}
+Estado PID: ${estadoPid}
+Motivo PID: ${motivoPid}
+Área PID: ${areaPid}
+Bloque PID: ${bloquePid}
+Puntaje PID base: ${puntajeBasePid}
+Bonus residencia: ${bonusResidencia}
+Puntaje PID final: ${puntajeFinalPid}
+Listado PID: ${listadoPid}
+Link: ${link}`;
+
+    parts.push(msg);
   }
 
-  if (current && current.trim()) {
-    parts.push(current.trim());
-  }
-
-  const footer = `Panel: https://alertasapd.com.ar\nEscribí ALERTAS para refrescar.`;
-
-  if (!parts.length) {
-    return [header, footer];
-  }
-
-  const lastIdx = parts.length - 1;
-  if ((parts[lastIdx] + `\n\n${footer}`).length <= MAX_PART_LEN) {
-    parts[lastIdx] = `${parts[lastIdx]}\n\n${footer}`;
-  } else {
-    parts.push(footer);
-  }
-
+  parts.push("Fin de alertas.");
   return parts;
 }
 __name(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
@@ -9503,26 +9511,39 @@ async function handleWhatsAppWebhook(request, env) {
             if (alerts.length) {
               const parts = buildWhatsAppQueryDigestParts(alerts);
 
-              for (let i = 0; i < parts.length; i++) {
-                const sendResult = await trySendWhatsAppText(
-                  env,
-                  from,
-                  parts[i],
-                  "alert_query_reply"
-                );
+              const MAX_WHATSAPP_MESSAGES = 6;
 
-                if (!sendResult?.ok) {
-                  console.error("WHATSAPP PART SEND ERROR", {
-                    user_id: user.id,
-                    from,
-                    index: i,
-                    total_parts: parts.length,
-                    status: sendResult?.status || null,
-                    error: sendResult?.error || sendResult?.data || null
-                  });
-                  break;
-                }
-              }
+for (let i = 0; i < parts.length && i < MAX_WHATSAPP_MESSAGES; i++) {
+  const sendResult = await trySendWhatsAppText(
+    env,
+    from,
+    parts[i],
+    "alert_query_reply"
+  );
+
+  if (!sendResult?.ok) {
+    console.error("WHATSAPP PART SEND ERROR", {
+      user_id: user.id,
+      from,
+      index: i,
+      total_parts: parts.length,
+      status: sendResult?.status || null,
+      error: sendResult?.error || sendResult?.data || null
+    });
+    continue;
+  }
+
+  await sleep(1800);
+}
+
+if (parts.length > MAX_WHATSAPP_MESSAGES) {
+  await trySendWhatsAppText(
+    env,
+    from,
+    `Mostré ${MAX_WHATSAPP_MESSAGES} de ${parts.length} mensajes.\nRespondé MAS para seguir.`,
+    "alert_query_reply"
+  );
+}
             } else {
               await trySendWhatsAppText(
                 env,
@@ -9677,19 +9698,28 @@ var worker_hotfix_default = {
     const debug = url.searchParams.get("debug") === "1";
     const dryRun = url.searchParams.get("dry_run") === "1";
 
+    const manualLimit = clampInt(
+      url.searchParams.get("limit"),
+      1,
+      10,
+      1
+    );
+
     const r = await runEmailAlertsSweep(env, {
       source: "manual_test",
       target_user_id: targetUserId || undefined,
       debug,
       debug_user_id: targetUserId || "",
-      dry_run: dryRun
+      dry_run: dryRun,
+      manual_limit: manualLimit
     });
 
-    return json2(r, 200);
-  } catch (err) {
-    return json2({
+    return json(r, 200);
+
+  } catch (e) {
+    return json({
       ok: false,
-      error: err?.message || "No se pudo ejecutar el barrido de email"
+      error: String(e?.message || e)
     }, 500);
   }
 }
