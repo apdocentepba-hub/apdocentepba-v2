@@ -221,36 +221,72 @@ async function sendWhatsAppText(env, to, body) {
 }
 
 function buildWhatsAppDigestMessage(user, alerts) {
-  const visible = Array.isArray(alerts) ? alerts.slice(0, 5) : [];
+  const items = Array.isArray(alerts) ? alerts : [];
   const lines = [
-    `Hola ${norm(user?.nombre) || "Docente"}.`,
-    visible.length
-      ? `Estas son tus alertas del momento (${alerts.length}):`
-      : "Ahora mismo no hay alertas compatibles con tus filtros.",
-    ""
+    `APDocentePBA`,
+    ``,
+    `Hola ${norm(user?.nombre) || "Docente"}.`
   ];
 
-  if (!visible.length) {
-    lines.push("Podés revisar nuevamente más tarde desde tu panel.");
+  if (!items.length) {
+    lines.push(`No hay alertas compatibles con tus filtros en este momento.`);
+    lines.push(``);
+    lines.push(`Escribí ALERTAS más tarde para volver a consultar.`);
     return lines.join("\n");
   }
 
-  visible.forEach((item, idx) => {
-    lines.push(`${idx + 1}) ${norm(item?.cargo || item?.area || "Oferta APD")}`);
-    if (item?.escuela) lines.push(`   ${norm(item.escuela)}`);
-    lines.push(`   ${norm(item?.distrito || "-")} · turno ${norm(item?.turno || "-")}`);
-    if (item?.finoferta_label || item?.fecha_cierre || item?.cierre) {
-      lines.push(`   cierre ${norm(item?.finoferta_label || item?.fecha_cierre || item?.cierre)}`);
+  lines.push(`Se encontraron ${items.length} alerta(s).`);
+  lines.push(``);
+
+  items.forEach((item, idx) => {
+    const cargo =
+      norm(item?.cargo || item?.area || "Oferta APD") || "Oferta APD";
+
+    const distrito = norm(item?.distrito || "-") || "-";
+    const escuela = norm(item?.escuela || "-") || "-";
+    const turno = norm(item?.turno || "-") || "-";
+    const nivel =
+      norm(item?.nivel || item?.nivel_modalidad || item?.modalidad || "-") || "-";
+    const cierre =
+      norm(item?.finoferta_label || item?.fecha_cierre || item?.cierre || "-") || "-";
+
+    const postulados =
+      item?.postulados ?? item?.total_postulantes ?? "-";
+
+    const puntajeMasAlto =
+      item?.primero_puntaje ?? item?.puntaje_primero ?? "-";
+
+    const listadoMasAlto =
+      norm(item?.listado_origen_primero || "-") || "-";
+
+    const abcUrl =
+      norm(item?.abc_url || item?.abc_postulantes_url || item?.link || "") || "";
+
+    lines.push(`${idx + 1}) ${cargo}`);
+    lines.push(`Distrito: ${distrito}`);
+    lines.push(`Escuela: ${escuela}`);
+    lines.push(`Turno: ${turno}`);
+    lines.push(`Nivel: ${nivel}`);
+    lines.push(`Cierre: ${cierre}`);
+    lines.push(`Postulados: ${postulados}`);
+    lines.push(`Puntaje más alto: ${puntajeMasAlto}`);
+    lines.push(`Listado del más alto: ${listadoMasAlto}`);
+
+    if (abcUrl) {
+      lines.push(`Link: ${abcUrl}`);
     }
-    lines.push("");
+
+    if (idx < items.length - 1) {
+      lines.push(``);
+      lines.push(`--------------------`);
+      lines.push(``);
+    }
   });
 
-  if (alerts.length > visible.length) {
-    lines.push(`+ ${alerts.length - visible.length} alerta(s) más en tu panel.`);
-    lines.push("");
-  }
+  lines.push(``);
+  lines.push(`Panel: https://alertasapd.com.ar`);
+  lines.push(`Escribí ALERTAS para refrescar.`);
 
-  lines.push("Panel APDocentePBA: revisá el detalle completo ahí.");
   return lines.join("\n");
 }
 
