@@ -6982,42 +6982,28 @@ const CARGO_EQUIV = {
 
 
 
-function cargoVariants(value) {
-  const base = norm(value);
-  if (!base) return [];
+function cargoVariants(cargo) {
+  if (!cargo) return [];
 
-  const out = new Set();
-  out.add(base);
+  const base = cargo.toUpperCase().trim();
 
-  const stripped = stripCargoCodeSuffix(base);
-  if (stripped) out.add(stripped);
+  // Ej: "(NTI) NTICX"
+  const match = base.match(/^\(([^)]+)\)\s*(.+)$/);
 
-  const codeMatch = base.match(/\(([A-Z0-9./-]{2,20})\)$/);
-  const onlyCode =
-    codeMatch?.[1]
-      ? norm(codeMatch[1]).replace(/\s+/g, "")
-      : norm(base).replace(/\s+/g, "");
-
-  if (onlyCode && CARGO_EQUIV[onlyCode]) {
-    for (const eq of CARGO_EQUIV[onlyCode]) {
-      const n = norm(eq);
-      if (n) out.add(n);
-    }
+  if (!match) {
+    return [base];
   }
 
-  // también soporta que el usuario guarde solo la sigla
-  if (CARGO_EQUIV[onlyCode]) {
-    for (const eq of CARGO_EQUIV[onlyCode]) {
-      const n = norm(eq);
-      if (n) out.add(n);
-    }
-  }
+  const codigo = match[1];   // NTI
+  const nombre = match[2];   // NTICX
 
-  return [...out].filter(Boolean);
+  return [
+    base,                       // (NTI) NTICX
+    `${nombre} (${codigo})`,    // NTICX (NTI)  👈 ESTA ES LA QUE FUNCIONA
+    nombre,                     // NTICX
+    codigo                      // NTI (por si acaso)
+  ];
 }
-
-
-
 function cargoTextOferta(oferta) {
   return norm([
     oferta?.descripcioncargo,
