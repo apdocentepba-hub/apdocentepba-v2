@@ -1,1 +1,319 @@
-REPLACED
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APDocentePBA — Alertas docentes PBA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="mobile_optimizations.css">
+  <link rel="stylesheet" href="mobile_overrides_v2.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">📋</div>
+        <div>
+          <h1 class="brand-title">APDocentePBA</h1>
+          <p class="brand-sub">Alertas de Actos Públicos Digitales · Provincia de Buenos Aires</p>
+        </div>
+      </div>
+      <nav class="top-nav">
+        <div id="navPublico" class="nav-group">
+          <button id="btnLogin" class="btn btn-ghost" type="button">Ingresar</button>
+          <button id="btnRegistro" class="btn btn-primary-outline" type="button">Registrarse</button>
+        </div>
+        <div id="navPrivado" class="nav-group hidden">
+          <button id="btnMiPanel" class="btn btn-ghost" type="button">Mi panel</button>
+          <button id="btnCerrarSesion" class="btn btn-danger" type="button">Cerrar sesión</button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="inicio" class="section">
+      <div class="container">
+        <div class="hero-card">
+          <div class="hero-eyebrow">🎯 Beta abierta para docentes PBA</div>
+          <h2 class="hero-title">Nunca más te pierdas<br>un Acto Público Digital</h2>
+          <p class="hero-desc">
+            Configurá tus preferencias de distrito, materia, nivel y turno,
+            y recibí alertas automáticas cuando se publique un APD que te interese.
+          </p>
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-lg" onclick="mostrarSeccion('registro')">Empezar ahora</button>
+            <button class="btn btn-outline btn-lg" onclick="mostrarSeccion('login')">Ya tengo cuenta</button>
+          </div>
+          <div class="hero-features">
+            <div class="hfeat"><span class="hfeat-icon">⚡</span><span>APD en tiempo real</span></div>
+            <div class="hfeat"><span class="hfeat-icon">📧</span><span>Alertas por email</span></div>
+            <div class="hfeat"><span class="hfeat-icon">🎯</span><span>Filtros por perfil</span></div>
+            <div class="hfeat"><span class="hfeat-icon">📍</span><span>Radar provincial</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="registro" class="section hidden">
+      <div class="container form-wrap">
+        <div class="form-card">
+          <div class="form-card-hdr">
+            <h2>Crear cuenta</h2>
+            <p>Completá tus datos para empezar a recibir alertas</p>
+          </div>
+
+          <form id="form-registro" novalidate>
+            <div class="grid-2">
+              <div class="field">
+                <label for="reg-nombre">Nombre <span class="req">*</span></label>
+                <input type="text" id="reg-nombre" placeholder="Tu nombre" required autocomplete="given-name"/>
+              </div>
+              <div class="field">
+                <label for="reg-apellido">Apellido <span class="req">*</span></label>
+                <input type="text" id="reg-apellido" placeholder="Tu apellido" required autocomplete="family-name"/>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label for="reg-email">Email <span class="req">*</span></label>
+                <input type="email" id="reg-email" placeholder="tu@email.com" required autocomplete="email"/>
+              </div>
+              <div class="field">
+                <label for="reg-celular">Celular</label>
+                <input type="text" id="reg-celular" placeholder="11 1234-5678" autocomplete="tel"/>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="reg-password">Contraseña <span class="req">*</span></label>
+              <div class="pw-wrap">
+                <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"/>
+                <button type="button" class="pw-toggle" data-target="reg-password" tabindex="-1">👁</button>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:10px">
+              <label style="display:flex;gap:10px;align-items:flex-start;line-height:1.45">
+                <input type="checkbox" id="reg-acepta-legal" style="margin-top:4px" />
+                <span>
+                  Acepto los
+                  <a href="./terminos.html" target="_blank" rel="noopener noreferrer">Términos y Condiciones</a>,
+                  la
+                  <a href="./privacidad.html" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>
+                  y la
+                  <a href="./suscripciones.html" target="_blank" rel="noopener noreferrer">Política de Suscripciones</a>
+                  de APDocentePBA, y reconozco que APDocentePBA es una herramienta de alertas y organización de información, no una garantía de vacante, adjudicación, designación ni resultado laboral.
+                </span>
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button>
+            </div>
+
+            <div class="form-foot">¿Ya tenés cuenta?
+              <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button>
+            </div>
+
+            <span id="registro-msg" class="msg"></span>
+          </form>
+
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap">
+            <div id="google-btn-registro"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="login" class="section hidden">
+      <div class="container form-wrap">
+        <div class="form-card">
+          <div class="form-card-hdr">
+            <h2>Iniciar sesión</h2>
+            <p>Ingresá para ver tus alertas y preferencias</p>
+          </div>
+
+          <form id="form-login" novalidate>
+            <div class="field">
+              <label for="login-email">Email</label>
+              <input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"/>
+            </div>
+
+            <div class="field">
+              <label for="login-password">Contraseña</label>
+              <div class="pw-wrap">
+                <input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"/>
+                <button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-full">Ingresar</button>
+            </div>
+
+            <div class="form-foot">¿No tenés cuenta?
+              <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate</button>
+            </div>
+
+            <span id="login-msg" class="msg"></span>
+          </form>
+
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap">
+            <div id="google-btn-login"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-docente" class="section hidden">
+      <div class="container">
+        <div class="panel-header">
+          <div>
+            <h2 id="panel-bienvenida">Bienvenido/a</h2>
+            <p id="panel-subtitulo" class="panel-sub">Cargando...</p>
+          </div>
+          <div class="panel-actions">
+            <button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button>
+            <button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button>
+          </div>
+        </div>
+
+        <div id="panel-loading" class="panel-loading hidden">
+          <div class="spinner"></div>
+          <span>Cargando panel...</span>
+        </div>
+
+        <div id="panel-content" class="cards-grid">
+          <div class="panel-card span-4">
+            <div class="card-lbl">👤 Mi cuenta</div>
+            <div id="panel-datos-docente"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl">⚙️ Mis preferencias</div>
+            <div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl">📊 Estadísticas</div>
+            <div id="panel-estadisticas"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl">💳 Mi plan</div>
+            <div id="panel-plan"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl">💬 Canales</div>
+            <div id="panel-canales"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl-row">
+              <span class="card-lbl">🛠️ Backfill provincial</span>
+              <div class="mini-group">
+                <button id="btn-provincia-step" class="mini-btn" type="button">Procesar lote</button>
+                <button id="btn-provincia-reset" class="mini-btn" type="button">Reset</button>
+              </div>
+            </div>
+            <div id="panel-backfill-provincia"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-12">
+            <div class="card-lbl-row">
+              <span class="card-lbl">📍 Radar provincial</span>
+              <button id="btn-refresh-provincia" class="mini-btn" type="button">Refrescar radar</button>
+            </div>
+            <p class="prefs-hint">Este bloque resume movimiento provincial real para ayudarte a evaluar otros distritos, materias y estados.</p>
+            <div id="panel-radar-provincia"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-12" id="panel-listados-pid-card">
+            <div class="card-lbl-row">
+              <span class="card-lbl">🪪 Listados / PID</span>
+            </div>
+            <p class="prefs-hint">Consultá puntaje de ingreso a la docencia por DNI, listado y año desde una pantalla separada y estable.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <a class="btn btn-primary" href="./pid.html">Abrir consulta PID</a>
+              <a class="btn btn-secondary" href="https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit" target="_blank" rel="noopener noreferrer">Abrir planilla PID</a>
+            </div>
+          </div>
+
+          <div class="panel-card span-8">
+            <div class="card-lbl-row">
+              <span class="card-lbl">🔔 Alertas APD activas</span>
+              <span id="alertas-badge" class="badge-num hidden"></span>
+            </div>
+            <div id="panel-alertas"><p class="ph">Cargando...</p></div>
+          </div>
+
+          <div class="panel-card span-4">
+            <div class="card-lbl">📋 Historial</div>
+            <div id="panel-historial"><p class="ph">Cargando...</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      APDocentePBA · Sistema de alertas para docentes PBA · 2026 ·
+      <a href="./terminos.html">Términos</a> ·
+      <a href="./privacidad.html">Privacidad</a> ·
+      <a href="./suscripciones.html">Suscripciones</a>
+    </div>
+  </footer>
+
+<script src="app_v2.js?v=17"></script>
+<script src="cargo_autocomplete_catalog_patch.js?v=3"></script>
+<script src="app_v2_cargo_delegate_fix.js?v=2"></script>
+<script src="panel_tabs_patch.js?v=2"></script>
+<script src="panel_listados_pid_patch.js?v=7"></script>
+<script src="plan_checkout_patch.js?v=2"></script>
+<script src="safe_dashboard_restore.js?v=4"></script>
+<script src="safe_dashboard_ui_patch.js?v=5"></script>
+<script src="telegram_feature_patch.js?v=4"></script>
+<script src="telegram_live_refresh_patch.js?v=1"></script>
+<script src="radar_provincia_patch_semaforo.js?v=2"></script>
+<script src="admin_preview_patch.js?v=2"></script>
+<script src="admin_payments_patch.js?v=3"></script>
+<script src="account_profile_patch.js?v=1"></script>
+<script src="account_profile_hotfix.js?v=1"></script>
+<script src="repositorio_patch.js?v=2"></script>
+<script src="frontend_easy_fixes_patch.js?v=1"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('form-registro');
+  if (!form) return;
+
+  form.addEventListener('submit', function (ev) {
+    const chk = document.getElementById('reg-acepta-legal');
+    if (chk && !chk.checked) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+
+      const msg = document.getElementById('registro-msg');
+      if (msg) {
+        msg.textContent = 'Para crear la cuenta tenés que aceptar los Términos, la Política de Privacidad y la Política de Suscripciones.';
+        msg.className = 'msg msg-error';
+      }
+
+      chk.focus();
+    }
+  }, true);
+});
+</script>
+
+</body>
+</html>
