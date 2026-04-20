@@ -5,7 +5,8 @@ window.__apdListboxFixLoaded3 = true;
 
 const SUPABASE_URL = 'https://vvgkinkvojqwfuqaxijh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Otlh-GYO19ZzO7VhwGzDIw_ebuJkukT';
-const MAX_ITEMS = 80;
+const MAX_DISTRICT_ITEMS = 300;
+const MAX_CARGO_ITEMS = 3000;
 const cache = { distritos: null, cargos: null };
 
 const pairs=[
@@ -19,6 +20,10 @@ function esc(v){
 
 function norm(v){
  return String(v||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
+}
+
+function getMaxItems(type){
+ return type === 'distrito' ? MAX_DISTRICT_ITEMS : MAX_CARGO_ITEMS;
 }
 
 function addStyle(){
@@ -61,7 +66,7 @@ async function loadDistritos(){
 
 async function loadCargos(){
  if(cache.cargos) return cache.cargos;
- const rows=await fetchJson(`${SUPABASE_URL}/rest/v1/catalogo_cargos_areas?select=codigo,nombre,apd_nombre&order=nombre.asc&limit=1500`);
+ const rows=await fetchJson(`${SUPABASE_URL}/rest/v1/catalogo_cargos_areas?select=codigo,nombre,apd_nombre&order=nombre.asc&limit=4000`);
  const seen=new Set();
  cache.cargos=[];
  (Array.isArray(rows)?rows:[]).forEach(row=>{
@@ -77,9 +82,10 @@ async function loadCargos(){
  return cache.cargos;
 }
 
-function filterItems(items, query){
+function filterItems(items, query, type){
+ const maxItems = getMaxItems(type);
  const q=norm(query);
- if(!q) return items.slice(0, MAX_ITEMS);
+ if(!q) return items.slice(0, maxItems);
  const starts=[];
  const contains=[];
  for(const item of items){
@@ -87,9 +93,9 @@ function filterItems(items, query){
   if(!n) continue;
   if(n.startsWith(q)) starts.push(item);
   else if(n.includes(q)) contains.push(item);
-  if(starts.length + contains.length >= MAX_ITEMS) break;
+  if(starts.length + contains.length >= maxItems) break;
  }
- return starts.concat(contains).slice(0, MAX_ITEMS);
+ return starts.concat(contains).slice(0, maxItems);
 }
 
 function showList(list){
@@ -119,7 +125,7 @@ function renderList(input,list,items){
 
 async function openList(input,list,type){
  const source = type === 'distrito' ? await loadDistritos() : await loadCargos();
- renderList(input,list,filterItems(source,input.value));
+ renderList(input,list,filterItems(source,input.value,type));
 }
 
 function bind(){
