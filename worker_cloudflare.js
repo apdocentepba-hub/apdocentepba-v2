@@ -901,6 +901,39 @@ async function traerOfertasABCCheckOffer(idop) {
   }));
 }
 
+async function traerOfertaAPDPorIds(idsOferta = [], idsDetalle = []) {
+  const clauses = [];
+
+  for (const id of idsOferta || []) {
+    const clean = sanitizeSolrNumber(id);
+    if (clean) clauses.push(`idoferta:${clean}`);
+  }
+
+  for (const id of idsDetalle || []) {
+    const clean = sanitizeSolrNumber(id);
+    if (clean) clauses.push(`iddetalle:${clean}`);
+  }
+
+  if (!clauses.length) return [];
+
+  const q = clauses.join(" OR ");
+
+  const url =
+    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select` +
+    `?q=${encodeURIComponent(q)}` +
+    `&rows=50&start=0&wt=json`;
+
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`APD por ids respondió ${res.status}: ${txt}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data?.response?.docs) ? data.response.docs : [];
+}
+
 function mergeDocsConCheckOffer(docsBase, checkItems) {
   const porIdOferta = new Map();
   const porIdDetalle = new Map();
@@ -5393,14 +5426,51 @@ async function construirAlertasParaUsuario(env, userId) {
         (x) => String(x?.estado || "").trim().toUpperCase() === "PUBLICADA"
       );
 
-      ofertasFinales = filtrarSoloPublicadasSegunCheckOffer(ofertas, publicadasCheck);
-      ofertasFinales = mergeDocsConCheckOffer(ofertasFinales, publicadasCheck);
+      const idsOfertaCheck = publicadasCheck
+        .map((x) => x?.idoferta)
+        .filter(Boolean);
+
+      const idsDetalleCheck = publicadasCheck
+        .map((x) => x?.iddetalle)
+        .filter(Boolean);
+
+      const docsCheckFull = await traerOfertaAPDPorIds(
+        idsOfertaCheck,
+        idsDetalleCheck
+      );
+
+      const baseMap = new Map();
+
+      for (const doc of ofertas || []) {
+        const k = buildSourceOfferKeyFromOferta(doc);
+        if (k) baseMap.set(k, doc);
+      }
+
+      for (const doc of docsCheckFull || []) {
+        const k = buildSourceOfferKeyFromOferta(doc);
+        if (k && !baseMap.has(k)) baseMap.set(k, doc);
+      }
+
+      const ofertasUnificadas = [...baseMap.values()];
+
+      ofertasFinales = filtrarSoloPublicadasSegunCheckOffer(
+        ofertasUnificadas,
+        publicadasCheck
+      );
+
+      ofertasFinales = mergeDocsConCheckOffer(
+        ofertasFinales,
+        publicadasCheck
+      );
 
       debugDistritos.push({
         estrategia: "abc_check_offer_lanus_preceptor_publicada",
         idop: ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA,
         total_check_offer: checkItems.length,
         total_publicadas_check_offer: publicadasCheck.length,
+        total_docs_select_original: (ofertas || []).length,
+        total_docs_check_full: (docsCheckFull || []).length,
+        total_docs_unificadas: ofertasUnificadas.length,
         total_final: ofertasFinales.length
       });
     }
