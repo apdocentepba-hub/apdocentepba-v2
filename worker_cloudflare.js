@@ -7178,39 +7178,83 @@ function buscarCargoEnCatalogo(lista, valor) {
   return null;
 }
 function canonizarListaCargosOMaterias(lista, catalogo) {
+  const arr = Array.isArray(lista) ? lista : [];
   const humanos = [];
   const apd = [];
 
-  for (const item of lista || []) {
-    const hit = buscarCargoEnCatalogo(catalogo, item);
+  for (const item of arr) {
+    const raw = String(item || "").trim();
+    const n = norm(raw);
 
-    if (hit) {
-      humanos.push(norm(hit.nombre || item));
-      apd.push(norm(hit.apd_nombre || hit.nombre || item));
+    if (!n) continue;
 
-      const codigo = norm(hit.codigo || "").replace(/\s+/g, "");
-      if (codigo && CARGO_EQUIV[codigo]) {
-        for (const eq of CARGO_EQUIV[codigo]) {
-          const n = norm(eq);
-          if (n) {
-            humanos.push(n);
-            apd.push(n);
-          }
-        }
-      }
-
+    // PR / PRECEPTOR
+    if (n.includes("PR") || n.includes("PRECEPTOR")) {
+      humanos.push("PRECEPTOR");
+      apd.push("PRECEPTOR");
       continue;
     }
 
-    for (const variant of cargoVariants(item)) {
-      humanos.push(variant);
-      apd.push(variant);
+    // NTI / NTICX
+    if (n.includes("NTI") || n.includes("NTICX")) {
+      humanos.push("NTICX");
+      apd.push("NTICX");
+      continue;
+    }
+
+    // ELI
+    if (
+      n.includes("ELI") ||
+      n.includes("ENCARGADO MEDIOS APOYO TEC") ||
+      n.includes("APOYO TECNICO PEDAGOGICO")
+    ) {
+      humanos.push("ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.");
+      apd.push("ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.");
+      continue;
+    }
+
+    // CCD
+    if (
+      n.includes("CCD") ||
+      n.includes("CONSTRUCCION DE CIUDADANIA") ||
+      n.includes("CONSTRUCCION DE LA CIUDADANIA")
+    ) {
+      humanos.push("CONSTRUCCION DE LA CIUDADANIA");
+      apd.push("CONSTRUCCION DE LA CIUDADANIA");
+      continue;
+    }
+
+    // MCS
+    if (n.includes("MCS") || n.includes("MATEMATICA CICLO SUPERIOR")) {
+      humanos.push("MATEMATICA CICLO SUPERIOR");
+      apd.push("MATEMATICA CICLO SUPERIOR");
+      continue;
+    }
+
+    // MTM
+    if (n.includes("MTM") || n === "MATEMATICA" || n.includes(" MATEMATICA")) {
+      humanos.push("MATEMATICA");
+      apd.push("MATEMATICA");
+      continue;
+    }
+
+    // fallback mínimo, sin inventar cargos falopa
+    if (n.includes("PRECEPTOR")) {
+      humanos.push("PRECEPTOR");
+      apd.push("PRECEPTOR");
+      continue;
+    }
+
+    if (n.includes("MATEMATICA")) {
+      humanos.push("MATEMATICA");
+      apd.push("MATEMATICA");
+      continue;
     }
   }
 
   return {
-    humanos: unique(humanos.filter(Boolean)),
-    apd: unique(apd.filter(Boolean))
+    humanos: [...new Set(humanos)],
+    apd: [...new Set(apd)]
   };
 }
 __name(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
@@ -7835,13 +7879,23 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   }
 
   const nivelModalidad = matchNivelModalidad(oferta, prefs);
-  if (!nivelModalidad.ok) {
-    return {
-      match: false,
-      detalle: { distrito, cargosMaterias, turno, nivelModalidad },
-      motivo: "nivel_no_coincide"
-    };
-  }
+
+const esPreceptor = norm(
+  [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.area
+  ].filter(Boolean).join(" ")
+).includes("PRECEPTOR");
+
+if (!nivelModalidad.ok && !esPreceptor) {
+  return {
+    match: false,
+    detalle: { distrito, cargosMaterias, turno, nivelModalidad },
+    motivo: "nivel_no_coincide"
+  };
+}
 
   return {
     match: true,
