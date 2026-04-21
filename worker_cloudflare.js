@@ -8284,74 +8284,72 @@ function extractParenthesizedCodes(text) {
 
   return [...out];
 }
+function extraerSigla(texto) {
+  const t = String(texto || "").toUpperCase();
+  const m = t.match(/\(([^)]+)\)/);
+  return m ? m[1].replace(/\s+/g, "") : "";
+}
+
+function normalizarTextoSimple(texto) {
+  return String(texto || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function matchCargosMaterias(oferta, prefs) {
-  const siglasPrefs = cargosMateriasPrefsAPD(prefs)
-    .map(normalizarToken)
-    .filter(Boolean);
+  const textoOferta = String(
+    oferta?.descripcioncargo ||
+    oferta?.cargo ||
+    oferta?.descripcionarea ||
+    oferta?.materia ||
+    ""
+  ).trim();
 
-  const siglasOferta = siglasOfertaCargoMateria(oferta)
-    .map(normalizarToken)
-    .filter(Boolean);
+  const siglaOferta = extraerSigla(textoOferta);
 
-  const tieneFiltrosCargo =
-    (Array.isArray(prefs?.cargos) && prefs.cargos.length > 0) ||
-    (Array.isArray(prefs?.materias) && prefs.materias.length > 0) ||
-    (Array.isArray(prefs?.cargos_apd) && prefs.cargos_apd.length > 0) ||
-    (Array.isArray(prefs?.materias_apd) && prefs.materias_apd.length > 0);
-
-  if (!tieneFiltrosCargo) {
-    return { ok: true, motivo: "Sin filtro de cargo o materia" };
-  }
-
-  if (siglasPrefs.length && siglasOferta.length) {
-    const hit = siglasOferta.find((sigla) => siglasPrefs.includes(sigla));
-
-    if (hit) {
-      return {
-        ok: true,
-        motivo: `Sigla compatible: ${hit}`,
-        detalle: {
-          siglas_oferta: siglasOferta,
-          siglas_prefs: siglasPrefs
-        }
-      };
-    }
-
-    return {
-      ok: false,
-      motivo: "sigla_cargo_materia_no_coincide",
-      detalle: {
-        siglas_oferta: siglasOferta,
-        siglas_prefs: siglasPrefs
-      }
-    };
-  }
-
-  const textoOferta = resolveOfferCargoText(oferta);
-  const ofertaTokens = new Set(tokenBag(textoOferta));
-
-  const prefsTexto = unique([
+  const listaPrefs = [
+    ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
+    ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
     ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
     ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
-  ])
-    .map(stripCargoCodeSuffix)
-    .map(norm)
+  ]
+    .map((x) => String(x || "").trim())
     .filter(Boolean);
 
-  for (const pref of prefsTexto) {
-    const prefTokens = tokenBag(pref);
-    if (!prefTokens.length) continue;
+  if (!listaPrefs.length) {
+    return { ok: true, motivo: "sin_filtro_cargo_materia" };
+  }
 
-    const ok = prefTokens.every((tok) => ofertaTokens.has(tok));
-    if (ok) {
+  for (const pref of listaPrefs) {
+    const siglaPref = extraerSigla(pref);
+
+    // prioridad: sigla
+    if (siglaPref && siglaOferta && siglaPref === siglaOferta) {
       return {
         ok: true,
-        motivo: "texto_cargo_materia_ok",
-        detalle: {
-          pref,
-          pref_tokens: prefTokens,
-          oferta_tokens: Array.from(ofertaTokens)
-        }
+        motivo: "sigla_cargo_materia_ok",
+        detalle: { siglaPref, siglaOferta }
+      };
+    }
+  }
+
+  const ofertaNorm = normalizarTextoSimple(textoOferta);
+
+  for (const pref of listaPrefs) {
+    const siglaPref = extraerSigla(pref);
+    if (siglaPref) continue;
+
+    const prefNorm = normalizarTextoSimple(pref);
+    if (prefNorm && ofertaNorm === prefNorm) {
+      return {
+        ok: true,
+        motivo: "texto_cargo_materia_exacto_ok",
+        detalle: { prefNorm, ofertaNorm }
       };
     }
   }
@@ -8360,9 +8358,9 @@ function matchCargosMaterias(oferta, prefs) {
     ok: false,
     motivo: "cargo_materia_no_coincide",
     detalle: {
-      texto_oferta: textoOferta,
-      siglas_oferta: siglasOferta,
-      siglas_prefs: siglasPrefs
+      textoOferta,
+      siglaOferta,
+      prefs: listaPrefs
     }
   };
 }
@@ -8461,11 +8459,7 @@ function mapTurnoAPD(turno) {
   return x;
 }
 __name(mapTurnoAPD, "mapTurnoAPD");
-function extraerSigla(texto) {
-  const t = String(texto || "").toUpperCase();
-  const m = t.match(/\(([^)]+)\)/); // lo que está entre ()
-  return m ? m[1].replace(/\s+/g, "") : "";
-}
+
 
 function normalizarToken(t) {
   return String(t || "").toUpperCase().replace(/\s+/g, "");
