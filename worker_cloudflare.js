@@ -854,7 +854,6 @@ var HISTORICO_INSERT_BATCH = 150;
 var HISTORICO_POSTULANTES_LIMIT = 8;
 var USER_CAPTURE_ROWS_PER_PAGE = 150;
 var USER_CAPTURE_MAX_PAGES = 25;
-var ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA = "Mzk4NDg1MHwzOTg5ODk";
 var PROVINCIA_SCOPE = "PROVINCIA_FULL";
 var PROVINCIA_CAPTURE_ROWS_PER_PAGE = 150;
 var PROVINCIA_STEP_PAGES = 4;
@@ -868,117 +867,12 @@ var WHATSAPP_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
-async function traerOfertasABCCheckOffer(idop) {
-  const url =
-    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/check/offer/?idop=${encodeURIComponent(idop)}`;
 
-  const res = await fetch(url, {
-    headers: {
-      accept: "application/json, text/javascript, */*; q=0.01",
-      origin: "http://servicios2.abc.gob.ar",
-      referer: "http://servicios2.abc.gob.ar/",
-      "x-requested-with": "XMLHttpRequest"
-    }
-  });
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`ABC check/offer respondió ${res.status}: ${txt}`);
-  }
 
-  const data = await res.json().catch(() => []);
 
-  if (!Array.isArray(data)) return [];
 
-  return data.map((o) => ({
-    fuente: "abc_check_offer",
-    estado: o?.estado || "",
-    iddetalle: o?.iddetalle ?? null,
-    idoferta: o?.idoferta ?? null,
-    postulacion_idganador: o?.postulacion_idganador ?? null,
-    nombreganador: o?.nombreganador ?? "",
-    cuilganador: o?.cuilganador ?? ""
-  }));
-}
 
-async function traerOfertaAPDPorIds(idsOferta = [], idsDetalle = []) {
-  const clauses = [];
-
-  for (const id of idsOferta || []) {
-    const clean = sanitizeSolrNumber(id);
-    if (clean) clauses.push(`idoferta:${clean}`);
-  }
-
-  for (const id of idsDetalle || []) {
-    const clean = sanitizeSolrNumber(id);
-    if (clean) clauses.push(`iddetalle:${clean}`);
-  }
-
-  if (!clauses.length) return [];
-
-  const q = clauses.join(" OR ");
-
-  const url =
-    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select` +
-    `?q=${encodeURIComponent(q)}` +
-    `&rows=50&start=0&wt=json`;
-
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`APD por ids respondió ${res.status}: ${txt}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  return Array.isArray(data?.response?.docs) ? data.response.docs : [];
-}
-
-function mergeDocsConCheckOffer(docsBase, checkItems) {
-  const porIdOferta = new Map();
-  const porIdDetalle = new Map();
-
-  for (const item of checkItems || []) {
-    if (item?.idoferta != null) porIdOferta.set(String(item.idoferta), item);
-    if (item?.iddetalle != null) porIdDetalle.set(String(item.iddetalle), item);
-  }
-
-  return (docsBase || []).map((doc) => {
-    const hit =
-      porIdOferta.get(String(doc?.idoferta ?? "")) ||
-      porIdDetalle.get(String(doc?.iddetalle ?? ""));
-
-    if (!hit) return doc;
-
-    return {
-      ...doc,
-      estado: hit.estado || doc.estado,
-      postulacion_idganador:
-        hit.postulacion_idganador ?? doc.postulacion_idganador ?? null,
-      nombreganador: hit.nombreganador || doc.nombreganador || "",
-      cuilganador: hit.cuilganador || doc.cuilganador || "",
-      fuente_estado: "abc_check_offer"
-    };
-  });
-}
-
-function filtrarSoloPublicadasSegunCheckOffer(docsBase, checkItems) {
-  const idsPublicados = new Set();
-
-  for (const item of checkItems || []) {
-    const estado = String(item?.estado || "").trim().toUpperCase();
-    if (estado !== "PUBLICADA") continue;
-
-    if (item?.idoferta != null) idsPublicados.add(`of:${item.idoferta}`);
-    if (item?.iddetalle != null) idsPublicados.add(`de:${item.iddetalle}`);
-  }
-
-  return (docsBase || []).filter((doc) => {
-    const k1 = `of:${doc?.idoferta ?? ""}`;
-    const k2 = `de:${doc?.iddetalle ?? ""}`;
-    return idsPublicados.has(k1) || idsPublicados.has(k2);
-  });
-}
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -5407,120 +5301,11 @@ async function construirAlertasParaUsuario(env, userId) {
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
 
-  let ofertasFinales = ofertas;
-
-  try {
-    const prefsCM = cargosMateriasPrefsAPD(prefsCanon).map((x) => norm(x));
-    const prefsDistritos = distritosPrefsAPD(prefsCanon).map((x) => norm(x));
-
-    const esCasoLanusPreceptor =
-      prefsDistritos.includes("LANUS") &&
-      prefsCM.some((x) => x.includes("PRECEPTOR"));
-
-    if (esCasoLanusPreceptor) {
-      const checkItems = await traerOfertasABCCheckOffer(
-        ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA
-      );
-
-      const publicadasCheck = checkItems.filter(
-        (x) => String(x?.estado || "").trim().toUpperCase() === "PUBLICADA"
-      );
-
-      const idsOfertaCheck = publicadasCheck
-        .map((x) => x?.idoferta)
-        .filter(Boolean);
-
-      const idsDetalleCheck = publicadasCheck
-        .map((x) => x?.iddetalle)
-        .filter(Boolean);
-
-      const docsCheckFull = await traerOfertaAPDPorIds(
-        idsOfertaCheck,
-        idsDetalleCheck
-      );
-
-      const baseMap = new Map();
-
-      for (const doc of ofertas || []) {
-        const k = buildSourceOfferKeyFromOferta(doc);
-        if (k) baseMap.set(k, doc);
-      }
-
-      for (const doc of docsCheckFull || []) {
-        const k = buildSourceOfferKeyFromOferta(doc);
-        if (k && !baseMap.has(k)) baseMap.set(k, doc);
-      }
-
-      const ofertasUnificadas = [...baseMap.values()];
-
-      ofertasFinales = filtrarSoloPublicadasSegunCheckOffer(
-        ofertasUnificadas,
-        publicadasCheck
-      );
-
-      ofertasFinales = mergeDocsConCheckOffer(
-        ofertasFinales,
-        publicadasCheck
-      );
-
-      debugDistritos.push({
-        estrategia: "abc_check_offer_lanus_preceptor_publicada",
-        idop: ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA,
-        total_check_offer: checkItems.length,
-        total_publicadas_check_offer: publicadasCheck.length,
-        total_docs_select_original: (ofertas || []).length,
-        total_docs_check_full: (docsCheckFull || []).length,
-        total_docs_unificadas: ofertasUnificadas.length,
-        total_final: ofertasFinales.length
-      });
-    }
-  } catch (err) {
-    debugDistritos.push({
-      estrategia: "abc_check_offer_lanus_preceptor_publicada",
-      error: String(err?.message || err)
-    });
-  }
-
-  const resolved = await resolverPlanUsuario(env, userId).catch(() => null);
-  const planCode = String(
-    resolved?.plan?.code || resolved?.subscription?.plan_code || ""
-  ).trim().toUpperCase();
-
-  const pidEnabled = planCode === "INSIGNE";
-
-  let pidData = null;
-  let pidRows = [];
-  let districtIndex = new Map();
-  let pidMeta = null;
-
-  if (pidEnabled) {
-    pidData = await obtenerUltimaPidGuardada(userId).catch(() => null);
-    pidRows = normalizePidRows(pidData);
-    districtIndex = buildDistrictIndex(catalogos);
-
-    pidMeta = {
-      listado: String(
-        pidData?.result?.listado ||
-        pidData?.result?.tipo_listado ||
-        pidData?.result?.listado_tipo ||
-        pidData?.listado ||
-        ""
-      ).trim(),
-      anio: String(
-        pidData?.result?.anio ||
-        pidData?.result?.year ||
-        pidData?.anio ||
-        ""
-      ).trim()
-    };
-  }
-
   const resultados = [];
   const descartadas = [];
   const vistos = new Set();
-  const compatiblesParaPostulantes = [];
 
-  for (const oferta of ofertasFinales) {
+  for (const oferta of ofertas || []) {
     if (!ofertaEsVisibleParaAlerta(oferta)) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
@@ -5550,7 +5335,9 @@ async function construirAlertasParaUsuario(env, userId) {
         "DESIERTO",
         "DESIGNADA",
         "DESIGNADO",
-        "NO VIGENTE"
+        "NO VIGENTE",
+        "RENUNCIADA",
+        "RENUNCIADO"
       ].includes(estado)
     ) {
       descartadas.push({
@@ -5604,68 +5391,10 @@ async function construirAlertasParaUsuario(env, userId) {
 
     let pidInfo = null;
 
-    if (pidEnabled) {
-      if (!pidData) {
-        pidInfo = {
-          compatible: false,
-          reason: "Sin PID guardada",
-          district_ok: false,
-          area_ok: false,
-          bloque_ok: false,
-          match: null,
-          pid_distritos: [],
-          meta: pidMeta
-        };
-      } else if (!pidRows.length) {
-        pidInfo = {
-          compatible: false,
-          reason: "Tu PID guardada no tiene filas utilizables todavía",
-          district_ok: false,
-          area_ok: false,
-          bloque_ok: false,
-          match: null,
-          pid_distritos: [],
-          meta: pidMeta
-        };
-      } else {
-        pidInfo = {
-          ...evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex),
-          meta: pidMeta
-        };
-      }
-    }
-
     const item = buildAlertItem(oferta, evaluacion, pidInfo);
     item.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
 
-    if (pidEnabled && pidInfo?.compatible && (item.idoferta || item.iddetalle)) {
-      compatiblesParaPostulantes.push(item);
-    }
-
     resultados.push(item);
-  }
-
-  if (pidEnabled && compatiblesParaPostulantes.length) {
-    for (let i = 0; i < compatiblesParaPostulantes.length; i += 5) {
-      const chunk = compatiblesParaPostulantes.slice(i, i + 5);
-
-      const enriched = await Promise.all(
-        chunk.map(async (item) => {
-          try {
-            const resumen = await obtenerResumenPostulantesABC(item.idoferta, item.iddetalle);
-            return { item, resumen };
-          } catch {
-            return { item, resumen: null };
-          }
-        })
-      );
-
-      for (const { item, resumen } of enriched) {
-        item.total_postulantes = resumen?.total_postulantes ?? null;
-        item.puntaje_primero = resumen?.puntaje_primero ?? null;
-        item.listado_origen_primero = resumen?.listado_origen_primero || "";
-      }
-    }
   }
 
   resultados.sort((a, b) => {
@@ -5679,7 +5408,7 @@ async function construirAlertasParaUsuario(env, userId) {
     user,
     preferencias_originales: prefs,
     preferencias_canonizadas: prefsCanon,
-    total_fuente: ofertasFinales.length,
+    total_fuente: (ofertas || []).length,
     total: resultados.length,
     descartadas_total: descartadas.length,
     descartadas_preview: descartadas.slice(0, 20),
@@ -7461,55 +7190,41 @@ async function traerOfertasAPDPorDistritos(prefs) {
   };
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
-async function traerOfertasAPDDeUnDistrito(distritoAPD) {
-  const distritoNorm = norm(distritoAPD);
-  const docsTotales = [];
-  const vistos = new Set();
+async function traerOfertasAPDDeUnDistrito(distrito) {
+  const url = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
 
-  for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
-    const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+  const params = new URLSearchParams({
+    q: `descdistrito:"${distrito}"`,
+    rows: "200",
+    start: "0",
+    wt: "json",
+    sort: "finoferta asc"
+  });
 
-    const q = `descdistrito:"${escaparSolr(distritoAPD)}"`;
-
-    const consultaUrl =
-      `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select` +
-      `?q=${encodeURIComponent(q)}` +
-      `&rows=${USER_CAPTURE_ROWS_PER_PAGE}` +
-      `&start=${start}` +
-      `&wt=json` +
-      `&sort=ult_movimiento%20desc`;
-
-    const res = await fetch(consultaUrl);
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`APD respondio ${res.status}: ${txt}`);
+  const res = await fetch(`${url}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "user-agent": "Mozilla/5.0",
+      "referer": "http://servicios2.abc.gob.ar/",
+      "origin": "http://servicios2.abc.gob.ar"
     }
+  });
 
-    const data = await res.json().catch(() => ({}));
-    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-
-    if (!docs.length) break;
-
-    for (const doc of docs) {
-      const distritoDoc = norm(doc?.descdistrito || doc?.distrito || "");
-      if (distritoDoc !== distritoNorm) continue;
-
-      const clave = buildSourceOfferKeyFromOferta(doc);
-      if (!clave || vistos.has(clave)) continue;
-
-      vistos.add(clave);
-      docsTotales.push(doc);
-    }
-
-    if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`ABC ERROR ${res.status}: ${txt}`);
   }
 
+  const data = await res.json().catch(() => ({}));
+  const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+
   return {
-    docs: docsTotales,
-    query: `descdistrito:"${distritoAPD}"`,
-    totalBruto: docsTotales.length,
-    totalFiltrado: docsTotales.length
+    ofertas: docs,
+    debug: {
+      distrito,
+      total_docs: docs.length
+    }
   };
 }
 __name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
