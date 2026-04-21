@@ -7367,6 +7367,52 @@ function resolveCargoValue(input, cargoIndex) {
     tokens_blocked: []
   };
 }
+function buildApdLabelFromResolved(originalValue, resolvedItem) {
+  const original = String(originalValue || "").trim();
+
+  const explicitCodes = extractExplicitCodesFromPreference(original)
+    .map((c) => normalizeCode(c))
+    .filter(Boolean);
+
+  const explicitCode = explicitCodes[0] || "";
+
+  const resolvedCode = normalizeCode(
+    resolvedItem?.code || resolvedItem?.codigo || ""
+  );
+
+  const finalCode = explicitCode || resolvedCode;
+
+  let human = String(
+    resolvedItem?.human ||
+    resolvedItem?.canonical ||
+    original ||
+    ""
+  ).trim();
+
+  // sacar cualquier sigla ya embebida en el texto humano
+  human = human.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+
+  if (finalCode) {
+    return `(${finalCode}) ${human}`.trim();
+  }
+
+  return human;
+}
+__name(buildApdLabelFromResolved, "buildApdLabelFromResolved");
+
+function buildResolvedApdList(originalList, resolvedList) {
+  const originals = Array.isArray(originalList) ? originalList : [];
+  const resolved = Array.isArray(resolvedList) ? resolvedList : [];
+
+  const out = [];
+
+  for (let i = 0; i < resolved.length; i += 1) {
+    out.push(buildApdLabelFromResolved(originals[i], resolved[i]));
+  }
+
+  return unique(out.filter(Boolean));
+}
+__name(buildResolvedApdList, "buildResolvedApdList");
 function resolveOfferDistrict(oferta) {
   return normDistritoABC(
     oferta?.descdistrito ||
@@ -7525,20 +7571,27 @@ __name(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
 function canonizarPreferenciasConCatalogo(prefs, catalogos) {
   const ctx = buildCatalogContext(catalogos);
 
-  const principalResolved = resolveDistrictValue(prefs?.distrito_principal || "", ctx.districtIndex);
+  const principalResolved = resolveDistrictValue(
+    prefs?.distrito_principal || "",
+    ctx.districtIndex
+  );
+
   const otrosResolved = unique(
     (prefs?.otros_distritos || [])
-      .map(x => resolveDistrictValue(x, ctx.districtIndex))
+      .map((x) => resolveDistrictValue(x, ctx.districtIndex))
       .filter(Boolean)
-      .map(x => x.canonical)
-  ).map(x => resolveDistrictValue(x, ctx.districtIndex));
+      .map((x) => x.canonical)
+  ).map((x) => resolveDistrictValue(x, ctx.districtIndex));
 
-  const cargosResolved = (prefs?.cargos || [])
-    .map(x => resolveCargoValue(x, ctx.cargoIndex))
+  const cargosOriginales = Array.isArray(prefs?.cargos) ? prefs.cargos : [];
+  const materiasOriginales = Array.isArray(prefs?.materias) ? prefs.materias : [];
+
+  const cargosResolved = cargosOriginales
+    .map((x) => resolveCargoValue(x, ctx.cargoIndex))
     .filter(Boolean);
 
-  const materiasResolved = (prefs?.materias || [])
-    .map(x => resolveCargoValue(x, ctx.cargoIndex))
+  const materiasResolved = materiasOriginales
+    .map((x) => resolveCargoValue(x, ctx.cargoIndex))
     .filter(Boolean);
 
   return {
@@ -7548,16 +7601,16 @@ function canonizarPreferenciasConCatalogo(prefs, catalogos) {
     distrito_principal_apd: principalResolved?.canonical || norm(prefs?.distrito_principal || ""),
     distrito_principal_resolved: principalResolved || null,
 
-    otros_distritos: unique(otrosResolved.map(x => x.human).filter(Boolean)),
-    otros_distritos_apd: unique(otrosResolved.map(x => x.canonical).filter(Boolean)),
+    otros_distritos: unique(otrosResolved.map((x) => x.human).filter(Boolean)),
+    otros_distritos_apd: unique(otrosResolved.map((x) => x.canonical).filter(Boolean)),
     otros_distritos_resolved: otrosResolved,
 
-    cargos: unique(cargosResolved.map(x => x.human).filter(Boolean)),
-    cargos_apd: unique(cargosResolved.map(x => x.canonical).filter(Boolean)),
+    cargos: unique(cargosResolved.map((x) => x.human).filter(Boolean)),
+    cargos_apd: buildResolvedApdList(cargosOriginales, cargosResolved),
     cargos_resolved: cargosResolved,
 
-    materias: unique(materiasResolved.map(x => x.human).filter(Boolean)),
-    materias_apd: unique(materiasResolved.map(x => x.canonical).filter(Boolean)),
+    materias: unique(materiasResolved.map((x) => x.human).filter(Boolean)),
+    materias_apd: buildResolvedApdList(materiasOriginales, materiasResolved),
     materias_resolved: materiasResolved
   };
 }
@@ -7924,8 +7977,8 @@ function extraerSiglasEntreParentesis(texto) {
 
   return unique(
     matches
-      .map((m) => norm(m[1] || ""))
-      .map((s) => s.replace(/\s+/g, " ").trim())
+      .map((m) => normalizeCode(m[1] || ""))
+      .map((s) => String(s || "").replace(/\s+/g, "").trim())
       .filter(Boolean)
   );
 }
