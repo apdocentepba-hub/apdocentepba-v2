@@ -5129,7 +5129,9 @@ async function fetchAPDDistrictBatch(distritoAPD, startPage, pagesToRead, rowsPe
       const txt = await res.text();
       throw new Error(`APD respondio ${res.status}: ${txt}`);
     }
-    const data = await res.json();
+const buffer = await res.arrayBuffer();
+const rawText = new TextDecoder("iso-8859-1").decode(buffer);
+const data = JSON.parse(rawText || "{}");
     const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
     const filtered = pageDocs.filter((doc) => norm(doc?.descdistrito || "") === norm(distritoAPD));
     docs.push(...filtered);
@@ -8945,11 +8947,13 @@ async function fetchOffersForDistrict(distritoAPD) {
     const q = `descdistrito:"${String(distritoAPD || "").replace(/(["\\])/g, "\\$1")}"`;
     const url = `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${ALERT_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
     const res = await fetch(url);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`APD respondio ${res.status}: ${text}`);
-    }
-    const data = await res.json().catch(() => ({}));
+if (!res.ok) {
+  const errText = await res.text().catch(() => "");
+  throw new Error(`APD respondió ${res.status}: ${errText}`);
+}
+const buffer = await res.arrayBuffer();
+const rawText = new TextDecoder("latin1").decode(buffer);
+const data = JSON.parse(rawText || "{}");
     const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
     if (!pageDocs.length) break;
     docs.push(...pageDocs.filter((doc) => norm2(doc?.descdistrito || "") === norm2(distritoAPD)));
