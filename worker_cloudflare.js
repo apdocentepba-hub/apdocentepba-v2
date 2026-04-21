@@ -7915,13 +7915,58 @@ function distritosPrefsAPD(prefs) {
 }
 __name(distritosPrefsAPD, "distritosPrefsAPD");
 
+function extraerSiglasEntreParentesis(texto) {
+  const raw = String(texto || "");
+  if (!raw) return [];
+
+  const matches = [...raw.matchAll(/\(([^)]+)\)/g)];
+  if (!matches.length) return [];
+
+  return unique(
+    matches
+      .map((m) => norm(m[1] || ""))
+      .map((s) => s.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+  );
+}
+__name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
+
 function cargosMateriasPrefsAPD(prefs) {
-  return [
-    ...(Array.isArray(prefs?.cargos_resolved) ? prefs.cargos_resolved : []),
-    ...(Array.isArray(prefs?.materias_resolved) ? prefs.materias_resolved : [])
+  const fuente = [
+    ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
+    ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
+    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
+    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
   ];
+
+  const out = [];
+  for (const item of fuente) {
+    out.push(...extraerSiglasEntreParentesis(item));
+  }
+
+  return unique(out);
 }
 __name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
+
+function siglasOfertaCargoMateria(oferta) {
+  const campos = [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ];
+
+  const out = [];
+  for (const campo of campos) {
+    out.push(...extraerSiglasEntreParentesis(campo));
+  }
+
+  return unique(out);
+}
+__name(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
+
 function turnosPrefs(prefs) {
   return unique((prefs?.turnos || []).map((item) => {
     const x = norm(item);
@@ -8017,58 +8062,32 @@ function scoreCargoMatch() {
   return 0;
 }
 function matchCargosMaterias(oferta, prefs) {
-  const prefsCM = cargosMateriasPrefsAPD(prefs);
-
-  if (!prefsCM.length) {
+  const prefsSiglas = cargosMateriasPrefsAPD(prefs);
+  if (!prefsSiglas.length) {
     return { ok: true, motivo: "Sin filtro de cargo o materia" };
   }
 
-  const offerCodes = extractOfferCargoCodes(oferta)
-    .map(normalizeCode)
-    .filter(Boolean);
-
-  if (!offerCodes.length) {
+  const ofertaSiglas = siglasOfertaCargoMateria(oferta);
+  if (!ofertaSiglas.length) {
     return {
       ok: false,
-      motivo: "La oferta no trae sigla de cargo o materia"
+      motivo: "La oferta no trae sigla entre parentesis en cargo o materia"
     };
   }
 
-  const prefCodes = unique(
-    prefsCM
-      .flatMap((pref) => {
-        const out = [];
+  const setOferta = new Set(ofertaSiglas);
+  const coincidencias = prefsSiglas.filter((sigla) => setOferta.has(sigla));
 
-        if (pref?.code) out.push(normalizeCode(pref.code));
-        if (pref?.canonical) out.push(...extractParenthesizedCodes(pref.canonical));
-        if (pref?.human) out.push(...extractParenthesizedCodes(pref.human));
-
-        for (const a of (pref?.aliases || [])) {
-          out.push(normalizeCode(a));
-          out.push(...extractParenthesizedCodes(a));
-        }
-
-        return out;
-      })
-      .map(normalizeCode)
-      .filter(Boolean)
-  );
-
-  if (!prefCodes.length) {
+  if (!coincidencias.length) {
     return {
       ok: false,
-      motivo: "Las preferencias no tienen siglas resueltas"
+      motivo: `Sigla no compatible. Oferta=[${ofertaSiglas.join(", ")}] Prefs=[${prefsSiglas.join(", ")}]`
     };
   }
-
-  const matches = offerCodes.filter((code) => prefCodes.includes(code));
-  const ok = matches.length > 0;
 
   return {
-    ok,
-    motivo: ok
-      ? `Coincidencia por sigla: ${matches.join(", ")}`
-      : `Sin coincidencia por sigla. Oferta=[${offerCodes.join(", ")}] Prefs=[${prefCodes.join(", ")}]`
+    ok: true,
+    motivo: `Sigla compatible: ${coincidencias.join(", ")}`
   };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
@@ -8119,18 +8138,29 @@ function matchNivelModalidad(oferta, prefs) {
 __name(matchNivelModalidad, "matchNivelModalidad");
 function coincideOfertaConPreferencias(oferta, prefs) {
   const distrito = matchDistritos(oferta, prefs);
-  if (!distrito.ok) return { match: false, detalle: { distrito } };
+  if (!distrito.ok) {
+    return { match: false, detalle: { distrito } };
+  }
 
   const cargosMaterias = matchCargosMaterias(oferta, prefs);
-  if (!cargosMaterias.ok) return { match: false, detalle: { distrito, cargosMaterias } };
-
-  const turno = matchTurno(oferta, prefs);
-  if (!turno.ok) return { match: false, detalle: { distrito, cargosMaterias, turno } };
+  if (!cargosMaterias.ok) {
+    return { match: false, detalle: { distrito, cargosMaterias } };
+  }
 
   const nivelModalidad = matchNivelModalidad(oferta, prefs);
-  if (!nivelModalidad.ok) return { match: false, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
+  if (!nivelModalidad.ok) {
+    return { match: false, detalle: { distrito, cargosMaterias, nivelModalidad } };
+  }
 
-  return { match: true, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
+  const turno = matchTurno(oferta, prefs);
+  if (!turno.ok) {
+    return { match: false, detalle: { distrito, cargosMaterias, nivelModalidad, turno } };
+  }
+
+  return {
+    match: true,
+    detalle: { distrito, cargosMaterias, nivelModalidad, turno }
+  };
 }
 __name(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
 function mapTurnoAPD(turno) {
@@ -8164,28 +8194,28 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
     };
   }
 
-  const turno = matchTurno(oferta, prefs);
-  if (!turno.ok) {
-    return {
-      match: false,
-      motivo: turno.motivo || "Turno no coincide",
-      detalle: { distrito, cargoMateria, turno }
-    };
-  }
-
   const nivelModalidad = matchNivelModalidad(oferta, prefs);
   if (!nivelModalidad.ok) {
     return {
       match: false,
       motivo: nivelModalidad.motivo || "Nivel o modalidad no coincide",
-      detalle: { distrito, cargoMateria, turno, nivelModalidad }
+      detalle: { distrito, cargoMateria, nivelModalidad }
+    };
+  }
+
+  const turno = matchTurno(oferta, prefs);
+  if (!turno.ok) {
+    return {
+      match: false,
+      motivo: turno.motivo || "Turno no coincide",
+      detalle: { distrito, cargoMateria, nivelModalidad, turno }
     };
   }
 
   return {
     match: true,
     motivo: "Coincide con preferencias",
-    detalle: { distrito, cargoMateria, turno, nivelModalidad }
+    detalle: { distrito, cargoMateria, nivelModalidad, turno }
   };
 }
 __name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
