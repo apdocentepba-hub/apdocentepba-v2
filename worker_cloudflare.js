@@ -8288,128 +8288,13 @@ function extractParenthesizedCodes(text) {
 
 
 
-function limpiarTextoCargo(texto) {
-  return String(texto || "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
-function tokensCargo(texto) {
-  const stop = new Set([
-    "DE","DEL","LA","EL","LOS","LAS","Y","EN","PARA","POR","CON",
-    "AREA","MODALIDAD","NIVEL","CARGO","MATERIA"
-  ]);
 
-  return limpiarTextoCargo(texto)
-    .split(" ")
-    .map((t) => t.trim())
-    .filter((t) => t && !stop.has(t));
-}
 
-function extraerSigla(texto) {
-  const t = String(texto || "").toUpperCase();
-  const m = t.match(/\(([^)]+)\)/);
-  return m ? m[1].replace(/\s+/g, "") : "";
-}
 
-function limpiarTextoCargo(texto) {
-  return String(texto || "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
-function tokensCargo(texto) {
-  const stop = new Set([
-    "DE","DEL","LA","EL","LOS","LAS","Y","EN","PARA","POR","CON",
-    "AREA","MODALIDAD","NIVEL","CARGO","MATERIA"
-  ]);
 
-  return limpiarTextoCargo(texto)
-    .split(" ")
-    .map((t) => t.trim())
-    .filter((t) => t && !stop.has(t));
-}
 
-function extraerSigla(texto) {
-  const t = String(texto || "").toUpperCase();
-  const m = t.match(/\(([^)]+)\)/);
-  return m ? m[1].replace(/\s+/g, "") : "";
-}
-
-function matchCargosMaterias(oferta, prefs) {
-  const textoOferta = String(
-    oferta?.descripcioncargo ||
-    oferta?.cargo ||
-    oferta?.descripcionarea ||
-    oferta?.materia ||
-    ""
-  ).trim();
-
-  const siglaOferta = extraerSigla(textoOferta);
-
-  const listaPrefs = [
-    ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
-    ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
-    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
-    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
-  ]
-    .map((x) => String(x || "").trim())
-    .filter(Boolean);
-
-  if (!listaPrefs.length) {
-    return { ok: true, motivo: "sin_filtro_cargo_materia" };
-  }
-
-  for (const pref of listaPrefs) {
-    const siglaPref = extraerSigla(pref);
-
-    if (siglaPref && siglaOferta && siglaPref === siglaOferta) {
-      return {
-        ok: true,
-        motivo: "sigla_cargo_materia_ok",
-        detalle: { siglaPref, siglaOferta }
-      };
-    }
-
-    if (!siglaPref && !siglaOferta) {
-      const prefTokens = tokensCargo(pref);
-      const ofertaTokens = new Set(tokensCargo(textoOferta));
-
-      if (
-        prefTokens.length > 0 &&
-        prefTokens.every((tok) => ofertaTokens.has(tok))
-      ) {
-        return {
-          ok: true,
-          motivo: "texto_cargo_materia_ok",
-          detalle: {
-            prefTokens,
-            ofertaTokens: Array.from(ofertaTokens)
-          }
-        };
-      }
-    }
-  }
-
-  return {
-    ok: false,
-    motivo: "cargo_materia_no_coincide",
-    detalle: {
-      oferta: textoOferta,
-      siglaOferta
-    }
-  };
-}
 __name(matchCargosMaterias, "matchCargosMaterias");
 function matchTurno(oferta, prefs) {
   const prefsT = turnosPrefs(prefs);
