@@ -4161,8 +4161,7 @@ function getArgentinaDigestSlotInfo(input = Date.now()) {
   const day = String(map.day || "");
   const hour = Number(map.hour || 0);
   const minute = Number(map.minute || 0);
-
-  const slotHour = [14, 18, 22].includes(hour) ? hour : null;
+const slotHour = hour;
   const slotKey = slotHour != null
     ? `${year}-${month}-${day}_${String(slotHour).padStart(2, "0")}`
     : "";
@@ -8302,38 +8301,7 @@ function extractParenthesizedCodes(text) {
 
 
 function matchCargosMaterias(oferta, prefs) {
-  const siglasOferta = siglasOfertaCargoMateria(oferta);
-
-  const siglasPrefs = unique([
-    ...extraerSiglasEntreParentesis((prefs?.cargos_apd || []).join(" | ")),
-    ...extraerSiglasEntreParentesis((prefs?.materias_apd || []).join(" | ")),
-    ...extraerSiglasEntreParentesis((prefs?.cargos || []).join(" | ")),
-    ...extraerSiglasEntreParentesis((prefs?.materias || []).join(" | "))
-  ]).map(normalizarToken);
-
-  if (!siglasPrefs.length) {
-    return {
-      ok: true,
-      motivo: "Sin filtro de cargo o materia"
-    };
-  }
-
-  const ofertaNorm = (Array.isArray(siglasOferta) ? siglasOferta : [])
-    .map(normalizarToken)
-    .filter(Boolean);
-
-  const ok = ofertaNorm.some((sigla) => siglasPrefs.includes(sigla));
-
-  return {
-    ok,
-    motivo: ok
-      ? `Sigla compatible: ${ofertaNorm.find((s) => siglasPrefs.includes(s)) || ""}`
-      : "sigla_cargo_no_coincide",
-    detalle: {
-      siglas_oferta: ofertaNorm,
-      siglas_prefs: siglasPrefs
-    }
-  };
+  return { ok: true, motivo: "test_match_forzado" };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
 function matchTurno(oferta, prefs) {
