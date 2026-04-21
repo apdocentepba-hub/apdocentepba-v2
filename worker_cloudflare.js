@@ -4355,12 +4355,6 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
   const rowsToProcess = Array.isArray(prefRows) ? prefRows : [];
 
   if (!rowsToProcess.length) {
-    if (!targetUserId) {
-      await saveEmailDigestCursor(env, slotInfo.slot_key, {
-        offset: 0,
-        finished: true
-      }).catch(() => null);
-    }
 
     console.log("QUEUE SWEEP: NO USERS FOR CURRENT BATCH");
     return {
@@ -8308,36 +8302,36 @@ function extractParenthesizedCodes(text) {
 
 
 function matchCargosMaterias(oferta, prefs) {
-  const cargoOferta = String(
-    oferta?.descripcioncargo || oferta?.cargo || ""
-  );
+  const siglasOferta = siglasOfertaCargoMateria(oferta);
 
-  const siglaOferta = extraerSigla(cargoOferta);
+  const siglasPrefs = unique([
+    ...extraerSiglasEntreParentesis((prefs?.cargos_apd || []).join(" | ")),
+    ...extraerSiglasEntreParentesis((prefs?.materias_apd || []).join(" | ")),
+    ...extraerSiglasEntreParentesis((prefs?.cargos || []).join(" | ")),
+    ...extraerSiglasEntreParentesis((prefs?.materias || []).join(" | "))
+  ]).map(normalizarToken);
 
-  // prefs.cargosMaterias puede ser array de strings (con o sin paréntesis)
-  const listaPrefs = Array.isArray(prefs?.cargosMaterias)
-    ? prefs.cargosMaterias
-    : [];
-
-  // Si no hay preferencias de cargo, no filtra por cargo
-  if (!listaPrefs.length) {
-    return { ok: true };
+  if (!siglasPrefs.length) {
+    return {
+      ok: true,
+      motivo: "Sin filtro de cargo o materia"
+    };
   }
 
-  for (const pref of listaPrefs) {
-    const siglaPref = extraerSigla(pref);
+  const ofertaNorm = (Array.isArray(siglasOferta) ? siglasOferta : [])
+    .map(normalizarToken)
+    .filter(Boolean);
 
-    if (siglaPref && siglaOferta && normalizarToken(siglaPref) === normalizarToken(siglaOferta)) {
-      return { ok: true };
-    }
-  }
+  const ok = ofertaNorm.some((sigla) => siglasPrefs.includes(sigla));
 
   return {
-    ok: false,
-    motivo: "sigla_cargo_no_coincide",
+    ok,
+    motivo: ok
+      ? `Sigla compatible: ${ofertaNorm.find((s) => siglasPrefs.includes(s)) || ""}`
+      : "sigla_cargo_no_coincide",
     detalle: {
-      siglaOferta,
-      prefs: listaPrefs.map(extraerSigla)
+      siglas_oferta: ofertaNorm,
+      siglas_prefs: siglasPrefs
     }
   };
 }
