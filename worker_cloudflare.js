@@ -6885,91 +6885,144 @@ const CARGO_EQUIV = {
     "CONSTRUCCION DE LA CIUDADANIA",
     "CONSTRUCCIÓN DE LA CIUDADANÍA"
   ],
-  NTICX: [
-    "NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD",
-    "NUEVAS TECNOLOGÍAS DE LA INFORMACIÓN Y LA CONECTIVIDAD"
+  "CONSTRUCCION DE LA CIUDADANIA": [
+    "CCD",
+    "CONSTRUCCIÓN DE LA CIUDADANÍA"
   ],
+
   NTI: [
     "NTICX",
     "NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD",
     "NUEVAS TECNOLOGÍAS DE LA INFORMACIÓN Y LA CONECTIVIDAD"
   ],
+  NTICX: [
+    "NTI",
+    "NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD",
+    "NUEVAS TECNOLOGÍAS DE LA INFORMACIÓN Y LA CONECTIVIDAD"
+  ],
+  "NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD": [
+    "NTI",
+    "NTICX"
+  ],
+
   PR: [
     "PRECEPTOR",
     "PRECEPTORIA",
-    "PRECEPTOR/A",
-    "PRECEPTORIA/S"
+    "PRECEPTOR A",
+    "PRECEPTORIA S"
   ],
   PRECEPTOR: [
     "PR",
     "PRECEPTORIA",
-    "PRECEPTOR/A"
+    "PRECEPTOR A",
+    "PRECEPTORIA S"
   ],
-  ACO: [
-    "ENCARGADO MEDIOS APOYO TEC-PED.CONSTRUCCIONES"
+  PRECEPTORIA: [
+    "PR",
+    "PRECEPTOR",
+    "PRECEPTOR A"
   ],
-  EMATP: [
-    "ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.",
+
+  ELI: [
+    "ENCARGADO MEDIOS APOYO TEC PED INF COMP E INF APL",
     "ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO",
     "ENCARGADO DE MEDIOS DE APOYO TÉCNICO PEDAGÓGICO"
+  ],
+  EMATP: [
+    "ENCARGADO MEDIOS APOYO TEC PED INF COMP E INF APL",
+    "ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO",
+    "ENCARGADO DE MEDIOS DE APOYO TÉCNICO PEDAGÓGICO"
+  ],
+
+  MTM: [
+    "MATEMATICA",
+    "MATEMÁTICA"
+  ],
+  MATEMATICA: [
+    "MTM",
+    "MATEMÁTICA"
+  ],
+
+  MCS: [
+    "MATEMATICA CICLO SUPERIOR",
+    "MATEMÁTICA CICLO SUPERIOR"
+  ],
+  "MATEMATICA CICLO SUPERIOR": [
+    "MCS",
+    "MATEMÁTICA CICLO SUPERIOR"
   ]
 };
 
 
 function cargoVariants(value) {
-  const base = norm(value);
+  const raw = String(value || "");
+  const base = norm(raw);
   if (!base) return [];
 
   const out = new Set();
-  out.add(base);
 
-  const stripped = stripCargoCodeSuffix(base);
-  if (stripped) out.add(stripped);
-
-  const parenCodes = [...base.matchAll(/\(([A-Z0-9./-]{1,20})\)/g)]
-    .map((m) => norm(m[1] || "").replace(/\s+/g, "").replace(/^\//, ""))
-    .filter(Boolean);
-
-  const slashCodes = [...base.matchAll(/\/([A-Z0-9]{1,10})\b/g)]
-    .map((m) => norm(m[1] || "").replace(/\s+/g, ""))
-    .filter(Boolean);
-
-  const rawCodes = new Set([...parenCodes, ...slashCodes]);
-
-  for (const code of rawCodes) {
-    out.add(code);
-
-    if (CARGO_EQUIV[code]) {
-      for (const eq of CARGO_EQUIV[code]) {
-        const n = norm(eq);
-        if (n) out.add(n);
-      }
-    }
-  }
-
-  const textOnly = norm(
+  const clean = norm(
     base
-      .replace(/\(([A-Z0-9./-]{1,20})\)/g, " ")
-      .replace(/\/[A-Z0-9]{1,10}\b/g, " ")
+      .replace(/[()]/g, " ")
       .replace(/\//g, " ")
       .replace(/-/g, " ")
       .replace(/\s+/g, " ")
       .trim()
   );
 
-  if (textOnly) out.add(textOnly);
+  if (base) out.add(base);
+  if (clean) out.add(clean);
 
-  if (
-    base.includes("PRECEPTOR") ||
-    textOnly === "PRECEPTOR" ||
-    textOnly === "PRECEPTORIA" ||
-    rawCodes.has("PR")
-  ) {
+  const codeMatches = [
+    ...raw.matchAll(/\(([A-Z0-9./-]{1,20})\)/gi),
+    ...raw.matchAll(/\/([A-Z0-9]{1,10})\b/gi)
+  ];
+
+  const codes = codeMatches
+    .map((m) => norm(m[1] || "").replace(/\s+/g, "").replace(/^\//, ""))
+    .filter(Boolean);
+
+  for (const code of codes) {
+    out.add(code);
+
+    const eqs = CARGO_EQUIV[code] || [];
+    for (const eq of eqs) {
+      const n = norm(eq);
+      if (n) out.add(n);
+    }
+  }
+
+  if (clean.includes("PRECEPTOR") || clean.includes("PRECEPTORIA") || codes.includes("PR")) {
     out.add("PR");
     out.add("PRECEPTOR");
     out.add("PRECEPTORIA");
-    out.add("PRECEPTOR A");
-    out.add("PRECEPTORIA S");
+  }
+
+  if (
+    clean.includes("NTICX") ||
+    clean.includes("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD") ||
+    codes.includes("NTI")
+  ) {
+    out.add("NTI");
+    out.add("NTICX");
+    out.add("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD");
+  }
+
+  if (
+    clean.includes("CONSTRUCCION DE LA CIUDADANIA") ||
+    clean.includes("CONSTRUCCIÓN DE LA CIUDADANÍA") ||
+    codes.includes("CCD")
+  ) {
+    out.add("CCD");
+    out.add("CONSTRUCCION DE LA CIUDADANIA");
+  }
+
+  if (clean.includes("MATEMATICA CICLO SUPERIOR") || clean.includes("MATEMÁTICA CICLO SUPERIOR")) {
+    out.add("MCS");
+    out.add("MATEMATICA CICLO SUPERIOR");
+  } else if (clean.includes("MATEMATICA") || clean.includes("MATEMÁTICA") || codes.includes("MTM")) {
+    out.add("MTM");
+    out.add("MATEMATICA");
   }
 
   return [...out].filter(Boolean);
@@ -7221,7 +7274,7 @@ async function traerOfertasAPDPorDistritos(prefs) {
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
 async function traerOfertasAPDDeUnDistrito(distrito) {
-  const distritoNorm = norm(distrito || "");
+  const distritoNorm = normDistritoABC(distrito || "");
   const escaped = String(distritoNorm || "").replace(/(["\\])/g, "\\$1");
 
   const q = `descdistrito:"${escaped}"`;
@@ -7254,7 +7307,7 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
   const docsRaw = Array.isArray(data?.response?.docs) ? data.response.docs : [];
 
   const docs = docsRaw.filter(
-    (doc) => norm(doc?.descdistrito || "") === distritoNorm
+    (doc) => normDistritoABC(doc?.descdistrito || "") === distritoNorm
   );
 
   return {
@@ -7304,7 +7357,24 @@ async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
     }))
   };
 }
+function normDistritoABC(value) {
+  let v = norm(value || "");
 
+  const aliases = {
+    "L DE ZAMORA": "LOMAS DE ZAMORA",
+    "LOMAS": "LOMAS DE ZAMORA",
+    "G SAN MARTIN": "GENERAL SAN MARTIN",
+    "SAN MARTIN": "GENERAL SAN MARTIN",
+    "GRAL SAN MARTIN": "GENERAL SAN MARTIN",
+    "GRAL. SAN MARTIN": "GENERAL SAN MARTIN",
+    "PARTIDO DE LA COSTA": "PARTIDO DE LA COSTA",
+    "LA COSTA": "PARTIDO DE LA COSTA",
+    "GRAL PUEYRREDON": "GENERAL PUEYRREDON",
+    "GRAL. PUEYRREDON": "GENERAL PUEYRREDON"
+  };
+
+  return aliases[v] || v;
+}
 async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
   const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
 
@@ -7427,7 +7497,19 @@ function adaptarPreferenciasRow(row) {
 }
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 function distritosPrefsAPD(prefs) {
-  return unique([norm(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""), ...prefs?.otros_distritos_apd || []].filter(Boolean));
+  const raw = [
+    prefs?.distrito_1,
+    prefs?.distrito_2,
+    prefs?.distrito_3,
+    prefs?.distrito_4,
+    prefs?.distrito_5
+  ].filter(Boolean);
+
+  return [...new Set(
+    raw
+      .map((x) => normDistritoABC(x))
+      .filter(Boolean)
+  )];
 }
 __name(distritosPrefsAPD, "distritosPrefsAPD");
 function cargosMateriasPrefsAPD(prefs) {
@@ -7468,122 +7550,167 @@ function categoriasNivel(texto) {
 }
 __name(categoriasNivel, "categoriasNivel");
 function matchDistritos(oferta, prefs) {
-  const prefsD = distritosPrefsAPD(prefs);
-  if (!prefsD.length) return { ok: true, motivo: "Sin filtro de distrito" };
-  const distritoOferta = norm(oferta?.descdistrito || oferta?.distrito || "");
-  if (!distritoOferta) return { ok: false, motivo: "La oferta no trae distrito" };
-  const ok = prefsD.includes(distritoOferta);
-  return { ok, motivo: ok ? `Distrito compatible: ${distritoOferta}` : `Distrito no compatible: ${distritoOferta}` };
+  const distritoOferta = normDistritoABC(
+    oferta?.descdistrito ||
+    oferta?.distrito ||
+    ""
+  );
+
+  const prefsDistritos = distritosPrefsAPD(prefs);
+
+  if (!prefsDistritos.length) {
+    return { ok: true, motivo: "Sin filtro de distrito" };
+  }
+
+  const ok = prefsDistritos.some((d) => d === distritoOferta);
+
+  return {
+    ok,
+    motivo: ok ? "Distrito compatible" : "Distrito no compatible"
+  };
 }
 __name(matchDistritos, "matchDistritos");
 function matchCargosMaterias(oferta, prefs) {
   const prefsCM = cargosMateriasPrefsAPD(prefs);
-
   if (!prefsCM.length) {
     return { ok: true, motivo: "Sin filtro de cargo o materia" };
   }
 
-  const textoOferta = norm([
+  const rawPrincipal = [
     oferta?.descripcioncargo,
     oferta?.cargo,
     oferta?.descripcionarea,
-    oferta?.area,
+    oferta?.area
+  ].filter(Boolean).join(" ");
+
+  const rawMateria = [
     oferta?.materia,
     oferta?.asignatura,
     oferta?.descripcionmateria
-  ].filter(Boolean).join(" "));
+  ].filter(Boolean).join(" ");
 
-  if (!textoOferta) {
+  const principalNorm = norm(rawPrincipal);
+  const materiaNorm = norm(rawMateria);
+
+  if (!principalNorm && !materiaNorm) {
     return { ok: false, motivo: "La oferta no trae cargo o materia" };
   }
 
-  const ofertaTextoLimpio = norm(
-    textoOferta
-      .replace(/[()]/g, " ")
-      .replace(/\//g, " ")
-      .replace(/-/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
+  const offerAliases = new Set();
 
-  const offerTokens = new Set(
-    ofertaTextoLimpio
-      .split(" ")
-      .map((t) => norm(t).replace(/\s+/g, ""))
-      .filter((t) => t && t.length >= 2)
-  );
+  function addAliasSetFromText(rawText) {
+    const n = norm(rawText || "");
+    if (!n) return;
 
-  const esOfertaPreceptor =
-    ofertaTextoLimpio.includes("PRECEPTOR") ||
-    ofertaTextoLimpio.includes("PRECEPTORIA");
+    const clean = norm(
+      n.replace(/[()]/g, " ")
+       .replace(/\//g, " ")
+       .replace(/-/g, " ")
+       .replace(/\s+/g, " ")
+       .trim()
+    );
 
-  const ok = prefsCM.some((pref) => {
-    const prefNorm = norm(pref);
-    if (!prefNorm) return false;
+    if (n) offerAliases.add(n);
+    if (clean) offerAliases.add(clean);
 
-    const variants = cargoVariants(pref);
-    const prefTokens = cargoTokensExpanded(pref).filter((t) => t && t.length >= 2);
+    const codeMatches = [
+      ...String(rawText || "").matchAll(/\(([A-Z0-9./-]{1,20})\)/gi),
+      ...String(rawText || "").matchAll(/\/([A-Z0-9]{1,10})\b/gi)
+    ];
 
-    const prefEsPreceptor =
-      variants.includes("PR") ||
-      variants.includes("PRECEPTOR") ||
-      variants.includes("PRECEPTORIA") ||
-      prefNorm.includes("PRECEPTOR");
+    const codes = codeMatches
+      .map((m) => norm(m[1] || "").replace(/\s+/g, "").replace(/^\//, ""))
+      .filter(Boolean);
 
-    if (prefEsPreceptor && esOfertaPreceptor) {
-      return true;
-    }
-
-    for (const variant of variants) {
-      const variantLimpia = norm(
-        String(variant || "")
-          .replace(/[()]/g, " ")
-          .replace(/\//g, " ")
-          .replace(/-/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-      );
-
-      if (!variantLimpia) continue;
-
-      if (ofertaTextoLimpio === variantLimpia) {
-        return true;
-      }
-
-      if (
-        variantLimpia.length >= 6 &&
-        (
-          ofertaTextoLimpio.includes(variantLimpia) ||
-          variantLimpia.includes(ofertaTextoLimpio)
-        )
-      ) {
-        return true;
+    for (const code of codes) {
+      offerAliases.add(code);
+      const eqs = CARGO_EQUIV[code] || [];
+      for (const eq of eqs) {
+        const en = norm(eq);
+        if (en) offerAliases.add(en);
       }
     }
 
-    if (!prefTokens.length) return false;
-
-    let overlap = 0;
-    for (const token of prefTokens) {
-      if (offerTokens.has(token)) overlap++;
+    if (clean.includes("PRECEPTOR") || clean.includes("PRECEPTORIA") || codes.includes("PR")) {
+      offerAliases.add("PR");
+      offerAliases.add("PRECEPTOR");
+      offerAliases.add("PRECEPTORIA");
     }
 
-    const coverage = overlap / Math.max(prefTokens.length, 1);
-
-    if (prefTokens.length === 1) {
-      return overlap === 1 && prefTokens[0].length >= 6;
+    if (
+      clean.includes("NTICX") ||
+      clean.includes("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD") ||
+      codes.includes("NTI")
+    ) {
+      offerAliases.add("NTI");
+      offerAliases.add("NTICX");
+      offerAliases.add("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD");
     }
 
-    if (prefTokens.length === 2) {
-      return overlap === 2;
+    if (
+      clean.includes("CONSTRUCCION DE LA CIUDADANIA") ||
+      clean.includes("CONSTRUCCIÓN DE LA CIUDADANÍA") ||
+      codes.includes("CCD")
+    ) {
+      offerAliases.add("CCD");
+      offerAliases.add("CONSTRUCCION DE LA CIUDADANIA");
     }
 
-    return overlap >= 2 && coverage >= 0.7;
-  });
+    if (clean.includes("MATEMATICA CICLO SUPERIOR") || clean.includes("MATEMÁTICA CICLO SUPERIOR")) {
+      offerAliases.add("MCS");
+      offerAliases.add("MATEMATICA CICLO SUPERIOR");
+    } else if (clean.includes("MATEMATICA") || clean.includes("MATEMÁTICA") || codes.includes("MTM")) {
+      offerAliases.add("MTM");
+      offerAliases.add("MATEMATICA");
+    }
+  }
+
+  addAliasSetFromText(rawPrincipal);
+  addAliasSetFromText(rawMateria);
+
+  const genericRejects = [
+    "COBERTURA DE ASIGNATURAS",
+    "FORMACION PROFESIONAL",
+    "FORMACIÓN PROFESIONAL",
+    "FPG",
+    "PRACTICAS",
+    "PRÁCTICAS",
+    "CONJUNTOS VOCALES",
+    "INSTRUMENTALES"
+  ];
+
+  for (const bad of genericRejects) {
+    if (principalNorm.includes(norm(bad)) && !offerAliases.has("PR") && !offerAliases.has("NTI") && !offerAliases.has("CCD")) {
+      return { ok: false, motivo: "Cargo o materia no compatible" };
+    }
+  }
+
+  for (const pref of prefsCM) {
+    const prefAliases = cargoVariants(pref);
+
+    for (const alias of prefAliases) {
+      const a = norm(alias);
+      if (!a) continue;
+
+      if (offerAliases.has(a)) {
+        return { ok: true, motivo: "Cargo o materia compatible" };
+      }
+    }
+
+    // fallback solo para textos largos y seguros
+    for (const alias of prefAliases) {
+      const a = norm(alias);
+      if (!a || a.length < 10) continue;
+
+      if (principalNorm.includes(a) || materiaNorm.includes(a)) {
+        return { ok: true, motivo: "Cargo o materia compatible" };
+      }
+    }
+  }
 
   return {
-    ok,
-    motivo: ok ? "Cargo o materia compatible" : "Cargo o materia no compatible"
+    ok: false,
+    motivo: "Cargo o materia no compatible"
   };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
