@@ -8183,7 +8183,7 @@ function mapTurnoAPD(turno) {
 }
 __name(mapTurnoAPD, "mapTurnoAPD");
 function coincideOfertaConPreferenciasAPD(oferta, prefs) {
-  const distrito = matchDistritos(oferta, prefs, catalogos);
+  const distrito = matchDistritos(oferta, prefs);
 
   if (!distrito.ok) {
     return {
@@ -8193,7 +8193,7 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
     };
   }
 
-  const cargosMaterias = matchCargosMaterias(oferta, prefs, catalogos);
+  const cargosMaterias = matchCargosMaterias(oferta, prefs);
   if (!cargosMaterias.ok) {
     return {
       match: false,
