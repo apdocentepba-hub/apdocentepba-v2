@@ -4161,7 +4161,7 @@ function getArgentinaDigestSlotInfo(input = Date.now()) {
   const day = String(map.day || "");
   const hour = Number(map.hour || 0);
   const minute = Number(map.minute || 0);
-const slotHour = hour;
+const slotHour = [14, 18, 22].includes(hour) ? hour : null;
   const slotKey = slotHour != null
     ? `${year}-${month}-${day}_${String(slotHour).padStart(2, "0")}`
     : "";
@@ -4699,20 +4699,7 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
       failedCount++;
     }
   }
-const resumenDescartes = descartadas.reduce((acc, item) => {
-  const k = String(item?.motivo || "sin_motivo");
-  acc[k] = (acc[k] || 0) + 1;
-  return acc;
-}, {});
 
-console.log("ALERT BUILD SUMMARY", JSON.stringify({
-  user_id: userId,
-  total_fuente: (ofertas || []).length,
-  total_resultados: resultados.length,
-  descartadas_total: descartadas.length,
-  resumen_descartes: resumenDescartes,
-  debug_distritos: debugDistritos
-}));
   return {
     ok: true,
     source,
@@ -8301,7 +8288,101 @@ function extractParenthesizedCodes(text) {
 
 
 function matchCargosMaterias(oferta, prefs) {
-  return { ok: true, motivo: "test_match_forzado" };
+ function limpiarTextoCargo(texto) {
+  return String(texto || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokensCargo(texto) {
+  const stop = new Set([
+    "DE","DEL","LA","EL","LOS","LAS","Y","EN","PARA","POR","CON",
+    "AREA","MODALIDAD","NIVEL","CARGO","MATERIA"
+  ]);
+
+  return limpiarTextoCargo(texto)
+    .split(" ")
+    .map((t) => t.trim())
+    .filter((t) => t && !stop.has(t));
+}
+
+function extraerSigla(texto) {
+  const t = String(texto || "").toUpperCase();
+  const m = t.match(/\(([^)]+)\)/);
+  return m ? m[1].replace(/\s+/g, "") : "";
+}
+
+function matchCargosMaterias(oferta, prefs) {
+  const textoOferta = String(
+    oferta?.descripcioncargo ||
+    oferta?.cargo ||
+    oferta?.descripcionarea ||
+    oferta?.materia ||
+    ""
+  ).trim();
+
+  const siglaOferta = extraerSigla(textoOferta);
+
+  const listaPrefs = [
+    ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
+    ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
+    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
+    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
+  ]
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+
+  if (!listaPrefs.length) {
+    return { ok: true, motivo: "sin_filtro_cargo_materia" };
+  }
+
+  for (const pref of listaPrefs) {
+    const siglaPref = extraerSigla(pref);
+
+    // 1) prioridad: sigla vs sigla
+    if (siglaPref && siglaOferta && siglaPref === siglaOferta) {
+      return {
+        ok: true,
+        motivo: "sigla_cargo_materia_ok",
+        detalle: { siglaPref, siglaOferta }
+      };
+    }
+
+    // 2) fallback textual solo si ninguno tiene sigla
+    if (!siglaPref && !siglaOferta) {
+      const prefTokens = tokensCargo(pref);
+      const ofertaTokens = new Set(tokensCargo(textoOferta));
+
+      if (
+        prefTokens.length > 0 &&
+        prefTokens.every((tok) => ofertaTokens.has(tok))
+      ) {
+        return {
+          ok: true,
+          motivo: "texto_cargo_materia_ok",
+          detalle: {
+            prefTokens,
+            ofertaTokens: Array.from(ofertaTokens)
+          }
+        };
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    motivo: "cargo_materia_no_coincide",
+    detalle: {
+      oferta: textoOferta,
+      siglaOferta
+    }
+  };
+}
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
 function matchTurno(oferta, prefs) {
