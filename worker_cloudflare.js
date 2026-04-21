@@ -854,6 +854,7 @@ var HISTORICO_INSERT_BATCH = 150;
 var HISTORICO_POSTULANTES_LIMIT = 8;
 var USER_CAPTURE_ROWS_PER_PAGE = 150;
 var USER_CAPTURE_MAX_PAGES = 25;
+var ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA = "Mzk4NDg1MHwzOTg5ODk";
 var PROVINCIA_SCOPE = "PROVINCIA_FULL";
 var PROVINCIA_CAPTURE_ROWS_PER_PAGE = 150;
 var PROVINCIA_STEP_PAGES = 4;
@@ -6997,18 +6998,36 @@ function cargoVariants(value) {
   const stripped = stripCargoCodeSuffix(base);
   if (stripped) out.add(stripped);
 
-  const codeMatch = base.match(/\(([A-Z0-9./-]{2,20})\)$/);
-  const onlyCode =
-    codeMatch?.[1]
-      ? norm(codeMatch[1]).replace(/\s+/g, "")
-      : norm(base).replace(/\s+/g, "");
+  // detecta código entre paréntesis en cualquier posición
+  const codeMatches = [...base.matchAll(/\(([A-Z0-9./-]{2,20})\)/g)];
+  const codes = codeMatches
+    .map((m) => norm(m[1] || "").replace(/\s+/g, ""))
+    .filter(Boolean);
 
-  if (onlyCode && CARGO_EQUIV[onlyCode]) {
-    for (const eq of CARGO_EQUIV[onlyCode]) {
+  for (const code of codes) {
+    out.add(code);
+    if (CARGO_EQUIV[code]) {
+      for (const eq of CARGO_EQUIV[code]) {
+        const n = norm(eq);
+        if (n) out.add(n);
+      }
+    }
+  }
+
+  // si no había código en paréntesis, intento por texto “compacto”
+  const compact = base.replace(/\s+/g, "");
+  if (CARGO_EQUIV[compact]) {
+    for (const eq of CARGO_EQUIV[compact]) {
       const n = norm(eq);
       if (n) out.add(n);
     }
   }
+
+  // agrega variante “solo texto sin código”
+  const textOnly = norm(
+    base.replace(/\(([A-Z0-9./-]{2,20})\)/g, " ").replace(/\s+/g, " ").trim()
+  );
+  if (textOnly) out.add(textOnly);
 
   return [...out].filter(Boolean);
 }
@@ -7085,22 +7104,37 @@ __name(canonizarListaDistritos, "canonizarListaDistritos");
 function stripCargoCodeSuffix(value) {
   const raw = norm(value);
   if (!raw) return "";
-  const m = raw.match(/^(.*?)\s+\(([A-Z0-9./-]{2,20})\)$/);
-  return m ? norm(m[1] || "") : raw;
-}
 
+  let s = raw;
+
+  // saca código al final: PRECEPTOR (/PR)
+  s = s.replace(/\s+\(([A-Z0-9./-]{2,20})\)\s*$/g, "").trim();
+
+  // saca código al principio: (/PR) PRECEPTOR
+  s = s.replace(/^\(([A-Z0-9./-]{2,20})\)\s+/g, "").trim();
+
+  return norm(s);
+}
 
 function cargoTokensExpanded(value) {
   const stop = new Set([
     "DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A", "AL",
-    "CON", "SIN", "POR", "PARA", "E", "INF", "COMP"
+    "CON", "SIN", "POR", "PARA", "E",
+    "CICLO", "SUPERIOR"
   ]);
 
   const tokens = new Set();
 
   for (const variant of cargoVariants(value)) {
-    for (const token of variant.split(" ")) {
-      const t = norm(token);
+    const clean = norm(
+      String(variant || "")
+        .replace(/[()]/g, " ")
+        .replace(/\//g, " ")
+        .replace(/-/g, " ")
+    );
+
+    for (const token of clean.split(" ")) {
+      const t = norm(token).replace(/\s+/g, "");
       if (!t || t.length < 2 || stop.has(t)) continue;
       tokens.add(t);
     }
@@ -7194,77 +7228,183 @@ function canonizarPreferenciasConCatalogo(prefs, catalogos) {
 __name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 async function traerOfertasAPDPorDistritos(prefs) {
   const distritos = distritosPrefsAPD(prefs);
-  const cargos = cargosMateriasPrefsAPD(prefs);
   const todas = [];
   const vistos = new Set();
   const debugDistritos = [];
 
   for (const distritoAPD of distritos) {
-    let docsDistrito = [];
+    const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
 
-    if (Array.isArray(cargos) && cargos.length) {
-      for (const cargo of cargos) {
-        const info = await traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargo);
+    debugDistritos.push({
+      distrito_apd: distritoAPD,
+      estrategia: "fetch_por_distrito_completo",
+      query_usada: info.query,
+      total_apd_bruto: info.totalBruto,
+      total_apd_filtrado: info.totalFiltrado
+    });
 
-        debugDistritos.push({
-          distrito_apd: distritoAPD,
-          cargo_query: cargo,
-          query_usada: info.query,
-          total_apd_bruto: info.totalBruto,
-          total_apd_filtrado: info.totalFiltrado
-        });
-
-        for (const doc of info.docs || []) {
-          const clave = buildSourceOfferKeyFromOferta(doc);
-          if (vistos.has(clave)) continue;
-          vistos.add(clave);
-          docsDistrito.push(doc);
-        }
-      }
-    } else {
-      const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
-
-      debugDistritos.push({
-        distrito_apd: distritoAPD,
-        query_usada: info.query,
-        total_apd_bruto: info.totalBruto,
-        total_apd_filtrado: info.totalFiltrado
-      });
-
-      for (const doc of info.docs || []) {
-        const clave = buildSourceOfferKeyFromOferta(doc);
-        if (vistos.has(clave)) continue;
-        vistos.add(clave);
-        docsDistrito.push(doc);
-      }
+    for (const doc of info.docs || []) {
+      const clave = buildSourceOfferKeyFromOferta(doc);
+      if (!clave || vistos.has(clave)) continue;
+      vistos.add(clave);
+      todas.push(doc);
     }
-
-    todas.push(...docsDistrito);
   }
 
-  return { ofertas: todas, debugDistritos };
+  todas.sort((a, b) => {
+    const ta =
+      parseFechaFlexible(
+        a?.ult_movimiento ||
+        a?.finoferta ||
+        a?.fecha_cierre ||
+        ""
+      )?.getTime() || 0;
+
+    const tb =
+      parseFechaFlexible(
+        b?.ult_movimiento ||
+        b?.finoferta ||
+        b?.fecha_cierre ||
+        ""
+      )?.getTime() || 0;
+
+    return tb - ta;
+  });
+
+  return {
+    ofertas: todas,
+    debugDistritos
+  };
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
+async function traerOfertasABCCheckOffer(idop) {
+  const url =
+    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/check/offer/?idop=${encodeURIComponent(idop)}`;
+
+  const res = await fetch(url, {
+    headers: {
+      accept: "application/json, text/javascript, */*; q=0.01",
+      origin: "http://servicios2.abc.gob.ar",
+      referer: "http://servicios2.abc.gob.ar/",
+      "x-requested-with": "XMLHttpRequest"
+    }
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`ABC check/offer respondió ${res.status}: ${txt}`);
+  }
+
+  const data = await res.json().catch(() => []);
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((o) => ({
+    fuente: "abc_check_offer",
+    estado: o?.estado || "",
+    iddetalle: o?.iddetalle ?? null,
+    idoferta: o?.idoferta ?? null,
+    postulacion_idganador: o?.postulacion_idganador ?? null,
+    nombreganador: o?.nombreganador ?? "",
+    cuilganador: o?.cuilganador ?? ""
+  }));
+}
+
+function mergeDocsConCheckOffer(docsBase, checkItems) {
+  const porIdOferta = new Map();
+  const porIdDetalle = new Map();
+
+  for (const item of checkItems || []) {
+    if (item?.idoferta != null) porIdOferta.set(String(item.idoferta), item);
+    if (item?.iddetalle != null) porIdDetalle.set(String(item.iddetalle), item);
+  }
+
+  return (docsBase || []).map((doc) => {
+    const hit =
+      porIdOferta.get(String(doc?.idoferta ?? "")) ||
+      porIdDetalle.get(String(doc?.iddetalle ?? ""));
+
+    if (!hit) return doc;
+
+    return {
+      ...doc,
+      estado: hit.estado || doc.estado,
+      postulacion_idganador:
+        hit.postulacion_idganador ?? doc.postulacion_idganador ?? null,
+      nombreganador: hit.nombreganador || doc.nombreganador || "",
+      cuilganador: hit.cuilganador || doc.cuilganador || "",
+      fuente_estado: "abc_check_offer"
+    };
+  });
+}
+
+function filtrarSoloPublicadasSegunCheckOffer(docsBase, checkItems) {
+  const idsPublicados = new Set();
+
+  for (const item of checkItems || []) {
+    const estado = String(item?.estado || "").trim().toUpperCase();
+    if (estado !== "PUBLICADA") continue;
+
+    if (item?.idoferta != null) idsPublicados.add(`of:${item.idoferta}`);
+    if (item?.iddetalle != null) idsPublicados.add(`de:${item.iddetalle}`);
+  }
+
+  return (docsBase || []).filter((doc) => {
+    const k1 = `of:${doc?.idoferta ?? ""}`;
+    const k2 = `de:${doc?.iddetalle ?? ""}`;
+    return idsPublicados.has(k1) || idsPublicados.has(k2);
+  });
+}
 async function traerOfertasAPDDeUnDistrito(distritoAPD) {
   const distritoNorm = norm(distritoAPD);
   const docsTotales = [];
+  const vistos = new Set();
+
   for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
     const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+
     const q = `descdistrito:"${escaparSolr(distritoAPD)}"`;
-    const consultaUrl = `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+
+    const consultaUrl =
+      `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select` +
+      `?q=${encodeURIComponent(q)}` +
+      `&rows=${USER_CAPTURE_ROWS_PER_PAGE}` +
+      `&start=${start}` +
+      `&wt=json` +
+      `&sort=ult_movimiento%20desc`;
+
     const res = await fetch(consultaUrl);
+
     if (!res.ok) {
-      const txt = await res.text();
+      const txt = await res.text().catch(() => "");
       throw new Error(`APD respondio ${res.status}: ${txt}`);
     }
-    const data = await res.json();
-    const docs = data?.response?.docs || [];
+
+    const data = await res.json().catch(() => ({}));
+    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+
     if (!docs.length) break;
-    docsTotales.push(...docs);
+
+    for (const doc of docs) {
+      const distritoDoc = norm(doc?.descdistrito || doc?.distrito || "");
+      if (distritoDoc !== distritoNorm) continue;
+
+      const clave = buildSourceOfferKeyFromOferta(doc);
+      if (!clave || vistos.has(clave)) continue;
+
+      vistos.add(clave);
+      docsTotales.push(doc);
+    }
+
     if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
   }
-  const docsFiltrados = docsTotales.filter((doc) => norm(doc?.descdistrito || "") === distritoNorm);
-  return { docs: docsFiltrados, query: `descdistrito:"${distritoAPD}"`, totalBruto: docsTotales.length, totalFiltrado: docsFiltrados.length };
+
+  return {
+    docs: docsTotales,
+    query: `descdistrito:"${distritoAPD}"`,
+    totalBruto: docsTotales.length,
+    totalFiltrado: docsTotales.length
+  };
 }
 __name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
 async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
@@ -7307,81 +7447,56 @@ async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
   };
 }
 
-
 async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
-  const distritoNorm = norm(distritoAPD);
+  const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+
   const cargoNorm = norm(cargoMateria);
-  const docsTotales = [];
+  const docsFiltrados = (info.docs || []).filter((doc) => {
+    const textoCargo = norm([
+      doc?.descripcioncargo,
+      doc?.cargo,
+      doc?.descripcionarea,
+      doc?.materia,
+      doc?.asignatura,
+      doc?.descripcionmateria
+    ].filter(Boolean).join(" "));
 
-  async function fetchConCargo(valorBusqueda) {
-    for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
-      const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+    if (!textoCargo) return false;
 
-      const q = [
-        `descdistrito:"${escaparSolr(distritoAPD)}"`,
-        `(` + [
-          `descripcioncargo:"${escaparSolr(valorBusqueda)}"`,
-          `descripcionarea:"${escaparSolr(valorBusqueda)}"`,
-          `cargo:"${escaparSolr(valorBusqueda)}"`
-        ].join(" OR ") + `)`
-      ].join(" AND ");
+    const variants = cargoVariants(cargoMateria);
+    if (!variants.length) {
+      return textoCargo.includes(cargoNorm) || cargoNorm.includes(textoCargo);
+    }
 
-      const consultaUrl =
-        `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+    const offerTokens = new Set(
+      textoCargo.split(" ").map((t) => norm(t)).filter(Boolean)
+    );
 
-      const res = await fetch(consultaUrl);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`APD respondio ${res.status}: ${txt}`);
+    return variants.some((variant) => {
+      if (!variant) return false;
+
+      if (textoCargo.includes(variant) || variant.includes(textoCargo)) {
+        return true;
       }
 
-      const data = await res.json();
-      const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-      if (!docs.length) break;
+      const prefTokens = cargoTokensExpanded(variant);
+      if (!prefTokens.length) return false;
 
-      for (const doc of docs) {
-        const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
-
-        const textoCargo = norm([
-          doc?.descripcioncargo,
-          doc?.descripcionarea,
-          doc?.cargo,
-          doc?.materia,
-          doc?.asignatura
-        ].filter(Boolean).join(" "));
-
-        const cargoOk =
-          textoCargo.includes(cargoNorm) ||
-          cargoNorm.includes(textoCargo);
-
-        if (!distritoOk || !cargoOk) continue;
-
-        docsTotales.push(doc);
+      let overlap = 0;
+      for (const token of prefTokens) {
+        if (offerTokens.has(token)) overlap++;
       }
 
-      if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
-    }
-  }
-
-  // 🔵 1) intento normal
-  await fetchConCargo(cargoMateria);
-
-  // 🔵 2) fallback SOLO si vino vacío
-  if (docsTotales.length === 0) {
-    const limpio = String(cargoMateria)
-      .replace(/\([^)]+\)/g, "")
-      .trim();
-
-    if (limpio && limpio !== cargoMateria) {
-      await fetchConCargo(limpio);
-    }
-  }
+      const coverage = overlap / Math.max(prefTokens.length, 1);
+      return coverage >= 0.6 || overlap >= 2;
+    });
+  });
 
   return {
-    docs: docsTotales,
-    query: `descdistrito:"${distritoAPD}" AND cargo:"${cargoMateria}"`,
-    totalBruto: docsTotales.length,
-    totalFiltrado: docsTotales.length
+    docs: docsFiltrados,
+    query: `FALLBACK_LOCAL distrito="${distritoAPD}" cargo="${cargoMateria}"`,
+    totalBruto: info.totalBruto,
+    totalFiltrado: docsFiltrados.length
   };
 }
 __name(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
@@ -7523,32 +7638,62 @@ function matchCargosMaterias(oferta, prefs) {
     return { ok: false, motivo: "La oferta no trae cargo o materia" };
   }
 
+  const ofertaTextoLimpio = norm(
+    textoOferta
+      .replace(/[()]/g, " ")
+      .replace(/\//g, " ")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+
   const offerTokens = new Set(
-    textoOferta.split(" ").map((t) => norm(t)).filter(Boolean)
+    ofertaTextoLimpio
+      .split(" ")
+      .map((t) => norm(t).replace(/\s+/g, ""))
+      .filter(Boolean)
   );
 
   const ok = prefsCM.some((pref) => {
     const variants = cargoVariants(pref);
+    const prefTokens = cargoTokensExpanded(pref);
 
-    return variants.some((variant) => {
-      if (!variant) return false;
+    // 1) match fuerte por texto "sin código / sin símbolos"
+    for (const variant of variants) {
+      const variantLimpia = norm(
+        String(variant || "")
+          .replace(/[()]/g, " ")
+          .replace(/\//g, " ")
+          .replace(/-/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      );
 
-      if (textoOferta.includes(variant) || variant.includes(textoOferta)) {
+      if (!variantLimpia) continue;
+
+      if (
+        ofertaTextoLimpio.includes(variantLimpia) ||
+        variantLimpia.includes(ofertaTextoLimpio)
+      ) {
         return true;
       }
+    }
 
-      const prefTokens = cargoTokensExpanded(variant);
-      if (!prefTokens.length) return false;
+    // 2) match por tokens
+    if (!prefTokens.length) return false;
 
-      let overlap = 0;
-      for (const token of prefTokens) {
-        if (offerTokens.has(token)) overlap++;
-      }
+    let overlap = 0;
+    for (const token of prefTokens) {
+      if (offerTokens.has(token)) overlap++;
+    }
 
-      const coverage = overlap / Math.max(prefTokens.length, 1);
+    const coverage = overlap / Math.max(prefTokens.length, 1);
 
-      return coverage >= 0.6 || overlap >= 2;
-    });
+    // PRECEPTOR (/PR), NTICX (NTI), etc.
+    if (coverage >= 0.5 && overlap >= 1) return true;
+    if (coverage >= 0.34 && overlap >= 2) return true;
+
+    return false;
   });
 
   return {
