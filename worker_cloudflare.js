@@ -4133,6 +4133,10 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
 }
 
 async function runEmailAlertsQueueSweep(env, options = {}) {
+  console.log("QUEUE SWEEP START");
+
+console.log("Usuarios procesados:", users.length);
+console.log("Alertas generadas:", totalAlertsGeneradas);
   const MAX_USERS_PER_RUN = clampInt(
   options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
   1,
@@ -7757,182 +7761,70 @@ function json(data, status = 200) {
 __name(json, "json");
 
 
-async function sendPendingEmailDigests(env, options = {}) {
-  const maxRows = clampInt(
-    options?.max_rows || env.EMAIL_DIGEST_PENDING_LIMIT,
-    1,
-    500,
-    200
-  );
+async function sendPendingEmailDigests(env, opts = {}) {
+  const maxRows = opts.max_rows || 20;
 
-  const targetUserId = String(options?.target_user_id || "").trim();
-  const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
+  const { data: rows, error } = await env.SUPABASE
+    .from("pending_notifications")
+    .select("*")
+    .limit(maxRows);
 
-  const pendingQuery =
-    `pending_notifications?channel=eq.email&status=eq.pending` +
-    `&select=id,user_id,kind,alert_key,payload,created_at` +
-    `${targetUserId ? `&user_id=eq.${encodeURIComponent(targetUserId)}` : ""}` +
-    `&order=created_at.desc&limit=${maxRows}`;
-
-  const pendingRows = await supabaseSelect(
-    env,
-    pendingQuery
-  ).catch(() => []);
-
-  const grouped = new Map();
-
-  for (const row of Array.isArray(pendingRows) ? pendingRows : []) {
-    const userId = String(row?.user_id || "").trim();
-    if (!userId) continue;
-    if (!grouped.has(userId)) grouped.set(userId, []);
-    grouped.get(userId).push(row);
+  if (error) {
+    console.log("SUPABASE ERROR:", error);
+    return;
   }
 
-  let processedUsers = 0;
-  let sent = 0;
-  let failed = 0;
-  const pending_rows = Array.isArray(pendingRows) ? pendingRows.length : 0;
-
-  if (!pending_rows) {
-    return {
-      ok: true,
-      mode: "pending_notifications",
-      processed_users: 0,
-      sent: 0,
-      failed: 0,
-      pending_rows: 0,
-      target_user_id: targetUserId || null
-    };
+  if (!rows || rows.length === 0) {
+    console.log("NO HAY MAILS PENDIENTES");
+    return;
   }
 
-  for (const [userId, rows] of grouped.entries()) {
-    const user = await obtenerUsuario(env, userId).catch(() => null);
-    if (!user?.id || !user?.email || user?.activo === false) continue;
+  console.log("ENVIANDO MAILS:", rows.length);
 
-    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
-    if (!resolved || !isPlanActivo(resolved)) continue;
+  for (const row of rows) {
+    try {
+      const html = `
+        <h3>Tenés nuevas alertas APD</h3>
+        <p><b>Distrito:</b> ${row.distrito || "-"}</p>
+        <p><b>Cargo:</b> ${row.cargo || "-"}</p>
+        <p><b>Nivel:</b> ${row.nivel || "-"}</p>
+        <p>Entrá al panel para ver más.</p>
+      `;
 
-    const prefsRows = await supabaseSelect(
-      env,
-      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
-    ).catch(() => []);
-
-    const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
-    if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
-
-    processedUsers += 1;
-
-    const rawAlerts = rows.map(row => row?.payload?.alert || row?.payload || {});
-    const alerts = rawAlerts
-      .slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL)
-      .map((item) => ({
-        offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-      }));
-
-    if (!alerts.length) continue;
-
-    const totalAlerts = rows.length;
-const shownCount = alerts.length;
-const asunto = `${shownCount} nuevas ofertas de ${totalAlerts}`;
-
-    const html = buildDigestHtml(alerts, user, {
-      total_alerts: totalAlerts,
-      max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
-      panel_url: "https://alertasapd.com.ar"
-    });
-
-    const send = await enviarMailBrevo(
-      user.email,
-      user.nombre || "",
-      asunto,
-      html,
-      env
-    );
-
-    const rowIds = rows.map(item => item.id).filter(Boolean);
-    const rowIdsQuery = rowIds.join(",");
-
-    if (send?.ok) {
-      sent += 1;
-
-      await supabaseInsert(env, "notification_delivery_logs", {
-        user_id: user.id,
-        channel: "email",
-        template_code: "apd_email_digest",
-        destination: user.email,
-        status: "sent_digest",
-        provider_message_id: null,
-        payload: {
-          total_alerts: totalAlerts,
-          alert_keys: rows.map(item => item.alert_key).filter(Boolean)
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": env.BREVO_API_KEY,
+          "Content-Type": "application/json"
         },
-        provider_response: send || null
-      }).catch(() => null);
+        body: JSON.stringify({
+          sender: {
+            name: "APDocente",
+            email: "alertas@apdocente.com"
+          },
+          to: [
+            {
+              email: row.email
+            }
+          ],
+          subject: "Nuevas alertas APD",
+          htmlContent: html
+        })
+      });
 
-      if (rowIds.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/pending_notifications?id=in.(${rowIdsQuery})`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-              Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-              Prefer: "return=minimal"
-            },
-            body: JSON.stringify({
-              status: "sent",
-              sent_at: new Date().toISOString()
-            })
-          }
-        ).catch(() => null);
-      }
-    } else {
-      failed += 1;
+      const text = await res.text();
+      console.log("BREVO RESP:", text);
 
-      await supabaseInsert(env, "notification_delivery_logs", {
-        user_id: user.id,
-        channel: "email",
-        template_code: "apd_email_digest",
-        destination: user.email,
-        status: "failed_digest",
-        provider_message_id: null,
-        payload: {
-          total_alerts: totalAlerts,
-          alert_keys: rows.map(item => item.alert_key).filter(Boolean)
-        },
-        provider_response: send || null
-      }).catch(() => null);
+      // borrar después de enviar
+      await env.SUPABASE
+        .from("pending_notifications")
+        .delete()
+        .eq("id", row.id);
 
-      if (rowIds.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/pending_notifications?id=in.(${rowIdsQuery})`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-              Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-              Prefer: "return=minimal"
-            },
-            body: JSON.stringify({
-              status: "failed"
-            })
-          }
-        ).catch(() => null);
-      }
+    } catch (err) {
+      console.log("ERROR MAIL:", err);
     }
   }
-
-  return {
-    ok: true,
-    mode: "pending_notifications",
-    processed_users: processedUsers,
-    sent,
-    failed,
-    pending_rows,
-    target_user_id: targetUserId || null
-  };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
 function buildDigestHtml(alerts, user, options = {}) {
