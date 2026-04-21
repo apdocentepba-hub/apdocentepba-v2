@@ -8284,18 +8284,99 @@ function extractParenthesizedCodes(text) {
 
   return [...out];
 }
+function matchCargosMaterias(oferta, prefs) {
+  const siglasPrefs = cargosMateriasPrefsAPD(prefs)
+    .map(normalizarToken)
+    .filter(Boolean);
 
+  const siglasOferta = siglasOfertaCargoMateria(oferta)
+    .map(normalizarToken)
+    .filter(Boolean);
 
+  const tieneFiltrosCargo =
+    (Array.isArray(prefs?.cargos) && prefs.cargos.length > 0) ||
+    (Array.isArray(prefs?.materias) && prefs.materias.length > 0) ||
+    (Array.isArray(prefs?.cargos_apd) && prefs.cargos_apd.length > 0) ||
+    (Array.isArray(prefs?.materias_apd) && prefs.materias_apd.length > 0);
 
+  if (!tieneFiltrosCargo) {
+    return { ok: true, motivo: "Sin filtro de cargo o materia" };
+  }
 
+  if (siglasPrefs.length && siglasOferta.length) {
+    const hit = siglasOferta.find((sigla) => siglasPrefs.includes(sigla));
 
+    if (hit) {
+      return {
+        ok: true,
+        motivo: `Sigla compatible: ${hit}`,
+        detalle: {
+          siglas_oferta: siglasOferta,
+          siglas_prefs: siglasPrefs
+        }
+      };
+    }
 
+    return {
+      ok: false,
+      motivo: "sigla_cargo_materia_no_coincide",
+      detalle: {
+        siglas_oferta: siglasOferta,
+        siglas_prefs: siglasPrefs
+      }
+    };
+  }
 
+  const textoOferta = resolveOfferCargoText(oferta);
+  const ofertaTokens = new Set(tokenBag(textoOferta));
 
+  const prefsTexto = unique([
+    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
+    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
+  ])
+    .map(stripCargoCodeSuffix)
+    .map(norm)
+    .filter(Boolean);
 
+  for (const pref of prefsTexto) {
+    const prefTokens = tokenBag(pref);
+    if (!prefTokens.length) continue;
 
+    const ok = prefTokens.every((tok) => ofertaTokens.has(tok));
+    if (ok) {
+      return {
+        ok: true,
+        motivo: "texto_cargo_materia_ok",
+        detalle: {
+          pref,
+          pref_tokens: prefTokens,
+          oferta_tokens: Array.from(ofertaTokens)
+        }
+      };
+    }
+  }
 
+  return {
+    ok: false,
+    motivo: "cargo_materia_no_coincide",
+    detalle: {
+      texto_oferta: textoOferta,
+      siglas_oferta: siglasOferta,
+      siglas_prefs: siglasPrefs
+    }
+  };
+}
 __name(matchCargosMaterias, "matchCargosMaterias");
+
+
+
+
+
+
+
+
+
+
 function matchTurno(oferta, prefs) {
   const prefsT = turnosPrefs(prefs);
   if (!prefsT.length) {
