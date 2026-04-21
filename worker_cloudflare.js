@@ -6955,79 +6955,7 @@ const CARGO_EQUIV = {
 };
 
 
-function cargoVariants(value) {
-  const raw = String(value || "");
-  const base = norm(raw);
-  if (!base) return [];
 
-  const out = new Set();
-
-  const clean = norm(
-    base
-      .replace(/[()]/g, " ")
-      .replace(/\//g, " ")
-      .replace(/-/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-
-  if (base) out.add(base);
-  if (clean) out.add(clean);
-
-  const codeMatches = [
-    ...raw.matchAll(/\(([A-Z0-9./-]{1,20})\)/gi),
-    ...raw.matchAll(/\/([A-Z0-9]{1,10})\b/gi)
-  ];
-
-  const codes = codeMatches
-    .map((m) => norm(m[1] || "").replace(/\s+/g, "").replace(/^\//, ""))
-    .filter(Boolean);
-
-  for (const code of codes) {
-    out.add(code);
-
-    const eqs = CARGO_EQUIV[code] || [];
-    for (const eq of eqs) {
-      const n = norm(eq);
-      if (n) out.add(n);
-    }
-  }
-
-  if (clean.includes("PRECEPTOR") || clean.includes("PRECEPTORIA") || codes.includes("PR")) {
-    out.add("PR");
-    out.add("PRECEPTOR");
-    out.add("PRECEPTORIA");
-  }
-
-  if (
-    clean.includes("NTICX") ||
-    clean.includes("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD") ||
-    codes.includes("NTI")
-  ) {
-    out.add("NTI");
-    out.add("NTICX");
-    out.add("NUEVAS TECNOLOGIAS DE LA INFORMACION Y LA CONECTIVIDAD");
-  }
-
-  if (
-    clean.includes("CONSTRUCCION DE LA CIUDADANIA") ||
-    clean.includes("CONSTRUCCIÓN DE LA CIUDADANÍA") ||
-    codes.includes("CCD")
-  ) {
-    out.add("CCD");
-    out.add("CONSTRUCCION DE LA CIUDADANIA");
-  }
-
-  if (clean.includes("MATEMATICA CICLO SUPERIOR") || clean.includes("MATEMÁTICA CICLO SUPERIOR")) {
-    out.add("MCS");
-    out.add("MATEMATICA CICLO SUPERIOR");
-  } else if (clean.includes("MATEMATICA") || clean.includes("MATEMÁTICA") || codes.includes("MTM")) {
-    out.add("MTM");
-    out.add("MATEMATICA");
-  }
-
-  return [...out].filter(Boolean);
-}
 function cargoTextOferta(oferta) {
   return norm([
     oferta?.descripcioncargo,
@@ -7176,19 +7104,19 @@ function buildCargoCatalogIndex(catalogos) {
     const code = normalizeCode(rawCode);
 
     const aliases = unique([
-      canonical,
-      human,
-      norm(row?.nombre || ""),
-      norm(row?.apd_nombre || ""),
-      norm(row?.apd_nombre_norm || ""),
-      norm(row?.nombre_norm || ""),
-      code ? `/${code}` : "",
-      code
-    ].filter(Boolean));
+  canonical,
+  human,
+  norm(row?.nombre || ""),
+  norm(row?.apd_nombre || ""),
+  norm(row?.apd_nombre_norm || ""),
+  norm(row?.nombre_norm || ""),
+  code ? `/${code}` : "",
+  code
+].filter(Boolean));
 
     const item = {
       kind: "cargo",
-      code: code ? `/${code}` : "",
+      code: code || "",
       canonical,
       simple,
       human,
@@ -8090,33 +8018,8 @@ function extractParenthesizedCodes(text) {
   return [...out];
 }
 
-function extractOfferCargoCodes(oferta) {
-  const textos = [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.materia,
-    oferta?.asignatura,
-    oferta?.descripcionmateria,
-    oferta?.areaincumbencia
-  ].filter(Boolean);
 
-  const out = new Set();
 
-  for (const txt of textos) {
-    for (const code of extractParenthesizedCodes(txt)) {
-      out.add(code);
-    }
-  }
-
-  const inc = normalizeCode(oferta?.areaincumbencia || "");
-  if (inc) out.add(inc);
-
-  return [...out];
-}
-function scoreCargoMatch() {
-  return 0;
-}
 function matchCargosMaterias(oferta, prefs) {
   const prefsSiglas = cargosMateriasPrefsAPD(prefs);
   if (!prefsSiglas.length) {
@@ -9006,42 +8909,7 @@ function resolveDistrictsForQuery(prefs, catalog) {
   return unique2(out);
 }
 __name(resolveDistrictsForQuery, "resolveDistrictsForQuery");
-function matchesCargo(oferta, prefs) {
-  const filtros = unique2([
-    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
-    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
-  ]);
 
-  if (!filtros.length) return true;
-
-  const offerCodes = extractOfferCargoCodes(oferta)
-    .map(normalizeCode)
-    .filter(Boolean);
-
-  if (!offerCodes.length) return false;
-
-  const prefCodes = unique2(
-    filtros.flatMap((item) => {
-      const out = [];
-
-      out.push(...extractExplicitCodesFromPreference(item));
-      out.push(...extractParenthesizedCodes(item));
-
-      const raw = String(item || "").trim();
-      const normalizedRaw = normalizeCode(raw);
-      if (normalizedRaw) out.push(normalizedRaw);
-
-      return out;
-    })
-    .map(normalizeCode)
-    .filter(Boolean)
-  );
-
-  if (!prefCodes.length) return false;
-
-  return offerCodes.some((code) => prefCodes.includes(code));
-}
-__name(matchesCargo, "matchesCargo");
 function matchesTurno(oferta, prefs) {
   const turnos = unique2((prefs?.turnos || []).map((item) => mapTurnoAPD2(item)).filter(Boolean));
   if (!turnos.length) return true;
