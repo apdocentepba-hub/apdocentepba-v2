@@ -868,6 +868,84 @@ var WHATSAPP_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_QUERY_ALERTS_LIMIT = 50;
 var TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
 var WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60 * 6;
+async function traerOfertasABCCheckOffer(idop) {
+  const url =
+    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/check/offer/?idop=${encodeURIComponent(idop)}`;
+
+  const res = await fetch(url, {
+    headers: {
+      accept: "application/json, text/javascript, */*; q=0.01",
+      origin: "http://servicios2.abc.gob.ar",
+      referer: "http://servicios2.abc.gob.ar/",
+      "x-requested-with": "XMLHttpRequest"
+    }
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`ABC check/offer respondió ${res.status}: ${txt}`);
+  }
+
+  const data = await res.json().catch(() => []);
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((o) => ({
+    fuente: "abc_check_offer",
+    estado: o?.estado || "",
+    iddetalle: o?.iddetalle ?? null,
+    idoferta: o?.idoferta ?? null,
+    postulacion_idganador: o?.postulacion_idganador ?? null,
+    nombreganador: o?.nombreganador ?? "",
+    cuilganador: o?.cuilganador ?? ""
+  }));
+}
+
+function mergeDocsConCheckOffer(docsBase, checkItems) {
+  const porIdOferta = new Map();
+  const porIdDetalle = new Map();
+
+  for (const item of checkItems || []) {
+    if (item?.idoferta != null) porIdOferta.set(String(item.idoferta), item);
+    if (item?.iddetalle != null) porIdDetalle.set(String(item.iddetalle), item);
+  }
+
+  return (docsBase || []).map((doc) => {
+    const hit =
+      porIdOferta.get(String(doc?.idoferta ?? "")) ||
+      porIdDetalle.get(String(doc?.iddetalle ?? ""));
+
+    if (!hit) return doc;
+
+    return {
+      ...doc,
+      estado: hit.estado || doc.estado,
+      postulacion_idganador:
+        hit.postulacion_idganador ?? doc.postulacion_idganador ?? null,
+      nombreganador: hit.nombreganador || doc.nombreganador || "",
+      cuilganador: hit.cuilganador || doc.cuilganador || "",
+      fuente_estado: "abc_check_offer"
+    };
+  });
+}
+
+function filtrarSoloPublicadasSegunCheckOffer(docsBase, checkItems) {
+  const idsPublicados = new Set();
+
+  for (const item of checkItems || []) {
+    const estado = String(item?.estado || "").trim().toUpperCase();
+    if (estado !== "PUBLICADA") continue;
+
+    if (item?.idoferta != null) idsPublicados.add(`of:${item.idoferta}`);
+    if (item?.iddetalle != null) idsPublicados.add(`de:${item.iddetalle}`);
+  }
+
+  return (docsBase || []).filter((doc) => {
+    const k1 = `of:${doc?.idoferta ?? ""}`;
+    const k2 = `de:${doc?.iddetalle ?? ""}`;
+    return idsPublicados.has(k1) || idsPublicados.has(k2);
+  });
+}
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -879,6 +957,7 @@ function jsonResponse(obj, status = 200) {
     }
   });
 }
+
 __name(jsonResponse, "jsonResponse");
 function corsHeaders() {
   return {
@@ -5295,11 +5374,46 @@ async function construirAlertasParaUsuario(env, userId) {
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
 
+  let ofertasFinales = ofertas;
+
+  try {
+    const prefsCM = cargosMateriasPrefsAPD(prefsCanon).map((x) => norm(x));
+    const prefsDistritos = distritosPrefsAPD(prefsCanon).map((x) => norm(x));
+
+    const esCasoLanusPreceptor =
+      prefsDistritos.includes("LANUS") &&
+      prefsCM.some((x) => x.includes("PRECEPTOR"));
+
+    if (esCasoLanusPreceptor) {
+      const checkItems = await traerOfertasABCCheckOffer(
+        ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA
+      );
+
+      const publicadasCheck = checkItems.filter(
+        (x) => String(x?.estado || "").trim().toUpperCase() === "PUBLICADA"
+      );
+
+      ofertasFinales = filtrarSoloPublicadasSegunCheckOffer(ofertas, publicadasCheck);
+      ofertasFinales = mergeDocsConCheckOffer(ofertasFinales, publicadasCheck);
+
+      debugDistritos.push({
+        estrategia: "abc_check_offer_lanus_preceptor_publicada",
+        idop: ABC_CHECK_OFFER_IDOP_PRECEPTOR_LANUS_PUBLICADA,
+        total_check_offer: checkItems.length,
+        total_publicadas_check_offer: publicadasCheck.length,
+        total_final: ofertasFinales.length
+      });
+    }
+  } catch (err) {
+    debugDistritos.push({
+      estrategia: "abc_check_offer_lanus_preceptor_publicada",
+      error: String(err?.message || err)
+    });
+  }
+
   const resolved = await resolverPlanUsuario(env, userId).catch(() => null);
   const planCode = String(
-    resolved?.plan?.code ||
-    resolved?.subscription?.plan_code ||
-    ""
+    resolved?.plan?.code || resolved?.subscription?.plan_code || ""
   ).trim().toUpperCase();
 
   const pidEnabled = planCode === "INSIGNE";
@@ -5336,7 +5450,7 @@ async function construirAlertasParaUsuario(env, userId) {
   const vistos = new Set();
   const compatiblesParaPostulantes = [];
 
-  for (const oferta of ofertas) {
+  for (const oferta of ofertasFinales) {
     if (!ofertaEsVisibleParaAlerta(oferta)) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
@@ -5389,23 +5503,23 @@ async function construirAlertasParaUsuario(env, userId) {
     vistos.add(clave);
 
     const cierre = parseFechaFlexible(
-  oferta?.finoferta ||
-  oferta?.fecha_cierre ||
-  oferta?.fecha_cierre_raw ||
-  oferta?.cierre ||
-  ""
-);
+      oferta?.finoferta ||
+      oferta?.fecha_cierre ||
+      oferta?.fecha_cierre_raw ||
+      oferta?.cierre ||
+      ""
+    );
 
-if (cierre && cierre.getTime() < Date.now()) {
-  descartadas.push({
-    iddetalle: oferta.iddetalle || oferta.id || null,
-    motivo: "cierre_pasado",
-    finoferta: oferta?.finoferta || oferta?.fecha_cierre || ""
-  });
-  continue;
-}
+    if (cierre && cierre.getTime() < Date.now()) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "cierre_pasado",
+        finoferta: oferta?.finoferta || oferta?.fecha_cierre || ""
+      });
+      continue;
+    }
 
-const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+    const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
 
     if (!evaluacion.match) {
       const itemDescartado = buildAlertItem(oferta, evaluacion, null);
@@ -5495,7 +5609,7 @@ const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
     user,
     preferencias_originales: prefs,
     preferencias_canonizadas: prefsCanon,
-    total_fuente: ofertas.length,
+    total_fuente: ofertasFinales.length,
     total: resultados.length,
     descartadas_total: descartadas.length,
     descartadas_preview: descartadas.slice(0, 20),
@@ -7277,84 +7391,6 @@ async function traerOfertasAPDPorDistritos(prefs) {
   };
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
-async function traerOfertasABCCheckOffer(idop) {
-  const url =
-    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/check/offer/?idop=${encodeURIComponent(idop)}`;
-
-  const res = await fetch(url, {
-    headers: {
-      accept: "application/json, text/javascript, */*; q=0.01",
-      origin: "http://servicios2.abc.gob.ar",
-      referer: "http://servicios2.abc.gob.ar/",
-      "x-requested-with": "XMLHttpRequest"
-    }
-  });
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`ABC check/offer respondió ${res.status}: ${txt}`);
-  }
-
-  const data = await res.json().catch(() => []);
-
-  if (!Array.isArray(data)) return [];
-
-  return data.map((o) => ({
-    fuente: "abc_check_offer",
-    estado: o?.estado || "",
-    iddetalle: o?.iddetalle ?? null,
-    idoferta: o?.idoferta ?? null,
-    postulacion_idganador: o?.postulacion_idganador ?? null,
-    nombreganador: o?.nombreganador ?? "",
-    cuilganador: o?.cuilganador ?? ""
-  }));
-}
-
-function mergeDocsConCheckOffer(docsBase, checkItems) {
-  const porIdOferta = new Map();
-  const porIdDetalle = new Map();
-
-  for (const item of checkItems || []) {
-    if (item?.idoferta != null) porIdOferta.set(String(item.idoferta), item);
-    if (item?.iddetalle != null) porIdDetalle.set(String(item.iddetalle), item);
-  }
-
-  return (docsBase || []).map((doc) => {
-    const hit =
-      porIdOferta.get(String(doc?.idoferta ?? "")) ||
-      porIdDetalle.get(String(doc?.iddetalle ?? ""));
-
-    if (!hit) return doc;
-
-    return {
-      ...doc,
-      estado: hit.estado || doc.estado,
-      postulacion_idganador:
-        hit.postulacion_idganador ?? doc.postulacion_idganador ?? null,
-      nombreganador: hit.nombreganador || doc.nombreganador || "",
-      cuilganador: hit.cuilganador || doc.cuilganador || "",
-      fuente_estado: "abc_check_offer"
-    };
-  });
-}
-
-function filtrarSoloPublicadasSegunCheckOffer(docsBase, checkItems) {
-  const idsPublicados = new Set();
-
-  for (const item of checkItems || []) {
-    const estado = String(item?.estado || "").trim().toUpperCase();
-    if (estado !== "PUBLICADA") continue;
-
-    if (item?.idoferta != null) idsPublicados.add(`of:${item.idoferta}`);
-    if (item?.iddetalle != null) idsPublicados.add(`de:${item.iddetalle}`);
-  }
-
-  return (docsBase || []).filter((doc) => {
-    const k1 = `of:${doc?.idoferta ?? ""}`;
-    const k2 = `de:${doc?.iddetalle ?? ""}`;
-    return idsPublicados.has(k1) || idsPublicados.has(k2);
-  });
-}
 async function traerOfertasAPDDeUnDistrito(distritoAPD) {
   const distritoNorm = norm(distritoAPD);
   const docsTotales = [];
