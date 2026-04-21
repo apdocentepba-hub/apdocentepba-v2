@@ -8074,11 +8074,26 @@ function matchCargosMaterias(oferta, prefs) {
 __name(matchCargosMaterias, "matchCargosMaterias");
 function matchTurno(oferta, prefs) {
   const prefsT = turnosPrefs(prefs);
-  if (!prefsT.length) return { ok: true, motivo: "Sin filtro de turno" };
-  const turnoOferta = norm(oferta?.turno || oferta?.descturno || "");
-  if (!turnoOferta) return { ok: false, motivo: "La oferta no trae turno" };
+  if (!prefsT.length) {
+    return { ok: true, motivo: "Sin filtro de turno" };
+  }
+
+  const turnoOferta = mapTurnoAPD(
+    oferta?.turno || oferta?.descturno || oferta?.raw?.turno || ""
+  );
+
+  if (!turnoOferta) {
+    return { ok: false, motivo: "La oferta no trae turno" };
+  }
+
   const ok = prefsT.includes(turnoOferta);
-  return { ok, motivo: ok ? `Turno compatible: ${turnoOferta}` : `Turno no compatible: ${turnoOferta}` };
+
+  return {
+    ok,
+    motivo: ok
+      ? `Turno compatible: ${turnoOferta}`
+      : `Turno no compatible: ${turnoOferta}`
+  };
 }
 __name(matchTurno, "matchTurno");
 function matchNivelModalidad(oferta, prefs) {
