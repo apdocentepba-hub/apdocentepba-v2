@@ -7996,7 +7996,8 @@ function extractOfferCargoCodes(oferta) {
     oferta?.descripcionarea,
     oferta?.materia,
     oferta?.asignatura,
-    oferta?.descripcionmateria
+    oferta?.descripcionmateria,
+    oferta?.areaincumbencia
   ].filter(Boolean);
 
   const out = new Set();
@@ -8006,6 +8007,9 @@ function extractOfferCargoCodes(oferta) {
       out.add(code);
     }
   }
+
+  const inc = normalizeCode(oferta?.areaincumbencia || "");
+  if (inc) out.add(inc);
 
   return [...out];
 }
@@ -8899,11 +8903,39 @@ function resolveDistrictsForQuery(prefs, catalog) {
 }
 __name(resolveDistrictsForQuery, "resolveDistrictsForQuery");
 function matchesCargo(oferta, prefs) {
-  const filtros = unique2([...prefs?.cargos || [], ...prefs?.materias || []].map(norm2).filter(Boolean));
+  const filtros = unique2([
+    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
+    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
+  ]);
+
   if (!filtros.length) return true;
-  const textoOferta = norm2([oferta?.descripcioncargo, oferta?.cargo, oferta?.descripcionarea, oferta?.materia, oferta?.asignatura].filter(Boolean).join(" "));
-  if (!textoOferta) return false;
-  return filtros.some((item) => textoOferta.includes(item) || item.includes(textoOferta));
+
+  const offerCodes = extractOfferCargoCodes(oferta)
+    .map(normalizeCode)
+    .filter(Boolean);
+
+  if (!offerCodes.length) return false;
+
+  const prefCodes = unique2(
+    filtros.flatMap((item) => {
+      const out = [];
+
+      out.push(...extractExplicitCodesFromPreference(item));
+      out.push(...extractParenthesizedCodes(item));
+
+      const raw = String(item || "").trim();
+      const normalizedRaw = normalizeCode(raw);
+      if (normalizedRaw) out.push(normalizedRaw);
+
+      return out;
+    })
+    .map(normalizeCode)
+    .filter(Boolean)
+  );
+
+  if (!prefCodes.length) return false;
+
+  return offerCodes.some((code) => prefCodes.includes(code));
 }
 __name(matchesCargo, "matchesCargo");
 function matchesTurno(oferta, prefs) {
