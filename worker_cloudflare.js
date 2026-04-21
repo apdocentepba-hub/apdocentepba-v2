@@ -7119,30 +7119,79 @@ function buildDistrictCatalogIndex(catalogos) {
 
   return { items, byCode, byExact };
 }
+function normalizeCode(value) {
+  return norm(String(value || "")).replace(/[()\s]/g, "").replace(/^\//, "");
+}
 
+function extractExplicitCodesFromPreference(value) {
+  const s = String(value || "");
+  const out = new Set();
+
+  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{2,20})\s*\)|(?:^|\s)\/([A-Z0-9.\-]{2,20})(?:\s|$)/g)) {
+    const c1 = normalizeCode(m[1] || "");
+    const c2 = normalizeCode(m[2] || "");
+    if (c1) out.add(c1);
+    if (c2) out.add(c2);
+  }
+
+  return [...out];
+}
 function buildCargoCatalogIndex(catalogos) {
   const rows = Array.isArray(catalogos?.cargos) ? catalogos.cargos : [];
+  const byCanonical = new Map();
+  const bySimple = new Map();
+  const byAlias = new Map();
   const byCode = new Map();
-  const byExact = new Map();
-  const tokenIndex = new Map();
   const items = [];
 
   for (const row of rows) {
-    const canonical = norm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre));
+    const canonical = norm(
+      pickFirstNonEmpty(
+        row?.apd_nombre,
+        row?.nombre,
+        row?.apd_nombre_norm,
+        row?.nombre_norm,
+        row?.canonical,
+        ""
+      )
+    );
+
+    if (!canonical) continue;
+
+    const simple = simplifyNorm(canonical);
+    const human = norm(
+      pickFirstNonEmpty(
+        row?.nombre,
+        row?.apd_nombre,
+        canonical
+      )
+    );
+
+    const rawCode = pickFirstNonEmpty(
+      row?.codigo,
+      row?.code,
+      ""
+    );
+
+    const code = normalizeCode(rawCode);
+
     const aliases = unique([
+      canonical,
+      human,
       norm(row?.nombre || ""),
-      norm(row?.nombre_norm || ""),
       norm(row?.apd_nombre || ""),
       norm(row?.apd_nombre_norm || ""),
-      norm(row?.codigo || "")
+      norm(row?.nombre_norm || ""),
+      code ? `/${code}` : "",
+      code
     ].filter(Boolean));
 
     const item = {
       kind: "cargo",
-      code: norm(row?.codigo || ""),
+      code: code ? `/${code}` : "",
       canonical,
-      simple: simplifyNorm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre)),
-      human: norm(pickFirstNonEmpty(row?.nombre, row?.apd_nombre)),
+      simple,
+      human,
       aliases,
       tokens_required: tokenBag(canonical),
       tokens_blocked: []
@@ -7150,19 +7199,35 @@ function buildCargoCatalogIndex(catalogos) {
 
     items.push(item);
 
-    if (item.code) byCode.set(item.code, item);
-    if (item.canonical) byExact.set(item.canonical, item);
+    if (!byCanonical.has(canonical)) byCanonical.set(canonical, []);
+    byCanonical.get(canonical).push(item);
+
+    if (simple) {
+      if (!bySimple.has(simple)) bySimple.set(simple, []);
+      bySimple.get(simple).push(item);
+    }
 
     for (const alias of aliases) {
-      byExact.set(alias, item);
-      for (const tok of tokenBag(alias)) {
-        if (!tokenIndex.has(tok)) tokenIndex.set(tok, []);
-        tokenIndex.get(tok).push(item);
+      const a = norm(alias);
+      if (!a) continue;
+
+      if (!byAlias.has(a)) byAlias.set(a, []);
+      byAlias.get(a).push(item);
+
+      const aCode = normalizeCode(a);
+      if (aCode) {
+        if (!byCode.has(aCode)) byCode.set(aCode, []);
+        byCode.get(aCode).push(item);
       }
+    }
+
+    if (code) {
+      if (!byCode.has(code)) byCode.set(code, []);
+      byCode.get(code).push(item);
     }
   }
 
-  return { items, byCode, byExact, tokenIndex };
+  return { items, byCanonical, bySimple, byAlias, byCode };
 }
 
 function buildCatalogContext(catalogos) {
@@ -7202,44 +7267,95 @@ function resolveCargoValue(input, cargoIndex) {
 
   const n = norm(raw);
   const s = simplifyNorm(raw);
+  const explicitCodes = extractExplicitCodesFromPreference(raw);
 
-  if (cargoIndex?.byCode?.has(n)) return cargoIndex.byCode.get(n);
-  if (cargoIndex?.byExact?.has(n)) return cargoIndex.byExact.get(n);
+  // 1) PRIORIDAD ABSOLUTA: si el usuario escribió código explícito, resolver por código
+  for (const code of explicitCodes) {
+    const byCodeMatches = cargoIndex?.byCode?.get(code) || [];
 
-  const prefTokens = tokenBag(raw);
-  const seen = new Map();
-  let best = null;
+    if (byCodeMatches.length === 1) {
+      return byCodeMatches[0];
+    }
 
-  for (const tok of prefTokens) {
-    const candidates = cargoIndex?.tokenIndex?.get(tok) || [];
-    for (const item of candidates) {
-      const k = `${item.code}__${item.canonical}`;
-      seen.set(k, item);
+    if (byCodeMatches.length > 1) {
+      // Elegir el más "base", no el más específico
+      return [...byCodeMatches].sort((a, b) => {
+        const la = (a?.canonical || "").length;
+        const lb = (b?.canonical || "").length;
+        return la - lb;
+      })[0];
     }
   }
 
-  for (const item of seen.values()) {
-    const corpus = [item.canonical, ...(item.aliases || [])].join(" ");
-    if (!hasAllRequiredTokens(corpus, item.tokens_required)) continue;
-    if (hasBlockedTokens(corpus, item.tokens_blocked)) continue;
+  // 2) Alias exacto
+  const exactAliasMatches = cargoIndex?.byAlias?.get(n) || [];
+  if (exactAliasMatches.length === 1) return exactAliasMatches[0];
+  if (exactAliasMatches.length > 1) {
+    return [...exactAliasMatches].sort((a, b) => {
+      const la = (a?.canonical || "").length;
+      const lb = (b?.canonical || "").length;
+      return la - lb;
+    })[0];
+  }
 
+  // 3) Canonical exacto
+  const exactCanonicalMatches = cargoIndex?.byCanonical?.get(n) || [];
+  if (exactCanonicalMatches.length === 1) return exactCanonicalMatches[0];
+  if (exactCanonicalMatches.length > 1) return exactCanonicalMatches[0];
+
+  // 4) Simple exacto
+  const exactSimpleMatches = cargoIndex?.bySimple?.get(s) || [];
+  if (exactSimpleMatches.length === 1) return exactSimpleMatches[0];
+  if (exactSimpleMatches.length > 1) {
+    return [...exactSimpleMatches].sort((a, b) => {
+      const la = (a?.canonical || "").length;
+      const lb = (b?.canonical || "").length;
+      return la - lb;
+    })[0];
+  }
+
+  // 5) Fallback por score textual
+  const prefTokens = tokenBag(raw);
+  let best = null;
+  let bestScore = -1;
+
+  for (const item of cargoIndex?.items || []) {
+    const corpus = [item.canonical, ...(item.aliases || [])].join(" ");
+    const corpusNorm = norm(corpus);
+    const corpusSimple = simplifyNorm(corpus);
     const bag = new Set(tokenBag(corpus));
+
     let score = 0;
 
-    for (const tok of prefTokens) {
-      if (bag.has(tok)) score += 10;
+    if (item.canonical === n) score += 100;
+    if (item.simple === s) score += 80;
+
+    for (const alias of item.aliases || []) {
+      const a = norm(alias);
+      if (!a) continue;
+
+      if (a === n) score += 90;
+      else if (a.includes(n) || n.includes(a)) score += 25;
     }
 
-    if (norm(corpus).includes(n)) score += 40;
-    if (simplifyNorm(corpus).includes(s)) score += 25;
+    for (const tok of prefTokens) {
+      if (bag.has(tok)) score += 8;
+    }
 
-    if (!best || score > best.score) {
-      best = { score, item };
+    if (corpusNorm.includes(n)) score += 20;
+    if (corpusSimple.includes(s)) score += 15;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
     }
   }
 
-  if (best?.item) return best.item;
+  if (best && bestScore >= 20) {
+    return best;
+  }
 
+  // 6) Fallback neutro si no resolvió nada
   return {
     kind: "cargo",
     code: "",
@@ -7251,9 +7367,14 @@ function resolveCargoValue(input, cargoIndex) {
     tokens_blocked: []
   };
 }
-
 function resolveOfferDistrict(oferta) {
-  return norm(oferta?.descdistrito || oferta?.distrito || "");
+  return normDistritoABC(
+    oferta?.descdistrito ||
+    oferta?.distrito ||
+    oferta?.raw?.descdistrito ||
+    oferta?.raw?.distrito ||
+    ""
+  );
 }
 
 function resolveOfferCargoText(oferta) {
@@ -7547,35 +7668,57 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
 
   const url = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
 
-  const params = new URLSearchParams({
-    q: `(${q})`,
-    rows: "200",
-    start: "0",
-    wt: "json",
-    sort: "ult_movimiento desc"
-  });
+  const rowsPerPage = 200;
+  const maxPages = 8;
+  const docsRaw = [];
 
-  const res = await fetch(`${url}?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      "accept": "application/json, text/javascript, */*; q=0.01",
-      "user-agent": "Mozilla/5.0",
-      "referer": "http://servicios2.abc.gob.ar/",
-      "origin": "http://servicios2.abc.gob.ar"
+  for (let page = 0; page < maxPages; page++) {
+    const start = page * rowsPerPage;
+
+    const params = new URLSearchParams({
+      q: `(${q})`,
+      rows: String(rowsPerPage),
+      start: String(start),
+      wt: "json",
+      sort: "ult_movimiento desc"
+    });
+
+    const res = await fetch(`${url}?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        "accept": "application/json, text/javascript, */*; q=0.01",
+        "user-agent": "Mozilla/5.0",
+        "referer": "http://servicios2.abc.gob.ar/",
+        "origin": "http://servicios2.abc.gob.ar"
+      }
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`ABC ERROR ${res.status}: ${txt}`);
     }
-  });
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`ABC ERROR ${res.status}: ${txt}`);
+    const data = await res.json().catch(() => ({}));
+    const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+
+    docsRaw.push(...pageDocs);
+
+    if (pageDocs.length < rowsPerPage) {
+      break;
+    }
   }
 
-  const data = await res.json().catch(() => ({}));
-  const docsRaw = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-
+  const seen = new Set();
   const docs = docsRaw.filter((doc) => {
     const docDistrict = normDistritoABC(doc?.descdistrito || "");
-    return docDistrict === distritoNorm || variantes.includes(docDistrict);
+    const districtOk = docDistrict === distritoNorm || variantes.includes(docDistrict);
+
+    if (!districtOk) return false;
+
+    const key = buildSourceOfferKeyFromOferta(doc);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 
   return {
@@ -7871,74 +8014,31 @@ function scoreCargoMatch(textoOferta, pref, oferta = null) {
   const textoNorm = norm(textoOferta || "");
   if (!textoNorm || !pref) return -999;
 
-  const offerTokens = tokenBag(textoOferta);
-
-  const prefCanonical = norm(pref.canonical || "");
-  const prefHuman = norm(pref.human || "");
-  const prefCode = norm(pref.code || "");
-  const prefAliases = Array.isArray(pref.aliases)
-    ? pref.aliases.map(x => norm(x)).filter(Boolean)
-    : [];
-
-  const prefVariants = unique([
-    prefCanonical,
-    prefHuman,
-    ...prefAliases
-  ].map(x => norm(x)).filter(Boolean));
-
-  const prefCodeVariants = unique([
-    prefCode,
-    ...extractParenthesizedCodes(prefCanonical),
-    ...extractParenthesizedCodes(prefHuman),
-    ...prefAliases.filter(x => /^[A-Z0-9.\-]{2,20}$/.test(x))
-  ].map(x => norm(x)).filter(Boolean));
-
-  const offerCodes = oferta ? extractOfferCargoCodes(oferta) : [];
+  // 🔴 1. EXTRAER CÓDIGOS
+  const offerCodes = new Set(extractOfferCargoCodes(oferta));
+  const prefCode = normalizeCode(pref.code || "");
 
   let score = 0;
 
-  // REGLA PRINCIPAL: si la oferta trae sigla y la preferencia también, manda la sigla
-  if (offerCodes.length && prefCodeVariants.length) {
-    const codeMatch = offerCodes.some(c => prefCodeVariants.includes(norm(c)));
-
-    if (codeMatch) {
-      score += 150;
-    } else {
-      return -300;
-    }
+  // 🔥 2. MATCH DIRECTO POR CÓDIGO (PRIORIDAD MÁXIMA)
+  if (prefCode && offerCodes.has(prefCode)) {
+    return 1000; // 🔴 MATCH SEGURO
   }
 
-  // exactos por texto
-  if (prefCanonical && textoNorm === prefCanonical) score += 70;
-  if (prefHuman && textoNorm === prefHuman) score += 60;
+  // 🔥 3. TOKEN MATCH (fallback)
+  const offerTokens = new Set(tokenBag(textoOferta));
+  const prefTokens = new Set(pref.tokens_required || []);
 
-  for (const v of prefVariants) {
-    if (!v) continue;
-    if (textoNorm === v) score += 55;
+  let tokenHits = 0;
+  for (const t of prefTokens) {
+    if (offerTokens.has(t)) tokenHits++;
   }
 
-  // inclusión textual suave
-  for (const v of prefVariants) {
-    if (!v || v.length < 4) continue;
-    if (textoNorm.includes(v)) score += 18;
-  }
+  score += tokenHits * 10;
 
-  // tokens requeridos
-  if (pref.tokens_required?.length) {
-    const bag = new Set(offerTokens);
-    const requiredOk = pref.tokens_required.every(t => bag.has(norm(t)));
-    const blockedOk = !hasBlockedTokens(textoOferta, pref.tokens_blocked || []);
-    if (requiredOk && blockedOk) score += 25;
-    if (!blockedOk) score -= 100;
-  }
-
-  // overlap general
-  const prefVariantTokens = unique(prefVariants.flatMap(v => tokenBag(v)));
-  if (prefVariantTokens.length) {
-    const bag = new Set(offerTokens);
-    const overlap = prefVariantTokens.filter(t => bag.has(t)).length;
-    score += overlap * 6;
-  }
+  // 🔥 4. CONTIENE TEXTO
+  if (textoNorm.includes(pref.canonical)) score += 40;
+  if (simplifyNorm(textoNorm).includes(pref.simple)) score += 25;
 
   return score;
 }
@@ -10127,6 +10227,84 @@ function safeProvinciaResumen(message = null) {
   return { ok: true, empty: true, ventana_dias: 30, total_ofertas: 0, activas_estimadas: 0, cerradas_estimadas: 0, districts_with_activity: 0, coverage_hint: null, nuevas_7d: 0, top_distritos: [], top_cargos: [], top_turnos: [], top_escuelas: [], state_breakdown: { activas: 0, designadas: 0, anuladas: 0, desiertas: 0, cerradas: 0 }, leaders: { matematica: null, ingles: null }, latest_rows: [], banner_items: [{ title: "Radar provincial", text: message || "Todavia no hay suficiente historial provincial para construir insights serios." }], scan_state: null };
 }
 __name(safeProvinciaResumen, "safeProvinciaResumen");
+async function debugLomasPreceptor(env, userId) {
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return { ok: false, message: "Usuario no encontrado" };
+  }
+
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs) {
+    return { ok: false, message: "Usuario sin preferencias" };
+  }
+
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+
+  const distritoObjetivo = "LOMAS DE ZAMORA";
+  const info = await traerOfertasAPDDeUnDistrito(distritoObjetivo);
+
+  const docs = Array.isArray(info?.docs) ? info.docs : [];
+
+  const candidatosPR = docs.filter((of) => {
+    const texto = norm([
+      of?.descripcioncargo,
+      of?.cargo,
+      of?.descripcionarea,
+      of?.materia,
+      of?.asignatura,
+      of?.descripcionmateria
+    ].filter(Boolean).join(" "));
+
+    return (
+      texto.includes("PRECEPTOR") ||
+      texto.includes("PRECEPTORIA") ||
+      texto.includes("(PR)") ||
+      texto.includes("/PR")
+    );
+  });
+
+  const evaluados = candidatosPR.map((of) => {
+    const distrito = matchDistritos(of, prefsCanon);
+    const cargosMaterias = matchCargosMaterias(of, prefsCanon);
+    const turno = matchTurno(of, prefsCanon);
+    const nivelModalidad = matchNivelModalidad(of, prefsCanon);
+    const final = coincideOfertaConPreferenciasAPD(of, prefsCanon);
+
+    return {
+      iddetalle: of?.iddetalle || of?.id || null,
+      idoferta: of?.idoferta || null,
+      descdistrito: of?.descdistrito || "",
+      cargo_texto: [
+        of?.descripcioncargo,
+        of?.cargo,
+        of?.descripcionarea,
+        of?.materia,
+        of?.asignatura,
+        of?.descripcionmateria
+      ].filter(Boolean).join(" | "),
+      distrito,
+      cargosMaterias,
+      turno,
+      nivelModalidad,
+      final_match: !!final?.match,
+      final_motivo: final?.motivo || "",
+      detalle_final: final?.detalle || {}
+    };
+  });
+
+  return {
+    ok: true,
+    user_id: userId,
+    prefs_originales: prefs,
+    prefs_canonizadas: prefsCanon,
+    distrito_debug: distritoObjetivo,
+    fetch_info: info,
+    total_docs_distrito: docs.length,
+    total_candidatos_pr: candidatosPR.length,
+    candidatos_pr_preview: evaluados.slice(0, 25)
+  };
+}
 var worker_hotfix_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });
@@ -10317,7 +10495,22 @@ var worker_hotfix_default = {
         }, 500);
       }
     }
+if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
+  try {
+    const userId = String(url.searchParams.get("user_id") || "").trim();
+    if (!userId) {
+      return json2({ ok: false, message: "Falta user_id" }, 400);
+    }
 
+    const data = await debugLomasPreceptor(env, userId);
+    return json2(data, data?.ok ? 200 : 400);
+  } catch (err) {
+    return json2({
+      ok: false,
+      error: String(err?.message || err)
+    }, 500);
+  }
+}
     return await worker_default.fetch(request, env, ctx);
   },
 
