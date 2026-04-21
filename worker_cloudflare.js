@@ -7833,49 +7833,7 @@ function matchDistritos(oferta, prefs) {
   };
 }
 __name(matchDistritos, "matchDistritos");
-function extractOfferCargoCodes(oferta) {
-  const textos = [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.materia,
-    oferta?.asignatura,
-    oferta?.descripcionmateria
-  ].filter(Boolean);
 
-  const codes = new Set();
-
-  for (const txt of textos) {
-    const s = String(txt || "");
-
-    // códigos entre paréntesis: (/PA) (PA) (/PR) etc.
-    for (const m of s.matchAll(/\(?\/?([A-Z0-9.\-]{2,20})\)?/g)) {
-      const code = norm(m[1] || "");
-      if (code && code.length >= 2 && code.length <= 20) {
-        codes.add(code);
-      }
-    }
-
-    // intenta extraer con helper existente si devuelve texto sin sufijo
-    if (typeof stripCargoCodeSuffix === "function") {
-      const stripped = stripCargoCodeSuffix(s);
-      const originalNorm = norm(s);
-      const strippedNorm = norm(stripped);
-
-      if (originalNorm && strippedNorm && originalNorm !== strippedNorm) {
-        const resto = originalNorm.replace(strippedNorm, "").trim();
-        for (const m of resto.matchAll(/([A-Z0-9.\-]{2,20})/g)) {
-          const code = norm(m[1] || "");
-          if (code && code.length >= 2 && code.length <= 20) {
-            codes.add(code);
-          }
-        }
-      }
-    }
-  }
-
-  return [...codes];
-}
 function extractParenthesizedCodes(text) {
   const s = String(text || "");
   const out = new Set();
