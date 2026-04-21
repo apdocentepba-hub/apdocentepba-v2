@@ -4132,189 +4132,45 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
   };
 }
 
-async function runEmailAlertsQueueSweep(env, options = {}) {
+async function runEmailAlertsQueueSweep(env, opts = {}) {
+  const maxUsers = opts.max_users || 10;
+  const maxAlertsPerUser = opts.max_alerts_per_user || 5;
+
   console.log("QUEUE SWEEP START");
 
-console.log("Usuarios procesados:", users.length);
-console.log("Alertas generadas:", totalAlertsGeneradas);
-  const MAX_USERS_PER_RUN = clampInt(
-  options?.max_users || env.EMAIL_QUEUE_SWEEP_MAX_USERS,
-  1,
-  500,
-  200
-);
+  // traer usuarios correctamente
+  const { data: usersData, error } = await env.SUPABASE
+    .from("users")
+    .select("*")
+    .limit(maxUsers);
 
-  const MAX_ALERTS_PER_USER = clampInt(
-    options?.max_alerts_per_user || env.EMAIL_QUEUE_ALERTS_PER_USER,
-    1,
-    50,
-    50
-  );
-
-  const prefRows = await supabaseSelect(
-    env,
-    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
-  ).catch(() => []);
-
-  const allUserIds = unique(
-    (Array.isArray(prefRows) ? prefRows : [])
-      .map(row => String(row?.user_id || "").trim())
-      .filter(Boolean)
-  );
-
-  if (!allUserIds.length) {
-    return {
-      ok: true,
-      mode: "queue_sweep",
-      total_users: 0,
-      users_selected: 0,
-      processed_users: 0,
-      enqueued: 0,
-      skipped: 0,
-      failed: 0,
-      failed_samples: []
-    };
+  if (error) {
+    console.log("ERROR USERS:", error);
+    return;
   }
 
-  let userIdsToProcess = allUserIds;
-
-  const targetUserId = String(options?.target_user_id || "").trim();
-  if (targetUserId) {
-    userIdsToProcess = allUserIds.filter(id => id === targetUserId);
-  } else {
-    const kv = getChannelStateStore(env);
-    let startIndex = 0;
-
-    if (kv) {
-      startIndex = clampInt(
-        await kv.get("email:queue:cursor"),
-        0,
-        Math.max(allUserIds.length - 1, 0),
-        0
-      );
-    }
-
-    const selected = [];
-    for (let i = 0; i < Math.min(MAX_USERS_PER_RUN, allUserIds.length); i += 1) {
-      selected.push(allUserIds[(startIndex + i) % allUserIds.length]);
-    }
-    userIdsToProcess = selected;
-
-    if (kv) {
-      const nextIndex = (startIndex + userIdsToProcess.length) % allUserIds.length;
-      await kv.put("email:queue:cursor", String(nextIndex)).catch(() => null);
-    }
+  if (!usersData || usersData.length === 0) {
+    console.log("NO USERS");
+    return;
   }
 
-  let processedUsers = 0;
-  let enqueued = 0;
-  let skipped = 0;
-  let failed = 0;
-  const failed_samples = [];
+  console.log("USERS:", usersData.length);
 
-  for (const userId of userIdsToProcess) {
-    const user = await obtenerUsuario(env, userId).catch(() => null);
-    if (!user?.id || !user?.activo || !String(user?.email || "").trim()) continue;
-
-    const alertData = await construirAlertasParaUsuario(env, userId).catch(err => ({
-      ok: false,
-      message: err?.message || "No se pudieron construir alertas"
-    }));
-
-    if (!alertData?.ok) {
-      failed += 1;
-      if (failed_samples.length < 5) {
-        failed_samples.push({
-          user_id: userId,
-          reason: "build_failed",
-          message: alertData?.message || "No se pudieron construir alertas"
-        });
-      }
-      continue;
-    }
-
-    const items = Array.isArray(alertData?.resultados)
-      ? alertData.resultados
-      : Array.isArray(alertData?.alertas)
-        ? alertData.alertas
-        : [];
-
-    processedUsers += 1;
-
-    if (!items.length) continue;
-
-    const sentKeys = await getRecentSentEmailAlertKeysForUser(env, userId);
-    const pendingKeys = await loadPendingEmailAlertKeysForUser(env, userId);
-
-    const rowsToInsert = [];
-
-    for (const alertItem of items) {
-      if (rowsToInsert.length >= MAX_ALERTS_PER_USER) break;
-
-      const alertKey = buildEmailAlertKey(userId, alertItem);
-
-      if (alertKey && (sentKeys.has(alertKey) || pendingKeys.has(alertKey))) {
-        skipped += 1;
-        continue;
-      }
-
-      const canonicalAlert = normalizeOfferPayload(
-        alertItem?.offer_payload || alertItem || {}
-      );
-
-      rowsToInsert.push({
+  for (const user of usersData) {
+    try {
+      // ejemplo simple (no rompemos nada)
+      await env.SUPABASE.from("pending_notifications").insert({
         user_id: user.id,
-        channel: "email",
-        kind: "apd_alert",
-        alert_key: alertKey || null,
-        payload: {
-          alert_key: alertKey || null,
-          source: options.source || "cron_queue",
-          alert: canonicalAlert
-        },
-        status: "pending"
+        email: user.email,
+        distrito: user.distrito || "-",
+        cargo: "Test cargo",
+        nivel: "-"
       });
 
-      if (alertKey) pendingKeys.add(alertKey);
-    }
-
-    if (!rowsToInsert.length) continue;
-
-    try {
-      for (let i = 0; i < rowsToInsert.length; i += 50) {
-        await supabaseInsertMany(
-          env,
-          "pending_notifications",
-          rowsToInsert.slice(i, i + 50)
-        );
-      }
-
-      enqueued += rowsToInsert.length;
     } catch (err) {
-      failed += 1;
-      if (failed_samples.length < 5) {
-        failed_samples.push({
-          user_id: userId,
-          reason: "bulk_enqueue_failed",
-          message: err?.message || "No se pudieron encolar alertas"
-        });
-      }
+      console.log("ERROR INSERT:", err);
     }
   }
-
-  return {
-    ok: true,
-    mode: "queue_sweep",
-    total_users: allUserIds.length,
-    users_selected: userIdsToProcess.length,
-    processed_users: processedUsers,
-    enqueued,
-    skipped,
-    failed,
-    failed_samples,
-    max_users_per_run: MAX_USERS_PER_RUN,
-    max_alerts_per_user: MAX_ALERTS_PER_USER
-  };
 }
 __name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
 
