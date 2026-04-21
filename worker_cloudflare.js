@@ -4133,44 +4133,189 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
 }
 
 async function runEmailAlertsQueueSweep(env, opts = {}) {
-  const maxUsers = opts.max_users || 10;
-  const maxAlertsPerUser = opts.max_alerts_per_user || 5;
+  const source = opts.source || "cron";
+  const maxUsers = clampInt(opts.max_users, 1, 200, 10);
+  const maxAlertsPerUser = clampInt(opts.max_alerts_per_user, 1, 5, 5);
+  const targetUserId = String(opts.target_user_id || "").trim();
 
   console.log("QUEUE SWEEP START");
 
-  // traer usuarios correctamente
-  const { data: usersData, error } = await env.SUPABASE
-    .from("users")
-    .select("*")
-    .limit(maxUsers);
+  const prefRows = await supabaseSelect(
+    env,
+    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
+  ).catch((err) => {
+    console.log("QUEUE PREFS ERROR:", err?.message || err);
+    return [];
+  });
 
-  if (error) {
-    console.log("ERROR USERS:", error);
-    return;
+  const baseRows = Array.isArray(prefRows) ? prefRows : [];
+  const rowsToProcess = targetUserId
+    ? baseRows.filter((row) => String(row?.user_id || "").trim() === targetUserId)
+    : baseRows.slice(0, maxUsers);
+
+  if (!rowsToProcess.length) {
+    console.log("QUEUE SWEEP: NO USERS");
+    return {
+      ok: true,
+      processed_users: 0,
+      queued_alerts: 0,
+      skipped_users: 0,
+      source
+    };
   }
 
-  if (!usersData || usersData.length === 0) {
-    console.log("NO USERS");
-    return;
-  }
+  console.log("QUEUE USERS:", rowsToProcess.length);
 
-  console.log("USERS:", usersData.length);
+  let processedUsers = 0;
+  let queuedAlerts = 0;
+  let skippedUsers = 0;
 
-  for (const user of usersData) {
-    try {
-      // ejemplo simple (no rompemos nada)
-      await env.SUPABASE.from("pending_notifications").insert({
-        user_id: user.id,
-        email: user.email,
-        distrito: user.distrito || "-",
-        cargo: "Test cargo",
-        nivel: "-"
-      });
+  for (const row of rowsToProcess) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
 
-    } catch (err) {
-      console.log("ERROR INSERT:", err);
+    processedUsers += 1;
+
+    const user = await obtenerUsuario(env, userId).catch((err) => {
+      console.log("QUEUE USER READ ERROR:", userId, err?.message || err);
+      return null;
+    });
+
+    if (!user?.id || !user?.activo || !String(user?.email || "").trim()) {
+      skippedUsers += 1;
+      continue;
+    }
+
+    const alertData = await buildAlertResultsFallback(env, userId).catch((err) => {
+      console.log("QUEUE BUILD ERROR:", userId, err?.message || err);
+      return { ok: false, message: err?.message || "build_failed" };
+    });
+
+    if (!alertData?.ok) {
+      console.log("QUEUE BUILD ERROR:", userId, alertData?.message || "build_failed");
+      skippedUsers += 1;
+      continue;
+    }
+
+    const allItems = Array.isArray(alertData?.resultados) ? alertData.resultados : [];
+
+    if (!allItems.length) {
+      skippedUsers += 1;
+      continue;
+    }
+
+    const recentSentKeys = await getRecentSentEmailAlertKeysForUser(env, userId).catch(() => new Set());
+    const pendingKeys = await loadPendingEmailAlertKeysForUser(env, userId).catch(() => new Set());
+
+    const newItems = allItems.filter((item) => {
+      const key = buildEmailAlertKey(userId, item);
+      if (!key) return false;
+      if (recentSentKeys.has(key)) return false;
+      if (pendingKeys.has(key)) return false;
+      return true;
+    });
+
+    if (!newItems.length) {
+      skippedUsers += 1;
+      continue;
+    }
+
+    const totalNewAlerts = newItems.length;
+    const visibleItems = newItems.slice(0, maxAlertsPerUser);
+
+    for (let i = 0; i < visibleItems.length; i += 1) {
+      const item = visibleItems[i];
+      const alertKey = buildEmailAlertKey(userId, item);
+      if (!alertKey) continue;
+
+      const canonicalAlert = normalizeOfferPayload(item?.offer_payload || item || {});
+      const payload = {
+        source,
+        total_alerts: totalNewAlerts,
+        shown_alerts: visibleItems.length,
+        alert_order: i + 1,
+        alert_key: alertKey,
+        alert: canonicalAlert
+      };
+
+      try {
+        await supabaseInsert(env, "pending_notifications", {
+          user_id: user.id,
+          channel: "email",
+          kind: "apd_alert",
+          alert_key: alertKey,
+          payload,
+          status: "pending"
+        });
+
+        await supabaseInsert(env, "notification_delivery_logs", {
+          user_id: user.id,
+          channel: "email",
+          template_code: "apd_email_alert",
+          destination: user.email,
+          status: "queued",
+          provider_message_id: null,
+          payload,
+          provider_response: {
+            message: `Alerta encolada para digest (${i + 1} de ${visibleItems.length}, total nuevas: ${totalNewAlerts})`
+          }
+        }).catch(() => null);
+
+        queuedAlerts += 1;
+      } catch (err) {
+        const msg = String(err?.message || "");
+
+        if (
+          msg.includes("23505") ||
+          msg.toLowerCase().includes("duplicate key") ||
+          msg.toLowerCase().includes("unique_alert_user") ||
+          msg.toLowerCase().includes("duplicate") ||
+          msg.toLowerCase().includes("unique")
+        ) {
+          await supabaseInsert(env, "notification_delivery_logs", {
+            user_id: user.id,
+            channel: "email",
+            template_code: "apd_email_alert",
+            destination: user.email,
+            status: "skipped_duplicate",
+            provider_message_id: null,
+            payload,
+            provider_response: {
+              message: "Alerta duplicada ignorada por constraint unique_alert_user"
+            }
+          }).catch(() => null);
+          continue;
+        }
+
+        console.log("QUEUE INSERT ERROR:", userId, alertKey, msg);
+
+        await supabaseInsert(env, "notification_delivery_logs", {
+          user_id: user.id,
+          channel: "email",
+          template_code: "apd_email_alert",
+          destination: user.email,
+          status: "failed_enqueue",
+          provider_message_id: null,
+          payload,
+          provider_response: { message: msg || "Error al encolar alerta" }
+        }).catch(() => null);
+      }
     }
   }
+
+  console.log("QUEUE SWEEP END", JSON.stringify({
+    processed_users: processedUsers,
+    queued_alerts: queuedAlerts,
+    skipped_users: skippedUsers
+  }));
+
+  return {
+    ok: true,
+    processed_users: processedUsers,
+    queued_alerts: queuedAlerts,
+    skipped_users: skippedUsers,
+    source
+  };
 }
 __name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
 
@@ -7616,71 +7761,143 @@ function json(data, status = 200) {
 }
 __name(json, "json");
 
-
 async function sendPendingEmailDigests(env, opts = {}) {
-  const maxRows = opts.max_rows || 20;
+  const maxRows = clampInt(opts.max_rows, 1, 20, 5);
+  const source = opts.source || "cron";
+  const targetUserId = String(
+    opts.target_user_id || "3a300893-a552-43c2-9189-071ab4a23198"
+  ).trim();
 
-  const { data: rows, error } = await env.SUPABASE
-    .from("pending_notifications")
-    .select("*")
-    .limit(maxRows);
+  let query =
+    `pending_notifications?channel=eq.email&status=eq.pending` +
+    `&select=id,user_id,alert_key,payload,created_at` +
+    `&order=created_at.asc&limit=${maxRows}`;
 
-  if (error) {
-    console.log("SUPABASE ERROR:", error);
-    return;
+  if (targetUserId) {
+    query += `&user_id=eq.${encodeURIComponent(targetUserId)}`;
   }
 
-  if (!rows || rows.length === 0) {
+  const rows = await supabaseSelect(env, query).catch((err) => {
+    console.log("DIGEST READ ERROR:", err?.message || err);
+    return [];
+  });
+
+  const pendingRows = Array.isArray(rows) ? rows : [];
+
+  if (!pendingRows.length) {
     console.log("NO HAY MAILS PENDIENTES");
-    return;
+    return {
+      ok: true,
+      processed_rows: 0,
+      sent_digests: 0,
+      source
+    };
   }
 
-  console.log("ENVIANDO MAILS:", rows.length);
+  console.log("DIGEST ROWS:", pendingRows.length);
 
-  for (const row of rows) {
-    try {
-      const html = `
-        <h3>Tenés nuevas alertas APD</h3>
-        <p><b>Distrito:</b> ${row.distrito || "-"}</p>
-        <p><b>Cargo:</b> ${row.cargo || "-"}</p>
-        <p><b>Nivel:</b> ${row.nivel || "-"}</p>
-        <p>Entrá al panel para ver más.</p>
-      `;
+  const grouped = new Map();
 
-      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": env.BREVO_API_KEY,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sender: {
-            name: "APDocente",
-            email: "alertas@apdocente.com"
-          },
-          to: [
-            {
-              email: row.email
-            }
-          ],
-          subject: "Nuevas alertas APD",
-          htmlContent: html
-        })
-      });
+  for (const row of pendingRows) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    if (!grouped.has(userId)) grouped.set(userId, []);
+    grouped.get(userId).push(row);
+  }
 
-      const text = await res.text();
-      console.log("BREVO RESP:", text);
+  let sentDigests = 0;
+  let processedRows = 0;
 
-      // borrar después de enviar
-      await env.SUPABASE
-        .from("pending_notifications")
-        .delete()
-        .eq("id", row.id);
+  for (const [userId, userRows] of grouped.entries()) {
+    const user = await obtenerUsuario(env, userId).catch((err) => {
+      console.log("DIGEST USER READ ERROR:", userId, err?.message || err);
+      return null;
+    });
 
-    } catch (err) {
-      console.log("ERROR MAIL:", err);
+    if (!user?.id || !String(user?.email || "").trim()) {
+      continue;
+    }
+
+    const alertsRaw = userRows
+      .map((row) => row?.payload?.alert || null)
+      .filter(Boolean)
+      .slice(0, 3);
+
+    if (!alertsRaw.length) {
+      continue;
+    }
+
+    const html = buildDigestHtml(alertsRaw, user, {
+      total_alerts: alertsRaw.length,
+      max_visible: 3,
+      panel_url: "https://alertasapd.com.ar"
+    });
+
+    const subject = `${alertsRaw.length} nuevas ofertas APD`;
+
+    const send = await enviarMailBrevo(
+      user.email,
+      user.nombre || "",
+      subject,
+      html,
+      env
+    ).catch((err) => ({
+      ok: false,
+      status: 500,
+      data: err?.message || "mail_send_failed"
+    }));
+
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_email_alert_digest",
+      destination: user.email,
+      status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+      provider_message_id: null,
+      payload: {
+        source,
+        total_alerts: alertsRaw.length,
+        alert_keys: userRows.map((r) => String(r?.alert_key || "").trim()).filter(Boolean)
+      },
+      provider_response: send || null
+    }).catch(() => null);
+
+    if (send?.ok) {
+      sentDigests += 1;
+
+      for (const row of userRows) {
+        const rowId = String(row?.id || "").trim();
+        if (!rowId) continue;
+
+        await supabaseRequest(
+          env,
+          `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
+          {
+            method: "DELETE",
+            headers: { Prefer: "return=minimal" }
+          }
+        ).catch((err) => {
+          console.log("DIGEST DELETE ERROR:", rowId, err?.message || err);
+        });
+
+        processedRows += 1;
+      }
+    } else {
+      console.log("BREVO RESP:", send?.data || send);
     }
   }
+
+  console.log("DIGEST END", JSON.stringify({
+    processed_rows: processedRows,
+    sent_digests: sentDigests
+  }));
+
+  return {
+    ok: true,
+    processed_rows: processedRows,
+    sent_digests: sentDigests,
+    source
+  };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
 function buildDigestHtml(alerts, user, options = {}) {
@@ -9440,44 +9657,53 @@ var worker_hotfix_default = {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });
     const url = new URL(request.url);
     const path = url.pathname;
-    if (path === `${API_URL_PREFIX3}/version` && request.method === "GET") return json2({ ok: true, version: HOTFIX_VERSION, worker_version: env.WORKER_URL || "ancient-wildflower-cd37" });
-    if (path === `${API_URL_PREFIX3}/debug-cargo` && request.method === "GET") {
-  try {
-    const distrito = url.searchParams.get("distrito") || "GENERAL PUEYRREDON";
-    const cargo = url.searchParams.get("cargo") || "(NTI) NTICX";
 
-    const variantes = [
-      cargo,
-      "NTICX (NTI)",
-      "NTICX",
-      "NTI"
-    ];
-
-    const resultados = [];
-    const vistos = new Set();
-
-    for (const variante of variantes) {
-      const clave = norm(variante);
-      if (!clave || vistos.has(clave)) continue;
-      vistos.add(clave);
-
-      const r = await debugBuscarCargoExactoEnABC(distrito, variante);
-      resultados.push(r);
+    if (path === `${API_URL_PREFIX3}/version` && request.method === "GET") {
+      return json2({
+        ok: true,
+        version: HOTFIX_VERSION,
+        worker_version: env.WORKER_URL || "ancient-wildflower-cd37"
+      });
     }
 
-    return json2({
-      ok: true,
-      distrito,
-      cargo_original: cargo,
-      pruebas: resultados
-    });
-  } catch (err) {
-    return json2({
-      ok: false,
-      error: String(err?.message || err)
-    }, 500);
-  }
-}
+    if (path === `${API_URL_PREFIX3}/debug-cargo` && request.method === "GET") {
+      try {
+        const distrito = url.searchParams.get("distrito") || "GENERAL PUEYRREDON";
+        const cargo = url.searchParams.get("cargo") || "(NTI) NTICX";
+
+        const variantes = [
+          cargo,
+          "NTICX (NTI)",
+          "NTICX",
+          "NTI"
+        ];
+
+        const resultados = [];
+        const vistos = new Set();
+
+        for (const variante of variantes) {
+          const clave = norm(variante);
+          if (!clave || vistos.has(clave)) continue;
+          vistos.add(clave);
+
+          const r = await debugBuscarCargoExactoEnABC(distrito, variante);
+          resultados.push(r);
+        }
+
+        return json2({
+          ok: true,
+          distrito,
+          cargo_original: cargo,
+          pruebas: resultados
+        });
+      } catch (err) {
+        return json2({
+          ok: false,
+          error: String(err?.message || err)
+        }, 500);
+      }
+    }
+
     if (path === `${API_URL_PREFIX3}/telegram/status` && request.method === "GET") {
       try {
         return await handleTelegramStatus(request, env);
@@ -9485,6 +9711,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, error: err?.message || "No se pudo leer Telegram" }, Number(err?.status || 500) || 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/telegram/webhook` && request.method === "POST") {
       try {
         return await handleTelegramWebhook(request, env);
@@ -9492,6 +9719,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, error: err?.message || "No se pudo procesar Telegram" }, Number(err?.status || 500) || 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/whatsapp/status` && request.method === "GET") {
       try {
         return await handleWhatsAppStatus(request, env);
@@ -9499,9 +9727,11 @@ var worker_hotfix_default = {
         return json2({ ok: false, error: err?.message || "No se pudo leer WhatsApp" }, Number(err?.status || 500) || 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/whatsapp/webhook` && request.method === "GET") {
       return await handleWhatsAppWebhookVerify(request, env);
     }
+
     if (path === `${API_URL_PREFIX3}/whatsapp/webhook` && request.method === "POST") {
       try {
         return await handleWhatsAppWebhook(request, env);
@@ -9509,6 +9739,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, error: err?.message || "No se pudo procesar WhatsApp" }, Number(err?.status || 500) || 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/guardar-preferencias` && request.method === "POST") {
       try {
         return await handleGuardarPreferenciasChannelsAware(request, env, ctx);
@@ -9516,6 +9747,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, message: err?.message || "No se pudieron guardar las preferencias" }, Number(err?.status || 500) || 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/login` && request.method === "POST") {
       try {
         return await handleLoginHotfix(request, env);
@@ -9523,6 +9755,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, message: err?.message || "No se pudo iniciar sesion" }, 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/google-auth` && request.method === "POST") {
       try {
         return await handleGoogleAuthHotfix(request, env);
@@ -9530,6 +9763,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, message: err?.message || "No se pudo ingresar con Google" }, 400);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/mis-alertas` && request.method === "GET") {
       try {
         return await handleMisAlertas(url, env);
@@ -9537,6 +9771,7 @@ var worker_hotfix_default = {
         return json2({ ok: false, message: err?.message || "No se pudieron cargar las alertas" }, 500);
       }
     }
+
     if (path === `${API_URL_PREFIX3}/provincia/backfill-status` && request.method === "GET") {
       try {
         const delegated = await delegateJson(worker_default, request, env, ctx);
@@ -9546,6 +9781,7 @@ var worker_hotfix_default = {
         return json2(safeProvinciaBackfillStatus(err?.message || "No se pudo leer el backfill provincial"));
       }
     }
+
     if (path === `${API_URL_PREFIX3}/provincia/resumen` && request.method === "GET") {
       try {
         const delegated = await delegateJson(worker_default, request, env, ctx);
@@ -9555,6 +9791,7 @@ var worker_hotfix_default = {
         return json2(safeProvinciaResumen(err?.message || "No se pudo leer el radar provincial"));
       }
     }
+
     if (path === `${API_URL_PREFIX3}/provincia/insights` && request.method === "GET") {
       try {
         const delegated = await delegateJson(worker_default, request, env, ctx);
@@ -9564,111 +9801,100 @@ var worker_hotfix_default = {
         return json2({ ok: true, days: 30, generated_at: (/* @__PURE__ */ new Date()).toISOString(), items: [] });
       }
     }
+
     if (path.startsWith("/api/profile/") || path.startsWith("/api/listados/") || path.startsWith("/api/eligibility/")) {
       const routed = await handleProfileListadosRoute(request, env);
       if (routed) return routed;
     }
-  if (path === "/test-email-sweep" && request.method === "GET") {
-  try {
-    const targetUserId = String(
-      url.searchParams.get("target_user_id") ||
-      url.searchParams.get("user_id") ||
-      ""
-    ).trim();
 
-    const debug = url.searchParams.get("debug") === "1";
-    const dryRun = url.searchParams.get("dry_run") === "1";
+    if (path === "/test-email-sweep" && request.method === "GET") {
+      try {
+        const targetUserId = String(
+          url.searchParams.get("target_user_id") ||
+          url.searchParams.get("user_id") ||
+          ""
+        ).trim();
 
-    const manualLimit = clampInt(
-      url.searchParams.get("limit"),
-      1,
-      10,
-      1
-    );
+        const debug = url.searchParams.get("debug") === "1";
+        const dryRun = url.searchParams.get("dry_run") === "1";
 
-    const r = await runEmailAlertsSweep(env, {
-      source: "manual_test",
-      target_user_id: targetUserId || undefined,
-      debug,
-      debug_user_id: targetUserId || "",
-      dry_run: dryRun,
-      manual_limit: manualLimit
-    });
+        const manualLimit = clampInt(
+          url.searchParams.get("limit"),
+          1,
+          10,
+          1
+        );
 
-    return json(r, 200);
+        const r = await runEmailAlertsSweep(env, {
+          source: "manual_test",
+          target_user_id: targetUserId || undefined,
+          debug,
+          debug_user_id: targetUserId || "",
+          dry_run: dryRun,
+          manual_limit: manualLimit
+        });
 
-  } catch (e) {
-    return json({
-      ok: false,
-      error: String(e?.message || e)
-    }, 500);
-  }
-}
+        return json(r, 200);
+      } catch (e) {
+        return json({
+          ok: false,
+          error: String(e?.message || e)
+        }, 500);
+      }
+    }
+
     return await worker_default.fetch(request, env, ctx);
   },
-async scheduled(_controller, env, ctx) {
-  console.log("CRON scheduled() START", new Date().toISOString());
 
-  ctx.waitUntil(
-    runProvinciaBackfillStep(env, { source: "cron", force: false })
-      .then((r) => {
-        console.log("CRON BACKFILL OK", JSON.stringify(r || {}));
-      })
-      .catch((err) => {
-        console.error("CRON BACKFILL ERROR:", err);
-      })
-  );
+  async scheduled(event, env, ctx) {
+  const cronExpr = String(event?.cron || "").trim();
 
-  // TEMPORALMENTE DESACTIVADO PARA NO ROMPER LA CORRIDA DE MAIL
-  // ctx.waitUntil(
-  //   runWhatsAppAlertsSweep(env, { source: "cron" })
-  //     .then((r) => {
-  //       console.log("CRON WHATSAPP SWEEP OK", JSON.stringify(r || {}));
-  //     })
-  //     .catch((err) => {
-  //       console.error("CRON WHATSAPP SWEEP ERROR:", err);
-  //     })
-  // );
+  console.log("CRON scheduled() START", new Date(event?.scheduledTime || Date.now()).toISOString());
 
-  ctx.waitUntil(
-    (async () => {
-      try {
-        const queueResult = await runEmailAlertsQueueSweep(env, {
-          source: "cron",
-          max_users: 10,
-          max_alerts_per_user: 5
-        });
+  const skipBackfill = cronExpr === "*/1 * * * *";
 
-        const digestResult = await sendPendingEmailDigests(env, {
-          source: "cron",
-          max_rows: 20
-        });
+  if (!skipBackfill) {
+    try {
+      await runProvinciaBackfillStep(env, {
+        source: "cron",
+        max_pages: 1,
+        max_rows_per_page: 30
+      });
+    } catch (err) {
+      console.log("CRON BACKFILL ERROR:", err);
+    }
+  } else {
+    console.log("CRON BACKFILL SKIPPED FOR MAIL TEST");
+  }
 
-        console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
-        console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
-      } catch (err) {
-        console.error("CRON EMAIL QUEUE/DIGEST ERROR:", err);
-      }
-    })()
-  );
+  try {
+    const queueResult = await runEmailAlertsQueueSweep(env, {
+      source: "cron",
+      max_users: 1,
+      max_alerts_per_user: 5,
+      target_user_id: "3a300893-a552-43c2-9189-071ab4a23198"
+    });
 
-  ctx.waitUntil(
-    (async () => {
-      if (new Date().getDay() !== 1) return;
-      try {
-        const fakeUrl = new URL("https://worker/api/importar-catalogo-cargos?desde=1&hasta=20");
-        const result = await handleImportarCatalogoCargos(fakeUrl, env);
-        console.log("CRON CATALOGO SYNC OK", JSON.stringify(result));
-      } catch (err) {
-        console.error("CRON CATALOGO SYNC ERROR:", err);
-      }
-    })()
-  );
+    console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
+  } catch (err) {
+    console.log("CRON EMAIL QUEUE ERROR", err);
+  }
+
+  try {
+    const digestResult = await sendPendingEmailDigests(env, {
+      source: "cron",
+      max_rows: 5,
+      target_user_id: "3a300893-a552-43c2-9189-071ab4a23198"
+    });
+
+    console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
+  } catch (err) {
+    console.log("CRON EMAIL DIGEST ERROR", err);
+  }
 }
 };
+
 export {
   worker_hotfix_default as default
 };
 //# sourceMappingURL=worker_hotfix.js.map
-
-
