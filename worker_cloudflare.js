@@ -7262,136 +7262,58 @@ async function traerOfertasAPDDeUnDistrito(distritoAPD) {
   return { docs: docsFiltrados, query: `descdistrito:"${distritoAPD}"`, totalBruto: docsTotales.length, totalFiltrado: docsFiltrados.length };
 }
 __name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
-function buildCargoSearchVariants(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return [];
-
-  const out = new Set();
-  const add = (v) => {
-    const s = String(v || "").trim();
-    if (s) out.add(s);
-  };
-
-  add(raw);
-
-  const rawNorm = norm(raw);
-
-  // Caso 1: "(PR) PRECEPTOR"
-  let m = rawNorm.match(/^\(([A-Z0-9./-]{2,20})\)\s+(.+)$/);
-  if (m) {
-    const sigla = m[1].trim();
-    const nombre = m[2].trim();
-
-    add(`(${sigla}) ${nombre}`);
-    add(`${nombre} (${sigla})`);
-    add(nombre);
-    add(sigla);
-  }
-
-  // Caso 2: "PRECEPTOR (PR)"
-  m = rawNorm.match(/^(.+?)\s+\(([A-Z0-9./-]{2,20})\)$/);
-  if (m) {
-    const nombre = m[1].trim();
-    const sigla = m[2].trim();
-
-    add(`${nombre} (${sigla})`);
-    add(`(${sigla}) ${nombre}`);
-    add(nombre);
-    add(sigla);
-  }
-
-  // Caso 3: por si viene con varios espacios raros
-  const sinDobleEspacio = rawNorm.replace(/\s+/g, " ").trim();
-  add(sinDobleEspacio);
-
-  // Caso 4: texto sin ningún paréntesis
-  const sinParentesis = rawNorm.replace(/\([^)]+\)/g, "").replace(/\s+/g, " ").trim();
-  if (sinParentesis && sinParentesis !== rawNorm) {
-    add(sinParentesis);
-  }
-
-  return [...out];
-}
 async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
   const distritoNorm = norm(distritoAPD);
-  const variantesBusqueda = buildCargoSearchVariants(cargoMateria);
-  const variantesNorm = unique(
-    variantesBusqueda.map((v) => norm(v)).filter(Boolean)
-  );
-
+  const cargoNorm = norm(cargoMateria);
   const docsTotales = [];
-  const vistos = new Set();
-  const queriesUsadas = [];
-  let totalBruto = 0;
 
-  for (const variante of variantesBusqueda) {
-    for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
-      const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+  for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
+    const start = i * USER_CAPTURE_ROWS_PER_PAGE;
 
-      const q = [
-        `descdistrito:"${escaparSolr(distritoAPD)}"`,
-        `(` + [
-          `descripcioncargo:"${escaparSolr(variante)}"`,
-          `descripcionarea:"${escaparSolr(variante)}"`,
-          `cargo:"${escaparSolr(variante)}"`,
-          `materia:"${escaparSolr(variante)}"`,
-          `asignatura:"${escaparSolr(variante)}"`
-        ].join(" OR ") + `)`
-      ].join(" AND ");
+    const q = [
+      `descdistrito:"${escaparSolr(distritoAPD)}"`,
+      `(` + [
+        `descripcioncargo:"${escaparSolr(cargoMateria)}"`,
+        `descripcionarea:"${escaparSolr(cargoMateria)}"`,
+        `cargo:"${escaparSolr(cargoMateria)}"`
+      ].join(" OR ") + `)`
+    ].join(" AND ");
 
-      if (i === 0) queriesUsadas.push(q);
+    const consultaUrl =
+      `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
 
-      const consultaUrl =
-        `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
-
-      const res = await fetch(consultaUrl);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`APD respondio ${res.status}: ${txt}`);
-      }
-
-      const data = await res.json();
-      const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-      if (!docs.length) break;
-
-      totalBruto += docs.length;
-
-      for (const doc of docs) {
-        const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
-        if (!distritoOk) continue;
-
-        const textoCargo = norm([
-          doc?.descripcioncargo,
-          doc?.descripcionarea,
-          doc?.cargo,
-          doc?.materia,
-          doc?.asignatura,
-          doc?.descripcionmateria
-        ].filter(Boolean).join(" "));
-
-        if (!textoCargo) continue;
-
-        const cargoOk = variantesNorm.some((v) =>
-          textoCargo.includes(v) || v.includes(textoCargo)
-        );
-
-        if (!cargoOk) continue;
-
-        const clave = buildSourceOfferKeyFromOferta(doc);
-        if (vistos.has(clave)) continue;
-
-        vistos.add(clave);
-        docsTotales.push(doc);
-      }
-
-      if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
+    const res = await fetch(consultaUrl);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`APD respondio ${res.status}: ${txt}`);
     }
+
+    const data = await res.json();
+    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+    if (!docs.length) break;
+
+    const docsFiltrados = docs.filter((doc) => {
+      const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
+      const textoCargo = norm([
+        doc?.descripcioncargo,
+        doc?.descripcionarea,
+        doc?.cargo,
+        doc?.materia,
+        doc?.asignatura
+      ].filter(Boolean).join(" "));
+      const cargoOk = textoCargo.includes(cargoNorm) || cargoNorm.includes(textoCargo);
+      return distritoOk && cargoOk;
+    });
+
+    docsTotales.push(...docsFiltrados);
+
+    if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
   }
 
   return {
     docs: docsTotales,
-    query: queriesUsadas.join(" || "),
-    totalBruto,
+    query: `descdistrito:"${distritoAPD}" AND cargo:"${cargoMateria}"`,
+    totalBruto: docsTotales.length,
     totalFiltrado: docsTotales.length
   };
 }
