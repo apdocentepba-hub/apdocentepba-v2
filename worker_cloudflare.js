@@ -7329,62 +7329,271 @@ function cargoTextOferta(oferta) {
     oferta?.descripcionmateria
   ].filter(Boolean).join(" "));
 }
-function buscarEnCatalogo(lista, valor) {
-  const variants = cargoVariants(valor);
-  if (!variants.length) return null;
+function pickFirstNonEmpty(...values) {
+  for (const v of values) {
+    const s = String(v || "").trim();
+    if (s) return s;
+  }
+  return "";
+}
 
-  for (const variant of variants) {
-    const variantNoSpaces = variant.replace(/\s+/g, "");
+function simplifyNorm(value) {
+  return norm(value)
+    .replace(/\bDE\b/g, " ")
+    .replace(/\bDEL\b/g, " ")
+    .replace(/\bLA\b/g, " ")
+    .replace(/\bLAS\b/g, " ")
+    .replace(/\bLOS\b/g, " ")
+    .replace(/\bEL\b/g, " ")
+    .replace(/\bY\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-    const exacto = (lista || []).find(item => {
-      const nombre = norm(item?.nombre_norm || item?.nombre || "");
-      const apd = norm(item?.apd_nombre_norm || item?.apd_nombre || "");
-      const codigo = norm(item?.codigo || "").replace(/\s+/g, "");
+function tokenBag(value) {
+  const stop = new Set(["DE", "DEL", "LA", "LAS", "LOS", "EL", "Y", "EN", "A", "AL", "PARA", "POR", "CON"]);
+  return [...new Set(
+    norm(value)
+      .split(" ")
+      .map(x => x.trim())
+      .filter(Boolean)
+      .filter(x => x.length > 1)
+      .filter(x => !stop.has(x))
+  )];
+}
 
-      return (
-        nombre === variant ||
-        apd === variant ||
-        (codigo && codigo === variantNoSpaces)
-      );
-    });
+function hasAllRequiredTokens(text, required) {
+  const req = Array.isArray(required) ? required.map(norm).filter(Boolean) : [];
+  if (!req.length) return true;
+  const bag = new Set(tokenBag(text));
+  return req.every(t => bag.has(t));
+}
 
-    if (exacto) return exacto;
+function hasBlockedTokens(text, blocked) {
+  const blk = Array.isArray(blocked) ? blocked.map(norm).filter(Boolean) : [];
+  if (!blk.length) return false;
+  const bag = new Set(tokenBag(text));
+  return blk.some(t => bag.has(t));
+}
+
+function buildDistrictCatalogIndex(catalogos) {
+  const rows = Array.isArray(catalogos?.distritos) ? catalogos.distritos : [];
+  const byCode = new Map();
+  const byExact = new Map();
+  const items = [];
+
+  for (const row of rows) {
+    const item = {
+      kind: "district",
+      code: norm(row?.codigo || ""),
+      canonical: norm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre)),
+      simple: simplifyNorm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre)),
+      human: norm(pickFirstNonEmpty(row?.nombre, row?.apd_nombre)),
+      aliases: unique([
+        norm(row?.nombre || ""),
+        norm(row?.nombre_norm || ""),
+        norm(row?.apd_nombre || ""),
+        norm(row?.apd_nombre_norm || "")
+      ].filter(Boolean))
+    };
+
+    items.push(item);
+
+    if (item.code) byCode.set(item.code, item);
+    if (item.canonical) byExact.set(item.canonical, item);
+
+    for (const alias of item.aliases) {
+      byExact.set(alias, item);
+    }
   }
 
-  for (const variant of variants) {
-    const hit = (lista || []).find(item => {
-      const nombre = norm(item?.nombre_norm || item?.nombre || "");
-      const apd = norm(item?.apd_nombre_norm || item?.apd_nombre || "");
+  return { items, byCode, byExact };
+}
 
-      return (
-        (nombre && (nombre.includes(variant) || variant.includes(nombre))) ||
-        (apd && (apd.includes(variant) || variant.includes(apd)))
-      );
-    });
+function buildCargoCatalogIndex(catalogos) {
+  const rows = Array.isArray(catalogos?.cargos) ? catalogos.cargos : [];
+  const byCode = new Map();
+  const byExact = new Map();
+  const tokenIndex = new Map();
+  const items = [];
 
-    if (hit) return hit;
+  for (const row of rows) {
+    const canonical = norm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre));
+    const aliases = unique([
+      norm(row?.nombre || ""),
+      norm(row?.nombre_norm || ""),
+      norm(row?.apd_nombre || ""),
+      norm(row?.apd_nombre_norm || ""),
+      norm(row?.codigo || "")
+    ].filter(Boolean));
+
+    const item = {
+      kind: "cargo",
+      code: norm(row?.codigo || ""),
+      canonical,
+      simple: simplifyNorm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre)),
+      human: norm(pickFirstNonEmpty(row?.nombre, row?.apd_nombre)),
+      aliases,
+      tokens_required: tokenBag(canonical),
+      tokens_blocked: []
+    };
+
+    items.push(item);
+
+    if (item.code) byCode.set(item.code, item);
+    if (item.canonical) byExact.set(item.canonical, item);
+
+    for (const alias of aliases) {
+      byExact.set(alias, item);
+      for (const tok of tokenBag(alias)) {
+        if (!tokenIndex.has(tok)) tokenIndex.set(tok, []);
+        tokenIndex.get(tok).push(item);
+      }
+    }
+  }
+
+  return { items, byCode, byExact, tokenIndex };
+}
+
+function buildCatalogContext(catalogos) {
+  return {
+    districtIndex: buildDistrictCatalogIndex(catalogos),
+    cargoIndex: buildCargoCatalogIndex(catalogos)
+  };
+}
+
+function resolveDistrictValue(input, districtIndex) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  const n = norm(raw);
+  const s = simplifyNorm(raw);
+
+  if (districtIndex?.byCode?.has(n)) return districtIndex.byCode.get(n);
+  if (districtIndex?.byExact?.has(n)) return districtIndex.byExact.get(n);
+
+  for (const item of districtIndex?.items || []) {
+    if (item.simple && item.simple === s) return item;
+  }
+
+  return {
+    kind: "district",
+    code: "",
+    canonical: n,
+    simple: s,
+    human: n,
+    aliases: [n]
+  };
+}
+
+function resolveCargoValue(input, cargoIndex) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  const n = norm(raw);
+  const s = simplifyNorm(raw);
+
+  if (cargoIndex?.byCode?.has(n)) return cargoIndex.byCode.get(n);
+  if (cargoIndex?.byExact?.has(n)) return cargoIndex.byExact.get(n);
+
+  const prefTokens = tokenBag(raw);
+  const seen = new Map();
+  let best = null;
+
+  for (const tok of prefTokens) {
+    const candidates = cargoIndex?.tokenIndex?.get(tok) || [];
+    for (const item of candidates) {
+      const k = `${item.code}__${item.canonical}`;
+      seen.set(k, item);
+    }
+  }
+
+  for (const item of seen.values()) {
+    const corpus = [item.canonical, ...(item.aliases || [])].join(" ");
+    if (!hasAllRequiredTokens(corpus, item.tokens_required)) continue;
+    if (hasBlockedTokens(corpus, item.tokens_blocked)) continue;
+
+    const bag = new Set(tokenBag(corpus));
+    let score = 0;
+
+    for (const tok of prefTokens) {
+      if (bag.has(tok)) score += 10;
+    }
+
+    if (norm(corpus).includes(n)) score += 40;
+    if (simplifyNorm(corpus).includes(s)) score += 25;
+
+    if (!best || score > best.score) {
+      best = { score, item };
+    }
+  }
+
+  if (best?.item) return best.item;
+
+  return {
+    kind: "cargo",
+    code: "",
+    canonical: n,
+    simple: s,
+    human: n,
+    aliases: [n],
+    tokens_required: prefTokens,
+    tokens_blocked: []
+  };
+}
+
+function resolveOfferDistrict(oferta) {
+  return norm(oferta?.descdistrito || oferta?.distrito || "");
+}
+
+function resolveOfferCargoText(oferta) {
+  return [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ].filter(Boolean).join(" ");
+}
+function buscarEnCatalogo(lista, valor) {
+  const raw = String(valor || "").trim();
+  if (!raw) return null;
+
+  const n = norm(raw);
+  const s = simplifyNorm(raw);
+
+  for (const row of Array.isArray(lista) ? lista : []) {
+    const code = norm(row?.codigo || "");
+    const canonical = norm(pickFirstNonEmpty(row?.apd_nombre, row?.nombre));
+    const aliases = unique([
+      norm(row?.nombre || ""),
+      norm(row?.nombre_norm || ""),
+      norm(row?.apd_nombre || ""),
+      norm(row?.apd_nombre_norm || "")
+    ].filter(Boolean));
+
+    if (code && code === n) return row;
+    if (canonical && canonical === n) return row;
+    if (aliases.includes(n)) return row;
+    if (simplifyNorm(canonical) === s) return row;
+    if (aliases.some(a => simplifyNorm(a) === s)) return row;
   }
 
   return null;
 }
 __name(buscarEnCatalogo, "buscarEnCatalogo");
 function canonizarListaDistritos(lista, catalogo) {
-  const humanos = [];
-  const apd = [];
-  for (const item of lista || []) {
-    const hit = buscarEnCatalogo(catalogo, item);
-    if (hit) {
-      humanos.push(norm(hit.nombre || item));
-      apd.push(norm(hit.apd_nombre || hit.nombre || item));
-    } else {
-      const value = norm(item);
-      if (value) {
-        humanos.push(value);
-        apd.push(value);
-      }
-    }
-  }
-  return { humanos: unique(humanos), apd: unique(apd) };
+  const districtIndex = buildDistrictCatalogIndex({ distritos: catalogo || [] });
+  const resolved = (lista || [])
+    .map(item => resolveDistrictValue(item, districtIndex))
+    .filter(Boolean);
+
+  return {
+    humanos: unique(resolved.map(x => x.human).filter(Boolean)),
+    apd: unique(resolved.map(x => x.canonical).filter(Boolean)),
+    resolved
+  };
 }
 __name(canonizarListaDistritos, "canonizarListaDistritos");
 
@@ -7470,92 +7679,56 @@ function buscarCargoEnCatalogo(lista, valor) {
   return null;
 }
 function canonizarListaCargosOMaterias(lista, catalogo) {
-  const arr = Array.isArray(lista) ? lista : [];
-  const humanos = [];
-  const apd = [];
-
-  for (const item of arr) {
-    const raw = String(item || "").trim();
-    const n = norm(raw);
-
-    if (!n) continue;
-
-    // PR / PRECEPTOR
-    if (n.includes("PR") || n.includes("PRECEPTOR")) {
-      humanos.push("PRECEPTOR");
-      apd.push("PRECEPTOR");
-      continue;
-    }
-
-    // NTI / NTICX
-    if (n.includes("NTI") || n.includes("NTICX")) {
-      humanos.push("NTICX");
-      apd.push("NTICX");
-      continue;
-    }
-
-    // ELI
-    if (
-      n.includes("ELI") ||
-      n.includes("ENCARGADO MEDIOS APOYO TEC") ||
-      n.includes("APOYO TECNICO PEDAGOGICO")
-    ) {
-      humanos.push("ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.");
-      apd.push("ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.");
-      continue;
-    }
-
-    // CCD
-    if (
-      n.includes("CCD") ||
-      n.includes("CONSTRUCCION DE CIUDADANIA") ||
-      n.includes("CONSTRUCCION DE LA CIUDADANIA")
-    ) {
-      humanos.push("CONSTRUCCION DE LA CIUDADANIA");
-      apd.push("CONSTRUCCION DE LA CIUDADANIA");
-      continue;
-    }
-
-    // MCS
-    if (n.includes("MCS") || n.includes("MATEMATICA CICLO SUPERIOR")) {
-      humanos.push("MATEMATICA CICLO SUPERIOR");
-      apd.push("MATEMATICA CICLO SUPERIOR");
-      continue;
-    }
-
-    // MTM
-    if (n.includes("MTM") || n === "MATEMATICA" || n.includes(" MATEMATICA")) {
-      humanos.push("MATEMATICA");
-      apd.push("MATEMATICA");
-      continue;
-    }
-
-    // fallback mínimo, sin inventar cargos falopa
-    if (n.includes("PRECEPTOR")) {
-      humanos.push("PRECEPTOR");
-      apd.push("PRECEPTOR");
-      continue;
-    }
-
-    if (n.includes("MATEMATICA")) {
-      humanos.push("MATEMATICA");
-      apd.push("MATEMATICA");
-      continue;
-    }
-  }
+  const cargoIndex = buildCargoCatalogIndex({ cargos: catalogo || [] });
+  const resolved = (lista || [])
+    .map(item => resolveCargoValue(item, cargoIndex))
+    .filter(Boolean);
 
   return {
-    humanos: [...new Set(humanos)],
-    apd: [...new Set(apd)]
+    humanos: unique(resolved.map(x => x.human).filter(Boolean)),
+    apd: unique(resolved.map(x => x.canonical).filter(Boolean)),
+    resolved
   };
 }
 __name(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
 function canonizarPreferenciasConCatalogo(prefs, catalogos) {
-  const principal = canonizarListaDistritos([prefs.distrito_principal || ""], catalogos.distritos);
-  const otros = canonizarListaDistritos(prefs.otros_distritos || [], catalogos.distritos);
-  const cargosCanon = canonizarListaCargosOMaterias(prefs.cargos || [], catalogos.cargos);
-  const materiasCanon = canonizarListaCargosOMaterias(prefs.materias || [], catalogos.cargos);
-  return { ...prefs, distrito_principal: principal.humanos[0] || norm(prefs.distrito_principal || ""), distrito_principal_apd: principal.apd[0] || norm(prefs.distrito_principal || ""), otros_distritos: otros.humanos, otros_distritos_apd: otros.apd, cargos: cargosCanon.humanos, cargos_apd: cargosCanon.apd, materias: materiasCanon.humanos, materias_apd: materiasCanon.apd };
+  const ctx = buildCatalogContext(catalogos);
+
+  const principalResolved = resolveDistrictValue(prefs?.distrito_principal || "", ctx.districtIndex);
+  const otrosResolved = unique(
+    (prefs?.otros_distritos || [])
+      .map(x => resolveDistrictValue(x, ctx.districtIndex))
+      .filter(Boolean)
+      .map(x => x.canonical)
+  ).map(x => resolveDistrictValue(x, ctx.districtIndex));
+
+  const cargosResolved = (prefs?.cargos || [])
+    .map(x => resolveCargoValue(x, ctx.cargoIndex))
+    .filter(Boolean);
+
+  const materiasResolved = (prefs?.materias || [])
+    .map(x => resolveCargoValue(x, ctx.cargoIndex))
+    .filter(Boolean);
+
+  return {
+    ...prefs,
+
+    distrito_principal: principalResolved?.human || norm(prefs?.distrito_principal || ""),
+    distrito_principal_apd: principalResolved?.canonical || norm(prefs?.distrito_principal || ""),
+    distrito_principal_resolved: principalResolved || null,
+
+    otros_distritos: unique(otrosResolved.map(x => x.human).filter(Boolean)),
+    otros_distritos_apd: unique(otrosResolved.map(x => x.canonical).filter(Boolean)),
+    otros_distritos_resolved: otrosResolved,
+
+    cargos: unique(cargosResolved.map(x => x.human).filter(Boolean)),
+    cargos_apd: unique(cargosResolved.map(x => x.canonical).filter(Boolean)),
+    cargos_resolved: cargosResolved,
+
+    materias: unique(materiasResolved.map(x => x.human).filter(Boolean)),
+    materias_apd: unique(materiasResolved.map(x => x.canonical).filter(Boolean)),
+    materias_resolved: materiasResolved
+  };
 }
 __name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 async function traerOfertasAPDPorDistritos(prefs) {
@@ -7832,29 +8005,20 @@ function adaptarPreferenciasRow(row) {
   return { user_id: row.user_id || "", distrito_principal: norm(row.distrito_principal || ""), otros_distritos: unique(arrNorm(row.otros_distritos)), cargos: unique(arrNorm(row.cargos)), materias: unique(arrNorm(row.materias)), niveles: unique(arrNorm(row.niveles)), turnos: unique(arrNorm(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_telegram: !!row.alertas_telegram, alertas_whatsapp: !!row.alertas_whatsapp };
 }
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
-function distritosPrefsAPD(prefs, catalogos = null) {
-  if (!catalogos) {
-    return unique([
-      norm(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""),
-      ...(prefs?.otros_distritos_apd || [])
-    ].filter(Boolean));
-  }
-
-  return normalizeUserDistrictPrefs(prefs, catalogos);
+function distritosPrefsAPD(prefs) {
+  return unique([
+    norm(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""),
+    ...(Array.isArray(prefs?.otros_distritos_apd) ? prefs.otros_distritos_apd : [])
+  ].filter(Boolean));
 }
 __name(distritosPrefsAPD, "distritosPrefsAPD");
-__name(distritosPrefsAPD, "distritosPrefsAPD");
-function cargosMateriasPrefsAPD(prefs, catalogos = null) {
-  if (!catalogos) {
-    return unique([
-      ...(prefs?.cargos_apd || []),
-      ...(prefs?.materias_apd || [])
-    ]);
-  }
 
-  return normalizeUserCargoPrefs(prefs, catalogos);
+function cargosMateriasPrefsAPD(prefs) {
+  return [
+    ...(Array.isArray(prefs?.cargos_resolved) ? prefs.cargos_resolved : []),
+    ...(Array.isArray(prefs?.materias_resolved) ? prefs.materias_resolved : [])
+  ];
 }
-__name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 __name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 function turnosPrefs(prefs) {
   return unique((prefs?.turnos || []).map((item) => {
@@ -7889,90 +8053,56 @@ function categoriasNivel(texto) {
   return out;
 }
 __name(categoriasNivel, "categoriasNivel");
-function matchDistritos(oferta, prefs, catalogos = null) {
-  const prefsD = distritosPrefsAPD(prefs, catalogos);
-
+function matchDistritos(oferta, prefs) {
+  const prefsD = distritosPrefsAPD(prefs);
   if (!prefsD.length) {
     return { ok: true, motivo: "Sin filtro de distrito" };
   }
 
-  const distritoOfertaRaw = firstNonEmpty(oferta?.descdistrito, oferta?.distrito);
-  if (!distritoOfertaRaw) {
+  const distritoOferta = resolveOfferDistrict(oferta);
+  if (!distritoOferta) {
     return { ok: false, motivo: "La oferta no trae distrito" };
   }
 
-  if (!catalogos) {
-    const distritoOferta = norm(distritoOfertaRaw);
-    const ok = prefsD.includes(distritoOferta);
-    return {
-      ok,
-      motivo: ok ? `Distrito compatible: ${distritoOferta}` : `Distrito no compatible: ${distritoOferta}`
-    };
-  }
-
-  const resolvedOffer = resolveOfferDistrict(oferta, catalogos);
-  const canonOffer = norm(resolvedOffer?.canonical || distritoOfertaRaw);
-
-  const ok = prefsD.includes(canonOffer);
+  const ok = prefsD.includes(distritoOferta);
 
   return {
     ok,
     motivo: ok
-      ? `Distrito compatible: ${canonOffer}`
-      : `Distrito no compatible: ${canonOffer}`
+      ? `Distrito compatible: ${distritoOferta}`
+      : `Distrito no compatible: ${distritoOferta}`
   };
 }
 __name(matchDistritos, "matchDistritos");
-function matchCargosMaterias(oferta, prefs, catalogos = null) {
-  const prefsCM = cargosMateriasPrefsAPD(prefs, catalogos);
+function matchCargosMaterias(oferta, prefs) {
+  const prefsCM = cargosMateriasPrefsAPD(prefs);
 
   if (!prefsCM.length) {
     return { ok: true, motivo: "Sin filtro de cargo o materia" };
   }
 
-  const textoOferta = [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.materia,
-    oferta?.asignatura,
-    oferta?.descripcionmateria
-  ].filter(Boolean).join(" ");
+  const textoOferta = resolveOfferCargoText(oferta);
+  const textoOfertaNorm = norm(textoOferta);
 
-  if (!textoOferta.trim()) {
+  if (!textoOfertaNorm) {
     return { ok: false, motivo: "La oferta no trae cargo o materia" };
   }
 
-  if (!catalogos) {
-    const n = norm(textoOferta);
-    const ok = prefsCM.some((pref) => {
-      const p = norm(pref);
-      return n.includes(p) || p.includes(n) || n.split(" ").some((token) => token === p);
-    });
-    return {
-      ok,
-      motivo: ok ? "Cargo o materia compatible" : "Cargo o materia no compatible"
-    };
-  }
-
-  const resolvedOffer = resolveOfferCargo(oferta, catalogos);
-  const offerCanonical = norm(resolvedOffer?.canonical || textoOferta);
   const offerTokens = tokenBag(textoOferta);
 
-  const ok = prefsCM.some((pref) => {
+  const ok = prefsCM.some(pref => {
     if (!pref) return false;
 
-    if (pref.code && resolvedOffer?.code && pref.code === resolvedOffer.code) {
-      return true;
-    }
+    if (pref.canonical && textoOfertaNorm === pref.canonical) return true;
+    if (pref.canonical && textoOfertaNorm.includes(pref.canonical)) return true;
 
-    if (pref.canonical && offerCanonical && pref.canonical === offerCanonical) {
-      return true;
+    for (const alias of pref.aliases || []) {
+      if (alias && textoOfertaNorm.includes(alias)) return true;
     }
 
     if (pref.tokens_required?.length) {
       const bag = new Set(offerTokens);
-      const requiredOk = pref.tokens_required.every((t) => bag.has(norm(t)));
+      const requiredOk = pref.tokens_required.every(t => bag.has(norm(t)));
       const blockedOk = !hasBlockedTokens(textoOferta, pref.tokens_blocked || []);
       if (requiredOk && blockedOk) return true;
     }
@@ -8025,14 +8155,18 @@ function matchNivelModalidad(oferta, prefs) {
 }
 __name(matchNivelModalidad, "matchNivelModalidad");
 function coincideOfertaConPreferencias(oferta, prefs) {
-  const distrito = matchDistritos(oferta, prefs, catalogos);
+  const distrito = matchDistritos(oferta, prefs);
   if (!distrito.ok) return { match: false, detalle: { distrito } };
-  const cargosMaterias = matchCargosMaterias(oferta, prefs, catalogos);
+
+  const cargosMaterias = matchCargosMaterias(oferta, prefs);
   if (!cargosMaterias.ok) return { match: false, detalle: { distrito, cargosMaterias } };
+
   const turno = matchTurno(oferta, prefs);
   if (!turno.ok) return { match: false, detalle: { distrito, cargosMaterias, turno } };
+
   const nivelModalidad = matchNivelModalidad(oferta, prefs);
   if (!nivelModalidad.ok) return { match: false, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
+
   return { match: true, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
 }
 __name(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
