@@ -6916,7 +6916,6 @@ const CARGO_EQUIV = {
 };
 
 
-
 function cargoVariants(value) {
   const base = norm(value);
   if (!base) return [];
@@ -6927,13 +6926,17 @@ function cargoVariants(value) {
   const stripped = stripCargoCodeSuffix(base);
   if (stripped) out.add(stripped);
 
-  // códigos entre paréntesis: (/PR), (NTI), etc.
-  const codeMatches = [...base.matchAll(/\(([A-Z0-9./-]{1,20})\)/g)];
-  const codes = codeMatches
+  const parenCodes = [...base.matchAll(/\(([A-Z0-9./-]{1,20})\)/g)]
     .map((m) => norm(m[1] || "").replace(/\s+/g, "").replace(/^\//, ""))
     .filter(Boolean);
 
-  for (const code of codes) {
+  const slashCodes = [...base.matchAll(/\/([A-Z0-9]{1,10})\b/g)]
+    .map((m) => norm(m[1] || "").replace(/\s+/g, ""))
+    .filter(Boolean);
+
+  const rawCodes = new Set([...parenCodes, ...slashCodes]);
+
+  for (const code of rawCodes) {
     out.add(code);
 
     if (CARGO_EQUIV[code]) {
@@ -6944,33 +6947,29 @@ function cargoVariants(value) {
     }
   }
 
-  const compact = base.replace(/\s+/g, "");
-  if (CARGO_EQUIV[compact]) {
-    for (const eq of CARGO_EQUIV[compact]) {
-      const n = norm(eq);
-      if (n) out.add(n);
-    }
-  }
-
   const textOnly = norm(
     base
       .replace(/\(([A-Z0-9./-]{1,20})\)/g, " ")
+      .replace(/\/[A-Z0-9]{1,10}\b/g, " ")
       .replace(/\//g, " ")
       .replace(/-/g, " ")
       .replace(/\s+/g, " ")
       .trim()
   );
+
   if (textOnly) out.add(textOnly);
 
-  // variantes especiales de preceptor
   if (
+    base.includes("PRECEPTOR") ||
     textOnly === "PRECEPTOR" ||
     textOnly === "PRECEPTORIA" ||
-    base.includes("PRECEPTOR")
+    rawCodes.has("PR")
   ) {
     out.add("PR");
     out.add("PRECEPTOR");
     out.add("PRECEPTORIA");
+    out.add("PRECEPTOR A");
+    out.add("PRECEPTORIA S");
   }
 
   return [...out].filter(Boolean);
@@ -7223,7 +7222,7 @@ async function traerOfertasAPDPorDistritos(prefs) {
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
 async function traerOfertasAPDDeUnDistrito(distrito) {
   const distritoNorm = norm(distrito || "");
-  const escaped = String(distritoNorm || "").replace(/([\"\\])/g, "\\$1");
+  const escaped = String(distritoNorm || "").replace(/(["\\])/g, "\\$1");
 
   const q = `descdistrito:"${escaped}"`;
   const url = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
@@ -7488,6 +7487,7 @@ function matchCargosMaterias(oferta, prefs) {
     oferta?.descripcioncargo,
     oferta?.cargo,
     oferta?.descripcionarea,
+    oferta?.area,
     oferta?.materia,
     oferta?.asignatura,
     oferta?.descripcionmateria
@@ -7510,12 +7510,29 @@ function matchCargosMaterias(oferta, prefs) {
     ofertaTextoLimpio
       .split(" ")
       .map((t) => norm(t).replace(/\s+/g, ""))
-      .filter(Boolean)
+      .filter((t) => t && t.length >= 2)
   );
 
+  const esOfertaPreceptor =
+    ofertaTextoLimpio.includes("PRECEPTOR") ||
+    ofertaTextoLimpio.includes("PRECEPTORIA");
+
   const ok = prefsCM.some((pref) => {
+    const prefNorm = norm(pref);
+    if (!prefNorm) return false;
+
     const variants = cargoVariants(pref);
-    const prefTokens = cargoTokensExpanded(pref);
+    const prefTokens = cargoTokensExpanded(pref).filter((t) => t && t.length >= 2);
+
+    const prefEsPreceptor =
+      variants.includes("PR") ||
+      variants.includes("PRECEPTOR") ||
+      variants.includes("PRECEPTORIA") ||
+      prefNorm.includes("PRECEPTOR");
+
+    if (prefEsPreceptor && esOfertaPreceptor) {
+      return true;
+    }
 
     for (const variant of variants) {
       const variantLimpia = norm(
@@ -7529,30 +7546,16 @@ function matchCargosMaterias(oferta, prefs) {
 
       if (!variantLimpia) continue;
 
-      if (
-        ofertaTextoLimpio.includes(variantLimpia) ||
-        variantLimpia.includes(ofertaTextoLimpio)
-      ) {
+      if (ofertaTextoLimpio === variantLimpia) {
         return true;
       }
 
-      // caso específico PR <-> PRECEPTOR / PRECEPTORIA
       if (
-        variantLimpia === "PR" &&
+        variantLimpia.length >= 6 &&
         (
-          ofertaTextoLimpio.includes("PRECEPTOR") ||
-          ofertaTextoLimpio.includes("PRECEPTORIA")
+          ofertaTextoLimpio.includes(variantLimpia) ||
+          variantLimpia.includes(ofertaTextoLimpio)
         )
-      ) {
-        return true;
-      }
-
-      if (
-        (
-          variantLimpia.includes("PRECEPTOR") ||
-          variantLimpia.includes("PRECEPTORIA")
-        ) &&
-        offerTokens.has("PRECEPTOR")
       ) {
         return true;
       }
@@ -7567,10 +7570,15 @@ function matchCargosMaterias(oferta, prefs) {
 
     const coverage = overlap / Math.max(prefTokens.length, 1);
 
-    if (coverage >= 0.5 && overlap >= 1) return true;
-    if (coverage >= 0.34 && overlap >= 2) return true;
+    if (prefTokens.length === 1) {
+      return overlap === 1 && prefTokens[0].length >= 6;
+    }
 
-    return false;
+    if (prefTokens.length === 2) {
+      return overlap === 2;
+    }
+
+    return overlap >= 2 && coverage >= 0.7;
   });
 
   return {
@@ -7634,68 +7642,45 @@ function mapTurnoAPD(turno) {
 }
 __name(mapTurnoAPD, "mapTurnoAPD");
 function coincideOfertaConPreferenciasAPD(oferta, prefs) {
-  const distritoOferta = norm(oferta?.descdistrito || "");
-  const cargoOferta = norm([
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea
-  ].filter(Boolean).join(" "));
-
-  const distritos = distritosPrefsAPD(prefs).map(x => norm(x));
-  const cargos = cargosMateriasPrefsAPD(prefs).map(x => norm(x));
-
-  // 🔴 MATCH DISTRITO (OBLIGATORIO)
-  const matchDistrito = distritos.some(d =>
-    distritoOferta.includes(d) || d.includes(distritoOferta)
-  );
-
-  if (!matchDistrito) {
+  const distrito = matchDistritos(oferta, prefs);
+  if (!distrito.ok) {
     return {
       match: false,
+      detalle: { distrito },
       motivo: "distrito_no_coincide"
     };
   }
 
-  // 🔴 MATCH CARGO (OBLIGATORIO)
-  const matchCargo = cargos.some(c => {
-    if (!c) return false;
-
-    // PR → PRECEPTOR
-    if (c === "PR" && cargoOferta.includes("PRECEPTOR")) return true;
-
-    // variantes normales
-    return cargoOferta.includes(c) || c.includes(cargoOferta);
-  });
-
-  if (!matchCargo) {
+  const cargosMaterias = matchCargosMaterias(oferta, prefs);
+  if (!cargosMaterias.ok) {
     return {
       match: false,
+      detalle: { distrito, cargosMaterias },
       motivo: "cargo_no_coincide"
     };
   }
 
-  // 🔴 MATCH NIVEL
-  const nivelOferta = norm(oferta?.descnivelmodalidad || "");
+  const turno = matchTurno(oferta, prefs);
+  if (!turno.ok) {
+    return {
+      match: false,
+      detalle: { distrito, cargosMaterias, turno },
+      motivo: "turno_no_coincide"
+    };
+  }
 
-  const niveles = nivelesPrefsAPD
-    ? nivelesPrefsAPD(prefs).map(x => norm(x))
-    : [];
-
-  if (niveles.length) {
-    const matchNivel = niveles.some(n =>
-      nivelOferta.includes(n) || n.includes(nivelOferta)
-    );
-
-    if (!matchNivel) {
-      return {
-        match: false,
-        motivo: "nivel_no_coincide"
-      };
-    }
+  const nivelModalidad = matchNivelModalidad(oferta, prefs);
+  if (!nivelModalidad.ok) {
+    return {
+      match: false,
+      detalle: { distrito, cargosMaterias, turno, nivelModalidad },
+      motivo: "nivel_no_coincide"
+    };
   }
 
   return {
     match: true,
+    detalle: { distrito, cargosMaterias, turno, nivelModalidad },
     motivo: "ok"
   };
 }
