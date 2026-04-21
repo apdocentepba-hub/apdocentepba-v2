@@ -4397,10 +4397,15 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
   has_email: !!String(user?.email || "").trim()
 }));
 
-    if (!user?.id || !user?.activo || !String(user?.email || "").trim()) {
-      skippedUsers += 1;
-      continue;
-    }
+   if (!user?.id || !user?.activo || !String(user?.email || "").trim()) {
+  console.log("QUEUE SKIP: USER INVALID", {
+    userId,
+    activo: user?.activo,
+    email: user?.email
+  });
+  skippedUsers += 1;
+  continue;
+}
 
     const initialRecentlySent = await wasInitialDigestSentRecently(
       env,
