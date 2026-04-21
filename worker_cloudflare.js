@@ -4398,11 +4398,12 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
 }));
 
    if (!user?.id || !user?.activo || !String(user?.email || "").trim()) {
-  console.log("QUEUE SKIP: USER INVALID", {
-    userId,
-    activo: user?.activo,
-    email: user?.email
-  });
+  console.log("QUEUE SKIP: USER INVALID", JSON.stringify({
+    user_id: userId,
+    has_user: !!user?.id,
+    activo: !!user?.activo,
+    has_email: !!String(user?.email || "").trim()
+  }));
   skippedUsers += 1;
   continue;
 }
@@ -4419,9 +4420,12 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
 }));
 
     if (initialRecentlySent) {
-      skippedUsers += 1;
-      continue;
-    }
+  console.log("QUEUE SKIP: INITIAL RECENTLY SENT", JSON.stringify({
+    user_id: userId
+  }));
+  skippedUsers += 1;
+  continue;
+}
 
     const alertData = await construirAlertasParaUsuario(env, userId).catch((err) => {
       console.log("QUEUE BUILD ERROR:", userId, err?.message || err);
@@ -4430,21 +4434,43 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
     console.log("QUEUE DEBUG ALERT DATA", JSON.stringify({
   user_id: userId,
   ok: !!alertData?.ok,
-  resultados: Array.isArray(alertData?.resultados) ? alertData.resultados.length : null,
-  message: alertData?.message || null
+  message: alertData?.message || null,
+  total_fuente: Number(alertData?.total_fuente || 0),
+  total_resultados: Array.isArray(alertData?.resultados) ? alertData.resultados.length : 0,
+  descartadas_total: Number(alertData?.descartadas_total || 0),
+  debug_distritos: Array.isArray(alertData?.debug_distritos)
+    ? alertData.debug_distritos.slice(0, 5)
+    : [],
+  descartadas_preview: Array.isArray(alertData?.descartadas_preview)
+    ? alertData.descartadas_preview.slice(0, 5).map((x) => ({
+        iddetalle: x?.iddetalle || null,
+        motivo: x?.motivo || null,
+        motivo_match: x?.motivo_match || x?.motivo || null,
+        distrito: x?.distrito || x?.descdistrito || null,
+        cargo: x?.cargo || x?.descripcioncargo || null,
+        nivel: x?.nivelmodalidad || x?.descnivelmodalidad || null,
+        turno: x?.turno || null
+      }))
+    : []
 }));
-
     if (!alertData?.ok) {
-      skippedUsers += 1;
-      continue;
-    }
+  console.log("QUEUE SKIP: ALERT BUILD NOT OK", JSON.stringify({
+    user_id: userId,
+    message: alertData?.message || null
+  }));
+  skippedUsers += 1;
+  continue;
+}
 
     const allItems = Array.isArray(alertData?.resultados) ? alertData.resultados : [];
 
     if (!allItems.length) {
-      skippedUsers += 1;
-      continue;
-    }
+  console.log("QUEUE SKIP: NO ALERTS FOR USER", JSON.stringify({
+    user_id: userId
+  }));
+  skippedUsers += 1;
+  continue;
+}
 
     const sortedLatest = allItems
       .slice()
@@ -4480,11 +4506,14 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
 }));
 
     const totalAlerts = sortedLatest.length;
-
-    if (!visibleAlerts.length) {
-      skippedUsers += 1;
-      continue;
-    }
+if (!visibleAlerts.length) {
+  console.log("QUEUE SKIP: NO VISIBLE ALERTS", JSON.stringify({
+    user_id: userId,
+    total_items: allItems.length
+  }));
+  skippedUsers += 1;
+  continue;
+}
 
     const digestAlertKey = `DIGEST:${slotInfo.slot_key}`;
 
@@ -4677,7 +4706,20 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
       failedCount++;
     }
   }
+const resumenDescartes = descartadas.reduce((acc, item) => {
+  const k = String(item?.motivo || "sin_motivo");
+  acc[k] = (acc[k] || 0) + 1;
+  return acc;
+}, {});
 
+console.log("ALERT BUILD SUMMARY", JSON.stringify({
+  user_id: userId,
+  total_fuente: (ofertas || []).length,
+  total_resultados: resultados.length,
+  descartadas_total: descartadas.length,
+  resumen_descartes: resumenDescartes,
+  debug_distritos: debugDistritos
+}));
   return {
     ok: true,
     source,
@@ -8266,35 +8308,37 @@ function extractParenthesizedCodes(text) {
 
 
 function matchCargosMaterias(oferta, prefs) {
-  const prefsSiglas = cargosMateriasPrefsAPD(prefs);
-  if (!prefsSiglas.length) {
-    return {
-      ok: true,
-      motivo: "Sin filtro de cargo o materia"
-    };
+  const cargoOferta = String(
+    oferta?.descripcioncargo || oferta?.cargo || ""
+  );
+
+  const siglaOferta = extraerSigla(cargoOferta);
+
+  // prefs.cargosMaterias puede ser array de strings (con o sin paréntesis)
+  const listaPrefs = Array.isArray(prefs?.cargosMaterias)
+    ? prefs.cargosMaterias
+    : [];
+
+  // Si no hay preferencias de cargo, no filtra por cargo
+  if (!listaPrefs.length) {
+    return { ok: true };
   }
 
-  const ofertaSiglas = siglasOfertaCargoMateria(oferta);
-  if (!ofertaSiglas.length) {
-    return {
-      ok: false,
-      motivo: "La oferta no trae sigla entre parentesis en cargo o materia"
-    };
-  }
+  for (const pref of listaPrefs) {
+    const siglaPref = extraerSigla(pref);
 
-  const setOferta = new Set(ofertaSiglas);
-  const coincidencias = prefsSiglas.filter((sigla) => setOferta.has(sigla));
-
-  if (!coincidencias.length) {
-    return {
-      ok: false,
-      motivo: `Sigla no compatible. Oferta=[${ofertaSiglas.join(", ")}] Prefs=[${prefsSiglas.join(", ")}]`
-    };
+    if (siglaPref && siglaOferta && normalizarToken(siglaPref) === normalizarToken(siglaOferta)) {
+      return { ok: true };
+    }
   }
 
   return {
-    ok: true,
-    motivo: `Sigla compatible: ${coincidencias.join(", ")}`
+    ok: false,
+    motivo: "sigla_cargo_no_coincide",
+    detalle: {
+      siglaOferta,
+      prefs: listaPrefs.map(extraerSigla)
+    }
   };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
@@ -8382,6 +8426,15 @@ function mapTurnoAPD(turno) {
   return x;
 }
 __name(mapTurnoAPD, "mapTurnoAPD");
+function extraerSigla(texto) {
+  const t = String(texto || "").toUpperCase();
+  const m = t.match(/\(([^)]+)\)/); // lo que está entre ()
+  return m ? m[1].replace(/\s+/g, "") : "";
+}
+
+function normalizarToken(t) {
+  return String(t || "").toUpperCase().replace(/\s+/g, "");
+}
 function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   const distrito = matchDistritos(oferta, prefs);
   if (!distrito.ok) {
