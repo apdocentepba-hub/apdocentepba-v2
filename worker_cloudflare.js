@@ -7931,22 +7931,57 @@ function extraerSiglasEntreParentesis(texto) {
 }
 __name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 
+function extraerSiglasEntreParentesis(texto) {
+  const raw = String(texto || "");
+  if (!raw) return [];
+
+  const matches = [...raw.matchAll(/\(([^)]+)\)/g)];
+  if (!matches.length) return [];
+
+  return unique(
+    matches
+      .map((m) => norm(m[1] || ""))
+      .map((s) => s.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+  );
+}
+__name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
+
 function cargosMateriasPrefsAPD(prefs) {
-  const fuente = [
+  const items = [
     ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
     ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
     ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
     ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
   ];
 
-  const out = [];
-  for (const item of fuente) {
-    out.push(...extraerSiglasEntreParentesis(item));
+  const siglas = [];
+  for (const item of items) {
+    siglas.push(...extraerSiglasEntreParentesis(item));
   }
 
-  return unique(out);
+  return unique(siglas);
 }
 __name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
+
+function siglasOfertaCargoMateria(oferta) {
+  const campos = [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ];
+
+  const siglas = [];
+  for (const campo of campos) {
+    siglas.push(...extraerSiglasEntreParentesis(campo));
+  }
+
+  return unique(siglas);
+}
+__name(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 
 function siglasOfertaCargoMateria(oferta) {
   const campos = [
@@ -8064,7 +8099,10 @@ function scoreCargoMatch() {
 function matchCargosMaterias(oferta, prefs) {
   const prefsSiglas = cargosMateriasPrefsAPD(prefs);
   if (!prefsSiglas.length) {
-    return { ok: true, motivo: "Sin filtro de cargo o materia" };
+    return {
+      ok: true,
+      motivo: "Sin filtro de cargo o materia"
+    };
   }
 
   const ofertaSiglas = siglasOfertaCargoMateria(oferta);
