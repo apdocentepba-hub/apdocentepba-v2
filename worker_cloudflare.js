@@ -7931,21 +7931,7 @@ function extraerSiglasEntreParentesis(texto) {
 }
 __name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 
-function extraerSiglasEntreParentesis(texto) {
-  const raw = String(texto || "");
-  if (!raw) return [];
 
-  const matches = [...raw.matchAll(/\(([^)]+)\)/g)];
-  if (!matches.length) return [];
-
-  return unique(
-    matches
-      .map((m) => norm(m[1] || ""))
-      .map((s) => s.replace(/\s+/g, " ").trim())
-      .filter(Boolean)
-  );
-}
-__name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 
 function cargosMateriasPrefsAPD(prefs) {
   const items = [
@@ -7983,24 +7969,6 @@ function siglasOfertaCargoMateria(oferta) {
 }
 __name(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 
-function siglasOfertaCargoMateria(oferta) {
-  const campos = [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.materia,
-    oferta?.asignatura,
-    oferta?.descripcionmateria
-  ];
-
-  const out = [];
-  for (const campo of campos) {
-    out.push(...extraerSiglasEntreParentesis(campo));
-  }
-
-  return unique(out);
-}
-__name(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 
 function turnosPrefs(prefs) {
   return unique((prefs?.turnos || []).map((item) => {
@@ -8257,6 +8225,8 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   };
 }
 __name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
+
+
 function historicoRowToOferta(row) {
   return { descdistrito: row?.distrito || "", descripcioncargo: row?.cargo || "", descripcionarea: row?.area || "", turno: row?.turno || "", descnivelmodalidad: row?.nivel_modalidad || "" };
 }
@@ -9071,18 +9041,56 @@ async function fetchOffersForDistrict(distritoAPD) {
 __name(fetchOffersForDistrict, "fetchOffersForDistrict");
 async function buildAlertResultsFallback(env, userId) {
   const user = await getUserById(env, userId);
-  if (!user) return { ok: false, message: "Usuario no encontrado" };
+  if (!user) {
+    return { ok: false, message: "Usuario no encontrado" };
+  }
+
   const prefs = await getUserPrefs(env, userId);
-  if (!prefs || !prefs.alertas_activas) return { ok: true, user, total_fuente: 0, total: 0, descartadas_total: 0, descartadas_preview: [], debug_distritos: [], resultados: [] };
-  const catalog = await getCatalogDistricts(env);
-  const distritos = resolveDistrictsForQuery(prefs, catalog);
-  if (!distritos.length) return { ok: true, user, total_fuente: 0, total: 0, descartadas_total: 0, descartadas_preview: [], debug_distritos: [], resultados: [] };
+  if (!prefs || !prefs.alertas_activas) {
+    return {
+      ok: true,
+      user,
+      total_fuente: 0,
+      total: 0,
+      descartadas_total: 0,
+      descartadas_preview: [],
+      debug_distritos: [],
+      resultados: []
+    };
+  }
+
+  const catalogos = await cargarCatalogos(env).catch(() => ({ distritos: [], cargos: [] }));
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+
+  const distritos = distritosPrefsAPD(prefsCanon);
+  if (!distritos.length) {
+    return {
+      ok: true,
+      user,
+      preferencias_originales: prefs,
+      preferencias_canonizadas: prefsCanon,
+      total_fuente: 0,
+      total: 0,
+      descartadas_total: 0,
+      descartadas_preview: [],
+      debug_distritos: [],
+      resultados: []
+    };
+  }
+
   const debug = [];
   const allDocs = [];
-  const seenDocs = /* @__PURE__ */ new Set();
+  const seenDocs = new Set();
+
   for (const distrito of distritos) {
     const docs = await fetchOffersForDistrict(distrito).catch(() => []);
-    debug.push({ distrito_apd: distrito, query_usada: `descdistrito:"${distrito}"`, total_apd_bruto: docs.length, total_apd_filtrado: docs.length });
+    debug.push({
+      distrito_apd: distrito,
+      query_usada: `descdistrito:"${distrito}"`,
+      total_apd_bruto: docs.length,
+      total_apd_filtrado: docs.length
+    });
+
     for (const doc of docs) {
       const key = buildSourceOfferKeyFromOferta2(doc);
       if (!key || seenDocs.has(key)) continue;
@@ -9090,34 +9098,61 @@ async function buildAlertResultsFallback(env, userId) {
       allDocs.push(doc);
     }
   }
+
   const descartadas = [];
   const resultados = [];
-  const seenAlerts = /* @__PURE__ */ new Set();
+  const seenAlerts = new Set();
+
   for (const oferta of allDocs) {
     if (!ofertaVigente(oferta)) {
-      descartadas.push({ iddetalle: oferta?.iddetalle || oferta?.id || null, motivo: "oferta_no_vigente" });
+      descartadas.push({
+        iddetalle: oferta?.iddetalle || oferta?.id || null,
+        motivo: "oferta_no_vigente"
+      });
       continue;
     }
-    if (!matchesCargo(oferta, prefs)) {
-      descartadas.push({ iddetalle: oferta?.iddetalle || oferta?.id || null, motivo: "cargo_no_compatible" });
+
+    const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+
+    if (!evaluacion?.match) {
+      descartadas.push({
+        iddetalle: oferta?.iddetalle || oferta?.id || null,
+        motivo: "no_coincide_preferencias",
+        detalle: evaluacion?.detalle || {},
+        motivo_match: evaluacion?.motivo || ""
+      });
       continue;
     }
-    if (!matchesTurno(oferta, prefs)) {
-      descartadas.push({ iddetalle: oferta?.iddetalle || oferta?.id || null, motivo: "turno_no_compatible" });
-      continue;
-    }
-    if (!matchesNivel(oferta, prefs)) {
-      descartadas.push({ iddetalle: oferta?.iddetalle || oferta?.id || null, motivo: "nivel_no_compatible" });
-      continue;
-    }
+
     const item = adaptOffer(oferta);
+    item.detalle_match = evaluacion?.detalle || {};
+    item.motivo_match = evaluacion?.motivo || "Coincide con preferencias";
+
     const key = `${item.source_offer_key}|${item.escuela}|${item.turno}`;
     if (seenAlerts.has(key)) continue;
     seenAlerts.add(key);
+
     resultados.push(item);
   }
-  resultados.sort((a, b) => (parseFechaFlexible2(b?.finoferta)?.getTime() || 0) - (parseFechaFlexible2(a?.finoferta)?.getTime() || 0));
-  return { ok: true, user, preferencias_originales: prefs, preferencias_canonizadas: prefs, total_fuente: allDocs.length, total: resultados.length, descartadas_total: descartadas.length, descartadas_preview: descartadas.slice(0, 20), debug_distritos: debug, resultados };
+
+  resultados.sort((a, b) => {
+    const ta = parseFechaFlexible2(a?.finoferta)?.getTime() || 0;
+    const tb = parseFechaFlexible2(b?.finoferta)?.getTime() || 0;
+    return tb - ta;
+  });
+
+  return {
+    ok: true,
+    user,
+    preferencias_originales: prefs,
+    preferencias_canonizadas: prefsCanon,
+    total_fuente: allDocs.length,
+    total: resultados.length,
+    descartadas_total: descartadas.length,
+    descartadas_preview: descartadas.slice(0, 20),
+    debug_distritos: debug,
+    resultados
+  };
 }
 __name(buildAlertResultsFallback, "buildAlertResultsFallback");
 async function delegateJson(originalWorker, request, env, ctx) {
