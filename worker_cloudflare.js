@@ -6109,8 +6109,9 @@ async function obtenerResumenPostulantesABC(ofertaId, detalleId) {
     const txt = await res.text();
     throw new Error(`ABC postulantes respondio ${res.status}: ${txt}`);
   }
-  const data = await res.json();
-  const total = Number(data?.response?.numFound || 0);
+const buffer = await res.arrayBuffer();
+const rawText = new TextDecoder("iso-8859-1").decode(buffer);
+const data = JSON.parse(rawText || "{}");  const total = Number(data?.response?.numFound || 0);
   const first = data?.response?.docs?.[0] || null;
   return {
     total_postulantes: total,
@@ -7732,8 +7733,9 @@ async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
     const txt = await res.text();
     throw new Error(`APD respondio ${res.status}: ${txt}`);
   }
-
-  const data = await res.json();
+const buffer = await res.arrayBuffer();
+const rawText = new TextDecoder("iso-8859-1").decode(buffer);
+const data = JSON.parse(rawText || "{}");
   const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
 
   return {
