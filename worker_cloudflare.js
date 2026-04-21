@@ -7262,6 +7262,45 @@ async function traerOfertasAPDDeUnDistrito(distritoAPD) {
   return { docs: docsFiltrados, query: `descdistrito:"${distritoAPD}"`, totalBruto: docsTotales.length, totalFiltrado: docsFiltrados.length };
 }
 __name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
+async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
+  const q = [
+    `descdistrito:"${escaparSolr(distritoAPD)}"`,
+    `(` + [
+      `descripcioncargo:"${escaparSolr(textoCargoBusqueda)}"`,
+      `descripcionarea:"${escaparSolr(textoCargoBusqueda)}"`,
+      `cargo:"${escaparSolr(textoCargoBusqueda)}"`
+    ].join(" OR ") + `)`
+  ].join(" AND ");
+
+  const consultaUrl =
+    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=10&start=0&wt=json`;
+
+  const res = await fetch(consultaUrl);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`APD respondio ${res.status}: ${txt}`);
+  }
+
+  const data = await res.json();
+  const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+
+  return {
+    texto_buscado: textoCargoBusqueda,
+    query: q,
+    total: docs.length,
+    ejemplos: docs.slice(0, 3).map((doc) => ({
+      iddetalle: doc?.iddetalle ?? null,
+      idoferta: doc?.idoferta ?? null,
+      descdistrito: doc?.descdistrito ?? null,
+      descripcioncargo: doc?.descripcioncargo ?? null,
+      descripcionarea: doc?.descripcionarea ?? null,
+      cargo: doc?.cargo ?? null,
+      materia: doc?.materia ?? null,
+      asignatura: doc?.asignatura ?? null,
+      descnivelmodalidad: doc?.descnivelmodalidad ?? null
+    }))
+  };
+}
 async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
   const distritoNorm = norm(distritoAPD);
   const cargoNorm = norm(cargoMateria);
@@ -9631,6 +9670,43 @@ var worker_hotfix_default = {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/version` && request.method === "GET") return json2({ ok: true, version: HOTFIX_VERSION, worker_version: env.WORKER_URL || "ancient-wildflower-cd37" });
+    if (path === `${API_URL_PREFIX3}/debug-cargo` && request.method === "GET") {
+  try {
+    const distrito = url.searchParams.get("distrito") || "GENERAL PUEYRREDON";
+    const cargo = url.searchParams.get("cargo") || "(NTI) NTICX";
+
+    const variantes = [
+      cargo,
+      "NTICX (NTI)",
+      "NTICX",
+      "NTI"
+    ];
+
+    const resultados = [];
+    const vistos = new Set();
+
+    for (const variante of variantes) {
+      const clave = norm(variante);
+      if (!clave || vistos.has(clave)) continue;
+      vistos.add(clave);
+
+      const r = await debugBuscarCargoExactoEnABC(distrito, variante);
+      resultados.push(r);
+    }
+
+    return json2({
+      ok: true,
+      distrito,
+      cargo_original: cargo,
+      pruebas: resultados
+    });
+  } catch (err) {
+    return json2({
+      ok: false,
+      error: String(err?.message || err)
+    }, 500);
+  }
+}
     if (path === `${API_URL_PREFIX3}/telegram/status` && request.method === "GET") {
       try {
         return await handleTelegramStatus(request, env);
