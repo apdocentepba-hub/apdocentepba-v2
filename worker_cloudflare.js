@@ -7308,47 +7308,68 @@ async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
   const cargoNorm = norm(cargoMateria);
   const docsTotales = [];
 
-  for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
-    const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+  async function fetchConCargo(valorBusqueda) {
+    for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
+      const start = i * USER_CAPTURE_ROWS_PER_PAGE;
 
-    const q = [
-      `descdistrito:"${escaparSolr(distritoAPD)}"`,
-      `(` + [
-        `descripcioncargo:"${escaparSolr(cargoMateria)}"`,
-        `descripcionarea:"${escaparSolr(cargoMateria)}"`,
-        `cargo:"${escaparSolr(cargoMateria)}"`
-      ].join(" OR ") + `)`
-    ].join(" AND ");
+      const q = [
+        `descdistrito:"${escaparSolr(distritoAPD)}"`,
+        `(` + [
+          `descripcioncargo:"${escaparSolr(valorBusqueda)}"`,
+          `descripcionarea:"${escaparSolr(valorBusqueda)}"`,
+          `cargo:"${escaparSolr(valorBusqueda)}"`
+        ].join(" OR ") + `)`
+      ].join(" AND ");
 
-    const consultaUrl =
-      `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+      const consultaUrl =
+        `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
 
-    const res = await fetch(consultaUrl);
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`APD respondio ${res.status}: ${txt}`);
+      const res = await fetch(consultaUrl);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`APD respondio ${res.status}: ${txt}`);
+      }
+
+      const data = await res.json();
+      const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+      if (!docs.length) break;
+
+      for (const doc of docs) {
+        const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
+
+        const textoCargo = norm([
+          doc?.descripcioncargo,
+          doc?.descripcionarea,
+          doc?.cargo,
+          doc?.materia,
+          doc?.asignatura
+        ].filter(Boolean).join(" "));
+
+        const cargoOk =
+          textoCargo.includes(cargoNorm) ||
+          cargoNorm.includes(textoCargo);
+
+        if (!distritoOk || !cargoOk) continue;
+
+        docsTotales.push(doc);
+      }
+
+      if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
     }
+  }
 
-    const data = await res.json();
-    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-    if (!docs.length) break;
+  // 🔵 1) intento normal
+  await fetchConCargo(cargoMateria);
 
-    const docsFiltrados = docs.filter((doc) => {
-      const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
-      const textoCargo = norm([
-        doc?.descripcioncargo,
-        doc?.descripcionarea,
-        doc?.cargo,
-        doc?.materia,
-        doc?.asignatura
-      ].filter(Boolean).join(" "));
-      const cargoOk = textoCargo.includes(cargoNorm) || cargoNorm.includes(textoCargo);
-      return distritoOk && cargoOk;
-    });
+  // 🔵 2) fallback SOLO si vino vacío
+  if (docsTotales.length === 0) {
+    const limpio = String(cargoMateria)
+      .replace(/\([^)]+\)/g, "")
+      .trim();
 
-    docsTotales.push(...docsFiltrados);
-
-    if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
+    if (limpio && limpio !== cargoMateria) {
+      await fetchConCargo(limpio);
+    }
   }
 
   return {
