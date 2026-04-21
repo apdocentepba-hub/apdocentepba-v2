@@ -7890,8 +7890,8 @@ function adaptarPreferenciasRow(row) {
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 function distritosPrefsAPD(prefs) {
   return unique([
-    norm(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""),
-    ...(Array.isArray(prefs?.otros_distritos_apd) ? prefs.otros_distritos_apd : [])
+    normDistritoABC(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""),
+    ...(Array.isArray(prefs?.otros_distritos_apd) ? prefs.otros_distritos_apd : []).map((x) => normDistritoABC(x))
   ].filter(Boolean));
 }
 __name(distritosPrefsAPD, "distritosPrefsAPD");
