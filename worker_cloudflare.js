@@ -8287,8 +8287,8 @@ function extractParenthesizedCodes(text) {
 
 
 
-function matchCargosMaterias(oferta, prefs) {
- function limpiarTextoCargo(texto) {
+
+function limpiarTextoCargo(texto) {
   return String(texto || "")
     .toUpperCase()
     .normalize("NFD")
@@ -8317,7 +8317,6 @@ function extraerSigla(texto) {
   return m ? m[1].replace(/\s+/g, "") : "";
 }
 
-}
 function limpiarTextoCargo(texto) {
   return String(texto || "")
     .toUpperCase()
