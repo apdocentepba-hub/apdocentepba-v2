@@ -7038,7 +7038,7 @@ function cargoTextOferta(oferta) {
     oferta?.descripcionmateria
   ].filter(Boolean).join(" "));
 }
-// ===== MATCHING NUEVO CANONICO =====
+
 function pickFirstNonEmpty(...values) {
   for (const v of values) {
     const s = String(v || "").trim();
@@ -7492,15 +7492,63 @@ async function traerOfertasAPDPorDistritos(prefs) {
   };
 }
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
+function districtQueryVariants(distrito) {
+  const base = normDistritoABC(distrito || "");
+  if (!base) return [];
+
+  const out = new Set([base]);
+
+  // variantes generales
+  out.add(base.replace(/^PARTIDO DE /, "").trim());
+  out.add(base.replace(/^GENERAL /, "GRAL ").trim());
+  out.add(base.replace(/^GENERAL /, "G ").trim());
+  out.add(base.replace(/^GRAL[.]? /, "GENERAL ").trim());
+
+  // variantes específicas razonables
+  if (base === "LOMAS DE ZAMORA") {
+    out.add("L DE ZAMORA");
+    out.add("LOMAS");
+  }
+
+  if (base === "GENERAL SAN MARTIN") {
+    out.add("SAN MARTIN");
+    out.add("G SAN MARTIN");
+    out.add("GRAL SAN MARTIN");
+    out.add("GRAL. SAN MARTIN");
+  }
+
+  if (base === "PARTIDO DE LA COSTA") {
+    out.add("LA COSTA");
+  }
+
+  if (base === "GENERAL PUEYRREDON") {
+    out.add("GRAL PUEYRREDON");
+    out.add("GRAL. PUEYRREDON");
+  }
+
+  return [...out].map(v => norm(v)).filter(Boolean);
+}
 async function traerOfertasAPDDeUnDistrito(distrito) {
   const distritoNorm = normDistritoABC(distrito || "");
-  const escaped = String(distritoNorm || "").replace(/(["\\])/g, "\\$1");
+  const variantes = districtQueryVariants(distritoNorm);
 
-  const q = `descdistrito:"${escaped}"`;
+  if (!distritoNorm || !variantes.length) {
+    return {
+      docs: [],
+      query: "",
+      totalBruto: 0,
+      totalFiltrado: 0
+    };
+  }
+
+  const q = variantes
+    .map(v => `descdistrito:"${escaparSolr(v)}"`)
+    .join(" OR ");
+
   const url = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
 
   const params = new URLSearchParams({
-    q,
+    q: `(${q})`,
     rows: "200",
     start: "0",
     wt: "json",
@@ -7525,13 +7573,14 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
   const data = await res.json().catch(() => ({}));
   const docsRaw = Array.isArray(data?.response?.docs) ? data.response.docs : [];
 
-  const docs = docsRaw.filter(
-    (doc) => normDistritoABC(doc?.descdistrito || "") === distritoNorm
-  );
+  const docs = docsRaw.filter((doc) => {
+    const docDistrict = normDistritoABC(doc?.descdistrito || "");
+    return docDistrict === distritoNorm || variantes.includes(docDistrict);
+  });
 
   return {
     docs,
-    query: q,
+    query: `(${q})`,
     totalBruto: docsRaw.length,
     totalFiltrado: docs.length
   };
@@ -7784,6 +7833,157 @@ function matchDistritos(oferta, prefs) {
   };
 }
 __name(matchDistritos, "matchDistritos");
+function extractOfferCargoCodes(oferta) {
+  const textos = [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ].filter(Boolean);
+
+  const codes = new Set();
+
+  for (const txt of textos) {
+    const s = String(txt || "");
+
+    // códigos entre paréntesis: (/PA) (PA) (/PR) etc.
+    for (const m of s.matchAll(/\(?\/?([A-Z0-9.\-]{2,20})\)?/g)) {
+      const code = norm(m[1] || "");
+      if (code && code.length >= 2 && code.length <= 20) {
+        codes.add(code);
+      }
+    }
+
+    // intenta extraer con helper existente si devuelve texto sin sufijo
+    if (typeof stripCargoCodeSuffix === "function") {
+      const stripped = stripCargoCodeSuffix(s);
+      const originalNorm = norm(s);
+      const strippedNorm = norm(stripped);
+
+      if (originalNorm && strippedNorm && originalNorm !== strippedNorm) {
+        const resto = originalNorm.replace(strippedNorm, "").trim();
+        for (const m of resto.matchAll(/([A-Z0-9.\-]{2,20})/g)) {
+          const code = norm(m[1] || "");
+          if (code && code.length >= 2 && code.length <= 20) {
+            codes.add(code);
+          }
+        }
+      }
+    }
+  }
+
+  return [...codes];
+}
+function extractParenthesizedCodes(text) {
+  const s = String(text || "");
+  const out = new Set();
+
+  // captura (PR), (/PR), (MTM), (/ELI), etc.
+  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{2,20})\s*\)/g)) {
+    const code = norm(m[1] || "");
+    if (code) out.add(code);
+  }
+
+  return [...out];
+}
+
+function extractOfferCargoCodes(oferta) {
+  const textos = [
+    oferta?.descripcioncargo,
+    oferta?.cargo,
+    oferta?.descripcionarea,
+    oferta?.materia,
+    oferta?.asignatura,
+    oferta?.descripcionmateria
+  ].filter(Boolean);
+
+  const out = new Set();
+
+  for (const txt of textos) {
+    for (const code of extractParenthesizedCodes(txt)) {
+      out.add(code);
+    }
+  }
+
+  return [...out];
+}
+function scoreCargoMatch(textoOferta, pref, oferta = null) {
+  const textoNorm = norm(textoOferta || "");
+  if (!textoNorm || !pref) return -999;
+
+  const offerTokens = tokenBag(textoOferta);
+
+  const prefCanonical = norm(pref.canonical || "");
+  const prefHuman = norm(pref.human || "");
+  const prefCode = norm(pref.code || "");
+  const prefAliases = Array.isArray(pref.aliases)
+    ? pref.aliases.map(x => norm(x)).filter(Boolean)
+    : [];
+
+  const prefVariants = unique([
+    prefCanonical,
+    prefHuman,
+    ...prefAliases
+  ].map(x => norm(x)).filter(Boolean));
+
+  const prefCodeVariants = unique([
+    prefCode,
+    ...extractParenthesizedCodes(prefCanonical),
+    ...extractParenthesizedCodes(prefHuman),
+    ...prefAliases.filter(x => /^[A-Z0-9.\-]{2,20}$/.test(x))
+  ].map(x => norm(x)).filter(Boolean));
+
+  const offerCodes = oferta ? extractOfferCargoCodes(oferta) : [];
+
+  let score = 0;
+
+  // REGLA PRINCIPAL: si la oferta trae sigla y la preferencia también, manda la sigla
+  if (offerCodes.length && prefCodeVariants.length) {
+    const codeMatch = offerCodes.some(c => prefCodeVariants.includes(norm(c)));
+
+    if (codeMatch) {
+      score += 150;
+    } else {
+      return -300;
+    }
+  }
+
+  // exactos por texto
+  if (prefCanonical && textoNorm === prefCanonical) score += 70;
+  if (prefHuman && textoNorm === prefHuman) score += 60;
+
+  for (const v of prefVariants) {
+    if (!v) continue;
+    if (textoNorm === v) score += 55;
+  }
+
+  // inclusión textual suave
+  for (const v of prefVariants) {
+    if (!v || v.length < 4) continue;
+    if (textoNorm.includes(v)) score += 18;
+  }
+
+  // tokens requeridos
+  if (pref.tokens_required?.length) {
+    const bag = new Set(offerTokens);
+    const requiredOk = pref.tokens_required.every(t => bag.has(norm(t)));
+    const blockedOk = !hasBlockedTokens(textoOferta, pref.tokens_blocked || []);
+    if (requiredOk && blockedOk) score += 25;
+    if (!blockedOk) score -= 100;
+  }
+
+  // overlap general
+  const prefVariantTokens = unique(prefVariants.flatMap(v => tokenBag(v)));
+  if (prefVariantTokens.length) {
+    const bag = new Set(offerTokens);
+    const overlap = prefVariantTokens.filter(t => bag.has(t)).length;
+    score += overlap * 6;
+  }
+
+  return score;
+}
 function matchCargosMaterias(oferta, prefs) {
   const prefsCM = cargosMateriasPrefsAPD(prefs);
 
@@ -7798,39 +7998,24 @@ function matchCargosMaterias(oferta, prefs) {
     return { ok: false, motivo: "La oferta no trae cargo o materia" };
   }
 
-  const offerTokens = tokenBag(textoOferta);
+  let bestScore = -999;
+  let bestPref = null;
 
-  const ok = prefsCM.some(pref => {
-    if (!pref) return false;
-
-    if (pref.canonical && textoOfertaNorm === pref.canonical) return true;
-    if (pref.canonical && textoOfertaNorm.includes(pref.canonical)) return true;
-
-    for (const alias of pref.aliases || []) {
-      if (alias && textoOfertaNorm.includes(alias)) return true;
+  for (const pref of prefsCM) {
+    const s = scoreCargoMatch(textoOferta, pref, oferta);
+    if (s > bestScore) {
+      bestScore = s;
+      bestPref = pref;
     }
+  }
 
-    if (pref.tokens_required?.length) {
-      const bag = new Set(offerTokens);
-      const requiredOk = pref.tokens_required.every(t => bag.has(norm(t)));
-      const blockedOk = !hasBlockedTokens(textoOferta, pref.tokens_blocked || []);
-      if (requiredOk && blockedOk) return true;
-    }
-
-    const prefCorpus = [pref.canonical, ...(pref.aliases || [])].join(" ");
-    const prefBag = new Set(tokenBag(prefCorpus));
-    let overlap = 0;
-
-    for (const tok of offerTokens) {
-      if (prefBag.has(tok)) overlap++;
-    }
-
-    return overlap >= Math.min(2, Math.max(1, prefBag.size));
-  });
+  const ok = bestScore >= 45;
 
   return {
     ok,
-    motivo: ok ? "Cargo o materia compatible" : "Cargo o materia no compatible"
+    motivo: ok
+      ? `Cargo o materia compatible (score=${bestScore}, match=${bestPref?.code || bestPref?.canonical || bestPref?.human || ""})`
+      : `Cargo o materia no compatible (score=${bestScore})`
   };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
@@ -8353,7 +8538,6 @@ function normalizeText2(v) {
   return String(v || "").trim();
 }
 __name(normalizeText2, "normalizeText");
-// ===== HOTFIX LEGACY / NO TOCAR SIN REVISAR REFERENCIAS =====
 function norm2(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s/().,-]/gu, " ").replace(/\s+/g, " ").trim();
 }
