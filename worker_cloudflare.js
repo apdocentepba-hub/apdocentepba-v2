@@ -7127,7 +7127,7 @@ function extractExplicitCodesFromPreference(value) {
   const s = String(value || "");
   const out = new Set();
 
-  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{2,20})\s*\)|(?:^|\s)\/([A-Z0-9.\-]{2,20})(?:\s|$)/g)) {
+  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{1,40})\s*\)|(?:^|\s)\/([A-Z0-9.\-]{1,40})(?:\s|$)/g)) {
     const c1 = normalizeCode(m[1] || "");
     const c2 = normalizeCode(m[2] || "");
     if (c1) out.add(c1);
@@ -7981,9 +7981,8 @@ function extractParenthesizedCodes(text) {
   const s = String(text || "");
   const out = new Set();
 
-  // captura (PR), (/PR), (MTM), (/ELI), etc.
-  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{2,20})\s*\)/g)) {
-    const code = norm(m[1] || "");
+  for (const m of s.matchAll(/\(\s*\/?\s*([A-Z0-9.\-]{1,40})\s*\)/g)) {
+    const code = normalizeCode(m[1] || "");
     if (code) out.add(code);
   }
 
@@ -8010,37 +8009,8 @@ function extractOfferCargoCodes(oferta) {
 
   return [...out];
 }
-function scoreCargoMatch(textoOferta, pref, oferta = null) {
-  const textoNorm = norm(textoOferta || "");
-  if (!textoNorm || !pref) return -999;
-
-  // 🔴 1. EXTRAER CÓDIGOS
-  const offerCodes = new Set(extractOfferCargoCodes(oferta));
-  const prefCode = normalizeCode(pref.code || "");
-
-  let score = 0;
-
-  // 🔥 2. MATCH DIRECTO POR CÓDIGO (PRIORIDAD MÁXIMA)
-  if (prefCode && offerCodes.has(prefCode)) {
-    return 1000; // 🔴 MATCH SEGURO
-  }
-
-  // 🔥 3. TOKEN MATCH (fallback)
-  const offerTokens = new Set(tokenBag(textoOferta));
-  const prefTokens = new Set(pref.tokens_required || []);
-
-  let tokenHits = 0;
-  for (const t of prefTokens) {
-    if (offerTokens.has(t)) tokenHits++;
-  }
-
-  score += tokenHits * 10;
-
-  // 🔥 4. CONTIENE TEXTO
-  if (textoNorm.includes(pref.canonical)) score += 40;
-  if (simplifyNorm(textoNorm).includes(pref.simple)) score += 25;
-
-  return score;
+function scoreCargoMatch() {
+  return 0;
 }
 function matchCargosMaterias(oferta, prefs) {
   const prefsCM = cargosMateriasPrefsAPD(prefs);
@@ -8049,31 +8019,52 @@ function matchCargosMaterias(oferta, prefs) {
     return { ok: true, motivo: "Sin filtro de cargo o materia" };
   }
 
-  const textoOferta = resolveOfferCargoText(oferta);
-  const textoOfertaNorm = norm(textoOferta);
+  const offerCodes = extractOfferCargoCodes(oferta)
+    .map(normalizeCode)
+    .filter(Boolean);
 
-  if (!textoOfertaNorm) {
-    return { ok: false, motivo: "La oferta no trae cargo o materia" };
+  if (!offerCodes.length) {
+    return {
+      ok: false,
+      motivo: "La oferta no trae sigla de cargo o materia"
+    };
   }
 
-  let bestScore = -999;
-  let bestPref = null;
+  const prefCodes = unique(
+    prefsCM
+      .flatMap((pref) => {
+        const out = [];
 
-  for (const pref of prefsCM) {
-    const s = scoreCargoMatch(textoOferta, pref, oferta);
-    if (s > bestScore) {
-      bestScore = s;
-      bestPref = pref;
-    }
+        if (pref?.code) out.push(normalizeCode(pref.code));
+        if (pref?.canonical) out.push(...extractParenthesizedCodes(pref.canonical));
+        if (pref?.human) out.push(...extractParenthesizedCodes(pref.human));
+
+        for (const a of (pref?.aliases || [])) {
+          out.push(normalizeCode(a));
+          out.push(...extractParenthesizedCodes(a));
+        }
+
+        return out;
+      })
+      .map(normalizeCode)
+      .filter(Boolean)
+  );
+
+  if (!prefCodes.length) {
+    return {
+      ok: false,
+      motivo: "Las preferencias no tienen siglas resueltas"
+    };
   }
 
-  const ok = bestScore >= 45;
+  const matches = offerCodes.filter((code) => prefCodes.includes(code));
+  const ok = matches.length > 0;
 
   return {
     ok,
     motivo: ok
-      ? `Cargo o materia compatible (score=${bestScore}, match=${bestPref?.code || bestPref?.canonical || bestPref?.human || ""})`
-      : `Cargo o materia no compatible (score=${bestScore})`
+      ? `Coincidencia por sigla: ${matches.join(", ")}`
+      : `Sin coincidencia por sigla. Oferta=[${offerCodes.join(", ")}] Prefs=[${prefCodes.join(", ")}]`
   };
 }
 __name(matchCargosMaterias, "matchCargosMaterias");
@@ -8137,21 +8128,20 @@ function mapTurnoAPD(turno) {
 __name(mapTurnoAPD, "mapTurnoAPD");
 function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   const distrito = matchDistritos(oferta, prefs);
-
   if (!distrito.ok) {
     return {
       match: false,
-      detalle: { distrito },
-      motivo: "distrito_no_coincide"
+      motivo: distrito.motivo || "Distrito no coincide",
+      detalle: { distrito }
     };
   }
 
-  const cargosMaterias = matchCargosMaterias(oferta, prefs);
-  if (!cargosMaterias.ok) {
+  const cargoMateria = matchCargosMaterias(oferta, prefs);
+  if (!cargoMateria.ok) {
     return {
       match: false,
-      detalle: { distrito, cargosMaterias },
-      motivo: "cargo_no_coincide"
+      motivo: cargoMateria.motivo || "Cargo o materia no coincide",
+      detalle: { distrito, cargoMateria }
     };
   }
 
@@ -8159,34 +8149,24 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   if (!turno.ok) {
     return {
       match: false,
-      detalle: { distrito, cargosMaterias, turno },
-      motivo: "turno_no_coincide"
+      motivo: turno.motivo || "Turno no coincide",
+      detalle: { distrito, cargoMateria, turno }
     };
   }
 
   const nivelModalidad = matchNivelModalidad(oferta, prefs);
-
-const esPreceptor = norm(
-  [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.area
-  ].filter(Boolean).join(" ")
-).includes("PRECEPTOR");
-
-if (!nivelModalidad.ok && !esPreceptor) {
-  return {
-    match: false,
-    detalle: { distrito, cargosMaterias, turno, nivelModalidad },
-    motivo: "nivel_no_coincide"
-  };
-}
+  if (!nivelModalidad.ok) {
+    return {
+      match: false,
+      motivo: nivelModalidad.motivo || "Nivel o modalidad no coincide",
+      detalle: { distrito, cargoMateria, turno, nivelModalidad }
+    };
+  }
 
   return {
     match: true,
-    detalle: { distrito, cargosMaterias, turno, nivelModalidad },
-    motivo: "ok"
+    motivo: "Coincide con preferencias",
+    detalle: { distrito, cargoMateria, turno, nivelModalidad }
   };
 }
 __name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
