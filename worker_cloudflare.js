@@ -7498,6 +7498,10 @@ function adaptarPreferenciasRow(row) {
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 function distritosPrefsAPD(prefs) {
   const raw = [
+    prefs?.distrito_principal,
+    ...(Array.isArray(prefs?.otros_distritos) ? prefs.otros_distritos : []),
+
+    // compatibilidad con formato viejo
     prefs?.distrito_1,
     prefs?.distrito_2,
     prefs?.distrito_3,
@@ -7513,7 +7517,41 @@ function distritosPrefsAPD(prefs) {
 }
 __name(distritosPrefsAPD, "distritosPrefsAPD");
 function cargosMateriasPrefsAPD(prefs) {
-  return unique([...prefs?.cargos_apd || [], ...prefs?.materias_apd || []]);
+  const raw = [
+    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
+    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
+  ].filter(Boolean);
+
+  const result = [];
+
+  for (const item of raw) {
+    const str = String(item || "").toUpperCase();
+
+    const match = str.match(/\(([A-Z0-9]+)\)/);
+
+    if (match) {
+      const code = match[1];
+
+      if (code === "PR") result.push("PRECEPTOR");
+      else if (code === "NTI" || code === "NTICX") result.push("NTICX");
+      else if (code === "CCD") result.push("CONSTRUCCION DE LA CIUDADANIA");
+      else if (code === "MTM") result.push("MATEMATICA");
+      else if (code === "MCS") result.push("MATEMATICA CICLO SUPERIOR");
+      else if (code === "ELI") result.push("ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO");
+
+      continue;
+    }
+
+    const limpio = norm(str);
+
+    if (limpio.includes("PRECEPTOR")) result.push("PRECEPTOR");
+    else if (limpio.includes("NTICX") || limpio.includes("NTI")) result.push("NTICX");
+    else if (limpio.includes("CIUDADANIA")) result.push("CONSTRUCCION DE LA CIUDADANIA");
+    else if (limpio.includes("MATEMATICA CICLO SUPERIOR")) result.push("MATEMATICA CICLO SUPERIOR");
+    else if (limpio.includes("MATEMATICA")) result.push("MATEMATICA");
+  }
+
+  return [...new Set(result)];
 }
 __name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 function turnosPrefs(prefs) {
