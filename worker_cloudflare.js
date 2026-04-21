@@ -6394,27 +6394,9 @@ async function cargarCatalogos(env) {
   };
 }
 __name(cargarCatalogos, "cargarCatalogos");
-function firstNonEmpty(...values) {
-  for (const v of values) {
-    const s = String(v || "").trim();
-    if (s) return s;
-  }
-  return "";
-}
+
 __name(firstNonEmpty, "firstNonEmpty");
 
-function splitCsvish(value) {
-  if (Array.isArray(value)) {
-    return value.map((x) => String(x || "").trim()).filter(Boolean);
-  }
-  const text = String(value || "").trim();
-  if (!text) return [];
-  return text
-    .split(/[,\n;|]+/g)
-    .map((x) => String(x || "").trim())
-    .filter(Boolean);
-}
-__name(splitCsvish, "splitCsvish");
 
 function simplifyNorm(value) {
   return norm(value)
@@ -6625,67 +6607,7 @@ function resolveCargoValue(input, cargoIndex) {
 }
 __name(resolveCargoValue, "resolveCargoValue");
 
-function buildMatchingContext(catalogos) {
-  const districtIndex = buildDistrictCatalogIndex(catalogos);
-  const cargoIndex = buildCargoCatalogIndex(catalogos);
-  return { districtIndex, cargoIndex };
-}
-__name(buildMatchingContext, "buildMatchingContext");
 
-function normalizeUserDistrictPrefs(prefs, catalogos) {
-  const ctx = buildMatchingContext(catalogos);
-  const raw = unique([
-    prefs?.distrito_principal_apd || "",
-    prefs?.distrito_principal || "",
-    ...(Array.isArray(prefs?.otros_distritos_apd) ? prefs.otros_distritos_apd : []),
-    ...(Array.isArray(prefs?.otros_distritos) ? prefs.otros_distritos : [])
-  ].filter(Boolean));
-
-  return unique(
-    raw
-      .map((x) => resolveDistrictValue(x, ctx.districtIndex))
-      .filter(Boolean)
-      .map((x) => x.canonical)
-      .filter(Boolean)
-  );
-}
-__name(normalizeUserDistrictPrefs, "normalizeUserDistrictPrefs");
-
-function normalizeUserCargoPrefs(prefs, catalogos) {
-  const ctx = buildMatchingContext(catalogos);
-  const raw = unique([
-    ...(Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : []),
-    ...(Array.isArray(prefs?.materias_apd) ? prefs.materias_apd : []),
-    ...(Array.isArray(prefs?.cargos) ? prefs.cargos : []),
-    ...(Array.isArray(prefs?.materias) ? prefs.materias : [])
-  ].filter(Boolean));
-
-  return raw
-    .map((x) => resolveCargoValue(x, ctx.cargoIndex))
-    .filter(Boolean);
-}
-__name(normalizeUserCargoPrefs, "normalizeUserCargoPrefs");
-
-function resolveOfferDistrict(oferta, catalogos) {
-  const ctx = buildMatchingContext(catalogos);
-  const raw = firstNonEmpty(oferta?.descdistrito, oferta?.distrito);
-  return resolveDistrictValue(raw, ctx.districtIndex);
-}
-__name(resolveOfferDistrict, "resolveOfferDistrict");
-
-function resolveOfferCargo(oferta, catalogos) {
-  const ctx = buildMatchingContext(catalogos);
-  const raw = [
-    oferta?.descripcioncargo,
-    oferta?.cargo,
-    oferta?.descripcionarea,
-    oferta?.materia,
-    oferta?.asignatura,
-    oferta?.descripcionmateria
-  ].filter(Boolean).join(" ");
-  return resolveCargoValue(raw, ctx.cargoIndex);
-}
-__name(resolveOfferCargo, "resolveOfferCargo");
 function canonicalPlanCode(code) {
   const key = String(code || "").trim().toUpperCase();
   if (!key) return "PLUS";
