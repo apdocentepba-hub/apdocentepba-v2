@@ -4138,43 +4138,249 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
     debug_users
   };
 }
+function getArgentinaDigestSlotInfo(input = Date.now()) {
+  const date = input instanceof Date ? input : new Date(input);
 
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  const map = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+
+  const year = String(map.year || "");
+  const month = String(map.month || "");
+  const day = String(map.day || "");
+  const hour = Number(map.hour || 0);
+  const minute = Number(map.minute || 0);
+
+  const slotHour = [14, 18, 22].includes(hour) ? hour : null;
+  const slotKey = slotHour != null
+    ? `${year}-${month}-${day}_${String(slotHour).padStart(2, "0")}`
+    : "";
+
+  return {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    slot_hour: slotHour,
+    slot_key: slotKey,
+    slot_date: `${year}-${month}-${day}`
+  };
+}
+__name(getArgentinaDigestSlotInfo, "getArgentinaDigestSlotInfo");
+
+function emailDigestCursorKey(slotKey) {
+  return `email:digest:cursor:${String(slotKey || "").trim()}`;
+}
+__name(emailDigestCursorKey, "emailDigestCursorKey");
+
+async function getEmailDigestCursor(env, slotKey) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !slotKey) {
+    return {
+  slot_key: String(slotKey || "").trim(),
+  offset: 0,
+  finished: false
+};
+    
+  }
+
+  const raw = await kv.get(emailDigestCursorKey(slotKey));
+  if (!raw) {
+    return {
+      slot_key: String(slotKey || "").trim(),
+      offset: 0,
+      finished: false
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      slot_key: String(parsed?.slot_key || slotKey || "").trim(),
+      offset: Number(parsed?.offset || 0),
+      finished: !!parsed?.finished,
+      updated_at: parsed?.updated_at || null
+    };
+  } catch {
+    return {
+      slot_key: String(slotKey || "").trim(),
+      offset: 0,
+      finished: false
+    };
+  }
+}
+__name(getEmailDigestCursor, "getEmailDigestCursor");
+
+async function saveEmailDigestCursor(env, slotKey, patch = {}) {
+  const kv = getChannelStateStore(env);
+  if (!kv || !slotKey) return null;
+
+  const current = await getEmailDigestCursor(env, slotKey);
+  const next = {
+    ...current,
+    ...patch,
+    slot_key: String(slotKey || "").trim(),
+    offset: Number(patch?.offset ?? current?.offset ?? 0),
+    finished: !!(patch?.finished ?? current?.finished),
+    updated_at: new Date().toISOString()
+  };
+
+  await kv.put(
+    emailDigestCursorKey(slotKey),
+    JSON.stringify(next),
+    { expirationTtl: 3 * 24 * 60 * 60 }
+  );
+
+  return next;
+}
+__name(saveEmailDigestCursor, "saveEmailDigestCursor");
+
+async function loadUsersMapByIds(env, userIds) {
+  const ids = unique(
+    (Array.isArray(userIds) ? userIds : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean)
+  );
+
+  const out = new Map();
+  if (!ids.length) return out;
+
+  for (let i = 0; i < ids.length; i += 40) {
+    const slice = ids.slice(i, i + 40);
+    const orFilter = slice
+      .map((id) => `id.eq.${encodeURIComponent(id)}`)
+      .join(",");
+
+    const rows = await supabaseSelect(
+      env,
+      `users?or=(${orFilter})&select=id,nombre,apellido,email,activo,celular,ultimo_login`
+    ).catch(() => []);
+
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const id = String(row?.id || "").trim();
+      if (id) out.set(id, row);
+    }
+  }
+
+  return out;
+}
+__name(loadUsersMapByIds, "loadUsersMapByIds");
+
+async function wasInitialDigestSentRecently(env, userId, nowInput, lookbackMinutes = 60) {
+  const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
+  const sinceIso = new Date(now.getTime() - lookbackMinutes * 60 * 1000).toISOString();
+
+  const rows = await supabaseSelect(
+    env,
+    `notification_delivery_logs?user_id=eq.${encodeURIComponent(userId)}&channel=eq.email&template_code=eq.apd_initial_digest&status=eq.sent_initial&created_at=gte.${encodeURIComponent(sinceIso)}&select=id&limit=1`
+  ).catch(() => []);
+
+  return Array.isArray(rows) && rows.length > 0;
+}
+__name(wasInitialDigestSentRecently, "wasInitialDigestSentRecently");
 async function runEmailAlertsQueueSweep(env, opts = {}) {
   const source = opts.source || "cron";
-  const maxUsers = clampInt(opts.max_users, 1, 200, 10);
+  const maxUsers = clampInt(
+    opts.max_users || env.EMAIL_DIGEST_BUILD_MAX_USERS_PER_RUN,
+    1,
+    200,
+    25
+  );
   const maxAlertsPerUser = clampInt(opts.max_alerts_per_user, 1, 5, 5);
   const targetUserId = String(opts.target_user_id || "").trim();
+  const nowInput = opts.now || Date.now();
+  const slotInfo = opts.slot_info || getArgentinaDigestSlotInfo(nowInput);
 
-  console.log("QUEUE SWEEP START");
+  console.log("QUEUE SWEEP START", JSON.stringify({
+    slot_key: slotInfo.slot_key || null,
+    slot_hour: slotInfo.slot_hour,
+    hour: slotInfo.hour,
+    minute: slotInfo.minute
+  }));
 
-  const prefRows = await supabaseSelect(
-    env,
-    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
-  ).catch((err) => {
-    console.log("QUEUE PREFS ERROR:", err?.message || err);
-    return [];
-  });
-
-  const baseRows = Array.isArray(prefRows) ? prefRows : [];
-  const rowsToProcess = targetUserId
-    ? baseRows.filter((row) => String(row?.user_id || "").trim() === targetUserId)
-    : baseRows.slice(0, maxUsers);
-
-  if (!rowsToProcess.length) {
-    console.log("QUEUE SWEEP: NO USERS");
+  if (!slotInfo.slot_hour || !slotInfo.slot_key) {
+    console.log("QUEUE SWEEP SKIPPED: NOT DIGEST SLOT");
     return {
       ok: true,
+      skipped: true,
+      reason: "not_digest_slot",
       processed_users: 0,
-      queued_alerts: 0,
+      queued_digests: 0,
       skipped_users: 0,
       source
     };
   }
 
-  console.log("QUEUE USERS:", rowsToProcess.length);
+  let cursor = {
+    slot_key: slotInfo.slot_key,
+    offset: 0,
+    finished: false
+  };
+
+  if (!targetUserId) {
+  cursor = {
+    slot_key: slotInfo.slot_key,
+    offset: 0,
+    finished: false
+  };
+}
+
+  let query =
+    `user_preferences?alertas_activas=is.true&alertas_email=is.true` +
+    `&select=user_id&order=user_id.asc&limit=${maxUsers}`;
+
+  if (targetUserId) {
+    query += `&user_id=eq.${encodeURIComponent(targetUserId)}`;
+  } else {
+    query += `&offset=${Number(cursor.offset || 0)}`;
+  }
+
+  const prefRows = await supabaseSelect(env, query).catch((err) => {
+    console.log("QUEUE PREFS ERROR:", err?.message || err);
+    return [];
+  });
+
+  const rowsToProcess = Array.isArray(prefRows) ? prefRows : [];
+
+  if (!rowsToProcess.length) {
+    if (!targetUserId) {
+      await saveEmailDigestCursor(env, slotInfo.slot_key, {
+        offset: 0,
+        finished: true
+      }).catch(() => null);
+    }
+
+    console.log("QUEUE SWEEP: NO USERS FOR CURRENT BATCH");
+    return {
+      ok: true,
+      processed_users: 0,
+      queued_digests: 0,
+      skipped_users: 0,
+      source,
+      slot_key: slotInfo.slot_key
+    };
+  }
+
+  const userIds = rowsToProcess
+    .map((row) => String(row?.user_id || "").trim())
+    .filter(Boolean);
+
+  const usersMap = await loadUsersMapByIds(env, userIds);
 
   let processedUsers = 0;
-  let queuedAlerts = 0;
+  let queuedDigests = 0;
   let skippedUsers = 0;
 
   for (const row of rowsToProcess) {
@@ -4183,23 +4389,47 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
 
     processedUsers += 1;
 
-    const user = await obtenerUsuario(env, userId).catch((err) => {
-      console.log("QUEUE USER READ ERROR:", userId, err?.message || err);
-      return null;
-    });
+    const user = usersMap.get(userId) || null;
+    console.log("QUEUE DEBUG USER", JSON.stringify({
+  user_id: userId,
+  has_user: !!user?.id,
+  activo: !!user?.activo,
+  has_email: !!String(user?.email || "").trim()
+}));
 
     if (!user?.id || !user?.activo || !String(user?.email || "").trim()) {
       skippedUsers += 1;
       continue;
     }
 
-    const alertData = await buildAlertResultsFallback(env, userId).catch((err) => {
+    const initialRecentlySent = await wasInitialDigestSentRecently(
+      env,
+      userId,
+      nowInput,
+      60
+    ).catch(() => false);
+    console.log("QUEUE DEBUG INITIAL", JSON.stringify({
+  user_id: userId,
+  initial_recently_sent: !!initialRecentlySent
+}));
+
+    if (initialRecentlySent) {
+      skippedUsers += 1;
+      continue;
+    }
+
+    const alertData = await construirAlertasParaUsuario(env, userId).catch((err) => {
       console.log("QUEUE BUILD ERROR:", userId, err?.message || err);
       return { ok: false, message: err?.message || "build_failed" };
     });
+    console.log("QUEUE DEBUG ALERT DATA", JSON.stringify({
+  user_id: userId,
+  ok: !!alertData?.ok,
+  resultados: Array.isArray(alertData?.resultados) ? alertData.resultados.length : null,
+  message: alertData?.message || null
+}));
 
     if (!alertData?.ok) {
-      console.log("QUEUE BUILD ERROR:", userId, alertData?.message || "build_failed");
       skippedUsers += 1;
       continue;
     }
@@ -4211,117 +4441,121 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
       continue;
     }
 
-    const recentSentKeys = await getRecentSentEmailAlertKeysForUser(env, userId).catch(() => new Set());
-    const pendingKeys = await loadPendingEmailAlertKeysForUser(env, userId).catch(() => new Set());
+    const sortedLatest = allItems
+      .slice()
+      .sort((a, b) => {
+        const ta =
+          parseFechaFlexible(
+            a?.raw?.ult_movimiento ||
+            a?.ult_movimiento ||
+            a?.raw?.finoferta ||
+            a?.finoferta ||
+            ""
+          )?.getTime() || 0;
 
-    const newItems = allItems.filter((item) => {
-      const key = buildEmailAlertKey(userId, item);
-      if (!key) return false;
-      if (recentSentKeys.has(key)) return false;
-      if (pendingKeys.has(key)) return false;
-      return true;
-    });
+        const tb =
+          parseFechaFlexible(
+            b?.raw?.ult_movimiento ||
+            b?.ult_movimiento ||
+            b?.raw?.finoferta ||
+            b?.finoferta ||
+            ""
+          )?.getTime() || 0;
 
-    if (!newItems.length) {
+        return tb - ta;
+      });
+
+    const visibleAlerts = sortedLatest
+      .slice(0, maxAlertsPerUser)
+      .map((item) => normalizeOfferPayload(item?.offer_payload || item || {}));
+      console.log("QUEUE DEBUG VISIBLE", JSON.stringify({
+  user_id: userId,
+  total_alerts: sortedLatest.length,
+  visible_alerts: visibleAlerts.length
+}));
+
+    const totalAlerts = sortedLatest.length;
+
+    if (!visibleAlerts.length) {
       skippedUsers += 1;
       continue;
     }
 
-    const totalNewAlerts = newItems.length;
-    const visibleItems = newItems.slice(0, maxAlertsPerUser);
+    const digestAlertKey = `DIGEST:${slotInfo.slot_key}`;
 
-    for (let i = 0; i < visibleItems.length; i += 1) {
-      const item = visibleItems[i];
-      const alertKey = buildEmailAlertKey(userId, item);
-      if (!alertKey) continue;
+    const payload = {
+      source,
+      slot_key: slotInfo.slot_key,
+      slot_date: slotInfo.slot_date,
+      slot_hour: slotInfo.slot_hour,
+      total_alerts: totalAlerts,
+      shown_alerts: visibleAlerts.length,
+      alerts: visibleAlerts,
+      cycle_mode: "scheduled_digest"
+    };
 
-      const canonicalAlert = normalizeOfferPayload(item?.offer_payload || item || {});
-      const payload = {
-        source,
-        total_alerts: totalNewAlerts,
-        shown_alerts: visibleItems.length,
-        alert_order: i + 1,
-        alert_key: alertKey,
-        alert: canonicalAlert
-      };
+    try {
+      await supabaseInsert(env, "pending_notifications", {
+        user_id: user.id,
+        channel: "email",
+        kind: "apd_digest",
+        alert_key: digestAlertKey,
+        payload,
+        status: "pending"
+      });
 
-      try {
-        await supabaseInsert(env, "pending_notifications", {
-          user_id: user.id,
-          channel: "email",
-          kind: "apd_alert",
-          alert_key: alertKey,
-          payload,
-          status: "pending"
-        });
-
-        await supabaseInsert(env, "notification_delivery_logs", {
-          user_id: user.id,
-          channel: "email",
-          template_code: "apd_email_alert",
-          destination: user.email,
-          status: "queued",
-          provider_message_id: null,
-          payload,
-          provider_response: {
-            message: `Alerta encolada para digest (${i + 1} de ${visibleItems.length}, total nuevas: ${totalNewAlerts})`
-          }
-        }).catch(() => null);
-
-        queuedAlerts += 1;
-      } catch (err) {
-        const msg = String(err?.message || "");
-
-        if (
-          msg.includes("23505") ||
-          msg.toLowerCase().includes("duplicate key") ||
-          msg.toLowerCase().includes("unique_alert_user") ||
-          msg.toLowerCase().includes("duplicate") ||
-          msg.toLowerCase().includes("unique")
-        ) {
-          await supabaseInsert(env, "notification_delivery_logs", {
-            user_id: user.id,
-            channel: "email",
-            template_code: "apd_email_alert",
-            destination: user.email,
-            status: "skipped_duplicate",
-            provider_message_id: null,
-            payload,
-            provider_response: {
-              message: "Alerta duplicada ignorada por constraint unique_alert_user"
-            }
-          }).catch(() => null);
-          continue;
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_digest_queue",
+        destination: user.email,
+        status: "queued_digest",
+        provider_message_id: null,
+        payload,
+        provider_response: {
+          message: `Digest encolado para slot ${slotInfo.slot_key}`
         }
+      }).catch(() => null);
 
-        console.log("QUEUE INSERT ERROR:", userId, alertKey, msg);
+      queuedDigests += 1;
+    } catch (err) {
+      const msg = String(err?.message || "");
 
-        await supabaseInsert(env, "notification_delivery_logs", {
-          user_id: user.id,
-          channel: "email",
-          template_code: "apd_email_alert",
-          destination: user.email,
-          status: "failed_enqueue",
-          provider_message_id: null,
-          payload,
-          provider_response: { message: msg || "Error al encolar alerta" }
-        }).catch(() => null);
+      if (
+        msg.includes("23505") ||
+        msg.toLowerCase().includes("duplicate key") ||
+        msg.toLowerCase().includes("unique_alert_user") ||
+        msg.toLowerCase().includes("duplicate") ||
+        msg.toLowerCase().includes("unique")
+      ) {
+        skippedUsers += 1;
+        continue;
       }
+
+      console.log("QUEUE INSERT ERROR:", userId, digestAlertKey, msg);
+      skippedUsers += 1;
     }
   }
 
+  if (!targetUserId) {
+  // Modo prueba: no guardamos cursor para no bloquear el slot
+}
+
   console.log("QUEUE SWEEP END", JSON.stringify({
     processed_users: processedUsers,
-    queued_alerts: queuedAlerts,
-    skipped_users: skippedUsers
+    queued_digests: queuedDigests,
+    skipped_users: skippedUsers,
+    slot_key: slotInfo.slot_key
   }));
 
   return {
     ok: true,
     processed_users: processedUsers,
-    queued_alerts: queuedAlerts,
+    queued_digests: queuedDigests,
     skipped_users: skippedUsers,
-    source
+    source,
+    slot_key: slotInfo.slot_key,
+    slot_hour: slotInfo.slot_hour
   };
 }
 __name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
@@ -8334,12 +8568,17 @@ function json(data, status = 200) {
 __name(json, "json");
 
 async function sendPendingEmailDigests(env, opts = {}) {
-  const maxRows = clampInt(opts.max_rows, 1, 500, 100);
+  const maxRows = clampInt(
+    opts.max_rows || env.EMAIL_DIGEST_SEND_BATCH_SIZE,
+    1,
+    500,
+    20
+  );
   const source = opts.source || "cron";
   const targetUserId = String(opts.target_user_id || "").trim();
 
   let query =
-    `pending_notifications?channel=eq.email&status=eq.pending` +
+    `pending_notifications?channel=eq.email&kind=eq.apd_digest&status=eq.pending` +
     `&select=id,user_id,alert_key,payload,created_at` +
     `&order=created_at.asc&limit=${maxRows}`;
 
@@ -8355,63 +8594,83 @@ async function sendPendingEmailDigests(env, opts = {}) {
   const pendingRows = Array.isArray(rows) ? rows : [];
 
   if (!pendingRows.length) {
-    console.log("NO HAY MAILS PENDIENTES");
+    console.log("NO HAY DIGESTS PENDIENTES");
     return {
       ok: true,
       processed_rows: 0,
       sent_digests: 0,
+      failed_digests: 0,
       source
     };
   }
 
-  console.log("DIGEST ROWS:", pendingRows.length);
+  const userIds = pendingRows
+    .map((row) => String(row?.user_id || "").trim())
+    .filter(Boolean);
 
-  const grouped = new Map();
-
-  for (const row of pendingRows) {
-    const userId = String(row?.user_id || "").trim();
-    if (!userId) continue;
-    if (!grouped.has(userId)) grouped.set(userId, []);
-    grouped.get(userId).push(row);
-  }
+  const usersMap = await loadUsersMapByIds(env, userIds);
 
   let sentDigests = 0;
+  let failedDigests = 0;
   let processedRows = 0;
 
-  for (const [userId, userRows] of grouped.entries()) {
-    const user = await obtenerUsuario(env, userId).catch((err) => {
-      console.log("DIGEST USER READ ERROR:", userId, err?.message || err);
-      return null;
-    });
+  for (const row of pendingRows) {
+    const rowId = String(row?.id || "").trim();
+    const userId = String(row?.user_id || "").trim();
+    const user = usersMap.get(userId) || null;
 
-    if (!user?.id || !String(user?.email || "").trim()) {
+    if (!rowId || !user?.id || !String(user?.email || "").trim()) {
+      if (rowId) {
+        await supabaseRequest(
+          env,
+          `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
+          {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ status: "failed" })
+          }
+        ).catch(() => null);
+      }
+      failedDigests += 1;
+      processedRows += 1;
       continue;
     }
 
-    const totalAlertsFromPayload = Math.max(
-      ...userRows.map((row) => Number(row?.payload?.total_alerts || 0)),
-      userRows.length
+    const payload = row?.payload || {};
+    const alertsRaw = Array.isArray(payload?.alerts) ? payload.alerts : [];
+    const totalAlerts = Math.max(
+      Number(payload?.total_alerts || 0),
+      alertsRaw.length
     );
 
-    const alertsRaw = userRows
-      .map((row) => row?.payload?.alert || null)
-      .filter(Boolean)
-      .slice(0, 5);
-
     if (!alertsRaw.length) {
+      await supabaseRequest(
+        env,
+        `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ status: "failed" })
+        }
+      ).catch(() => null);
+
+      failedDigests += 1;
+      processedRows += 1;
       continue;
     }
 
+    const visibleCount = Math.min(alertsRaw.length, 5);
+
     const html = buildDigestHtml(alertsRaw, user, {
-      total_alerts: totalAlertsFromPayload,
+      total_alerts: totalAlerts,
       max_visible: 5,
       panel_url: "https://alertasapd.com.ar"
     });
 
     const subject =
-      totalAlertsFromPayload > alertsRaw.length
-        ? `${alertsRaw.length} nuevas ofertas de ${totalAlertsFromPayload}`
-        : `${alertsRaw.length} nuevas ofertas APD`;
+      totalAlerts > visibleCount
+        ? `${visibleCount} nuevas ofertas de ${totalAlerts}`
+        : `${visibleCount} nuevas ofertas APD`;
 
     const send = await enviarMailBrevo(
       user.email,
@@ -8434,52 +8693,56 @@ async function sendPendingEmailDigests(env, opts = {}) {
       provider_message_id: null,
       payload: {
         source,
-        total_alerts: totalAlertsFromPayload,
-        alert_keys: userRows
-          .map((r) => String(r?.alert_key || "").trim())
-          .filter(Boolean)
+        slot_key: payload?.slot_key || null,
+        slot_date: payload?.slot_date || null,
+        slot_hour: payload?.slot_hour || null,
+        total_alerts: totalAlerts,
+        shown_alerts: visibleCount,
+        alert_key: String(row?.alert_key || "").trim() || null
       },
       provider_response: send || null
     }).catch(() => null);
 
+    await supabaseRequest(
+      env,
+      `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          status: send?.ok ? "sent" : "failed"
+        })
+      }
+    ).catch((err) => {
+      console.log("DIGEST PATCH ERROR:", rowId, err?.message || err);
+    });
+
     if (send?.ok) {
       sentDigests += 1;
-
-      for (const row of userRows) {
-        const rowId = String(row?.id || "").trim();
-        if (!rowId) continue;
-
-        await supabaseRequest(
-          env,
-          `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
-          {
-            method: "DELETE",
-            headers: { Prefer: "return=minimal" }
-          }
-        ).catch((err) => {
-          console.log("DIGEST DELETE ERROR:", rowId, err?.message || err);
-        });
-
-        processedRows += 1;
-      }
     } else {
+      failedDigests += 1;
       console.log("BREVO RESP:", send?.data || send);
     }
+
+    processedRows += 1;
   }
 
   console.log("DIGEST END", JSON.stringify({
     processed_rows: processedRows,
-    sent_digests: sentDigests
+    sent_digests: sentDigests,
+    failed_digests: failedDigests
   }));
 
   return {
     ok: true,
     processed_rows: processedRows,
     sent_digests: sentDigests,
+    failed_digests: failedDigests,
     source
   };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
+
 function buildDigestHtml(alerts, user, options = {}) {
   const panelUrl = String(options?.panel_url || "https://alertasapd.com.ar").trim();
 
@@ -10581,11 +10844,19 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
 
  async scheduled(event, env, ctx) {
   const cronExpr = String(event?.cron || "").trim();
+  const nowInput = event?.scheduledTime || Date.now();
+  const slotInfo = getArgentinaDigestSlotInfo(nowInput);
 
-  console.log("CRON scheduled() START", new Date(event?.scheduledTime || Date.now()).toISOString(), "cron=", cronExpr);
+  console.log(
+    "CRON scheduled() START",
+    new Date(nowInput).toISOString(),
+    "cron=",
+    cronExpr,
+    "slot=",
+    slotInfo.slot_key || "none"
+  );
 
-  const skipBackfill = cronExpr === "*/1 * * * *";
-
+const skipBackfill = true;
   if (!skipBackfill) {
     try {
       const backfillResult = await runProvinciaBackfillStep(env, {
@@ -10604,7 +10875,9 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
   try {
     const queueResult = await runEmailAlertsQueueSweep(env, {
       source: "cron",
-      max_users: 20,
+      now: nowInput,
+      slot_info: slotInfo,
+      max_users: 1,
       max_alerts_per_user: 5
     });
 
@@ -10616,7 +10889,8 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
   try {
     const digestResult = await sendPendingEmailDigests(env, {
       source: "cron",
-      max_rows: 100
+      max_rows: 5
+      
     });
 
     console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
