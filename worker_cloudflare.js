@@ -7681,7 +7681,9 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
       throw new Error(`ABC ERROR ${res.status}: ${txt}`);
     }
 
-    const data = await res.json().catch(() => ({}));
+    const buffer = await res.arrayBuffer();
+const rawText = new TextDecoder("iso-8859-1").decode(buffer);
+const data = JSON.parse(rawText || "{}");
     const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
 
     docsRaw.push(...pageDocs);
