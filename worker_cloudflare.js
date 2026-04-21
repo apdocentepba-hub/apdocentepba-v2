@@ -8334,11 +8334,9 @@ function json(data, status = 200) {
 __name(json, "json");
 
 async function sendPendingEmailDigests(env, opts = {}) {
-  const maxRows = clampInt(opts.max_rows, 1, 20, 5);
+  const maxRows = clampInt(opts.max_rows, 1, 500, 100);
   const source = opts.source || "cron";
-  const targetUserId = String(
-    opts.target_user_id || "3a300893-a552-43c2-9189-071ab4a23198"
-  ).trim();
+  const targetUserId = String(opts.target_user_id || "").trim();
 
   let query =
     `pending_notifications?channel=eq.email&status=eq.pending` +
@@ -8390,22 +8388,30 @@ async function sendPendingEmailDigests(env, opts = {}) {
       continue;
     }
 
+    const totalAlertsFromPayload = Math.max(
+      ...userRows.map((row) => Number(row?.payload?.total_alerts || 0)),
+      userRows.length
+    );
+
     const alertsRaw = userRows
       .map((row) => row?.payload?.alert || null)
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 5);
 
     if (!alertsRaw.length) {
       continue;
     }
 
     const html = buildDigestHtml(alertsRaw, user, {
-      total_alerts: alertsRaw.length,
-      max_visible: 3,
+      total_alerts: totalAlertsFromPayload,
+      max_visible: 5,
       panel_url: "https://alertasapd.com.ar"
     });
 
-    const subject = `${alertsRaw.length} nuevas ofertas APD`;
+    const subject =
+      totalAlertsFromPayload > alertsRaw.length
+        ? `${alertsRaw.length} nuevas ofertas de ${totalAlertsFromPayload}`
+        : `${alertsRaw.length} nuevas ofertas APD`;
 
     const send = await enviarMailBrevo(
       user.email,
@@ -8428,8 +8434,10 @@ async function sendPendingEmailDigests(env, opts = {}) {
       provider_message_id: null,
       payload: {
         source,
-        total_alerts: alertsRaw.length,
-        alert_keys: userRows.map((r) => String(r?.alert_key || "").trim()).filter(Boolean)
+        total_alerts: totalAlertsFromPayload,
+        alert_keys: userRows
+          .map((r) => String(r?.alert_key || "").trim())
+          .filter(Boolean)
       },
       provider_response: send || null
     }).catch(() => null);
@@ -10571,22 +10579,23 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
     return await worker_default.fetch(request, env, ctx);
   },
 
-  async scheduled(event, env, ctx) {
+ async scheduled(event, env, ctx) {
   const cronExpr = String(event?.cron || "").trim();
 
-  console.log("CRON scheduled() START", new Date(event?.scheduledTime || Date.now()).toISOString());
+  console.log("CRON scheduled() START", new Date(event?.scheduledTime || Date.now()).toISOString(), "cron=", cronExpr);
 
   const skipBackfill = cronExpr === "*/1 * * * *";
 
   if (!skipBackfill) {
     try {
-      await runProvinciaBackfillStep(env, {
+      const backfillResult = await runProvinciaBackfillStep(env, {
         source: "cron",
         max_pages: 1,
         max_rows_per_page: 30
       });
+      console.log("CRON BACKFILL OK", JSON.stringify(backfillResult || {}));
     } catch (err) {
-      console.log("CRON BACKFILL ERROR:", err);
+      console.log("CRON BACKFILL ERROR", err?.message || err);
     }
   } else {
     console.log("CRON BACKFILL SKIPPED FOR MAIL TEST");
@@ -10595,26 +10604,24 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
   try {
     const queueResult = await runEmailAlertsQueueSweep(env, {
       source: "cron",
-      max_users: 1,
-      max_alerts_per_user: 5,
-      target_user_id: "3a300893-a552-43c2-9189-071ab4a23198"
+      max_users: 20,
+      max_alerts_per_user: 5
     });
 
     console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
   } catch (err) {
-    console.log("CRON EMAIL QUEUE ERROR", err);
+    console.log("CRON EMAIL QUEUE ERROR", err?.message || err);
   }
 
   try {
     const digestResult = await sendPendingEmailDigests(env, {
       source: "cron",
-      max_rows: 5,
-      target_user_id: "3a300893-a552-43c2-9189-071ab4a23198"
+      max_rows: 100
     });
 
     console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
   } catch (err) {
-    console.log("CRON EMAIL DIGEST ERROR", err);
+    console.log("CRON EMAIL DIGEST ERROR", err?.message || err);
   }
 }
 };
