@@ -8225,8 +8225,6 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   };
 }
 __name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
-
-
 function historicoRowToOferta(row) {
   return { descdistrito: row?.distrito || "", descripcioncargo: row?.cargo || "", descripcionarea: row?.area || "", turno: row?.turno || "", descnivelmodalidad: row?.nivel_modalidad || "" };
 }
