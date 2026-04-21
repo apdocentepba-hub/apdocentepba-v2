@@ -7038,6 +7038,7 @@ function cargoTextOferta(oferta) {
     oferta?.descripcionmateria
   ].filter(Boolean).join(" "));
 }
+// ===== MATCHING NUEVO CANONICO =====
 function pickFirstNonEmpty(...values) {
   for (const v of values) {
     const s = String(v || "").trim();
@@ -8352,6 +8353,7 @@ function normalizeText2(v) {
   return String(v || "").trim();
 }
 __name(normalizeText2, "normalizeText");
+// ===== HOTFIX LEGACY / NO TOCAR SIN REVISAR REFERENCIAS =====
 function norm2(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s/().,-]/gu, " ").replace(/\s+/g, " ").trim();
 }
