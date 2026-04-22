@@ -5578,30 +5578,30 @@ async function construirAlertasParaUsuario(env, userId) {
     }
 
     const estado = String(
-  oferta?.estado ||
-  oferta?.estado_oferta ||
-  oferta?.estado_actual ||
-  ""
-).trim().toUpperCase();
+      oferta?.estado ||
+      oferta?.estado_oferta ||
+      oferta?.estado_actual ||
+      ""
+    ).trim().toUpperCase();
 
-if (!estadoOfertaEsPublicada(oferta)) {
-  descartadas.push({
-    iddetalle: oferta.iddetalle || oferta.id || null,
-    motivo: "estado_no_publicada",
-    estado
-  });
-  continue;
-}
+    if (!estadoOfertaEsPublicada(oferta)) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "estado_no_publicada",
+        estado
+      });
+      continue;
+    }
 
-if (!ofertaSigueVigenteParaAlerta(oferta)) {
-  descartadas.push({
-    iddetalle: oferta.iddetalle || oferta.id || null,
-    motivo: "fecha_vencida",
-    cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
-    estado
-  });
-  continue;
-}
+    if (!ofertaSigueVigenteParaAlerta(oferta)) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "fecha_vencida",
+        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
+        estado
+      });
+      continue;
+    }
 
     const clave = [
       buildSourceOfferKeyFromOferta(oferta),
@@ -8070,41 +8070,25 @@ function escaparSolr(text) {
   return String(text || "").replace(/(["\\])/g, "\\$1");
 }
 __name(escaparSolr, "escaparSolr");
-function estadoOfertaEsPublicada(oferta) {
-  const estado = String(
+
+
+
+function ofertaEsVisibleParaAlerta(oferta) {
+  const estado = norm(
     oferta?.estado ||
     oferta?.estado_oferta ||
     oferta?.estado_actual ||
     ""
-  ).trim().toUpperCase();
-
-  return estado === "PUBLICADA";
-}
-
-function ofertaSigueVigenteParaAlerta(oferta) {
-  const cierre = parseFechaFlexible(
-    oferta?.finoferta ||
-    oferta?.fecha_cierre ||
-    oferta?.fecha_cierre_raw ||
-    oferta?.cierre ||
-    ""
   );
 
-  if (!cierre) {
-    return true;
-  }
-
-  return cierre.getTime() >= Date.now();
-}
-
-function ofertaEsVisibleParaAlerta(oferta) {
-  const estado = norm(oferta?.estado || "");
-  const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
-  const ahora = Date.now();
   if (estado.includes("ANULADA")) return false;
   if (estado.includes("DESIGNADA")) return false;
-  if (fin && fin < ahora - 48 * 60 * 60 * 1000) return false;
-  return true;
+  if (estado.includes("DESIERTA")) return false;
+  if (estado.includes("CERRADA")) return false;
+  if (estado.includes("FINALIZADA")) return false;
+  if (estado.includes("NO VIGENTE")) return false;
+
+  return ofertaSigueVigenteParaAlerta(oferta);
 }
 
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
@@ -8567,6 +8551,58 @@ function sortHistoricoDesc(a, b) {
   return tb - ta;
 }
 __name(sortHistoricoDesc, "sortHistoricoDesc");
+function parseFechaCierreFinDeDia(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const soloFecha = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (soloFecha) {
+    const [, yyyy, mm, dd] = soloFecha;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+  }
+
+  const fechaHoraIso = raw.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (fechaHoraIso) {
+    const [, yyyy, mm, dd] = fechaHoraIso;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+  }
+
+  const fechaArg = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (fechaArg) {
+    const [, dd, mm, yyyy] = fechaArg;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+  }
+
+  const d = parseFechaFlexible(raw);
+  if (!d) return null;
+
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+function ofertaSigueVigenteParaAlerta(oferta) {
+  const cierre = parseFechaCierreFinDeDia(
+    oferta?.finoferta ||
+    oferta?.fecha_cierre ||
+    oferta?.fecha_cierre_raw ||
+    oferta?.cierre ||
+    ""
+  );
+
+  if (!cierre) return true;
+
+  return cierre.getTime() >= Date.now();
+}
+
+function estadoOfertaEsPublicada(oferta) {
+  const estado = String(
+    oferta?.estado ||
+    oferta?.estado_oferta ||
+    oferta?.estado_actual ||
+    ""
+  ).trim().toUpperCase();
+
+  return estado === "PUBLICADA";
+}
 function parseFechaFlexible(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
