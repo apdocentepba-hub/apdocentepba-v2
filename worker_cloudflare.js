@@ -5541,55 +5541,43 @@ async function buildHistoricoCaptureRows(oferta, capturedAt, includePostulantes)
 }
 __name(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
 async function construirAlertasParaUsuario(env, userId) {
-  const user = await getUserById(env, userId);
-  if (!user) {
-    return {
-      ok: false,
-      error: "Usuario no encontrado"
-    };
-  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) return { ok: false, message: "Usuario no encontrado" };
+  if (!user.activo) return { ok: false, message: "Usuario inactivo" };
 
-  const prefs = await getUserPreferences(env, userId);
-  if (!prefs) {
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs || !prefs.alertas_activas) {
     return {
-      ok: false,
-      error: "Preferencias no encontradas"
+      ok: true,
+      user,
+      preferencias_originales: prefs,
+      preferencias_canonizadas: prefs,
+      total_fuente: 0,
+      total: 0,
+      descartadas_total: 0,
+      descartadas_preview: [],
+      debug_distritos: [],
+      resultados: []
     };
   }
 
   const catalogos = await cargarCatalogos(env);
-  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
-  const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
+const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
 
-  // PID solo para plan INSIGNE
-  const resolvedPlan = await resolverPlanUsuario(env, userId).catch(() => null);
-  const planCode = String(
-    resolvedPlan?.plan?.code ||
-    resolvedPlan?.subscription?.plan_code ||
-    user?.plan_code ||
-    user?.plan ||
-    ""
-  ).trim().toUpperCase();
+const pidData = await obtenerUltimaPidGuardada(userId).catch(() => null);
+const pidRows = normalizePidRows(pidData);
+const districtIndex = buildDistrictIndex(catalogos);
+const pidMeta = pidData?.result
+  ? {
+      listado: pidData.result.listado || "",
+      anio: pidData.result.anio || ""
+    }
+  : null;
 
-  const pidEnabled = planCode === "INSIGNE";
-
-  const pidData = pidEnabled
-    ? await obtenerUltimaPidGuardada(userId).catch(() => null)
-    : null;
-
-  const pidRows = pidEnabled ? normalizePidRows(pidData) : [];
-  const districtIndex = pidEnabled ? buildDistrictIndex(catalogos) : new Map();
-
-  const pidMeta = pidEnabled && pidData?.result
-    ? {
-        listado: pidData.result.listado || "",
-        anio: pidData.result.anio || ""
-      }
-    : null;
-
-  const resultados = [];
-  const descartadas = [];
-  const vistos = new Set();
+const resultados = [];
+const descartadas = [];
+const vistos = new Set();
 
   for (const oferta of ofertas) {
     if (!ofertaEsVisibleParaAlerta(oferta)) {
@@ -5616,6 +5604,8 @@ async function construirAlertasParaUsuario(env, userId) {
       continue;
     }
 
+    
+
     const clave = [
       buildSourceOfferKeyFromOferta(oferta),
       String(oferta?.cargo || "").trim().toUpperCase(),
@@ -5627,25 +5617,30 @@ async function construirAlertasParaUsuario(env, userId) {
     if (vistos.has(clave)) continue;
     vistos.add(clave);
 
-    const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+  const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
 
-    const pidInfo = pidEnabled
-      ? {
-          ...evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex),
-          meta: pidMeta
-        }
-      : null;
+const pidEvalBase = evaluatePidCompatibility(
+  oferta,
+  pidData,
+  pidRows,
+  districtIndex
+);
 
-    const item = buildAlertItem(oferta, evaluacion, pidInfo);
+const pidInfo = {
+  ...pidEvalBase,
+  meta: pidMeta
+};
 
-    if (evaluacion.match) {
-      resultados.push(item);
-    } else {
-      descartadas.push({
-        ...item,
-        motivo: "no_coincide_preferencias"
-      });
-    }
+const item = buildAlertItem(oferta, evaluacion, pidInfo);
+
+if (evaluacion.match) {
+  resultados.push(item);
+} else {
+  descartadas.push({
+    ...item,
+    motivo: "no_coincide_preferencias"
+  });
+}
   }
 
   resultados.sort((a, b) => {
@@ -8094,7 +8089,23 @@ __name(escaparSolr, "escaparSolr");
 
 
 
+function ofertaEsVisibleParaAlerta(oferta) {
+  const estado = norm(
+    oferta?.estado ||
+    oferta?.estado_oferta ||
+    oferta?.estado_actual ||
+    ""
+  );
 
+  if (estado.includes("ANULADA")) return false;
+  if (estado.includes("DESIGNADA")) return false;
+  if (estado.includes("DESIERTA")) return false;
+  if (estado.includes("CERRADA")) return false;
+  if (estado.includes("FINALIZADA")) return false;
+  if (estado.includes("NO VIGENTE")) return false;
+
+  return true;
+}
 
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 function ofertaEsVisibleParaHistoricoUsuario(oferta) {
@@ -8584,21 +8595,7 @@ function parseFechaCierreFinDeDia(value) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
-function ofertaEsVisibleParaAlerta(oferta) {
-  const estado = norm(
-    oferta?.estado ||
-    oferta?.estado_oferta ||
-    oferta?.estado_actual ||
-    ""
-  );
-
-  if (estado.includes("ANULADA")) return false;
-  if (estado.includes("DESIGNADA")) return false;
-  if (estado.includes("DESIERTA")) return false;
-  if (estado.includes("CERRADA")) return false;
-  if (estado.includes("FINALIZADA")) return false;
-  if (estado.includes("NO VIGENTE")) return false;
-
+function ofertaSigueVigenteParaAlerta(oferta) {
   return true;
 }
 
