@@ -1943,6 +1943,294 @@ async function syncUserOfferState(env, userId, offers) {
   };
 }
 __name(syncUserOfferState, "syncUserOfferState");
+function audNorm(v) {
+  return String(v || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+__name(audNorm, "audNorm");
+
+function audExtraerSiglaParentesis(txt) {
+  const m = String(txt || "").match(/\(([^)]+)\)/);
+  return m ? audNorm(m[1]) : "";
+}
+__name(audExtraerSiglaParentesis, "audExtraerSiglaParentesis");
+
+function audNormalizarTurno(turno) {
+  const t = audNorm(turno);
+  if (!t) return "";
+  if (t === "M" || t === "MANANA") return "MANANA";
+  if (t === "T" || t === "TARDE") return "TARDE";
+  if (t === "V" || t === "N" || t === "VESPERTINO" || t === "NOCHE" || t === "NOCTURNO") return "NOCHE";
+  if (t === "ALTERNADO") return "ALTERNADO";
+  return t;
+}
+__name(audNormalizarTurno, "audNormalizarTurno");
+
+function audNormalizarOfertaAPD(doc) {
+  return {
+    id: String(doc?.iddetalle || doc?.idoferta || doc?.id || "").trim(),
+    distrito: String(doc?.descdistrito || "").trim(),
+    distrito_norm: audNorm(doc?.descdistrito || ""),
+    cargo: String(doc?.descripcioncargo || doc?.cargo || "").trim(),
+    cargo_norm: audNorm(doc?.descripcioncargo || doc?.cargo || ""),
+    cargo_sigla: audExtraerSiglaParentesis(doc?.descripcioncargo || doc?.cargo || ""),
+    nivel: String(doc?.descnivelmodalidad || "").trim(),
+    nivel_norm: audNorm(doc?.descnivelmodalidad || ""),
+    turno: String(doc?.turno || "").trim(),
+    turno_norm: audNormalizarTurno(doc?.turno || ""),
+    finoferta: String(doc?.finoferta || doc?.finoferta_label || "").trim(),
+    estado: String(doc?.estado || "").trim(),
+    raw: doc
+  };
+}
+__name(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
+
+function audOfertaActiva(oferta) {
+  const estado = audNorm(oferta?.estado || "");
+  const cargo = audNorm(oferta?.cargo || "");
+  const nivel = audNorm(oferta?.nivel || "");
+  if (estado.includes("ANULAD")) return false;
+  if (estado.includes("DESIGNAD")) return false;
+  if (cargo.includes("ANULAD")) return false;
+  if (cargo.includes("DESIGNAD")) return false;
+  if (nivel.includes("ANULAD")) return false;
+  if (nivel.includes("DESIGNAD")) return false;
+  return true;
+}
+__name(audOfertaActiva, "audOfertaActiva");
+
+async function audFetchAPDPage(start = 0, rows = 100, distrito = "") {
+  const base = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
+  const url = new URL(base);
+  url.searchParams.set("wt", "json");
+  url.searchParams.set("rows", String(rows));
+  url.searchParams.set("start", String(start));
+  url.searchParams.set("q", distrito ? `descdistrito:"${distrito}"` : "*:*");
+
+  const resp = await fetchConReintentos(
+    url.toString(),
+    {
+      method: "GET",
+      headers: { Accept: "application/json, text/plain, */*" }
+    },
+    3,
+    25000
+  );
+
+  const data = await resp.json();
+  return {
+    docs: Array.isArray(data?.response?.docs) ? data.response.docs : [],
+    numFound: Number(data?.response?.numFound || 0)
+  };
+}
+__name(audFetchAPDPage, "audFetchAPDPage");
+
+async function audObtenerOfertasBaseAPD(distrito = "") {
+  const rows = 100;
+  let start = 0;
+  let total = 0;
+  const acumuladas = [];
+
+  do {
+    const page = await audFetchAPDPage(start, rows, distrito);
+    total = page.numFound;
+    acumuladas.push(...page.docs);
+    start += rows;
+  } while (start < total);
+
+  const map = new Map();
+  for (const doc of acumuladas) {
+    const of = audNormalizarOfertaAPD(doc);
+    if (!of.id) continue;
+    if (!audOfertaActiva(of)) continue;
+    if (!map.has(of.id)) map.set(of.id, of);
+  }
+  return [...map.values()];
+}
+__name(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
+
+function audFiltrarPorDistrito(ofertas, distritoBuscado) {
+  const d = audNorm(distritoBuscado);
+  return (ofertas || []).filter((of) => of.distrito_norm === d);
+}
+__name(audFiltrarPorDistrito, "audFiltrarPorDistrito");
+
+function audMatchCargo(oferta, preferenciaCargo) {
+  const prefNorm = audNorm(preferenciaCargo);
+  if (!prefNorm) return true;
+  const siglaPref = audExtraerSiglaParentesis(preferenciaCargo);
+  if (siglaPref) return oferta.cargo_sigla === siglaPref;
+  return oferta.cargo_norm.includes(prefNorm);
+}
+__name(audMatchCargo, "audMatchCargo");
+
+function audMatchNivel(oferta, preferenciaNivel) {
+  const n = audNorm(preferenciaNivel);
+  if (!n) return true;
+  return oferta.nivel_norm.includes(n);
+}
+__name(audMatchNivel, "audMatchNivel");
+
+function audMatchTurno(oferta, preferenciaTurno) {
+  const t = audNormalizarTurno(preferenciaTurno);
+  if (!t) return true;
+  return oferta.turno_norm === t;
+}
+__name(audMatchTurno, "audMatchTurno");
+
+function audEvaluarOfertaPasoAPaso(oferta, pref) {
+  const distritoOk = !pref.distrito || oferta.distrito_norm === audNorm(pref.distrito);
+  if (!distritoOk) {
+    return {
+      id: oferta.id,
+      distrito: oferta.distrito,
+      cargo: oferta.cargo,
+      nivel: oferta.nivel,
+      turno: oferta.turno,
+      paso_fallado: "distrito",
+      pasaFinal: false
+    };
+  }
+
+  const cargoOk = audMatchCargo(oferta, pref.cargo);
+  if (!cargoOk) {
+    return {
+      id: oferta.id,
+      distrito: oferta.distrito,
+      cargo: oferta.cargo,
+      nivel: oferta.nivel,
+      turno: oferta.turno,
+      paso_fallado: "cargo",
+      pasaFinal: false
+    };
+  }
+
+  const nivelOk = audMatchNivel(oferta, pref.nivel);
+  if (!nivelOk) {
+    return {
+      id: oferta.id,
+      distrito: oferta.distrito,
+      cargo: oferta.cargo,
+      nivel: oferta.nivel,
+      turno: oferta.turno,
+      paso_fallado: "nivel",
+      pasaFinal: false
+    };
+  }
+
+  const turnoOk = audMatchTurno(oferta, pref.turno);
+  if (!turnoOk) {
+    return {
+      id: oferta.id,
+      distrito: oferta.distrito,
+      cargo: oferta.cargo,
+      nivel: oferta.nivel,
+      turno: oferta.turno,
+      paso_fallado: "turno",
+      pasaFinal: false
+    };
+  }
+
+  return {
+    id: oferta.id,
+    distrito: oferta.distrito,
+    cargo: oferta.cargo,
+    nivel: oferta.nivel,
+    turno: oferta.turno,
+    paso_fallado: "",
+    pasaFinal: true
+  };
+}
+__name(audEvaluarOfertaPasoAPaso, "audEvaluarOfertaPasoAPaso");
+
+function audResumenDistrito(items, totalBase, distrito) {
+  return {
+    distrito,
+    total_base: totalBase,
+    total_resultado: items.length,
+    cargos_unicos: [...new Set(items.map((x) => x.cargo).filter(Boolean))].sort(),
+    niveles_unicos: [...new Set(items.map((x) => x.nivel).filter(Boolean))].sort(),
+    turnos_unicos: [...new Set(items.map((x) => x.turno).filter(Boolean))].sort(),
+    ids_unicos: [...new Set(items.map((x) => x.id).filter(Boolean))].length
+  };
+}
+__name(audResumenDistrito, "audResumenDistrito");
+
+function audResumenComparacion(evaluadas) {
+  return {
+    total_evaluadas: evaluadas.length,
+    pasan_final: evaluadas.filter((x) => x.pasaFinal).length,
+    descartadas_distrito: evaluadas.filter((x) => x.paso_fallado === "distrito").length,
+    descartadas_cargo: evaluadas.filter((x) => x.paso_fallado === "cargo").length,
+    descartadas_nivel: evaluadas.filter((x) => x.paso_fallado === "nivel").length,
+    descartadas_turno: evaluadas.filter((x) => x.paso_fallado === "turno").length
+  };
+}
+__name(audResumenComparacion, "audResumenComparacion");
+
+async function handleAdminAuditoriaDistrito(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+
+  const url = new URL(request.url);
+  const distrito = String(url.searchParams.get("distrito") || "").trim();
+  if (!distrito) {
+    return adminJson({ ok: false, error: "Falta distrito" }, 400);
+  }
+
+  const ofertasBase = await audObtenerOfertasBaseAPD(distrito);
+  const items = audFiltrarPorDistrito(ofertasBase, distrito);
+
+  return adminJson({
+    ok: true,
+    resumen: audResumenDistrito(items, ofertasBase.length, distrito),
+    items: items.map((x) => ({
+      id: x.id,
+      distrito: x.distrito,
+      cargo: x.cargo,
+      nivel: x.nivel,
+      turno: x.turno,
+      finoferta: x.finoferta
+    }))
+  });
+}
+__name(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
+
+async function handleAdminCompararFiltro(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+
+  const url = new URL(request.url);
+  const distrito = String(url.searchParams.get("distrito") || "").trim();
+  const cargo = String(url.searchParams.get("cargo") || "").trim();
+  const nivel = String(url.searchParams.get("nivel") || "").trim();
+  const turno = String(url.searchParams.get("turno") || "").trim();
+
+  if (!distrito) {
+    return adminJson({ ok: false, error: "Falta distrito" }, 400);
+  }
+
+  const ofertasBase = await audObtenerOfertasBaseAPD(distrito);
+  const universo = audFiltrarPorDistrito(ofertasBase, distrito);
+
+  const pref = { distrito, cargo, nivel, turno };
+  const evaluadas = universo.map((of) => audEvaluarOfertaPasoAPaso(of, pref));
+
+  return adminJson({
+    ok: true,
+    pref,
+    resumen_universo: audResumenDistrito(universo, ofertasBase.length, distrito),
+    resumen_comparacion: audResumenComparacion(evaluadas),
+    final: evaluadas.filter((x) => x.pasaFinal),
+    descartadas: evaluadas.filter((x) => !x.pasaFinal)
+  });
+}
+__name(handleAdminCompararFiltro, "handleAdminCompararFiltro");
 var worker_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -2097,6 +2385,13 @@ if (path === `${API_URL_PREFIX2}/subscription/cancel` && request.method === "POS
       if (path === `${API_URL_PREFIX2}/admin/alertas` && request.method === "GET") {
         return await handleAdminAlertas(request, env);
       }
+      if (path === `${API_URL_PREFIX2}/admin/auditoria-distrito` && request.method === "GET") {
+  return await handleAdminAuditoriaDistrito(request, env);
+}
+
+if (path === `${API_URL_PREFIX2}/admin/comparar-filtro` && request.method === "GET") {
+  return await handleAdminCompararFiltro(request, env);
+}
       return json({ ok: false, error: "Ruta no encontrada" }, 404);
     } catch (err) {
       return json({ ok: false, error: err?.message || "Error interno" }, 500);
