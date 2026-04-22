@@ -5541,29 +5541,51 @@ async function buildHistoricoCaptureRows(oferta, capturedAt, includePostulantes)
 }
 __name(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
 async function construirAlertasParaUsuario(env, userId) {
-  const user = await obtenerUsuario(env, userId);
-  if (!user) return { ok: false, message: "Usuario no encontrado" };
-  if (!user.activo) return { ok: false, message: "Usuario inactivo" };
-
-  const prefs = await obtenerPreferenciasUsuario(env, userId);
-  if (!prefs || !prefs.alertas_activas) {
+  const user = await getUserById(env, userId);
+  if (!user) {
     return {
-      ok: true,
-      user,
-      preferencias_originales: prefs,
-      preferencias_canonizadas: prefs,
-      total_fuente: 0,
-      total: 0,
-      descartadas_total: 0,
-      descartadas_preview: [],
-      debug_distritos: [],
-      resultados: []
+      ok: false,
+      error: "Usuario no encontrado"
+    };
+  }
+
+  const prefs = await getUserPreferences(env, userId);
+  if (!prefs) {
+    return {
+      ok: false,
+      error: "Preferencias no encontradas"
     };
   }
 
   const catalogos = await cargarCatalogos(env);
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
+
+  // PID solo para plan INSIGNE
+  const resolvedPlan = await resolverPlanUsuario(env, userId).catch(() => null);
+  const planCode = String(
+    resolvedPlan?.plan?.code ||
+    resolvedPlan?.subscription?.plan_code ||
+    user?.plan_code ||
+    user?.plan ||
+    ""
+  ).trim().toUpperCase();
+
+  const pidEnabled = planCode === "INSIGNE";
+
+  const pidData = pidEnabled
+    ? await obtenerUltimaPidGuardada(userId).catch(() => null)
+    : null;
+
+  const pidRows = pidEnabled ? normalizePidRows(pidData) : [];
+  const districtIndex = pidEnabled ? buildDistrictIndex(catalogos) : new Map();
+
+  const pidMeta = pidEnabled && pidData?.result
+    ? {
+        listado: pidData.result.listado || "",
+        anio: pidData.result.anio || ""
+      }
+    : null;
 
   const resultados = [];
   const descartadas = [];
@@ -5594,8 +5616,6 @@ async function construirAlertasParaUsuario(env, userId) {
       continue;
     }
 
-    
-
     const clave = [
       buildSourceOfferKeyFromOferta(oferta),
       String(oferta?.cargo || "").trim().toUpperCase(),
@@ -5608,7 +5628,15 @@ async function construirAlertasParaUsuario(env, userId) {
     vistos.add(clave);
 
     const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
-    const item = buildAlertItem(oferta, evaluacion);
+
+    const pidInfo = pidEnabled
+      ? {
+          ...evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex),
+          meta: pidMeta
+        }
+      : null;
+
+    const item = buildAlertItem(oferta, evaluacion, pidInfo);
 
     if (evaluacion.match) {
       resultados.push(item);
@@ -8066,23 +8094,7 @@ __name(escaparSolr, "escaparSolr");
 
 
 
-function ofertaEsVisibleParaAlerta(oferta) {
-  const estado = norm(
-    oferta?.estado ||
-    oferta?.estado_oferta ||
-    oferta?.estado_actual ||
-    ""
-  );
 
-  if (estado.includes("ANULADA")) return false;
-  if (estado.includes("DESIGNADA")) return false;
-  if (estado.includes("DESIERTA")) return false;
-  if (estado.includes("CERRADA")) return false;
-  if (estado.includes("FINALIZADA")) return false;
-  if (estado.includes("NO VIGENTE")) return false;
-
-  return true;
-}
 
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 function ofertaEsVisibleParaHistoricoUsuario(oferta) {
@@ -8572,7 +8584,21 @@ function parseFechaCierreFinDeDia(value) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
-function ofertaSigueVigenteParaAlerta(oferta) {
+function ofertaEsVisibleParaAlerta(oferta) {
+  const estado = norm(
+    oferta?.estado ||
+    oferta?.estado_oferta ||
+    oferta?.estado_actual ||
+    ""
+  );
+
+  if (estado.includes("ANULADA")) return false;
+  if (estado.includes("DESIGNADA")) return false;
+  if (estado.includes("DESIERTA")) return false;
+  if (estado.includes("CERRADA")) return false;
+  if (estado.includes("FINALIZADA")) return false;
+  if (estado.includes("NO VIGENTE")) return false;
+
   return true;
 }
 
@@ -11345,29 +11371,36 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
   },
 
 async scheduled(event, env, ctx) {
-  const cronExpr = String(event?.cron || "").trim();
-  const nowInput = event?.scheduledTime || Date.now();
+  const slot = getArgentinaDigestSlotInfo(event?.scheduledTime || Date.now());
 
-  console.log(
-    "CRON scheduled() START",
-    new Date(nowInput).toISOString(),
-    "cron=",
-    cronExpr
-  );
-
-  // Backfill provincial desactivado por ahora para no mezclar
-  // con las pruebas de mail.
-  console.log("CRON BACKFILL SKIPPED");
-
-  try {
-    const digestResult = await sendPendingEmailDigests(env, {
-      source: "cron"
-    });
-
-    console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
-  } catch (err) {
-    console.log("CRON EMAIL DIGEST ERROR", err?.message || err);
+  if (!slot.slot_hour || !slot.slot_key) {
+    console.log("CRON fuera de franja, no envia nada");
+    return;
   }
+
+  const kv = getChannelStateStore(env);
+  if (!kv) {
+    console.log("Sin KV de estado, no envio para evitar duplicados");
+    return;
+  }
+
+  const lockKey = `email:sent:${slot.slot_key}`;
+  const alreadySent = await kv.get(lockKey);
+  if (alreadySent) {
+    console.log("Ya enviado en esta franja:", slot.slot_key);
+    return;
+  }
+
+  const result = await runEmailAlertsSweep(env, {
+    source: "cron_slot",
+    max_users: 200
+  });
+
+  await kv.put(lockKey, new Date().toISOString(), {
+    expirationTtl: 60 * 60 * 8
+  });
+
+  console.log("CRON EMAIL SWEEP RESULT", JSON.stringify(result || {}));
 }
 };
 
