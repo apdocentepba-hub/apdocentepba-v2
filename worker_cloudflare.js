@@ -8701,15 +8701,25 @@ async function sendPendingEmailDigests(env, options = {}) {
     if (!Array.isArray(rows) || !rows.length) continue;
 
     const nuevas = rows
-      .filter(x => !x.first_emailed_at)
-      .sort((a, b) => {
-        const ta = parseFechaFlexible(a?.last_seen_at)?.getTime() || 0;
-        const tb = parseFechaFlexible(b?.last_seen_at)?.getTime() || 0;
-        return tb - ta;
-      })
-      .slice(0, 5);
+  .filter(x => x && x.is_active !== false)
+  .sort((a, b) => {
+    const tb =
+      parseFechaFlexible(b?.last_seen_at)?.getTime() ||
+      parseFechaFlexible(b?.updated_at)?.getTime() ||
+      parseFechaFlexible(b?.created_at)?.getTime() ||
+      0;
 
-    if (!nuevas.length) continue;
+    const ta =
+      parseFechaFlexible(a?.last_seen_at)?.getTime() ||
+      parseFechaFlexible(a?.updated_at)?.getTime() ||
+      parseFechaFlexible(a?.created_at)?.getTime() ||
+      0;
+
+    return tb - ta;
+  })
+  .slice(0, 5);
+
+if (!nuevas.length) continue;
 
     processedUsers++;
 
@@ -8893,31 +8903,293 @@ function buildDigestHtml(alerts, user, options = {}) {
   `;
 }
 function buildTop5NuevasHtml(alerts, user) {
-  const items = alerts.map(item => {
-    const o = normalizeOfferPayload(item.offer_payload || {});
-    const titulo = o.cargo || o.materia || o.title || "Oferta APD";
+  const safePanelUrl = escHtml(PANEL_URL);
+
+  const cards = alerts.map((item) => {
+    const raw = item?.offer_payload || {};
+    const o = normalizeOfferPayload(raw);
+
+    const titulo = escHtml(
+      o.cargo ||
+      o.materia ||
+      o.title ||
+      "Oferta APD"
+    );
+
+    const distrito = escHtml(o.distrito || "—");
+    const turno = escHtml(o.turno || "—");
+    const nivel = escHtml(o.nivel || o.nivel_modalidad || "—");
+    const area = escHtml(o.area || o.area_pd || o.materia || "—");
+    const cursoDivision = escHtml(o.cursodivision || o.curso_division || "—");
+    const modulos = escHtml(String(o.modulos || "—"));
+    const diasHora = escHtml(o.dias_horarios || o.diashora || o.horario || "—");
+    const vigencia = escHtml(
+      o.vigencia ||
+      (o.fecha_desde || o.fecha_hasta
+        ? `${o.fecha_desde || "—"} — ${o.fecha_hasta || "—"}`
+        : "—")
+    );
+    const cierre = escHtml(o.fecha_cierre || o.finoferta || "—");
+
+    const motivo = escHtml(o.motivo_estado || o.motivo || "Compatible con tu PID");
+    const bloquePid = escHtml(o.bloque_pid || o.bloque || o.bloque_pd || "—");
+    const puntajeEabe = escHtml(String(o.puntaje_primero || o.puntaje_eabe || "—"));
+    const bonoResidencia = escHtml(
+      o.bono_residencia != null && o.bono_residencia !== ""
+        ? String(o.bono_residencia)
+        : "—"
+    );
+    const distritoResidencia = escHtml(o.distrito_residencia || "—");
+    const puntajeTotal = escHtml(String(o.tu_puntaje || o.puntaje_total || "—"));
+    const listadoMayor = escHtml(
+      o.listado_origen_primero ||
+      o.listado_mayor_puntaje ||
+      o.listado_referencia ||
+      "—"
+    );
+    const anioListado = escHtml(String(o.anio_listado || new Date().getFullYear()));
+    const diferenciaTexto = escHtml(
+      o.diferencia_puntaje_texto ||
+      (
+        o.tu_puntaje != null && o.puntaje_primero != null
+          ? `Tu puntaje (${o.tu_puntaje}) hoy queda por debajo del mejor visible (${o.puntaje_primero}).`
+          : "Referencia calculada según los postulantes visibles."
+      )
+    );
+
+    const cantPost = escHtml(String(o.total_postulantes || o.cantidad_postulantes || "—"));
+    const puntajeMasAlto = escHtml(String(o.puntaje_primero || o.puntaje_mas_alto || "—"));
+    const listadoMasAlto = escHtml(
+      o.listado_origen_primero ||
+      o.listado_mas_alto ||
+      "—"
+    );
+
+    const chips = [
+      o.codigo ? { text: escHtml(o.codigo), bg: "#eef2ff", color: "#1e40af" } : null,
+      o.distrito ? { text: distrito, bg: "#f3f4f6", color: "#374151" } : null,
+      o.turno ? { text: turno, bg: "#ecfdf5", color: "#166534" } : null,
+      o.is ? { text: escHtml(o.is), bg: "#fff7ed", color: "#9a3412" } : null,
+      o.nivel ? { text: nivel, bg: "#fef3c7", color: "#92400e" } : null,
+      o.situacion_revista ? { text: escHtml(o.situacion_revista), bg: "#f5f3ff", color: "#6d28d9" } : null
+    ].filter(Boolean);
+
+    const chipsHtml = chips.map((chip) => `
+      <span style="
+        display:inline-block;
+        margin:0 6px 6px 0;
+        padding:5px 10px;
+        border-radius:999px;
+        background:${chip.bg};
+        color:${chip.color};
+        font-family:Arial,Helvetica,sans-serif;
+        font-size:11px;
+        line-height:1.2;
+        font-weight:700;
+        letter-spacing:.02em;
+      ">
+        ${chip.text}
+      </span>
+    `).join("");
+
+    const abcUrl = raw?.url || raw?.link || raw?.abc_url || "#";
 
     return `
       <tr>
-        <td style="padding:0 0 16px 0;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dbe3f0;border-radius:14px;background:#ffffff;">
+        <td style="padding:0 0 20px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+            width:100%;
+            border:1px solid #d6deea;
+            border-radius:18px;
+            background:#f8fbff;
+            overflow:hidden;
+          ">
             <tr>
-              <td style="padding:16px;">
-                <div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;font-weight:700;color:#0f3460;margin-bottom:10px;">
-                  ${escHtml(titulo)}
+              <td style="padding:18px 18px 10px 18px;">
+                <div style="
+                  font-family:Arial,Helvetica,sans-serif;
+                  font-size:15px;
+                  line-height:1.2;
+                  font-weight:800;
+                  letter-spacing:.10em;
+                  color:#173a74;
+                  text-transform:uppercase;
+                  margin-bottom:12px;
+                ">
+                  ${titulo}
                 </div>
 
-                ${o.distrito ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Distrito:</b> ${escHtml(o.distrito)}</div>` : ""}
-                ${o.escuela ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Escuela:</b> ${escHtml(o.escuela)}</div>` : ""}
-                ${o.turno ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Turno:</b> ${escHtml(o.turno)}</div>` : ""}
-                ${o.nivel ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Nivel:</b> ${escHtml(o.nivel)}</div>` : ""}
-                ${o.modulos ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Módulos:</b> ${escHtml(String(o.modulos))}</div>` : ""}
-                ${o.dias_horarios ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Horario:</b> ${escHtml(o.dias_horarios)}</div>` : ""}
-                ${o.fecha_cierre ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Cierre:</b> ${escHtml(o.fecha_cierre)}</div>` : ""}
-
-                <div style="margin-top:12px;">
-                  ${o.link ? `<a href="${escHtml(o.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:10px 14px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ver oferta</a>` : ""}
+                <div style="margin-bottom:10px;">
+                  ${chipsHtml}
                 </div>
+
+                <div style="margin:0 0 14px 0;">
+                  <a href="${escHtml(abcUrl)}" target="_blank" style="
+                    display:inline-block;
+                    background:#2563eb;
+                    color:#ffffff;
+                    text-decoration:none;
+                    padding:8px 14px;
+                    border-radius:8px;
+                    font-family:Arial,Helvetica,sans-serif;
+                    font-size:12px;
+                    font-weight:700;
+                    margin-right:8px;
+                  ">Ir a ABC</a>
+
+                  <a href="${safePanelUrl}" target="_blank" style="
+                    display:inline-block;
+                    background:#163f7a;
+                    color:#ffffff;
+                    text-decoration:none;
+                    padding:8px 14px;
+                    border-radius:8px;
+                    font-family:Arial,Helvetica,sans-serif;
+                    font-size:12px;
+                    font-weight:700;
+                  ">Ir a mi panel</a>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 18px 18px 18px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                      ${mailInfoBox("CURSO / DIVISIÓN", cursoDivision)}
+                    </td>
+                    <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                      ${mailInfoBox("MÓDULOS", modulos)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                      ${mailInfoBox("DÍAS / HORA.PROB", diasHora)}
+                    </td>
+                    <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                      ${mailInfoBox("VIGENCIA", vigencia)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" style="padding:0;">
+                      ${mailInfoBox("CIERRE", cierre)}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 18px 12px 18px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+                  width:100%;
+                  border:1px solid #e7c574;
+                  border-radius:14px;
+                  background:#fff8e7;
+                ">
+                  <tr>
+                    <td style="padding:12px 14px 8px 14px;">
+                      <div style="
+                        font-family:Arial,Helvetica,sans-serif;
+                        font-size:13px;
+                        line-height:1.3;
+                        font-weight:700;
+                        color:#a15b00;
+                        margin-bottom:10px;
+                      ">🟠 Estado actual: Difícil</div>
+
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                            ${mailMiniBox("MOTIVO", motivo)}
+                          </td>
+                          <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                            ${mailMiniBox("ÁREA PID", area)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                            ${mailMiniBox("BLOQUE PID", bloquePid)}
+                          </td>
+                          <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                            ${mailMiniBox("PUNTAJE E.A.B.E", puntajeEabe)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                            ${mailMiniBox("BONUS RESIDENCIA", bonoResidencia)}
+                          </td>
+                          <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                            ${mailMiniBox("DISTRITO RESIDENCIA", distritoResidencia)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td width="50%" style="padding:0 6px 0 0; vertical-align:top;">
+                            ${mailMiniBox("TU PUNTAJE TOTAL", puntajeTotal)}
+                          </td>
+                          <td width="50%" style="padding:0 0 0 6px; vertical-align:top;">
+                            ${mailMiniBox("LISTADO / AÑO PID", `${listadoMayor} · ${anioListado}`)}
+                          </td>
+                        </tr>
+                      </table>
+
+                      <div style="
+                        font-family:Arial,Helvetica,sans-serif;
+                        font-size:12px;
+                        line-height:1.5;
+                        color:#4b5563;
+                        margin-top:10px;
+                      ">
+                        ${diferenciaTexto}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 18px 18px 18px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+                  width:100%;
+                  border:1px solid #c8d7ff;
+                  border-radius:14px;
+                  background:#f6f9ff;
+                ">
+                  <tr>
+                    <td style="padding:12px 14px 8px 14px;">
+                      <div style="
+                        font-family:Arial,Helvetica,sans-serif;
+                        font-size:12px;
+                        line-height:1.3;
+                        font-weight:800;
+                        color:#2b5fb8;
+                        letter-spacing:.08em;
+                        text-transform:uppercase;
+                        margin-bottom:10px;
+                      ">
+                        Referencia de postulantes
+                      </div>
+
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                            ${mailMiniBox("CANTIDAD", cantPost)}
+                          </td>
+                          <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                            ${mailMiniBox("PUNTAJE MÁS ALTO", puntajeMasAlto)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colspan="2" style="padding:0;">
+                            ${mailMiniBox("LISTADO DEL MÁS ALTO", listadoMasAlto)}
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
@@ -8927,42 +9199,90 @@ function buildTop5NuevasHtml(alerts, user) {
   }).join("");
 
   return `
-    <div style="background:#f0f2f7;padding:20px 0;">
+    <div style="background:#eef3f9;padding:24px 0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td align="center">
-            <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:620px;max-width:620px;">
+            <table role="presentation" width="820" cellpadding="0" cellspacing="0" border="0" style="
+              width:820px;
+              max-width:820px;
+            ">
               <tr>
-                <td style="background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%);color:#ffffff;padding:22px;border-radius:16px 16px 0 0;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:700;line-height:1.2;">
-                    APDocentePBA
-                  </div>
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;opacity:.9;margin-top:4px;">
-                    Tus 5 últimas ofertas nuevas
-                  </div>
+                <td style="
+                  padding:0 10px 18px 10px;
+                  font-family:Arial,Helvetica,sans-serif;
+                  font-size:20px;
+                  line-height:1.3;
+                  font-weight:800;
+                  color:#173a74;
+                ">
+                  APDocentePBA
                 </td>
               </tr>
 
               <tr>
-                <td style="background:#ffffff;padding:18px;border:1px solid #dbe3f0;border-top:none;border-radius:0 0 16px 16px;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#374151;margin-bottom:16px;">
-                    Hola ${escHtml(user?.nombre || "")}, estas son las últimas ofertas nuevas que aparecieron en tu carrusel.
-                  </div>
+                <td style="
+                  padding:0 10px 18px 10px;
+                  font-family:Arial,Helvetica,sans-serif;
+                  font-size:15px;
+                  line-height:1.6;
+                  color:#374151;
+                ">
+                  Hola ${escHtml(user?.nombre || "")}, estas son las 5 ofertas más recientes detectadas para vos.
+                </td>
+              </tr>
 
+              <tr>
+                <td style="padding:0 10px;">
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    ${items}
+                    ${cards}
                   </table>
-
-                  <div style="margin-top:20px;padding-top:18px;border-top:1px solid #e5e7eb;text-align:center;">
-                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#374151;margin-bottom:12px;">
-                      Para ver más ofertas, entrá al panel.
-                    </div>
-                    <a href="${escHtml(PANEL_URL)}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:12px 18px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;">
-                      Ir al panel
-                    </a>
-                  </div>
                 </td>
               </tr>
+
+              <tr>
+                <td style="padding:10px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+                    width:100%;
+                    border:1px solid #d9e3f1;
+                    border-radius:16px;
+                    background:#ffffff;
+                  ">
+                    <tr>
+                      <td style="
+                        padding:18px;
+                        text-align:center;
+                        font-family:Arial,Helvetica,sans-serif;
+                        font-size:14px;
+                        line-height:1.6;
+                        color:#4b5563;
+                      ">
+                        Si querés ver más ofertas o revisar el carrusel completo, entrá al panel.
+                        <div style="margin-top:12px;">
+                          <a href="${safePanelUrl}" target="_blank" style="
+                            display:inline-block;
+                            background:#163f7a;
+                            color:#ffffff;
+                            text-decoration:none;
+                            padding:12px 18px;
+                            border-radius:9px;
+                            font-size:14px;
+                            font-weight:700;
+                          ">Ir al panel</a>
+                        </div>
+                        <div style="
+                          margin-top:12px;
+                          font-size:12px;
+                          color:#6b7280;
+                        ">
+                          Si usás Gmail, mover este correo a Principal puede ayudar a recibir mejor las próximas alertas.
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
             </table>
           </td>
         </tr>
@@ -8970,6 +9290,73 @@ function buildTop5NuevasHtml(alerts, user) {
     </div>
   `;
 }
+
+function mailInfoBox(label, value) {
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+      width:100%;
+      border:1px solid #d7dee9;
+      border-radius:12px;
+      background:#f8fafc;
+    ">
+      <tr>
+        <td style="padding:10px 12px;">
+          <div style="
+            font-family:Arial,Helvetica,sans-serif;
+            font-size:9px;
+            line-height:1.2;
+            font-weight:700;
+            letter-spacing:.10em;
+            text-transform:uppercase;
+            color:#6b7280;
+            margin-bottom:6px;
+          ">${label}</div>
+          <div style="
+            font-family:Arial,Helvetica,sans-serif;
+            font-size:13px;
+            line-height:1.5;
+            color:#111827;
+            font-weight:600;
+          ">${value}</div>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+function mailMiniBox(label, value) {
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+      width:100%;
+      border:1px solid #e5dcc2;
+      border-radius:10px;
+      background:#fffdf8;
+    ">
+      <tr>
+        <td style="padding:9px 10px;">
+          <div style="
+            font-family:Arial,Helvetica,sans-serif;
+            font-size:8px;
+            line-height:1.2;
+            font-weight:700;
+            letter-spacing:.10em;
+            text-transform:uppercase;
+            color:#6b7280;
+            margin-bottom:5px;
+          ">${label}</div>
+          <div style="
+            font-family:Arial,Helvetica,sans-serif;
+            font-size:12px;
+            line-height:1.45;
+            color:#111827;
+            font-weight:600;
+          ">${value}</div>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
 // worker_hotfix.js
 var API_URL_PREFIX3 = "/api";
 var LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
@@ -10975,55 +11362,24 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
     return await worker_default.fetch(request, env, ctx);
   },
 
- async scheduled(event, env, ctx) {
+async scheduled(event, env, ctx) {
   const cronExpr = String(event?.cron || "").trim();
   const nowInput = event?.scheduledTime || Date.now();
-  const slotInfo = getArgentinaDigestSlotInfo(nowInput);
 
   console.log(
     "CRON scheduled() START",
     new Date(nowInput).toISOString(),
     "cron=",
-    cronExpr,
-    "slot=",
-    slotInfo.slot_key || "none"
+    cronExpr
   );
 
-const skipBackfill = true;
-  if (!skipBackfill) {
-    try {
-      const backfillResult = await runProvinciaBackfillStep(env, {
-        source: "cron",
-        max_pages: 1,
-        max_rows_per_page: 30
-      });
-      console.log("CRON BACKFILL OK", JSON.stringify(backfillResult || {}));
-    } catch (err) {
-      console.log("CRON BACKFILL ERROR", err?.message || err);
-    }
-  } else {
-    console.log("CRON BACKFILL SKIPPED FOR MAIL TEST");
-  }
-
-  try {
-    const queueResult = await runEmailAlertsQueueSweep(env, {
-      source: "cron",
-      now: nowInput,
-      slot_info: slotInfo,
-      max_users: 1,
-      max_alerts_per_user: 5
-    });
-
-    console.log("CRON EMAIL QUEUE OK", JSON.stringify(queueResult || {}));
-  } catch (err) {
-    console.log("CRON EMAIL QUEUE ERROR", err?.message || err);
-  }
+  // Backfill provincial desactivado por ahora para no mezclar
+  // con las pruebas de mail.
+  console.log("CRON BACKFILL SKIPPED");
 
   try {
     const digestResult = await sendPendingEmailDigests(env, {
-      source: "cron",
-      max_rows: 5
-      
+      source: "cron"
     });
 
     console.log("CRON EMAIL DIGEST OK", JSON.stringify(digestResult || {}));
