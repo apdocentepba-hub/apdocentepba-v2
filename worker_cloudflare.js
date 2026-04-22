@@ -5578,30 +5578,30 @@ async function construirAlertasParaUsuario(env, userId) {
     }
 
     const estado = String(
-      oferta?.estado ||
-      oferta?.estado_oferta ||
-      oferta?.estado_actual ||
-      ""
-    ).trim().toUpperCase();
+  oferta?.estado ||
+  oferta?.estado_oferta ||
+  oferta?.estado_actual ||
+  ""
+).trim().toUpperCase();
 
-    if (!estadoOfertaEsPublicada(oferta)) {
-      descartadas.push({
-        iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "estado_no_publicada",
-        estado
-      });
-      continue;
-    }
+if (!estadoOfertaEsPublicada(oferta)) {
+  descartadas.push({
+    iddetalle: oferta.iddetalle || oferta.id || null,
+    motivo: "estado_no_publicada",
+    estado
+  });
+  continue;
+}
 
-    if (!ofertaSigueVigenteParaAlerta(oferta)) {
-      descartadas.push({
-        iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "fecha_vencida",
-        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
-        estado
-      });
-      continue;
-    }
+if (!ofertaSigueVigenteParaAlerta(oferta)) {
+  descartadas.push({
+    iddetalle: oferta.iddetalle || oferta.id || null,
+    motivo: "fecha_vencida",
+    cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
+    estado
+  });
+  continue;
+}
 
     const clave = [
       buildSourceOfferKeyFromOferta(oferta),
