@@ -2,6 +2,7 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // profile_listados_api.js
+const PANEL_URL = "https://apdocentepba.com";
 var API_URL_PREFIX = "/api";
 var PD_ABC_SYNC_SOURCE = "abc_public";
 function pdCorsHeaders() {
