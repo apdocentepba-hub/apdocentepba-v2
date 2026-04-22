@@ -8668,178 +8668,131 @@ function json(data, status = 200) {
 }
 __name(json, "json");
 
-async function sendPendingEmailDigests(env, opts = {}) {
-  const maxRows = clampInt(
-    opts.max_rows || env.EMAIL_DIGEST_SEND_BATCH_SIZE,
-    1,
-    500,
-    20
-  );
-  const source = opts.source || "cron";
-  const targetUserId = String(opts.target_user_id || "").trim();
+async function sendPendingEmailDigests(env, options = {}) {
+  const users = await supabaseSelect(
+    env,
+    `users?select=id,nombre,apellido,email,activo&activo=eq.true&email=not.is.null`
+  ).catch(() => []);
 
-  let query =
-    `pending_notifications?channel=eq.email&kind=eq.apd_digest&status=eq.pending` +
-    `&select=id,user_id,alert_key,payload,created_at` +
-    `&order=created_at.asc&limit=${maxRows}`;
-
-  if (targetUserId) {
-    query += `&user_id=eq.${encodeURIComponent(targetUserId)}`;
-  }
-
-  const rows = await supabaseSelect(env, query).catch((err) => {
-    console.log("DIGEST READ ERROR:", err?.message || err);
-    return [];
-  });
-
-  const pendingRows = Array.isArray(rows) ? rows : [];
-
-  if (!pendingRows.length) {
-    console.log("NO HAY DIGESTS PENDIENTES");
-    return {
-      ok: true,
-      processed_rows: 0,
-      sent_digests: 0,
-      failed_digests: 0,
-      source
-    };
-  }
-
-  const userIds = pendingRows
-    .map((row) => String(row?.user_id || "").trim())
-    .filter(Boolean);
-
-  const usersMap = await loadUsersMapByIds(env, userIds);
-
+  let processedUsers = 0;
   let sentDigests = 0;
   let failedDigests = 0;
-  let processedRows = 0;
 
-  for (const row of pendingRows) {
-    const rowId = String(row?.id || "").trim();
-    const userId = String(row?.user_id || "").trim();
-    const user = usersMap.get(userId) || null;
+  for (const user of users) {
+    if (!user?.id || !user?.email) continue;
 
-    if (!rowId || !user?.id || !String(user?.email || "").trim()) {
-      if (rowId) {
-        await supabaseRequest(
-          env,
-          `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
-          {
-            method: "PATCH",
-            headers: { Prefer: "return=minimal" },
-            body: JSON.stringify({ status: "failed" })
+    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
+    if (!resolved || !isPlanActivo(resolved)) continue;
+
+    const prefsRows = await supabaseSelect(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
+    ).catch(() => []);
+
+    const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
+    if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
+
+    const rows = await supabaseSelect(
+      env,
+      `user_offer_state?user_id=eq.${encodeURIComponent(user.id)}&is_active=eq.true&select=id,offer_id,offer_payload,first_emailed_at,last_emailed_at,last_seen_at`
+    ).catch(() => []);
+
+    if (!Array.isArray(rows) || !rows.length) continue;
+
+    const nuevas = rows
+      .filter(x => !x.first_emailed_at)
+      .sort((a, b) => {
+        const ta = parseFechaFlexible(a?.last_seen_at)?.getTime() || 0;
+        const tb = parseFechaFlexible(b?.last_seen_at)?.getTime() || 0;
+        return tb - ta;
+      })
+      .slice(0, 5);
+
+    if (!nuevas.length) continue;
+
+    processedUsers++;
+
+    const alerts = await Promise.all(
+      nuevas.map(async row => {
+        const payload = row.offer_payload || {};
+        const merged = { ...payload };
+
+        const ofertaId = String(payload.idoferta || "").trim();
+        const detalleId = String(payload.iddetalle || "").trim();
+
+        if (ofertaId || detalleId) {
+          try {
+            const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+            merged.total_postulantes = resumen.total_postulantes ?? payload.total_postulantes ?? null;
+            merged.puntaje_primero = resumen.puntaje_primero ?? payload.puntaje_primero ?? null;
+            merged.listado_origen_primero = resumen.listado_origen_primero || payload.listado_origen_primero || "";
+          } catch (_) {
+            merged.total_postulantes = payload.total_postulantes ?? null;
+            merged.puntaje_primero = payload.puntaje_primero ?? null;
+            merged.listado_origen_primero = payload.listado_origen_primero || "";
           }
-        ).catch(() => null);
-      }
-      failedDigests += 1;
-      processedRows += 1;
-      continue;
-    }
+        }
 
-    const payload = row?.payload || {};
-    const alertsRaw = Array.isArray(payload?.alerts) ? payload.alerts : [];
-    const totalAlerts = Math.max(
-      Number(payload?.total_alerts || 0),
-      alertsRaw.length
+        return {
+          row_id: row.id,
+          offer_payload: merged
+        };
+      })
     );
 
-    if (!alertsRaw.length) {
-      await supabaseRequest(
-        env,
-        `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
-        {
-          method: "PATCH",
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ status: "failed" })
-        }
-      ).catch(() => null);
+    const html = buildTop5NuevasHtml(alerts, user);
 
-      failedDigests += 1;
-      processedRows += 1;
-      continue;
-    }
-
-    const visibleCount = Math.min(alertsRaw.length, 5);
-
-    const html = buildDigestHtml(alertsRaw, user, {
-      total_alerts: totalAlerts,
-      max_visible: 5,
-      panel_url: "https://alertasapd.com.ar"
-    });
-
-    const subject =
-      totalAlerts > visibleCount
-        ? `${visibleCount} nuevas ofertas de ${totalAlerts}`
-        : `${visibleCount} nuevas ofertas APD`;
+    const asunto = `APDocentePBA: ${alerts.length} nueva${alerts.length === 1 ? "" : "s"} oferta${alerts.length === 1 ? "" : "s"} para vos`;
 
     const send = await enviarMailBrevo(
       user.email,
       user.nombre || "",
-      subject,
+      asunto,
       html,
       env
-    ).catch((err) => ({
-      ok: false,
-      status: 500,
-      data: err?.message || "mail_send_failed"
-    }));
-
-    await supabaseInsert(env, "notification_delivery_logs", {
-      user_id: user.id,
-      channel: "email",
-      template_code: "apd_email_alert_digest",
-      destination: user.email,
-      status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-      provider_message_id: null,
-      payload: {
-        source,
-        slot_key: payload?.slot_key || null,
-        slot_date: payload?.slot_date || null,
-        slot_hour: payload?.slot_hour || null,
-        total_alerts: totalAlerts,
-        shown_alerts: visibleCount,
-        alert_key: String(row?.alert_key || "").trim() || null
-      },
-      provider_response: send || null
-    }).catch(() => null);
-
-    await supabaseRequest(
-      env,
-      `pending_notifications?id=eq.${encodeURIComponent(rowId)}`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({
-          status: send?.ok ? "sent" : "failed"
-        })
-      }
-    ).catch((err) => {
-      console.log("DIGEST PATCH ERROR:", rowId, err?.message || err);
-    });
+    );
 
     if (send?.ok) {
-      sentDigests += 1;
+      sentDigests++;
+
+      const nowIso = new Date().toISOString();
+
+      await Promise.all(
+        nuevas.map(row => {
+          const patch = {
+            last_emailed_at: nowIso
+          };
+
+          if (!row.first_emailed_at) {
+            patch.first_emailed_at = nowIso;
+          }
+
+          return fetch(
+            `${env.SUPABASE_URL}/rest/v1/user_offer_state?id=eq.${encodeURIComponent(row.id)}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+                Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+                Prefer: "return=minimal"
+              },
+              body: JSON.stringify(patch)
+            }
+          ).catch(() => null);
+        })
+      );
     } else {
-      failedDigests += 1;
-      console.log("BREVO RESP:", send?.data || send);
+      failedDigests++;
     }
-
-    processedRows += 1;
   }
-
-  console.log("DIGEST END", JSON.stringify({
-    processed_rows: processedRows,
-    sent_digests: sentDigests,
-    failed_digests: failedDigests
-  }));
 
   return {
     ok: true,
-    processed_rows: processedRows,
+    processed_rows: processedUsers,
     sent_digests: sentDigests,
     failed_digests: failedDigests,
-    source
+    source: options.source || "cron"
   };
 }
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
@@ -8932,6 +8885,84 @@ function buildDigestHtml(alerts, user, options = {}) {
               </tr>
             </table>
 
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+function buildTop5NuevasHtml(alerts, user) {
+  const items = alerts.map(item => {
+    const o = normalizeOfferPayload(item.offer_payload || {});
+    const titulo = o.cargo || o.materia || o.title || "Oferta APD";
+
+    return `
+      <tr>
+        <td style="padding:0 0 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dbe3f0;border-radius:14px;background:#ffffff;">
+            <tr>
+              <td style="padding:16px;">
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:1.3;font-weight:700;color:#0f3460;margin-bottom:10px;">
+                  ${escHtml(titulo)}
+                </div>
+
+                ${o.distrito ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Distrito:</b> ${escHtml(o.distrito)}</div>` : ""}
+                ${o.escuela ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Escuela:</b> ${escHtml(o.escuela)}</div>` : ""}
+                ${o.turno ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Turno:</b> ${escHtml(o.turno)}</div>` : ""}
+                ${o.nivel ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Nivel:</b> ${escHtml(o.nivel)}</div>` : ""}
+                ${o.modulos ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Módulos:</b> ${escHtml(String(o.modulos))}</div>` : ""}
+                ${o.dias_horarios ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Horario:</b> ${escHtml(o.dias_horarios)}</div>` : ""}
+                ${o.fecha_cierre ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111827;"><b>Cierre:</b> ${escHtml(o.fecha_cierre)}</div>` : ""}
+
+                <div style="margin-top:12px;">
+                  ${o.link ? `<a href="${escHtml(o.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:10px 14px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ver oferta</a>` : ""}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div style="background:#f0f2f7;padding:20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:620px;max-width:620px;">
+              <tr>
+                <td style="background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%);color:#ffffff;padding:22px;border-radius:16px 16px 0 0;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:700;line-height:1.2;">
+                    APDocentePBA
+                  </div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;opacity:.9;margin-top:4px;">
+                    Tus 5 últimas ofertas nuevas
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="background:#ffffff;padding:18px;border:1px solid #dbe3f0;border-top:none;border-radius:0 0 16px 16px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#374151;margin-bottom:16px;">
+                    Hola ${escHtml(user?.nombre || "")}, estas son las últimas ofertas nuevas que aparecieron en tu carrusel.
+                  </div>
+
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${items}
+                  </table>
+
+                  <div style="margin-top:20px;padding-top:18px;border-top:1px solid #e5e7eb;text-align:center;">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#374151;margin-bottom:12px;">
+                      Para ver más ofertas, entrá al panel.
+                    </div>
+                    <a href="${escHtml(PANEL_URL)}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:12px 18px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;">
+                      Ir al panel
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
