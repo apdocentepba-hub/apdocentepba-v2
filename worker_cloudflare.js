@@ -5594,15 +5594,7 @@ async function construirAlertasParaUsuario(env, userId) {
       continue;
     }
 
-    if (!ofertaSigueVigenteParaAlerta(oferta)) {
-      descartadas.push({
-        iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "fecha_vencida",
-        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
-        estado
-      });
-      continue;
-    }
+    
 
     const clave = [
       buildSourceOfferKeyFromOferta(oferta),
@@ -8089,7 +8081,7 @@ function ofertaEsVisibleParaAlerta(oferta) {
   if (estado.includes("FINALIZADA")) return false;
   if (estado.includes("NO VIGENTE")) return false;
 
-  return ofertaSigueVigenteParaAlerta(oferta);
+  return true;
 }
 
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
@@ -8581,17 +8573,7 @@ function parseFechaCierreFinDeDia(value) {
 }
 
 function ofertaSigueVigenteParaAlerta(oferta) {
-  const cierre = parseFechaCierreFinDeDia(
-    oferta?.finoferta ||
-    oferta?.fecha_cierre ||
-    oferta?.fecha_cierre_raw ||
-    oferta?.cierre ||
-    ""
-  );
-
-  if (!cierre) return true;
-
-  return cierre.getTime() >= Date.now();
+  return true;
 }
 
 function estadoOfertaEsPublicada(oferta) {
