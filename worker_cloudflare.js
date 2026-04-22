@@ -5568,7 +5568,7 @@ async function construirAlertasParaUsuario(env, userId) {
   const descartadas = [];
   const vistos = new Set();
 
-  for (const oferta of ofertas || []) {
+  for (const oferta of ofertas) {
     if (!ofertaEsVisibleParaAlerta(oferta)) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
@@ -5584,28 +5584,20 @@ async function construirAlertasParaUsuario(env, userId) {
       ""
     ).trim().toUpperCase();
 
-    if (
-      [
-        "CERRADA",
-        "CERRADO",
-        "FINALIZADA",
-        "FINALIZADO",
-        "VENCIDA",
-        "VENCIDO",
-        "ANULADA",
-        "ANULADO",
-        "DESIERTA",
-        "DESIERTO",
-        "DESIGNADA",
-        "DESIGNADO",
-        "NO VIGENTE",
-        "RENUNCIADA",
-        "RENUNCIADO"
-      ].includes(estado)
-    ) {
+    if (!estadoOfertaEsPublicada(oferta)) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "estado_no_vigente",
+        motivo: "estado_no_publicada",
+        estado
+      });
+      continue;
+    }
+
+    if (!ofertaSigueVigenteParaAlerta(oferta)) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "fecha_vencida",
+        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null,
         estado
       });
       continue;
@@ -5622,42 +5614,17 @@ async function construirAlertasParaUsuario(env, userId) {
     if (vistos.has(clave)) continue;
     vistos.add(clave);
 
-    const cierre = parseFechaFlexible(
-      oferta?.finoferta ||
-      oferta?.fecha_cierre ||
-      oferta?.fecha_cierre_raw ||
-      oferta?.cierre ||
-      ""
-    );
-
-    if (cierre && cierre.getTime() < Date.now()) {
-      descartadas.push({
-        iddetalle: oferta.iddetalle || oferta.id || null,
-        motivo: "cierre_pasado",
-        finoferta: oferta?.finoferta || oferta?.fecha_cierre || ""
-      });
-      continue;
-    }
-
     const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+    const item = buildAlertItem(oferta, evaluacion);
 
-    if (!evaluacion.match) {
-      const itemDescartado = buildAlertItem(oferta, evaluacion, null);
-      itemDescartado.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
-
+    if (evaluacion.match) {
+      resultados.push(item);
+    } else {
       descartadas.push({
-        ...itemDescartado,
+        ...item,
         motivo: "no_coincide_preferencias"
       });
-      continue;
     }
-
-    let pidInfo = null;
-
-    const item = buildAlertItem(oferta, evaluacion, pidInfo);
-    item.cierre_pasado = !!(cierre && cierre.getTime() < Date.now());
-
-    resultados.push(item);
   }
 
   resultados.sort((a, b) => {
@@ -5671,7 +5638,7 @@ async function construirAlertasParaUsuario(env, userId) {
     user,
     preferencias_originales: prefs,
     preferencias_canonizadas: prefsCanon,
-    total_fuente: (ofertas || []).length,
+    total_fuente: ofertas.length,
     total: resultados.length,
     descartadas_total: descartadas.length,
     descartadas_preview: descartadas.slice(0, 20),
@@ -8103,32 +8070,43 @@ function escaparSolr(text) {
   return String(text || "").replace(/(["\\])/g, "\\$1");
 }
 __name(escaparSolr, "escaparSolr");
-function ofertaEsVisibleParaAlerta(oferta) {
-  const estado = norm(
+function estadoOfertaEsPublicada(oferta) {
+  const estado = String(
     oferta?.estado ||
     oferta?.estado_oferta ||
     oferta?.estado_actual ||
     ""
+  ).trim().toUpperCase();
+
+  return estado === "PUBLICADA";
+}
+
+function ofertaSigueVigenteParaAlerta(oferta) {
+  const cierre = parseFechaFlexible(
+    oferta?.finoferta ||
+    oferta?.fecha_cierre ||
+    oferta?.fecha_cierre_raw ||
+    oferta?.cierre ||
+    ""
   );
 
-  if (
-    estado.includes("ANULADA") ||
-    estado.includes("ANULADO") ||
-    estado.includes("DESIGNADA") ||
-    estado.includes("DESIGNADO") ||
-    estado.includes("DESIERTA") ||
-    estado.includes("DESIERTO") ||
-    estado.includes("NO VIGENTE") ||
-    estado.includes("CERRADA") ||
-    estado.includes("CERRADO") ||
-    estado.includes("FINALIZADA") ||
-    estado.includes("FINALIZADO")
-  ) {
-    return false;
+  if (!cierre) {
+    return true;
   }
 
+  return cierre.getTime() >= Date.now();
+}
+
+function ofertaEsVisibleParaAlerta(oferta) {
+  const estado = norm(oferta?.estado || "");
+  const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
+  const ahora = Date.now();
+  if (estado.includes("ANULADA")) return false;
+  if (estado.includes("DESIGNADA")) return false;
+  if (fin && fin < ahora - 48 * 60 * 60 * 1000) return false;
   return true;
 }
+
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 function ofertaEsVisibleParaHistoricoUsuario(oferta) {
   const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
