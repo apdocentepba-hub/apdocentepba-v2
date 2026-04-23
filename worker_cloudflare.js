@@ -1974,6 +1974,17 @@ __name(audNormalizarTurno, "audNormalizarTurno");
 function audNormalizarOfertaAPD(doc) {
   return {
     id: String(doc?.iddetalle || doc?.idoferta || doc?.id || "").trim(),
+    iddetalle_raw: doc?.iddetalle ?? null,
+    idoferta_raw: doc?.idoferta ?? null,
+    id_raw: doc?.id ?? null,
+    ige: String(doc?.ige || doc?.IGE || "").trim(),
+    codigo_visible: String(
+      doc?.codigo ||
+      doc?.codigooferta ||
+      doc?.codigocargo ||
+      doc?.source_offer_key ||
+      ""
+    ).trim(),
     distrito: String(doc?.descdistrito || "").trim(),
     distrito_norm: audNorm(doc?.descdistrito || ""),
     cargo: String(doc?.descripcioncargo || doc?.cargo || "").trim(),
@@ -1983,8 +1994,15 @@ function audNormalizarOfertaAPD(doc) {
     nivel_norm: audNorm(doc?.descnivelmodalidad || ""),
     turno: String(doc?.turno || "").trim(),
     turno_norm: audNormalizarTurno(doc?.turno || ""),
+    escuela: String(doc?.nombreestablecimiento || doc?.escuela || "").trim(),
+    escuela_norm: audNorm(doc?.nombreestablecimiento || doc?.escuela || ""),
     finoferta: String(doc?.finoferta || doc?.finoferta_label || "").trim(),
     estado: String(doc?.estado || "").trim(),
+    estado_raw: String(doc?.estado || "").trim(),
+    estado_publicacion_raw: String(doc?.estadopublicacion || doc?.estado_publicacion || "").trim(),
+    publicada_raw: doc?.publicada ?? null,
+    anulada_raw: doc?.anulada ?? null,
+    designada_raw: doc?.designada ?? null,
     raw: doc
   };
 }
@@ -1992,14 +2010,47 @@ __name(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
 
 function audOfertaActiva(oferta) {
   const estado = audNorm(oferta?.estado || "");
+  const estadoPublicacion = audNorm(oferta?.estado_publicacion_raw || "");
   const cargo = audNorm(oferta?.cargo || "");
   const nivel = audNorm(oferta?.nivel || "");
+
+  const publicadaRaw = String(oferta?.publicada_raw ?? "").trim().toUpperCase();
+  const anuladaRaw = String(oferta?.anulada_raw ?? "").trim().toUpperCase();
+  const designadaRaw = String(oferta?.designada_raw ?? "").trim().toUpperCase();
+
+  const fin = String(oferta?.finoferta || "").trim();
+  const finDate = fin ? new Date(fin) : null;
+  const vencida = finDate && !isNaN(finDate.getTime()) && finDate.getTime() < Date.now();
+
+  if (vencida) return false;
+
   if (estado.includes("ANULAD")) return false;
   if (estado.includes("DESIGNAD")) return false;
+  if (estado.includes("RENUNCIAD")) return false;
+  if (estado.includes("BAJA")) return false;
+  if (estado.includes("CERRAD")) return false;
+  if (estado.includes("VENCID")) return false;
+
+  if (estadoPublicacion.includes("ANULAD")) return false;
+  if (estadoPublicacion.includes("DESIGNAD")) return false;
+  if (estadoPublicacion.includes("RENUNCIAD")) return false;
+  if (estadoPublicacion.includes("BAJA")) return false;
+  if (estadoPublicacion.includes("CERRAD")) return false;
+  if (estadoPublicacion.includes("VENCID")) return false;
+
   if (cargo.includes("ANULAD")) return false;
   if (cargo.includes("DESIGNAD")) return false;
+  if (cargo.includes("RENUNCIAD")) return false;
+
   if (nivel.includes("ANULAD")) return false;
   if (nivel.includes("DESIGNAD")) return false;
+  if (nivel.includes("RENUNCIAD")) return false;
+
+  if (anuladaRaw === "TRUE" || anuladaRaw === "1" || anuladaRaw === "SI") return false;
+  if (designadaRaw === "TRUE" || designadaRaw === "1" || designadaRaw === "SI") return false;
+
+  if (publicadaRaw === "FALSE" || publicadaRaw === "0" || publicadaRaw === "NO") return false;
+
   return true;
 }
 __name(audOfertaActiva, "audOfertaActiva");
@@ -2012,15 +2063,17 @@ async function audFetchAPDPage(start = 0, rows = 100, distrito = "") {
   url.searchParams.set("start", String(start));
   url.searchParams.set("q", distrito ? `descdistrito:"${distrito}"` : "*:*");
 
-  const resp = await fetchConReintentos(
-    url.toString(),
-    {
-      method: "GET",
-      headers: { Accept: "application/json, text/plain, */*" }
-    },
-    3,
-    25000
-  );
+  const resp = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json, text/plain, */*"
+    }
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`APD HTTP ${resp.status} ${txt.slice(0, 300)}`);
+  }
 
   const data = await resp.json();
   return {
@@ -2061,11 +2114,13 @@ function audFiltrarPorDistrito(ofertas, distritoBuscado) {
 __name(audFiltrarPorDistrito, "audFiltrarPorDistrito");
 
 function audMatchCargo(oferta, preferenciaCargo) {
-  const prefNorm = audNorm(preferenciaCargo);
-  if (!prefNorm) return true;
   const siglaPref = audExtraerSiglaParentesis(preferenciaCargo);
-  if (siglaPref) return oferta.cargo_sigla === siglaPref;
-  return oferta.cargo_norm.includes(prefNorm);
+  const siglaOferta = oferta.cargo_sigla || "";
+
+  if (!siglaPref) return false;
+  if (!siglaOferta) return false;
+
+  return siglaOferta === siglaPref;
 }
 __name(audMatchCargo, "audMatchCargo");
 
@@ -2084,14 +2139,31 @@ function audMatchTurno(oferta, preferenciaTurno) {
 __name(audMatchTurno, "audMatchTurno");
 
 function audEvaluarOfertaPasoAPaso(oferta, pref) {
+  const base = {
+    id: oferta.id,
+    iddetalle_raw: oferta.iddetalle_raw,
+    idoferta_raw: oferta.idoferta_raw,
+    id_raw: oferta.id_raw,
+    ige: oferta.ige,
+    codigo_visible: oferta.codigo_visible,
+    estado_raw: oferta.estado_raw,
+    estado_publicacion_raw: oferta.estado_publicacion_raw,
+    publicada_raw: oferta.publicada_raw,
+    anulada_raw: oferta.anulada_raw,
+    designada_raw: oferta.designada_raw,
+    distrito: oferta.distrito,
+    cargo: oferta.cargo,
+    cargo_sigla: oferta.cargo_sigla,
+    escuela: oferta.escuela,
+    nivel: oferta.nivel,
+    turno: oferta.turno,
+    finoferta: oferta.finoferta
+  };
+
   const distritoOk = !pref.distrito || oferta.distrito_norm === audNorm(pref.distrito);
   if (!distritoOk) {
     return {
-      id: oferta.id,
-      distrito: oferta.distrito,
-      cargo: oferta.cargo,
-      nivel: oferta.nivel,
-      turno: oferta.turno,
+      ...base,
       paso_fallado: "distrito",
       pasaFinal: false
     };
@@ -2100,11 +2172,7 @@ function audEvaluarOfertaPasoAPaso(oferta, pref) {
   const cargoOk = audMatchCargo(oferta, pref.cargo);
   if (!cargoOk) {
     return {
-      id: oferta.id,
-      distrito: oferta.distrito,
-      cargo: oferta.cargo,
-      nivel: oferta.nivel,
-      turno: oferta.turno,
+      ...base,
       paso_fallado: "cargo",
       pasaFinal: false
     };
@@ -2113,11 +2181,7 @@ function audEvaluarOfertaPasoAPaso(oferta, pref) {
   const nivelOk = audMatchNivel(oferta, pref.nivel);
   if (!nivelOk) {
     return {
-      id: oferta.id,
-      distrito: oferta.distrito,
-      cargo: oferta.cargo,
-      nivel: oferta.nivel,
-      turno: oferta.turno,
+      ...base,
       paso_fallado: "nivel",
       pasaFinal: false
     };
@@ -2126,22 +2190,14 @@ function audEvaluarOfertaPasoAPaso(oferta, pref) {
   const turnoOk = audMatchTurno(oferta, pref.turno);
   if (!turnoOk) {
     return {
-      id: oferta.id,
-      distrito: oferta.distrito,
-      cargo: oferta.cargo,
-      nivel: oferta.nivel,
-      turno: oferta.turno,
+      ...base,
       paso_fallado: "turno",
       pasaFinal: false
     };
   }
 
   return {
-    id: oferta.id,
-    distrito: oferta.distrito,
-    cargo: oferta.cargo,
-    nivel: oferta.nivel,
-    turno: oferta.turno,
+    ...base,
     paso_fallado: "",
     pasaFinal: true
   };
@@ -2385,11 +2441,11 @@ if (path === `${API_URL_PREFIX2}/subscription/cancel` && request.method === "POS
       if (path === `${API_URL_PREFIX2}/admin/alertas` && request.method === "GET") {
         return await handleAdminAlertas(request, env);
       }
-      if (path === `${API_URL_PREFIX2}/admin/auditoria-distrito` && request.method === "GET") {
+      if (path === "/api/admin/auditoria-distrito" && request.method === "GET") {
   return await handleAdminAuditoriaDistrito(request, env);
 }
 
-if (path === `${API_URL_PREFIX2}/admin/comparar-filtro` && request.method === "GET") {
+if (path === "/api/admin/comparar-filtro" && request.method === "GET") {
   return await handleAdminCompararFiltro(request, env);
 }
       return json({ ok: false, error: "Ruta no encontrada" }, 404);
