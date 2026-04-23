@@ -2642,42 +2642,17 @@ var worker_default = {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
-      if (path === "/test-mail" && request.method === "GET") {
-        const r = await enviarMailBrevo(
-          "martin.nicolas.podubinio@gmail.com",
-          "Martin",
-          "PRUEBA APDocentePBA \u{1F680}",
-          "<h1>Funciona desde Worker</h1>",
-          env
-        );
-        return new Response(JSON.stringify(r, null, 2), {
-          status: 200,
-          headers: { "Content-Type": "application/json; charset=utf-8" }
-        });
+        if (path === "/test-mail" && request.method === "GET") {
+        return await handleTestMail(env);
       }
+
       if (path === "/test-email-sweep" && request.method === "GET") {
-  const targetUserId = String(
-    url.searchParams.get("target_user_id") ||
-    url.searchParams.get("user_id") ||
-    ""
-  ).trim();
+        return await handleTestEmailSweep(env);
+      }
 
-  const debug = url.searchParams.get("debug") === "1";
-  const dryRun = url.searchParams.get("dry_run") === "1";
-
-  const r = await runEmailAlertsSweep(env, {
-    source: "manual_test",
-    target_user_id: targetUserId || undefined,
-    debug,
-    debug_user_id: targetUserId || "",
-    dry_run: dryRun
-  });
-
-  return new Response(JSON.stringify(r, null, 2), {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" }
-  });
-}
+      if (path === "/test-digest" && request.method === "GET") {
+        return await handleTestDigest(env);
+      }
       if (path === "/test-digest" && request.method === "GET") {
         const r = await sendPendingEmailDigests(env);
         return new Response(JSON.stringify(r, null, 2), {
@@ -12107,7 +12082,27 @@ async scheduled(event, env, ctx) {
   console.log("CRON EMAIL SWEEP RESULT", JSON.stringify(result || {}));
 }
 };
+async function handleTestMail(env) {
+  const r = await enviarMailBrevo(
+    "martin.nicolas.podubinio@gmail.com",
+    "Martin",
+    "PRUEBA APDocentePBA 🚀",
+    "<h1>Funciona desde Worker</h1>",
+    env
+  );
 
+  return jsonResponse(r, 200);
+}
+
+async function handleTestEmailSweep(env) {
+  const r = await runEmailAlertsSweep(env, { source: "manual_test" });
+  return jsonResponse(r, 200);
+}
+
+async function handleTestDigest(env) {
+  const r = await sendPendingEmailDigests(env);
+  return jsonResponse(r, 200);
+}
 export {
   worker_hotfix_default as default
 };
