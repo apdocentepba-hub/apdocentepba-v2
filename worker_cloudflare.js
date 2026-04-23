@@ -2083,10 +2083,11 @@ async function audFetchAPDPage(start = 0, rows = 100, distrito = "") {
 }
 __name(audFetchAPDPage, "audFetchAPDPage");
 
-async function audObtenerOfertasBaseAPD(distrito = "") {
+async function audObtenerOfertasBaseAPD(distrito = "", maxPages = 3) {
   const rows = 100;
   let start = 0;
   let total = 0;
+  let pages = 0;
   const acumuladas = [];
 
   do {
@@ -2094,15 +2095,18 @@ async function audObtenerOfertasBaseAPD(distrito = "") {
     total = page.numFound;
     acumuladas.push(...page.docs);
     start += rows;
-  } while (start < total);
+    pages += 1;
+  } while (start < total && pages < maxPages);
 
   const map = new Map();
+
   for (const doc of acumuladas) {
     const of = audNormalizarOfertaAPD(doc);
     if (!of.id) continue;
     if (!audOfertaActiva(of)) continue;
     if (!map.has(of.id)) map.set(of.id, of);
   }
+
   return [...map.values()];
 }
 __name(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
@@ -2228,6 +2232,29 @@ function audResumenComparacion(evaluadas) {
   };
 }
 __name(audResumenComparacion, "audResumenComparacion");
+function audResumenMasivo(items) {
+  const out = [];
+  for (const item of items || []) {
+    const resumen = item?.resultado?.resumen_comparacion || {};
+    const final = Array.isArray(item?.resultado?.final) ? item.resultado.final : [];
+    out.push({
+      distrito: item.distrito,
+      cargo: item.cargo,
+      nivel: item.nivel,
+      turno: item.turno,
+      total_evaluadas: resumen.total_evaluadas || 0,
+      pasan_final: resumen.pasan_final || 0,
+      descartadas_distrito: resumen.descartadas_distrito || 0,
+      descartadas_cargo: resumen.descartadas_cargo || 0,
+      descartadas_nivel: resumen.descartadas_nivel || 0,
+      descartadas_turno: resumen.descartadas_turno || 0,
+      ids_finales: final.map(x => x.id),
+      cargos_finales: final.map(x => x.cargo),
+      escuelas_finales: final.map(x => x.escuela || "")
+    });
+  }
+  return out;
+}
 
 async function handleAdminAuditoriaDistrito(request, env) {
   const auth = await requireAdmin(env, request);
@@ -2258,35 +2285,355 @@ async function handleAdminAuditoriaDistrito(request, env) {
 __name(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
 
 async function handleAdminCompararFiltro(request, env) {
-  const auth = await requireAdmin(env, request);
-  if (!auth.ok) return auth.response;
+  try {
+    const auth = await requireAdmin(env, request);
+    if (!auth.ok) return auth.response;
 
-  const url = new URL(request.url);
-  const distrito = String(url.searchParams.get("distrito") || "").trim();
-  const cargo = String(url.searchParams.get("cargo") || "").trim();
-  const nivel = String(url.searchParams.get("nivel") || "").trim();
-  const turno = String(url.searchParams.get("turno") || "").trim();
+    const url = new URL(request.url);
+    const distrito = String(url.searchParams.get("distrito") || "").trim();
+    const cargo = String(url.searchParams.get("cargo") || "").trim();
+    const nivel = String(url.searchParams.get("nivel") || "SECUNDARIA").trim();
+    const turno = String(url.searchParams.get("turno") || "M").trim();
 
-  if (!distrito) {
-    return adminJson({ ok: false, error: "Falta distrito" }, 400);
+    if (!distrito) {
+      return adminJson({ ok: false, error: "Falta distrito" }, 400);
+    }
+
+    const fakeUrl = new URL(request.url);
+    fakeUrl.searchParams.set("distrito", distrito);
+    if (cargo) fakeUrl.searchParams.set("cargo", cargo);
+    fakeUrl.searchParams.set("nivel", nivel);
+    fakeUrl.searchParams.set("turno", turno);
+
+    const fakeRequest = new Request(fakeUrl.toString(), {
+      method: "GET",
+      headers: request.headers
+    });
+
+    const masivoResp = await handleAdminCompararMasivo(fakeRequest, env);
+    const masivoJson = await masivoResp.json();
+
+    if (!masivoJson.ok) {
+      return adminJson(masivoJson, masivoResp.status || 500);
+    }
+
+    const item = Array.isArray(masivoJson.items) && masivoJson.items.length
+      ? masivoJson.items[0]
+      : null;
+
+    if (!item) {
+      return adminJson({
+        ok: true,
+        pref: { distrito, cargo, nivel, turno },
+        resumen_universo: {
+          distrito,
+          total_base: 0,
+          total_resultado: 0,
+          cargos_unicos: [],
+          niveles_unicos: [],
+          turnos_unicos: [],
+          ids_unicos: 0
+        },
+        resumen_comparacion: {
+          total_evaluadas: 0,
+          pasan_final: 0,
+          descartadas_distrito: 0,
+          descartadas_cargo: 0,
+          descartadas_nivel: 0,
+          descartadas_turno: 0
+        },
+        final: [],
+        descartadas: []
+      });
+    }
+
+    return adminJson({
+      ok: true,
+      pref: { distrito, cargo, nivel, turno },
+      resumen_universo: {
+        distrito: item.distrito,
+        total_base: item.total_evaluadas,
+        total_resultado: item.total_evaluadas,
+        cargos_unicos: [],
+        niveles_unicos: [],
+        turnos_unicos: [],
+        ids_unicos: 0
+      },
+      resumen_comparacion: {
+        total_evaluadas: item.total_evaluadas,
+        pasan_final: item.pasan_final,
+        descartadas_distrito: item.descartadas_distrito,
+        descartadas_cargo: item.descartadas_cargo,
+        descartadas_nivel: item.descartadas_nivel,
+        descartadas_turno: item.descartadas_turno
+      },
+      final: (item.ids_finales || []).map((id, i) => ({
+        id,
+        cargo: (item.cargos_finales || [])[i] || "",
+        escuela: (item.escuelas_finales || [])[i] || ""
+      })),
+      descartadas: []
+    });
+  } catch (err) {
+    return adminJson({
+      ok: false,
+      error: err?.message || String(err),
+      stack: String(err?.stack || "")
+    }, 500);
   }
-
-  const ofertasBase = await audObtenerOfertasBaseAPD(distrito);
-  const universo = audFiltrarPorDistrito(ofertasBase, distrito);
-
-  const pref = { distrito, cargo, nivel, turno };
-  const evaluadas = universo.map((of) => audEvaluarOfertaPasoAPaso(of, pref));
-
-  return adminJson({
-    ok: true,
-    pref,
-    resumen_universo: audResumenDistrito(universo, ofertasBase.length, distrito),
-    resumen_comparacion: audResumenComparacion(evaluadas),
-    final: evaluadas.filter((x) => x.pasaFinal),
-    descartadas: evaluadas.filter((x) => !x.pasaFinal)
-  });
 }
 __name(handleAdminCompararFiltro, "handleAdminCompararFiltro");
+async function handleAdminVerificarCaso(request, env) {
+  try {
+    const auth = await requireAdmin(env, request);
+    if (!auth.ok) return auth.response;
+
+    const url = new URL(request.url);
+
+    const distrito = String(url.searchParams.get("distrito") || "").trim();
+    const cargo = String(url.searchParams.get("cargo") || "").trim();
+    const nivel = String(url.searchParams.get("nivel") || "SECUNDARIA").trim();
+    const turno = String(url.searchParams.get("turno") || "M").trim();
+    const maxPages = Number(url.searchParams.get("maxPages") || 3);
+
+    if (!distrito) {
+      return adminJson({ ok: false, error: "Falta distrito" }, 400);
+    }
+
+    if (!cargo) {
+      return adminJson({ ok: false, error: "Falta cargo" }, 400);
+    }
+
+    const ofertasBase = await audObtenerOfertasBaseAPD(distrito, maxPages);
+    const universo = audFiltrarPorDistrito(ofertasBase, distrito);
+
+    const pref = { distrito, cargo, nivel, turno };
+    const evaluadas = universo.map(of => audEvaluarOfertaPasoAPaso(of, pref));
+    const final = evaluadas.filter(x => x.pasaFinal);
+    const descartadas = evaluadas.filter(x => !x.pasaFinal);
+
+    return adminJson({
+      ok: true,
+      pref,
+      resumen_universo: audResumenDistrito(universo, ofertasBase.length, distrito),
+      resumen_comparacion: audResumenComparacion(evaluadas),
+      final,
+      descartadas
+    });
+  } catch (err) {
+    return adminJson({
+      ok: false,
+      error: err?.message || String(err),
+      stack: String(err?.stack || "")
+    }, 500);
+  }
+}
+function dbg2Norm(v) {
+  return String(v || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\/()\-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dbg2ExtraerSiglaParentesis(txt) {
+  const m = String(txt || "").match(/\(([^)]+)\)/);
+  return m ? dbg2Norm(m[1]) : "";
+}
+
+function dbg2NormalizarTurno(turno) {
+  const t = dbg2Norm(turno);
+  if (!t) return "";
+  if (t === "M" || t === "MANANA") return "M";
+  if (t === "T" || t === "TARDE") return "T";
+  if (t === "N" || t === "V" || t === "NOCTURNO" || t === "NOCHE" || t === "VESPERTINO") return "N";
+  if (t === "MT") return "MT";
+  if (t === "A" || t === "ALTERNADO") return "A";
+  return t;
+}
+
+function dbg2NormalizarOferta(doc) {
+  return {
+    id: String(doc?.iddetalle || doc?.idoferta || doc?.id || "").trim(),
+    distrito: String(doc?.descdistrito || "").trim(),
+    distrito_norm: dbg2Norm(doc?.descdistrito || ""),
+    cargo: String(doc?.descripcioncargo || doc?.cargo || "").trim(),
+    cargo_sigla: dbg2ExtraerSiglaParentesis(doc?.descripcioncargo || doc?.cargo || ""),
+    nivel: String(doc?.descnivelmodalidad || "").trim(),
+    nivel_norm: dbg2Norm(doc?.descnivelmodalidad || ""),
+    turno: String(doc?.turno || "").trim(),
+    turno_norm: dbg2NormalizarTurno(doc?.turno || ""),
+    escuela: String(doc?.nombreestablecimiento || doc?.escuela || "").trim(),
+    finoferta: String(doc?.finoferta || doc?.finoferta_label || "").trim(),
+    estado_raw: String(doc?.estado || "").trim(),
+    raw: doc
+  };
+}
+
+function dbg2OfertaActiva(oferta) {
+  const estado = dbg2Norm(oferta?.estado_raw || "");
+  const fin = String(oferta?.finoferta || "").trim();
+  const finDate = fin ? new Date(fin) : null;
+  const vencida = finDate && !isNaN(finDate.getTime()) && finDate.getTime() < Date.now();
+
+  if (vencida) return false;
+  if (estado.includes("ANULAD")) return false;
+  if (estado.includes("DESIGNAD")) return false;
+  if (estado.includes("RENUNCIAD")) return false;
+  if (estado.includes("CERRAD")) return false;
+  if (estado.includes("VENCID")) return false;
+
+  return true;
+}
+
+async function dbg2FetchPage(distrito, start = 0, rows = 100) {
+  const base = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
+  const url = new URL(base);
+  url.searchParams.set("wt", "json");
+  url.searchParams.set("rows", String(rows));
+  url.searchParams.set("start", String(start));
+  url.searchParams.set("q", `descdistrito:"${distrito}"`);
+
+  const resp = await fetch(url.toString(), {
+    method: "GET",
+    headers: { Accept: "application/json, text/plain, */*" }
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`APD HTTP ${resp.status} ${txt.slice(0, 300)}`);
+  }
+
+  const data = await resp.json();
+  return {
+    docs: Array.isArray(data?.response?.docs) ? data.response.docs : [],
+    numFound: Number(data?.response?.numFound || 0)
+  };
+}
+
+async function dbg2ObtenerBaseDistrito(distrito, maxPages = 4) {
+  const rows = 100;
+  let start = 0;
+  let total = 0;
+  let pages = 0;
+  const acumuladas = [];
+
+  do {
+    const page = await dbg2FetchPage(distrito, start, rows);
+    total = page.numFound;
+    acumuladas.push(...page.docs);
+    start += rows;
+    pages += 1;
+  } while (start < total && pages < maxPages);
+
+  const map = new Map();
+
+  for (const doc of acumuladas) {
+    const of = dbg2NormalizarOferta(doc);
+    if (!of.id) continue;
+    if (!dbg2OfertaActiva(of)) continue;
+    if (!map.has(of.id)) map.set(of.id, of);
+  }
+
+  return [...map.values()];
+}
+
+function dbg2MatchCargo(oferta, cargoPreferencia) {
+  const siglaPref = dbg2ExtraerSiglaParentesis(cargoPreferencia);
+  const siglaOferta = oferta.cargo_sigla || "";
+  if (!siglaPref) return false;
+  if (!siglaOferta) return false;
+  return siglaOferta === siglaPref;
+}
+
+function dbg2MatchNivel(oferta, nivelPreferencia) {
+  const n = dbg2Norm(nivelPreferencia);
+  if (!n) return true;
+  return oferta.nivel_norm.includes(n);
+}
+
+function dbg2MatchTurno(oferta, turnoPreferencia) {
+  const t = dbg2NormalizarTurno(turnoPreferencia);
+  if (!t) return true;
+  return oferta.turno_norm === t;
+}
+
+async function handleAdminVerificarCasoV2(request, env) {
+  try {
+    const auth = await requireAdmin(env, request);
+    if (!auth.ok) return auth.response;
+
+    const url = new URL(request.url);
+    const distrito = String(url.searchParams.get("distrito") || "").trim();
+    const cargo = String(url.searchParams.get("cargo") || "").trim();
+    const nivel = String(url.searchParams.get("nivel") || "SECUNDARIA").trim();
+    const turno = String(url.searchParams.get("turno") || "M").trim();
+    const maxPages = Number(url.searchParams.get("maxPages") || 4);
+
+    if (!distrito) return adminJson({ ok: false, error: "Falta distrito" }, 400);
+    if (!cargo) return adminJson({ ok: false, error: "Falta cargo" }, 400);
+
+    const universo = await dbg2ObtenerBaseDistrito(distrito, maxPages);
+
+    const evaluadas = universo.map(oferta => {
+      const base = {
+        id: oferta.id,
+        distrito: oferta.distrito,
+        cargo: oferta.cargo,
+        cargo_sigla: oferta.cargo_sigla,
+        nivel: oferta.nivel,
+        turno: oferta.turno,
+        estado: oferta.estado_raw,
+        escuela: oferta.escuela,
+        finoferta: oferta.finoferta
+      };
+
+      if (!dbg2MatchCargo(oferta, cargo)) {
+        return { ...base, paso_fallado: "cargo", pasaFinal: false };
+      }
+      if (!dbg2MatchNivel(oferta, nivel)) {
+        return { ...base, paso_fallado: "nivel", pasaFinal: false };
+      }
+      if (!dbg2MatchTurno(oferta, turno)) {
+        return { ...base, paso_fallado: "turno", pasaFinal: false };
+      }
+
+      return { ...base, paso_fallado: "", pasaFinal: true };
+    });
+
+    const final = evaluadas.filter(x => x.pasaFinal);
+    const descartadas = evaluadas.filter(x => !x.pasaFinal);
+
+    return adminJson({
+      ok: true,
+      pref: { distrito, cargo, nivel, turno, maxPages },
+      resumen_universo: {
+        distrito,
+        total_base: universo.length,
+        cargos_unicos: [...new Set(universo.map(x => x.cargo).filter(Boolean))].length,
+        niveles_unicos: [...new Set(universo.map(x => x.nivel).filter(Boolean))].length,
+        turnos_unicos: [...new Set(universo.map(x => x.turno).filter(Boolean))].length
+      },
+      resumen_comparacion: {
+        total_evaluadas: evaluadas.length,
+        pasan_final: final.length,
+        descartadas_cargo: descartadas.filter(x => x.paso_fallado === "cargo").length,
+        descartadas_nivel: descartadas.filter(x => x.paso_fallado === "nivel").length,
+        descartadas_turno: descartadas.filter(x => x.paso_fallado === "turno").length
+      },
+      final,
+      descartadas
+    });
+  } catch (err) {
+    return adminJson({
+      ok: false,
+      error: err?.message || String(err),
+      stack: String(err?.stack || "")
+    }, 500);
+  }
+}
 var worker_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -2447,6 +2794,15 @@ if (path === `${API_URL_PREFIX2}/subscription/cancel` && request.method === "POS
 
 if (path === "/api/admin/comparar-filtro" && request.method === "GET") {
   return await handleAdminCompararFiltro(request, env);
+}
+if (path === "/api/admin/comparar-masivo" && request.method === "GET") {
+  return await handleAdminCompararMasivo(request, env);
+}
+if (path === "/api/admin/verificar-caso" && request.method === "GET") {
+  return await handleAdminVerificarCaso(request, env);
+}
+if (path === "/api/admin/verificar-caso-v2" && request.method === "GET") {
+  return await handleAdminVerificarCasoV2(request, env);
 }
       return json({ ok: false, error: "Ruta no encontrada" }, 404);
     } catch (err) {
