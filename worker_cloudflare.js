@@ -1614,238 +1614,291 @@ function buildMailChanceInfo(p) {
   };
 }
 function renderMailOfferCard(row) {
-  const p = normalizeOfferPayload(row?.offer_payload || {});
-  const chance = buildMailChanceInfo(p);
+  const safePanelUrl = escHtml(PANEL_URL);
+  const raw = row?.offer_payload || row || {};
+  const o = normalizeOfferPayload(raw);
 
-  const titulo = p.cargo || p.materia || p.title || "Oferta APD";
-
-  const puntajeBase =
-    Number.isFinite(Number(p?.pid_puntaje_total_base))
-      ? Number(p.pid_puntaje_total_base)
-      : parseMailNumber(p?.pid_puntaje_total);
-
-  const puntajeFinal =
-    Number.isFinite(Number(p?.pid_puntaje_total_final))
-      ? Number(p.pid_puntaje_total_final)
-      : (
-          Number.isFinite(puntajeBase)
-            ? puntajeBase + Number(p?.pid_residencia_bonus_puntos || 0)
-            : null
-        );
-
-  const tipo = String(p.revista || "").trim() || (
-    (
-      p.desde &&
-      String(p.desde).trim() &&
-      String(p.desde).trim().toLowerCase() !== "sin fecha" &&
-      p.hasta &&
-      String(p.hasta).trim() &&
-      String(p.hasta).trim().toLowerCase() !== "sin fecha"
-    )
-      ? "Suplencia"
-      : "Provisional"
+  const titulo = escHtml(
+    o.cargo ||
+    o.materia ||
+    o.title ||
+    "Oferta APD"
   );
 
-  const chanceIcon =
-    !chance ? "" :
-    chance.title.includes("Muy favorable") ? "🟢" :
-    chance.title.includes("Favorable") ? "🟢" :
-    chance.title.includes("Competida") ? "🔵" :
-    chance.title.includes("Sin competencia") ? "🟢" :
-    "🟠";
+  const distrito = escHtml(o.distrito || "—");
+  const turno = escHtml(o.turno || "—");
+  const nivel = escHtml(o.nivel || o.nivel_modalidad || "—");
+  const area = escHtml(o.area || o.area_pd || o.materia || "—");
+  const cursoDivision = escHtml(o.cursodivision || o.curso_division || "—");
+  const modulos = escHtml(String(o.modulos || "—"));
+  const diasHora = escHtml(o.dias_horarios || o.diashora || o.horario || "—");
+  const vigencia = escHtml(
+    o.vigencia ||
+    (o.fecha_desde || o.fecha_hasta
+      ? `${o.fecha_desde || "—"} — ${o.fecha_hasta || "—"}`
+      : "—")
+  );
+  const cierre = escHtml(o.fecha_cierre || o.finoferta || "—");
+
+  const motivo = escHtml(o.motivo_estado || o.motivo || "Compatible con tu PID");
+  const bloquePid = escHtml(o.bloque_pid || o.bloque || o.bloque_pd || "—");
+  const puntajeEabe = escHtml(String(o.puntaje_primero || o.puntaje_eabe || "—"));
+  const bonoResidencia = escHtml(
+    o.bono_residencia != null && o.bono_residencia !== ""
+      ? String(o.bono_residencia)
+      : "—"
+  );
+  const distritoResidencia = escHtml(o.distrito_residencia || "—");
+  const puntajeTotal = escHtml(String(o.tu_puntaje || o.puntaje_total || "—"));
+  const listadoMayor = escHtml(
+    o.listado_origen_primero ||
+    o.listado_mayor_puntaje ||
+    o.listado_referencia ||
+    "—"
+  );
+  const anioListado = escHtml(String(o.anio_listado || new Date().getFullYear()));
+  const diferenciaTexto = escHtml(
+    o.diferencia_puntaje_texto ||
+    (
+      o.tu_puntaje != null && o.puntaje_primero != null
+        ? `Tu puntaje (${o.tu_puntaje}) hoy queda por debajo del mejor visible (${o.puntaje_primero}).`
+        : "Referencia calculada según los postulantes visibles."
+    )
+  );
+
+  const cantPost = escHtml(String(o.total_postulantes || o.cantidad_postulantes || "—"));
+  const puntajeMasAlto = escHtml(String(o.puntaje_primero || o.puntaje_mas_alto || "—"));
+  const listadoMasAlto = escHtml(
+    o.listado_origen_primero ||
+    o.listado_mas_alto ||
+    "—"
+  );
+
+  const chips = [
+    o.codigo ? { text: escHtml(o.codigo), bg: "#eef2ff", color: "#1e40af" } : null,
+    o.distrito ? { text: distrito, bg: "#f3f4f6", color: "#374151" } : null,
+    o.turno ? { text: turno, bg: "#ecfdf5", color: "#166534" } : null,
+    o.is ? { text: escHtml(o.is), bg: "#fff7ed", color: "#9a3412" } : null,
+    o.nivel ? { text: nivel, bg: "#fef3c7", color: "#92400e" } : null,
+    o.situacion_revista ? { text: escHtml(o.situacion_revista), bg: "#f5f3ff", color: "#6d28d9" } : null
+  ].filter(Boolean);
+
+  const chipsHtml = chips.map((chip) => `
+    <span style="
+      display:inline-block;
+      margin:0 6px 6px 0;
+      padding:5px 10px;
+      border-radius:999px;
+      background:${chip.bg};
+      color:${chip.color};
+      font-family:Arial,Helvetica,sans-serif;
+      font-size:11px;
+      line-height:1.2;
+      font-weight:700;
+      letter-spacing:.02em;
+    ">
+      ${chip.text}
+    </span>
+  `).join("");
+
+  const abcUrl = raw?.url || raw?.link || raw?.abc_url || "#";
 
   return `
     <tr>
-      <td style="padding:0 0 18px 0;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-          style="border:1px solid #dbe3f0;border-radius:18px;background:#ffffff;overflow:hidden;">
+      <td style="padding:0 0 20px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+          width:100%;
+          border:1px solid #d6deea;
+          border-radius:18px;
+          background:#f8fbff;
+          overflow:hidden;
+        ">
           <tr>
-            <td style="padding:0;">
-
-              <div style="background:linear-gradient(180deg,#f8fbff 0%,#eef5ff 100%);padding:18px 18px 14px 18px;border-bottom:1px solid #e4ecf7;">
-                <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:1.2;font-weight:800;color:#0f3460;margin:0 0 12px 0;">
-                  ${escHtml(titulo)}
-                </div>
-
-                <div style="margin:0 0 4px 0;">
-                  ${p.escuela ? `<span style="display:inline-block;background:#eef4ff;color:#1f4fa3;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏫 ${escHtml(p.escuela)}</span>` : ""}
-                  ${p.distrito ? `<span style="display:inline-block;background:#eef1f4;color:#29435c;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📍 ${escHtml(p.distrito)}</span>` : ""}
-                  ${p.turno ? `<span style="display:inline-block;background:#edf9f0;color:#0b7a44;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🕒 ${escHtml(p.turno)}</span>` : ""}
-                  ${p.jornada ? `<span style="display:inline-block;background:#f3f4f6;color:#374151;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🏷️ ${escHtml(p.jornada)}</span>` : ""}
-                  ${p.nivel ? `<span style="display:inline-block;background:#fff5e8;color:#9a6700;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">🎓 ${escHtml(p.nivel)}</span>` : ""}
-                  ${tipo ? `<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;padding:7px 11px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">📌 ${escHtml(tipo)}</span>` : ""}
-                </div>
+            <td style="padding:18px 18px 10px 18px;">
+              <div style="
+                font-family:Arial,Helvetica,sans-serif;
+                font-size:15px;
+                line-height:1.2;
+                font-weight:800;
+                letter-spacing:.10em;
+                color:#173a74;
+                text-transform:uppercase;
+                margin-bottom:12px;
+              ">
+                ${titulo}
               </div>
 
-              <div style="padding:16px 18px 18px 18px;">
-
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px 0;">
-                  <tr>
-                    <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Curso / división</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;">${escHtml(p.curso_division || "-")}</div>
-                      </div>
-                    </td>
-                    <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Módulos</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;">${escHtml(p.modulos || "-")}</div>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Días / horarios</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;line-height:1.45;">${escHtml(p.dias_horarios || "-")}</div>
-                      </div>
-                    </td>
-                    <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Vigencia</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;line-height:1.45;">${escHtml((p.desde || "-") + (p.hasta ? " → " + p.hasta : ""))}</div>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colspan="2" style="padding:0;vertical-align:top;">
-                      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Cierre</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#111827;">${escHtml(p.fecha_cierre || "-")}</div>
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-
-                ${
-                  p.observaciones
-                    ? `
-                      <div style="margin:0 0 14px 0;padding:12px 14px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:6px;">Observaciones</div>
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;">${escHtml(p.observaciones)}</div>
-                      </div>
-                    `
-                    : ""
-                }
-
-                ${
-                  chance
-                    ? `
-                      <div style="margin:0 0 14px 0;padding:14px 14px 12px 14px;background:${chance.toneBg};border:1px solid ${chance.toneBorder};border-radius:14px;">
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:800;color:${chance.toneColor};margin:0 0 10px 0;">
-                          ${chanceIcon} ${escHtml(chance.title)}
-                        </div>
-
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
-                          <tr>
-                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Motivo</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;line-height:1.45;">${escHtml(p.pid_reason || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID"))}</div>
-                              </div>
-                            </td>
-                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Área PID</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_area || "-")}</div>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bloque PID</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_bloque || "-")}</div>
-                              </div>
-                            </td>
-                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Puntaje base</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeBase) ? formatMailNumber(puntajeBase) : "-"}</div>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Bonus residencia</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${p.pid_residencia_bonus_aplicado ? `+${p.pid_residencia_bonus_puntos}` : "No"}</div>
-                              </div>
-                            </td>
-                            <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Distrito residencia</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.pid_distrito_residencia || "-")}</div>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td width="50%" style="padding:0 8px 0 0;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Tu puntaje total</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${Number.isFinite(puntajeFinal) ? formatMailNumber(puntajeFinal) : "-"}</div>
-                              </div>
-                            </td>
-                            <td width="50%" style="padding:0 0 0 8px;vertical-align:top;">
-                              <div style="background:rgba(255,255,255,.6);border:1px solid rgba(15,52,96,.08);border-radius:12px;padding:10px 12px;">
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Listado / año PID</div>
-                                <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml((p.pid_listado || "-") + " · " + (p.pid_anio || "-"))}</div>
-                              </div>
-                            </td>
-                          </tr>
-                        </table>
-
-                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;margin-top:8px;">
-                          ${escHtml(chance.text)}
-                        </div>
-                      </div>
-                    `
-                    : ""
-                }
-
-                <div style="margin:0 0 14px 0;padding:14px 14px 12px 14px;background:#f7faff;border:1px solid #dbeafe;border-radius:14px;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:800;color:#1d4ed8;margin:0 0 10px 0;">
-                    REFERENCIA DE POSTULANTES
-                  </div>
-
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;">
-                        <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Cantidad</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${(p.total_postulantes != null && p.total_postulantes !== "") ? escHtml(String(p.total_postulantes)) : "Sin postulados visibles"}</div>
-                        </div>
-                      </td>
-                      <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;">
-                        <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Puntaje más alto</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${(p.puntaje_primero != null && p.puntaje_primero !== "") ? formatMailNumber(parseMailNumber(p.puntaje_primero)) : "Sin datos"}</div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colspan="2" style="padding:0;vertical-align:top;">
-                        <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:12px;padding:10px 12px;">
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Listado del más alto</div>
-                          <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#111827;">${escHtml(p.listado_origen_primero || "Sin datos")}</div>
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
-                </div>
-
-                <div style="margin-top:4px;">
-                  ${
-                    p.link
-                      ? `<a href="${escHtml(p.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:11px 16px;margin:4px 8px 0 0;text-decoration:none;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a ABC</a>`
-                      : ""
-                  }
-                  <a href="https://alertasapd.com.ar" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:11px 16px;margin:4px 8px 0 0;text-decoration:none;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a mi panel</a>
-                </div>
-
+              <div style="margin-bottom:10px;">
+                ${chipsHtml}
               </div>
 
+              <div style="margin:0 0 14px 0;">
+                <a href="${escHtml(abcUrl)}" target="_blank" style="
+                  display:inline-block;
+                  background:#2563eb;
+                  color:#ffffff;
+                  text-decoration:none;
+                  padding:8px 14px;
+                  border-radius:8px;
+                  font-family:Arial,Helvetica,sans-serif;
+                  font-size:12px;
+                  font-weight:700;
+                  margin-right:8px;
+                ">Ir a ABC</a>
+
+                <a href="${safePanelUrl}" target="_blank" style="
+                  display:inline-block;
+                  background:#163f7a;
+                  color:#ffffff;
+                  text-decoration:none;
+                  padding:8px 14px;
+                  border-radius:8px;
+                  font-family:Arial,Helvetica,sans-serif;
+                  font-size:12px;
+                  font-weight:700;
+                ">Ir a mi panel</a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 18px 18px 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                    ${mailInfoBox("CURSO / DIVISIÓN", cursoDivision)}
+                  </td>
+                  <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                    ${mailInfoBox("MÓDULOS", modulos)}
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                    ${mailInfoBox("DÍAS / HORA.PROB", diasHora)}
+                  </td>
+                  <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                    ${mailInfoBox("VIGENCIA", vigencia)}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding:0;">
+                    ${mailInfoBox("CIERRE", cierre)}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 18px 12px 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+                width:100%;
+                border:1px solid #e7c574;
+                border-radius:14px;
+                background:#fff8e7;
+              ">
+                <tr>
+                  <td style="padding:12px 14px 8px 14px;">
+                    <div style="
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:13px;
+                      line-height:1.3;
+                      font-weight:700;
+                      color:#a15b00;
+                      margin-bottom:10px;
+                    ">🟠 Estado actual: Difícil</div>
+
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                          ${mailMiniBox("MOTIVO", motivo)}
+                        </td>
+                        <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                          ${mailMiniBox("ÁREA PID", area)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                          ${mailMiniBox("BLOQUE PID", bloquePid)}
+                        </td>
+                        <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                          ${mailMiniBox("PUNTAJE E.A.B.E", puntajeEabe)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                          ${mailMiniBox("BONUS RESIDENCIA", bonoResidencia)}
+                        </td>
+                        <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                          ${mailMiniBox("DISTRITO RESIDENCIA", distritoResidencia)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" style="padding:0 6px 0 0; vertical-align:top;">
+                          ${mailMiniBox("TU PUNTAJE TOTAL", puntajeTotal)}
+                        </td>
+                        <td width="50%" style="padding:0 0 0 6px; vertical-align:top;">
+                          ${mailMiniBox("LISTADO / AÑO PID", `${listadoMayor} · ${anioListado}`)}
+                        </td>
+                      </tr>
+                    </table>
+
+                    <div style="
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:12px;
+                      line-height:1.5;
+                      color:#4b5563;
+                      margin-top:10px;
+                    ">
+                      ${diferenciaTexto}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 18px 18px 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
+                width:100%;
+                border:1px solid #c8d7ff;
+                border-radius:14px;
+                background:#f6f9ff;
+              ">
+                <tr>
+                  <td style="padding:12px 14px 8px 14px;">
+                    <div style="
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:12px;
+                      line-height:1.3;
+                      font-weight:800;
+                      color:#2b5fb8;
+                      letter-spacing:.08em;
+                      text-transform:uppercase;
+                      margin-bottom:10px;
+                    ">
+                      Referencia de postulantes
+                    </div>
+
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
+                          ${mailMiniBox("CANTIDAD", cantPost)}
+                        </td>
+                        <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
+                          ${mailMiniBox("PUNTAJE MÁS ALTO", puntajeMasAlto)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding:0;">
+                          ${mailMiniBox("LISTADO DEL MÁS ALTO", listadoMasAlto)}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
         </table>
@@ -4536,7 +4589,7 @@ const rowsToProcess = targetUserId
   ? rowsBase
   : rowsBase.slice(0, MANUAL_SWEEP_LIMIT);
 
-  if (targetUserId && !rowsToProcess.length) {
+    if (targetUserId && !rowsToProcess.length) {
     return {
       ok: true,
       processed_users: 0,
@@ -4549,6 +4602,8 @@ const rowsToProcess = targetUserId
       limit_per_run: targetUserId ? 1 : MANUAL_SWEEP_LIMIT,
       stopped_early: false,
       failed_samples: [],
+      pref_source: prefSource,
+      pref_error: prefError,
       debug_enabled: debugEnabled,
       debug_user_id: debugUserId || null,
       dry_run: dryRun,
@@ -12100,8 +12155,32 @@ async function handleTestEmailSweep(env) {
 }
 
 async function handleTestDigest(env) {
-  const r = await sendPendingEmailDigests(env);
-  return jsonResponse(r, 200);
+  try {
+    const r = await sendPendingEmailDigests(env);
+    return jsonResponse(r, 200);
+  } catch (err) {
+    const msg = String(err?.message || err || "");
+
+    if (/Too many subrequests/i.test(msg)) {
+      const fallback = await runEmailAlertsSweep(env, {
+        source: "manual_test_digest_fallback",
+        max_users: 1
+      });
+
+      return jsonResponse({
+        ok: true,
+        fallback_used: true,
+        fallback_reason: msg,
+        ...fallback
+      }, 200);
+    }
+
+    return jsonResponse({
+      ok: false,
+      error: msg,
+      stack: String(err?.stack || "")
+    }, 500);
+  }
 }
 export {
   worker_hotfix_default as default
