@@ -4846,7 +4846,97 @@ async function runEmailAlertsSweep(env, options = {}) {
         );
       });
   }
+  function emailCleanId(value) {
+    const s = String(value || "").trim();
+    if (!s) return "";
+    const m = s.match(/\d+/);
+    return m ? m[0] : "";
+  }
 
+  function emailGetOfertaDetalle(payload) {
+    const p = normalizeOfferPayload(payload || {});
+    const raw = p?.raw || {};
+
+    const oferta = emailCleanId(
+      p.idoferta ||
+      raw.idoferta ||
+      raw.oferta ||
+      raw.id_oferta ||
+      ""
+    );
+
+    const detalle = emailCleanId(
+      p.iddetalle ||
+      raw.iddetalle ||
+      raw.detalle ||
+      raw.id_detalle ||
+      p.offer_id ||
+      raw.offer_id ||
+      ""
+    );
+
+    return { oferta, detalle };
+  }
+
+  async function enrichEmailVisibleAlertsWithPostulantes(env, alerts) {
+    const source = Array.isArray(alerts) ? alerts : [];
+
+    const enriched = await Promise.all(
+      source.map(async (item) => {
+        const base = normalizeOfferPayload(item?.offer_payload || item || {});
+        const ids = emailGetOfertaDetalle(base);
+
+        if (!ids.oferta || !ids.detalle || typeof obtenerResumenPostulantesABC !== "function") {
+          return {
+            ...item,
+            offer_payload: base,
+            email_postulantes_enriched: false,
+            email_postulantes_reason: "missing_ids_or_helper"
+          };
+        }
+
+        try {
+          const resumen = await Promise.race([
+            obtenerResumenPostulantesABC(ids.oferta, ids.detalle),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("timeout_postulantes_email")), 4500)
+            )
+          ]);
+
+          return {
+            ...item,
+            offer_payload: normalizeOfferPayload({
+              ...base,
+              total_postulantes:
+                resumen?.total_postulantes ?? base.total_postulantes ?? null,
+              puntaje_primero:
+                resumen?.puntaje_primero ?? base.puntaje_primero ?? null,
+              listado_origen_primero:
+                resumen?.listado_origen_primero ||
+                base.listado_origen_primero ||
+                ""
+            }),
+            email_postulantes_enriched: true
+          };
+        } catch (err) {
+          console.error("EMAIL POSTULANTES ENRICH ERROR:", {
+            oferta: ids.oferta || null,
+            detalle: ids.detalle || null,
+            error: String(err?.message || err || "")
+          });
+
+          return {
+            ...item,
+            offer_payload: base,
+            email_postulantes_enriched: false,
+            email_postulantes_reason: String(err?.message || err || "")
+          };
+        }
+      })
+    );
+
+    return enriched;
+  }
   const userIds = rowsToProcess
     .map((row) => String(row?.user_id || "").trim())
     .filter(Boolean);
@@ -4957,12 +5047,17 @@ async function runEmailAlertsSweep(env, options = {}) {
       .slice()
       .sort((a, b) => emailAlertTime(b) - emailAlertTime(a));
 
-    const totalAlerts = sortedLatest.length;
+      const totalAlerts = sortedLatest.length;
     const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
-    const visibleAlerts = visibleSource.map((item) => ({
-      offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-    }));
+    const visibleAlerts = await enrichEmailVisibleAlertsWithPostulantes(
+      env,
+      visibleSource.map((item) => ({
+        offer_id: item?.offer_id || "",
+        offer_payload: normalizeOfferPayload(item?.offer_payload || item || {}),
+        last_seen_at: item?.last_seen_at || ""
+      }))
+    );
 
     const shownCount = visibleAlerts.length;
 
@@ -5001,7 +5096,7 @@ async function runEmailAlertsSweep(env, options = {}) {
       })
       .filter(Boolean);
 
-    const sampleTitles = visibleAlerts
+        const sampleTitles = visibleAlerts
       .map((item) => {
         const p = normalizeOfferPayload(item?.offer_payload || item || {});
         return String(
@@ -5009,6 +5104,22 @@ async function runEmailAlertsSweep(env, options = {}) {
         ).trim();
       })
       .filter(Boolean);
+
+    const enrichedSamples = visibleAlerts.map((item) => {
+      const p = normalizeOfferPayload(item?.offer_payload || item || {});
+      return {
+        offer_id: String(
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.offer_id ||
+          ""
+        ).trim(),
+        total_postulantes: p.total_postulantes,
+        puntaje_primero: p.puntaje_primero,
+        listado_origen_primero: p.listado_origen_primero || ""
+      };
+    });
 
     const payload = {
       source: options.source || "cron",
@@ -5022,7 +5133,7 @@ async function runEmailAlertsSweep(env, options = {}) {
 
     attemptedDigests += 1;
 
-    if (dryRun) {
+        if (dryRun) {
       pushDebug({
         user_id: userId,
         stage: "dry_run",
@@ -5033,6 +5144,8 @@ async function runEmailAlertsSweep(env, options = {}) {
         visible_alert_keys: visibleAlertKeys,
         visible_offer_ids: visibleOfferIds,
         sample_titles: sampleTitles,
+        enriched_postulantes: true,
+        enriched_samples: enrichedSamples,
         send_ok: null,
         send_status: null,
         dry_run: true,
@@ -5068,7 +5181,7 @@ async function runEmailAlertsSweep(env, options = {}) {
       provider_response: send || null
     }).catch(() => null);
 
-    pushDebug({
+        pushDebug({
       user_id: userId,
       stage: "send_attempt",
       destination: user.email,
@@ -5078,6 +5191,8 @@ async function runEmailAlertsSweep(env, options = {}) {
       visible_alert_keys: visibleAlertKeys,
       visible_offer_ids: visibleOfferIds,
       sample_titles: sampleTitles,
+      enriched_postulantes: true,
+      enriched_samples: enrichedSamples,
       send_ok: !!send?.ok,
       send_status: send?.status || null,
       send_data:
@@ -12399,11 +12514,39 @@ async function handleWhatsAppWebhook(request, env) {
     return s ? s : fallback;
   }
 
-  function waOfferText(item, index, totalShown) {
+    function waOfferText(item, index, totalShown) {
     const p = normalizeOfferPayload(item?.offer_payload || item || {});
     const raw = p?.raw || {};
 
-    const titulo = waValue(
+    const safe = (value, fallback = "—") => {
+      const s = String(value ?? "").trim();
+      return s ? s : fallback;
+    };
+
+    const clip = (value, max = 700) => {
+      const s = safe(value, "");
+      if (!s) return "";
+      return s.length > max ? `${s.slice(0, max).trim()}...` : s;
+    };
+
+    const num = (value) => {
+      const n = typeof parseMailNumber === "function"
+        ? parseMailNumber(value)
+        : Number(value);
+
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const fmt = (value, fallback = "—") => {
+      const n = num(value);
+      if (!Number.isFinite(n)) return fallback;
+
+      return typeof formatMailNumber === "function"
+        ? formatMailNumber(n)
+        : String(n);
+    };
+
+    const titulo = safe(
       p.cargo ||
       p.materia ||
       p.title ||
@@ -12413,14 +12556,15 @@ async function handleWhatsAppWebhook(request, env) {
       "Oferta APD"
     );
 
-    const distrito = waValue(p.distrito || raw.descdistrito);
-    const escuela = waValue(p.escuela || raw.escuela || raw.nombreestablecimiento);
-    const turno = waValue(p.turno || raw.turno);
-    const jornada = waValue(p.jornada || raw.jornada);
-    const nivel = waValue(p.nivel || p.nivel_modalidad || raw.descnivelmodalidad);
-    const curso = waValue(p.curso_division || p.cursodivision || raw.cursodivision);
-    const modulos = waValue(p.modulos || p.hsmodulos || raw.hsmodulos);
-    const dias = waValue(
+    const distrito = safe(p.distrito || raw.descdistrito);
+    const escuela = safe(p.escuela || raw.escuela || raw.nombreestablecimiento);
+    const turno = safe(p.turno || raw.turno);
+    const jornada = safe(p.jornada || raw.jornada);
+    const nivel = safe(p.nivel || p.nivel_modalidad || raw.descnivelmodalidad);
+    const curso = safe(p.curso_division || p.cursodivision || raw.cursodivision);
+    const modulos = safe(p.modulos || p.hsmodulos || raw.hsmodulos);
+
+    const dias = safe(
       p.dias_horarios ||
       p.diashora ||
       p.horario ||
@@ -12428,23 +12572,23 @@ async function handleWhatsAppWebhook(request, env) {
       raw.dias_horarios
     );
 
-    const desde = waValue(p.desde || p.supl_desde || raw.supl_desde, "Sin fecha");
-    const hasta = waValue(p.hasta || p.supl_hasta || raw.supl_hasta, "Sin fecha");
-    const vigencia = waValue(p.vigencia, `${desde} / ${hasta}`);
-
-    const cierre = waValue(p.fecha_cierre || p.finoferta || raw.finoferta);
+    const desde = safe(p.desde || p.supl_desde || raw.supl_desde, "Sin fecha");
+    const hasta = safe(p.hasta || p.supl_hasta || raw.supl_hasta, "Sin fecha");
+    const vigencia = safe(p.vigencia, `${desde} / ${hasta}`);
+    const cierre = safe(p.fecha_cierre || p.finoferta || raw.finoferta);
+    const observaciones = clip(p.observaciones || raw.observaciones || "", 700);
 
     const totalPostulantes =
       p.total_postulantes != null && p.total_postulantes !== ""
         ? String(p.total_postulantes)
-        : "Sin datos";
+        : "Sin postulados visibles";
 
     const puntajeMasAlto =
       p.puntaje_primero != null && p.puntaje_primero !== ""
-        ? waFormatNumber(p.puntaje_primero)
+        ? fmt(p.puntaje_primero, "Sin datos")
         : "Sin datos";
 
-    const listadoMasAlto = waValue(p.listado_origen_primero, "Sin datos");
+    const listadoMasAlto = safe(p.listado_origen_primero, "Sin datos");
 
     const postuladosUrl = waBuildPostuladosUrl(p);
 
@@ -12460,12 +12604,70 @@ async function handleWhatsAppWebhook(request, env) {
       `🔢 Módulos: ${modulos}`,
       `📅 Días/horarios: ${dias}`,
       `🗓️ Vigencia: ${vigencia}`,
-      `⏰ Cierre: ${cierre}`,
-      ``,
-      `👥 Postulados visibles: ${totalPostulantes}`,
-      `📈 Puntaje más alto: ${puntajeMasAlto}`,
-      `📄 Listado del más alto: ${listadoMasAlto}`
+      `⏰ Cierre: ${cierre}`
     ];
+
+    if (observaciones) {
+      lines.push(`📝 Observaciones: ${observaciones}`);
+    }
+
+    lines.push(``);
+    lines.push(`📌 *Referencia de postulantes*`);
+    lines.push(`👥 Postulados visibles: ${totalPostulantes}`);
+    lines.push(`📈 Puntaje más alto: ${puntajeMasAlto}`);
+    lines.push(`📄 Listado del más alto: ${listadoMasAlto}`);
+
+    if (hasPidEvidence(p)) {
+      const chance = buildMailChanceInfo(p);
+
+      const puntajeBase = Number.isFinite(Number(p.pid_puntaje_total_base))
+        ? Number(p.pid_puntaje_total_base)
+        : num(p.pid_puntaje_total);
+
+      const bonusResidencia = p.pid_residencia_bonus_aplicado
+        ? Number(p.pid_residencia_bonus_puntos || 0)
+        : 0;
+
+      const puntajeFinal = Number.isFinite(Number(p.pid_puntaje_total_final))
+        ? Number(p.pid_puntaje_total_final)
+        : (
+            Number.isFinite(puntajeBase)
+              ? puntajeBase + bonusResidencia
+              : null
+          );
+
+      const primero = num(p.puntaje_primero);
+
+      const diff = Number.isFinite(puntajeFinal) && Number.isFinite(primero)
+        ? puntajeFinal - primero
+        : null;
+
+      lines.push(``);
+      lines.push(`🧠 *${chance?.title || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID")}*`);
+      lines.push(`🧾 Motivo PID: ${safe(p.pid_reason || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID"))}`);
+      lines.push(`📚 Área PID: ${safe(p.pid_area || p.area || p.materia)}`);
+      lines.push(`🗂️ Bloque PID: ${safe(p.pid_bloque || p.bloque_pid)}`);
+      lines.push(`📊 Puntaje PID base: ${Number.isFinite(puntajeBase) ? fmt(puntajeBase) : "—"}`);
+
+      if (p.pid_residencia_bonus_aplicado) {
+        lines.push(`➕ Bonus residencia: +${fmt(bonusResidencia, "0")}`);
+        lines.push(`🏠 Distrito residencia: ${safe(p.pid_distrito_residencia)}`);
+      } else {
+        lines.push(`➕ Bonus residencia: No`);
+      }
+
+      lines.push(`⭐ Tu puntaje total: ${Number.isFinite(puntajeFinal) ? fmt(puntajeFinal) : "—"}`);
+      lines.push(`🧷 Listado/año PID: ${safe(p.pid_listado)} · ${safe(p.pid_anio)}`);
+
+      if (Number.isFinite(diff)) {
+        const sign = diff > 0 ? "+" : "";
+        lines.push(`🧮 Diferencia vs más alto: ${sign}${fmt(diff)}`);
+      }
+
+      if (chance?.text) {
+        lines.push(`ℹ️ ${clip(chance.text, 500)}`);
+      }
+    }
 
     if (postuladosUrl) {
       lines.push(``);
