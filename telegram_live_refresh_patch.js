@@ -21,7 +21,7 @@
     if (!key) return 'tu plan';
     if (key === 'TRIAL_7D') return 'Prueba 7 días';
     if (key === 'PLUS') return 'Plus';
-    if (key === 'PREMIUM' || key === 'PRO') return 'Pro';
+    if (key === 'PREMIUM' || key === 'PRO') return 'Premium';
     if (key === 'INSIGNE') return 'Insigne';
     return key;
   }
@@ -32,6 +32,70 @@
     pill.style.background = bg;
     pill.style.color = color;
     pill.style.borderColor = border;
+  }
+
+  function ensureWhatsappCopyPatch() {
+    if (window.__apdWhatsappQueryOnlyCopyPatchLoaded) return;
+    if ([...document.scripts].some(s => s.src && s.src.includes('whatsapp_query_only_copy_patch.js'))) return;
+    const s = document.createElement('script');
+    s.src = 'whatsapp_query_only_copy_patch.js?v=1';
+    s.defer = true;
+    s.id = 'apd-whatsapp-query-only-copy-loader';
+    document.body.appendChild(s);
+  }
+
+  function patchPublicCopy() {
+    const hero = document.querySelector('.hero-eyebrow');
+    if (hero && /beta/i.test(hero.textContent || '')) {
+      hero.textContent = '🎯 Servicio de alertas para docentes PBA';
+    }
+
+    document.querySelectorAll('a[href="./soporte-beta.html"], a[href="soporte-beta.html"]').forEach(a => {
+      a.setAttribute('href', './soporte.html');
+    });
+
+    const listadosCard = byId('panel-listados-pid-card');
+    const listadosHint = listadosCard?.querySelector('.prefs-hint');
+    if (listadosHint) {
+      listadosHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función incluida en plan Insigne o según habilitación vigente de tu plan.';
+    }
+
+    const backfillLabel = byId('panel-backfill-provincia')?.closest('.panel-card')?.querySelector('.card-lbl');
+    if (backfillLabel && /Backfill/i.test(backfillLabel.textContent || '')) {
+      backfillLabel.textContent = '🛠️ Herramientas de actualización';
+    }
+  }
+
+  function patchChannelsSummaryCopy() {
+    const canales = byId('panel-canales');
+    if (!canales) return;
+
+    const notes = canales.querySelectorAll('.plan-note');
+    if (notes.length >= 2 && /pr[oó]ximamente|a[uú]n no disponible/i.test(notes[1].textContent || '')) {
+      notes[1].textContent = 'Telegram está disponible según tu plan y requiere vincular el bot desde tus preferencias.';
+    }
+    if (notes.length >= 3) {
+      notes[2].textContent = 'WhatsApp queda reservado para Insigne y funciona en modo consulta manual: escribís ALERTAS y recibís la respuesta en ese momento.';
+    }
+
+    const rows = canales.querySelectorAll('.plan-pill-row');
+    rows.forEach(row => {
+      const txt = row.textContent || '';
+      const neutral = row.querySelector('.plan-pill-neutral');
+      if (!neutral) return;
+      if (/Telegram/i.test(txt) && /Pr[oó]ximamente|No incluido/i.test(neutral.textContent || '')) {
+        neutral.textContent = 'Según plan';
+      }
+      if (/WhatsApp/i.test(txt) && /En preparación|Pr[oó]ximamente/i.test(neutral.textContent || '')) {
+        neutral.textContent = 'Consulta manual';
+      }
+    });
+  }
+
+  function patchAllPublicCopy() {
+    patchPublicCopy();
+    patchChannelsSummaryCopy();
+    ensureWhatsappCopyPatch();
   }
 
   function renderTelegramCard(status, requested) {
@@ -130,10 +194,10 @@
         isRequested ? '#bbf7d0' : '#d6e4ff'
       );
       note.textContent = isRequested
-        ? 'WhatsApp quedó listo para consultas desde el número vinculado.'
-        : 'WhatsApp ya está vinculado, pero el canal está apagado en tus preferencias.';
+        ? 'WhatsApp quedó listo para consulta manual. Escribí ALERTAS en el chat para pedir tus alertas del momento.'
+        : 'WhatsApp ya está vinculado, pero el canal está apagado en tus preferencias. Cuando lo actives, vas a consultar escribiendo ALERTAS.';
       actions.innerHTML = '';
-      mini.textContent = [planName ? `Plan: ${planName}` : '', phoneMasked ? `Número: ${phoneMasked}` : '']
+      mini.textContent = [planName ? `Plan: ${planName}` : '', phoneMasked ? `Número: ${phoneMasked}` : '', 'Modo consulta manual: ALERTAS']
         .filter(Boolean)
         .join(' · ');
       return;
@@ -141,9 +205,9 @@
 
     checkbox.checked = isRequested;
     setPill(pill, isRequested ? 'Pendiente de conexión' : 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
-    note.textContent = connectHint || 'Escribí al número del bot desde tu WhatsApp para vincularlo y consultar alertas.';
+    note.textContent = connectHint || 'Vinculá tu número y después consultá escribiendo ALERTAS en el chat de WhatsApp.';
     actions.innerHTML = '';
-    mini.textContent = planName ? `Incluido en ${planName}.` : '';
+    mini.textContent = planName ? `Incluido en ${planName}. Modo consulta manual: ALERTAS.` : 'Modo consulta manual: ALERTAS.';
   }
 
   async function refreshChannelStatusFromWorker() {
@@ -168,6 +232,8 @@
       if (wa) {
         renderWhatsAppCard(wa, waCheck ? !!waCheck.checked : !!wa.alerts_requested);
       }
+
+      patchAllPublicCopy();
     } catch (err) {
       console.error('APD telegram live refresh error:', err);
     }
@@ -183,6 +249,7 @@
       const out = original.apply(this, arguments);
       setTimeout(refreshChannelStatusFromWorker, 0);
       setTimeout(refreshChannelStatusFromWorker, 700);
+      setTimeout(patchAllPublicCopy, 900);
       return out;
     };
     window.cargarPrefsEnFormulario.__apdLiveRefreshPatched = true;
@@ -190,9 +257,14 @@
   }
 
   function boot() {
+    patchAllPublicCopy();
+    const observer = new MutationObserver(patchAllPublicCopy);
+    if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
     let tries = 0;
     const tick = () => {
       tries += 1;
+      patchAllPublicCopy();
       const done = patchCargarPrefs();
       if (done) {
         setTimeout(refreshChannelStatusFromWorker, 1200);
