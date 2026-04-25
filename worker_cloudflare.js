@@ -2,7 +2,7 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // profile_listados_api.js
-const PANEL_URL = "https://apdocentepba.com";
+const PANEL_URL = "https://alertasapd.com.ar";
 var API_URL_PREFIX = "/api";
 var PD_ABC_SYNC_SOURCE = "abc_public";
 function pdCorsHeaders() {
@@ -1614,73 +1614,113 @@ function buildMailChanceInfo(p) {
   };
 }
 function renderMailOfferCard(row) {
-  const safePanelUrl = escHtml(PANEL_URL);
   const raw = row?.offer_payload || row || {};
-  const o = normalizeOfferPayload(raw);
+  const p = normalizeOfferPayload(raw);
+  const chance = buildMailChanceInfo(p);
 
-  const titulo = escHtml(
-    o.cargo ||
-    o.materia ||
-    o.title ||
-    "Oferta APD"
-  );
+  const titulo = p.cargo || p.materia || p.title || "Oferta APD";
 
-  const distrito = escHtml(o.distrito || "—");
-  const turno = escHtml(o.turno || "—");
-  const nivel = escHtml(o.nivel || o.nivel_modalidad || "—");
-  const area = escHtml(o.area || o.area_pd || o.materia || "—");
-  const cursoDivision = escHtml(o.cursodivision || o.curso_division || "—");
-  const modulos = escHtml(String(o.modulos || "—"));
-  const diasHora = escHtml(o.dias_horarios || o.diashora || o.horario || "—");
-  const vigencia = escHtml(
-    o.vigencia ||
-    (o.fecha_desde || o.fecha_hasta
-      ? `${o.fecha_desde || "—"} — ${o.fecha_hasta || "—"}`
-      : "—")
-  );
-  const cierre = escHtml(o.fecha_cierre || o.finoferta || "—");
+  const puntajeBase = Number.isFinite(Number(p?.pid_puntaje_total_base))
+    ? Number(p.pid_puntaje_total_base)
+    : parseMailNumber(p?.pid_puntaje_total);
 
-  const motivo = escHtml(o.motivo_estado || o.motivo || "Compatible con tu PID");
-  const bloquePid = escHtml(o.bloque_pid || o.bloque || o.bloque_pd || "—");
-  const puntajeEabe = escHtml(String(o.puntaje_primero || o.puntaje_eabe || "—"));
-  const bonoResidencia = escHtml(
-    o.bono_residencia != null && o.bono_residencia !== ""
-      ? String(o.bono_residencia)
-      : "—"
-  );
-  const distritoResidencia = escHtml(o.distrito_residencia || "—");
-  const puntajeTotal = escHtml(String(o.tu_puntaje || o.puntaje_total || "—"));
-  const listadoMayor = escHtml(
-    o.listado_origen_primero ||
-    o.listado_mayor_puntaje ||
-    o.listado_referencia ||
-    "—"
-  );
-  const anioListado = escHtml(String(o.anio_listado || new Date().getFullYear()));
-  const diferenciaTexto = escHtml(
-    o.diferencia_puntaje_texto ||
-    (
-      o.tu_puntaje != null && o.puntaje_primero != null
-        ? `Tu puntaje (${o.tu_puntaje}) hoy queda por debajo del mejor visible (${o.puntaje_primero}).`
-        : "Referencia calculada según los postulantes visibles."
-    )
+  const puntajeFinal = Number.isFinite(Number(p?.pid_puntaje_total_final))
+    ? Number(p.pid_puntaje_total_final)
+    : (
+        Number.isFinite(puntajeBase)
+          ? puntajeBase + Number(p?.pid_residencia_bonus_puntos || 0)
+          : null
+      );
+
+  const tipo = String(p.revista || "").trim() || (
+    (p.desde && String(p.desde).trim() && String(p.desde).trim().toLowerCase() !== "sin fecha" &&
+     p.hasta && String(p.hasta).trim() && String(p.hasta).trim().toLowerCase() !== "sin fecha")
+      ? "Suplencia"
+      : "Provisional"
   );
 
-  const cantPost = escHtml(String(o.total_postulantes || o.cantidad_postulantes || "—"));
-  const puntajeMasAlto = escHtml(String(o.puntaje_primero || o.puntaje_mas_alto || "—"));
-  const listadoMasAlto = escHtml(
-    o.listado_origen_primero ||
-    o.listado_mas_alto ||
-    "—"
+  function resolveMailHref(...candidates) {
+    for (const value of candidates) {
+      const s = String(value || "").trim();
+      if (!s) continue;
+      if (/^https?:\/\//i.test(s)) return s;
+      if (s.startsWith("//")) return `https:${s}`;
+      if (s.startsWith("/")) return `https://alertasapd.com.ar${s}`;
+    }
+    return "";
+  }
+
+  function actionBtn(label, href, variant = "primary") {
+    const bg = variant === "secondary" ? "#163f7a" : "#2563eb";
+    return `
+      <a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer" style="
+        display:inline-block;
+        background:${bg};
+        color:#ffffff;
+        text-decoration:none;
+        padding:8px 14px;
+        border-radius:8px;
+        font-family:Arial,Helvetica,sans-serif;
+        font-size:12px;
+        font-weight:700;
+        margin-right:8px;
+        margin-top:8px;
+      ">${escHtml(label)}</a>
+    `;
+  }
+
+  const abcUrl = resolveMailHref(
+    p.link,
+    p.url,
+    p.abc_url,
+    p.link_postular,
+    p.url_postular,
+    p.postular_url,
+    raw.link,
+    raw.url,
+    raw.abc_url,
+    raw.link_postular,
+    raw.url_postular,
+    raw.postular_url
   );
 
+  const postuladosUrl = resolveMailHref(
+    p.url_postulados,
+    p.link_postulados,
+    p.postulantes_url,
+    p.postulados_url,
+    p.url_postulaciones,
+    raw.url_postulados,
+    raw.link_postulados,
+    raw.postulantes_url,
+    raw.postulados_url,
+    raw.url_postulaciones
+  );
+
+const offerKey = String(
+  p.iddetalle ||
+  p.idoferta ||
+  p.apd_id ||
+  p.offer_id ||
+  p.source_offer_key ||
+  p.codigo ||
+  ""
+).trim();
+
+const panelBaseUrl = String(PANEL_URL || "").trim().replace(/\/+$/, "") || "https://alertasapd.com.ar";
+const panelUrl = offerKey
+  ? `${panelBaseUrl}/?offer=${encodeURIComponent(offerKey)}`
+  : panelBaseUrl;
   const chips = [
-    o.codigo ? { text: escHtml(o.codigo), bg: "#eef2ff", color: "#1e40af" } : null,
-    o.distrito ? { text: distrito, bg: "#f3f4f6", color: "#374151" } : null,
-    o.turno ? { text: turno, bg: "#ecfdf5", color: "#166534" } : null,
-    o.is ? { text: escHtml(o.is), bg: "#fff7ed", color: "#9a3412" } : null,
-    o.nivel ? { text: nivel, bg: "#fef3c7", color: "#92400e" } : null,
-    o.situacion_revista ? { text: escHtml(o.situacion_revista), bg: "#f5f3ff", color: "#6d28d9" } : null
+    p.codigo ? { text: `🆔 ${p.codigo}`, bg: "#eef2ff", color: "#1e40af" } : null,
+    p.distrito ? { text: `📍 ${p.distrito}`, bg: "#f3f4f6", color: "#374151" } : null,
+    p.turno ? { text: `🕒 ${p.turno}`, bg: "#ecfdf5", color: "#166534" } : null,
+    p.is ? { text: `🏷️ ${p.is}`, bg: "#fff7ed", color: "#9a3412" } : null,
+    (p.nivel || p.nivel_modalidad) ? {
+      text: `🎓 ${p.nivel || p.nivel_modalidad}`,
+      bg: "#fef3c7",
+      color: "#92400e"
+    } : null
   ].filter(Boolean);
 
   const chipsHtml = chips.map((chip) => `
@@ -1696,12 +1736,24 @@ function renderMailOfferCard(row) {
       line-height:1.2;
       font-weight:700;
       letter-spacing:.02em;
-    ">
-      ${chip.text}
-    </span>
+    ">${escHtml(chip.text)}</span>
   `).join("");
 
-  const abcUrl = raw?.url || raw?.link || raw?.abc_url || "#";
+  const infoMsg =
+    p.diferencia_puntaje_texto ||
+    (
+      (p.total_postulantes == null || p.total_postulantes === "" || Number(p.total_postulantes) === 0)
+        ? `Por ahora no se ven postulantes cargados. Tu puntaje actual para esta oferta es ${
+            Number.isFinite(puntajeFinal) ? formatMailNumber(puntajeFinal) : "—"
+          }.`
+        : "Referencia calculada según los postulantes visibles."
+    );
+
+  const botonesHtml = [
+    abcUrl ? actionBtn("🌐 Ir a ABC", abcUrl, "primary") : "",
+    postuladosUrl ? actionBtn("👥 Ir a postulados", postuladosUrl, "primary") : "",
+    actionBtn("📋 Ir a mi panel", panelUrl, "secondary")
+  ].join("");
 
   return `
     <tr>
@@ -1720,43 +1772,28 @@ function renderMailOfferCard(row) {
                 font-size:15px;
                 line-height:1.2;
                 font-weight:800;
-                letter-spacing:.10em;
+                letter-spacing:.03em;
                 color:#173a74;
                 text-transform:uppercase;
                 margin-bottom:12px;
               ">
-                ${titulo}
+                ${escHtml(titulo)}
               </div>
 
-              <div style="margin-bottom:10px;">
+              <div style="margin-bottom:4px;">
                 ${chipsHtml}
-              </div>
-
-              <div style="margin:0 0 14px 0;">
-                <a href="${escHtml(abcUrl)}" target="_blank" style="
+                <span style="
                   display:inline-block;
-                  background:#2563eb;
-                  color:#ffffff;
-                  text-decoration:none;
-                  padding:8px 14px;
-                  border-radius:8px;
+                  margin:0 6px 6px 0;
+                  padding:5px 10px;
+                  border-radius:999px;
+                  background:#f5f3ff;
+                  color:#7c3aed;
                   font-family:Arial,Helvetica,sans-serif;
-                  font-size:12px;
+                  font-size:11px;
+                  line-height:1.2;
                   font-weight:700;
-                  margin-right:8px;
-                ">Ir a ABC</a>
-
-                <a href="${safePanelUrl}" target="_blank" style="
-                  display:inline-block;
-                  background:#163f7a;
-                  color:#ffffff;
-                  text-decoration:none;
-                  padding:8px 14px;
-                  border-radius:8px;
-                  font-family:Arial,Helvetica,sans-serif;
-                  font-size:12px;
-                  font-weight:700;
-                ">Ir a mi panel</a>
+                ">✨ ${escHtml(tipo)}</span>
               </div>
             </td>
           </tr>
@@ -1766,23 +1803,33 @@ function renderMailOfferCard(row) {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                    ${mailInfoBox("CURSO / DIVISIÓN", cursoDivision)}
+                    ${mailInfoBox("CURSO / DIVISIÓN", escHtml(p.cursodivision || p.curso_division || "—"))}
                   </td>
                   <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                    ${mailInfoBox("MÓDULOS", modulos)}
+                    ${mailInfoBox("MÓDULOS", escHtml(String(p.modulos || "—")))}
                   </td>
                 </tr>
                 <tr>
                   <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                    ${mailInfoBox("DÍAS / HORA.PROB", diasHora)}
+                    ${mailInfoBox("DÍAS / HORA.PROB", escHtml(p.dias_horarios || p.diashora || p.horario || "—"))}
                   </td>
                   <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                    ${mailInfoBox("VIGENCIA", vigencia)}
+                    ${mailInfoBox(
+                      "VIGENCIA",
+                      escHtml(
+                        p.vigencia ||
+                        (
+                          (p.desde || p.fecha_desde || "—") +
+                          " — " +
+                          (p.hasta || p.fecha_hasta || "—")
+                        )
+                      )
+                    )}
                   </td>
                 </tr>
                 <tr>
                   <td colspan="2" style="padding:0;">
-                    ${mailInfoBox("CIERRE", cierre)}
+                    ${mailInfoBox("CIERRE", escHtml(p.fecha_cierre || p.finoferta || "—"))}
                   </td>
                 </tr>
               </table>
@@ -1793,9 +1840,9 @@ function renderMailOfferCard(row) {
             <td style="padding:0 18px 12px 18px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
                 width:100%;
-                border:1px solid #e7c574;
+                border:1px solid ${chance?.toneBorder || "#b7e1c1"};
                 border-radius:14px;
-                background:#fff8e7;
+                background:${chance?.toneBg || "#eefbf0"};
               ">
                 <tr>
                   <td style="padding:12px 14px 8px 14px;">
@@ -1804,41 +1851,59 @@ function renderMailOfferCard(row) {
                       font-size:13px;
                       line-height:1.3;
                       font-weight:700;
-                      color:#a15b00;
+                      color:${chance?.toneColor || "#1f7a35"};
                       margin-bottom:10px;
-                    ">🟠 Estado actual: Difícil</div>
+                    ">
+                      ${escHtml(chance?.title || "Compatible con tu PID")}
+                    </div>
 
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                          ${mailMiniBox("MOTIVO", motivo)}
+                          ${mailMiniBox("MOTIVO", escHtml(p.pid_reason || "Compatible con tu PID"))}
                         </td>
                         <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                          ${mailMiniBox("ÁREA PID", area)}
+                          ${mailMiniBox("ÁREA PID", escHtml(p.pid_area || p.area || p.materia || "—"))}
                         </td>
                       </tr>
                       <tr>
                         <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                          ${mailMiniBox("BLOQUE PID", bloquePid)}
+                          ${mailMiniBox("BLOQUE PID", escHtml(p.pid_bloque || p.bloque_pid || "—"))}
                         </td>
                         <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                          ${mailMiniBox("PUNTAJE E.A.B.E", puntajeEabe)}
+                          ${mailMiniBox(
+                            "PUNTAJE BASE",
+                            Number.isFinite(puntajeBase) ? formatMailNumber(puntajeBase) : "—"
+                          )}
                         </td>
                       </tr>
                       <tr>
                         <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                          ${mailMiniBox("BONUS RESIDENCIA", bonoResidencia)}
+                          ${mailMiniBox(
+                            "BONUS RESIDENCIA",
+                            p.pid_residencia_bonus != null && p.pid_residencia_bonus !== ""
+                              ? escHtml(String(p.pid_residencia_bonus))
+                              : "No"
+                          )}
                         </td>
                         <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                          ${mailMiniBox("DISTRITO RESIDENCIA", distritoResidencia)}
+                          ${mailMiniBox("DISTRITO RESIDENCIA", escHtml(p.pid_distrito_residencia || "—"))}
                         </td>
                       </tr>
                       <tr>
                         <td width="50%" style="padding:0 6px 0 0; vertical-align:top;">
-                          ${mailMiniBox("TU PUNTAJE TOTAL", puntajeTotal)}
+                          ${mailMiniBox(
+                            "TU PUNTAJE TOTAL",
+                            Number.isFinite(puntajeFinal) ? formatMailNumber(puntajeFinal) : "—"
+                          )}
                         </td>
                         <td width="50%" style="padding:0 0 0 6px; vertical-align:top;">
-                          ${mailMiniBox("LISTADO / AÑO PID", `${listadoMayor} · ${anioListado}`)}
+                          ${mailMiniBox(
+                            "LISTADO / AÑO PID",
+                            escHtml(
+                              `${p.listado_origen_primero || p.pid_listado || "—"} · ${p.anio_listado || new Date().getFullYear()}`
+                            )
+                          )}
                         </td>
                       </tr>
                     </table>
@@ -1850,7 +1915,7 @@ function renderMailOfferCard(row) {
                       color:#4b5563;
                       margin-top:10px;
                     ">
-                      ${diferenciaTexto}
+                      ${escHtml(infoMsg)}
                     </div>
                   </td>
                 </tr>
@@ -1859,7 +1924,7 @@ function renderMailOfferCard(row) {
           </tr>
 
           <tr>
-            <td style="padding:0 18px 18px 18px;">
+            <td style="padding:0 18px 12px 18px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
                 width:100%;
                 border:1px solid #c8d7ff;
@@ -1878,27 +1943,46 @@ function renderMailOfferCard(row) {
                       text-transform:uppercase;
                       margin-bottom:10px;
                     ">
-                      Referencia de postulantes
+                      REFERENCIA DE POSTULANTES
                     </div>
 
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td width="50%" style="padding:0 6px 6px 0; vertical-align:top;">
-                          ${mailMiniBox("CANTIDAD", cantPost)}
+                          ${mailMiniBox(
+                            "CANTIDAD",
+                            (p.total_postulantes != null && p.total_postulantes !== "")
+                              ? escHtml(String(p.total_postulantes))
+                              : "Sin postulados visibles"
+                          )}
                         </td>
                         <td width="50%" style="padding:0 0 6px 6px; vertical-align:top;">
-                          ${mailMiniBox("PUNTAJE MÁS ALTO", puntajeMasAlto)}
+                          ${mailMiniBox(
+                            "PUNTAJE MÁS ALTO",
+                            (p.puntaje_primero != null && p.puntaje_primero !== "")
+                              ? formatMailNumber(parseMailNumber(p.puntaje_primero))
+                              : "Sin datos"
+                          )}
                         </td>
                       </tr>
                       <tr>
                         <td colspan="2" style="padding:0;">
-                          ${mailMiniBox("LISTADO DEL MÁS ALTO", listadoMasAlto)}
+                          ${mailMiniBox(
+                            "LISTADO DEL MÁS ALTO",
+                            escHtml(p.listado_origen_primero || "Sin datos")
+                          )}
                         </td>
                       </tr>
                     </table>
                   </td>
                 </tr>
               </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 18px 18px 18px;">
+              ${botonesHtml}
             </td>
           </tr>
         </table>
@@ -2704,8 +2788,8 @@ var worker_default = {
       }
 
       if (path === "/test-digest" && request.method === "GET") {
-        return await handleTestDigest(env);
-      }
+  return await handleTestDigest(request, env);
+}
       if (path === "/test-digest" && request.method === "GET") {
         const r = await sendPendingEmailDigests(env);
         return new Response(JSON.stringify(r, null, 2), {
@@ -4527,52 +4611,82 @@ async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
 }
 __name(sendEmailAlertForUser, "sendEmailAlertForUser");
 async function runEmailAlertsSweep(env, options = {}) {
-  const prefRows = await supabaseSelect(
+ let prefError = null;
+let prefSource = "user_preferences";
+
+const MAX_DIGEST_EMAILS_PER_RUN = clampInt(
+  options?.max_users || env.EMAIL_DIGEST_MAX_USERS_PER_RUN,
+  1,
+  500,
+  200
+);
+
+const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
+const targetUserId = String(options?.target_user_id || "").trim();
+const debugEnabled =
+  options?.debug === true ||
+  !!String(options?.debug_user_id || "").trim();
+const debugUserId = String(
+  options?.debug_user_id || targetUserId || ""
+).trim();
+const dryRun = options?.dry_run === true;
+
+let prefRows = await supabaseSelect(
+  env,
+  `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
+).catch((err) => {
+  prefError = String(err?.message || err || "");
+  return [];
+});
+
+if ((!Array.isArray(prefRows) || prefRows.length === 0) && targetUserId) {
+  prefRows = [{ user_id: targetUserId }];
+  prefSource = "target_user_id_fallback";
+}
+
+if (!Array.isArray(prefRows) || prefRows.length === 0) {
+  const userRows = await supabaseSelect(
     env,
-    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
-  ).catch(() => []);
+    `users?activo=is.true&alertas_activas=is.true&alertas_email=is.true&select=id&order=id.asc`
+  ).catch((err) => {
+    if (!prefError) prefError = String(err?.message || err || "");
+    return [];
+  });
 
-  const total = Array.isArray(prefRows) ? prefRows.length : 0;
+  if (Array.isArray(userRows) && userRows.length > 0) {
+    prefRows = userRows
+      .map((u) => ({ user_id: String(u?.id || "").trim() }))
+      .filter((u) => !!u.user_id);
 
-  const MAX_DIGEST_EMAILS_PER_RUN = clampInt(
-    options?.max_users || env.EMAIL_DIGEST_MAX_USERS_PER_RUN,
-    1,
-    500,
-    200
-  );
-
-  const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
-  const targetUserId = String(options?.target_user_id || "").trim();
-  const debugEnabled =
-    options?.debug === true ||
-    !!String(options?.debug_user_id || "").trim();
-  const debugUserId = String(
-    options?.debug_user_id || targetUserId || ""
-  ).trim();
-  const dryRun = options?.dry_run === true;
-
-  if (!total) {
-    return {
-      ok: true,
-      processed_users: 0,
-      send_attempts: 0,
-      sent_count: 0,
-      notified_alerts_count: 0,
-      skipped_count: 0,
-      failed_count: 0,
-      total_users: 0,
-      limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
-      stopped_early: false,
-      failed_samples: [],
-      message: "No hay usuarios con alertas por email activas",
-      debug_enabled: debugEnabled,
-      debug_user_id: debugUserId || null,
-      dry_run: dryRun,
-      debug_users: []
-    };
+    prefSource = "users_fallback";
   }
+}
 
- const rowsBase = targetUserId
+const total = Array.isArray(prefRows) ? prefRows.length : 0;
+
+if (!total) {
+  return {
+    ok: true,
+    processed_users: 0,
+    send_attempts: 0,
+    sent_count: 0,
+    notified_alerts_count: 0,
+    skipped_count: 0,
+    failed_count: 0,
+    total_users: 0,
+limit_per_run: isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN,    stopped_early: false,
+    failed_samples: [],
+    message: "No hay usuarios con alertas por email activas",
+    pref_source: prefSource,
+    pref_error: prefError,
+    debug_enabled: debugEnabled,
+    debug_user_id: debugUserId || null,
+    dry_run: dryRun,
+    debug_users: []
+  };
+}
+
+const rowsBase = targetUserId
   ? prefRows.filter(
       (r) => String(r?.user_id || "").trim() === targetUserId
     )
@@ -4585,38 +4699,43 @@ const MANUAL_SWEEP_LIMIT = clampInt(
   1
 );
 
+const isManualRun = String(options?.source || "").startsWith("manual_");
+
 const rowsToProcess = targetUserId
   ? rowsBase
-  : rowsBase.slice(0, MANUAL_SWEEP_LIMIT);
+  : isManualRun
+    ? rowsBase.slice(0, MANUAL_SWEEP_LIMIT)
+    : rowsBase.slice(0, MAX_DIGEST_EMAILS_PER_RUN);
 
-    if (targetUserId && !rowsToProcess.length) {
-    return {
-      ok: true,
-      processed_users: 0,
-      send_attempts: 0,
-      sent_count: 0,
-      notified_alerts_count: 0,
-      skipped_count: 0,
-      failed_count: 0,
-      total_users: total,
-      limit_per_run: targetUserId ? 1 : MANUAL_SWEEP_LIMIT,
-      stopped_early: false,
-      failed_samples: [],
-      pref_source: prefSource,
-      pref_error: prefError,
-      debug_enabled: debugEnabled,
-      debug_user_id: debugUserId || null,
-      dry_run: dryRun,
-      debug_users: [
-        {
-          user_id: targetUserId,
-          stage: "pref_lookup",
-          skipped: true,
-          reason: "user_not_in_email_pref_rows"
-        }
-      ]
-    };
-  }
+   if (targetUserId && !rowsToProcess.length) {
+  return {
+    ok: true,
+    processed_users: 0,
+    send_attempts: 0,
+    sent_count: 0,
+    notified_alerts_count: 0,
+    skipped_count: 0,
+    failed_count: 0,
+    total_users: total,
+limit_per_run: targetUserId
+  ? 1
+  : (isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN),    stopped_early: false,
+    failed_samples: [],
+    pref_source: prefSource,
+    pref_error: prefError,
+    debug_enabled: debugEnabled,
+    debug_user_id: debugUserId || null,
+    dry_run: dryRun,
+    debug_users: [
+      {
+        user_id: targetUserId,
+        stage: "pref_lookup",
+        skipped: true,
+        reason: "user_not_in_email_pref_rows"
+      }
+    ]
+  };
+}
 
   let processedUsers = 0;
   let attemptedDigests = 0;
@@ -4867,7 +4986,7 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
     skipped_count: skippedAlerts,
     failed_count: failedDigests,
     total_users: total,
-    limit_per_run: MAX_DIGEST_EMAILS_PER_RUN,
+limit_per_run: isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN,
     stopped_early: attemptedDigests >= MAX_DIGEST_EMAILS_PER_RUN,
     failed_samples,
     debug_enabled: debugEnabled,
@@ -12154,30 +12273,56 @@ async function handleTestEmailSweep(env) {
   return jsonResponse(r, 200);
 }
 
-async function handleTestDigest(env) {
+async function handleTestDigest(request, env) {
   try {
-    const r = await sendPendingEmailDigests(env);
-    return jsonResponse(r, 200);
-  } catch (err) {
-    const msg = String(err?.message || err || "");
+    const url = new URL(request.url);
+    const targetEmail = String(url.searchParams.get("target_email") || "").trim().toLowerCase();
+    let targetUserId = String(url.searchParams.get("target_user_id") || "").trim();
 
-    if (/Too many subrequests/i.test(msg)) {
-      const fallback = await runEmailAlertsSweep(env, {
-        source: "manual_test_digest_fallback",
-        max_users: 1
-      });
+    if (!targetUserId && targetEmail) {
+      const rows = await supabaseSelect(
+        env,
+        `users?email=eq.${encodeURIComponent(targetEmail)}&select=id,email&limit=1`
+      ).catch(() => []);
 
-      return jsonResponse({
-        ok: true,
-        fallback_used: true,
-        fallback_reason: msg,
-        ...fallback
-      }, 200);
+      const found = Array.isArray(rows) ? rows[0] || null : null;
+      targetUserId = String(found?.id || "").trim();
+
+      if (!targetUserId) {
+        return jsonResponse({
+          ok: false,
+          error: "No se encontró usuario para ese email",
+          target_email: targetEmail
+        }, 404);
+      }
     }
 
+    if (!targetUserId) {
+      return jsonResponse({
+        ok: false,
+        error: "Falta target_user_id o target_email"
+      }, 400);
+    }
+
+    const result = await runEmailAlertsSweep(env, {
+      source: "manual_test_digest_targeted",
+      max_users: 1,
+      target_user_id: targetUserId,
+      debug: true,
+      debug_user_id: targetUserId
+    });
+
+    return jsonResponse({
+      ok: true,
+      direct_test: true,
+      target_user_id: targetUserId,
+      target_email: targetEmail || null,
+      ...result
+    }, 200);
+  } catch (err) {
     return jsonResponse({
       ok: false,
-      error: msg,
+      error: String(err?.message || err || ""),
       stack: String(err?.stack || "")
     }, 500);
   }
