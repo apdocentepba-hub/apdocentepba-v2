@@ -3150,10 +3150,19 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     return { ok: true, skipped: true, reason: "no_alerts" };
   }
 
-  const MAX_VISIBLE = 5;
+    const MAX_VISIBLE = 5;
   const alerts = await enrichAlertsForRichChannels(env, user, items, MAX_VISIBLE);
 
-  const html = buildDigestHtml(alerts, user, {
+  const resolvedPlanForInitialEmail = await resolverPlanUsuario(env, user.id).catch(() => null);
+  const initialEmailPlanCode = getPlanCodeValue(resolvedPlanForInitialEmail) || "TRIAL_7D";
+  const initialEmailCanShowPid = canShowPidForPlan(initialEmailPlanCode);
+
+  const alertsForRender = applyPidVisibilityToAlerts(
+    alerts,
+    initialEmailPlanCode
+  );
+
+  const html = buildDigestHtml(alertsForRender, user, {
     total_alerts: items.length,
     max_visible: MAX_VISIBLE,
     panel_url: "https://alertasapd.com.ar"
@@ -3179,9 +3188,11 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     destination: user.email,
     status: send?.ok ? "sent_initial" : "failed_initial",
     provider_message_id: null,
-    payload: {
+        payload: {
       source: options.source || "first_preferences_save",
-      total_alerts: items.length
+      total_alerts: items.length,
+      plan_code: initialEmailPlanCode,
+      pid_visible: initialEmailCanShowPid
     },
     provider_response: send || null
   }).catch(() => null);
@@ -5127,8 +5138,32 @@ async function runEmailAlertsSweep(env, options = {}) {
       continue;
     }
 
-    const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+const subjectSlotLabel = (() => {
+  const rawSlot = String(slotKey || "").trim();
 
+  const m = rawSlot.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{1,2})$/);
+
+  if (m) {
+    const [, yyyy, mm, dd, hh] = m;
+    return `${dd}/${mm}/${yyyy} ${String(hh).padStart(2, "0")}:00`;
+  }
+
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date());
+
+  const get = (type) => parts.find((p) => p.type === type)?.value || "";
+
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
+})();
+
+const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalAlerts}`;
     const visibleAlertKeys = visibleSource
       .map((item) => buildEmailAlertKey(userId, item?.offer_payload || item || {}))
       .filter(Boolean);
@@ -10024,19 +10059,17 @@ function buildDigestHtml(alerts, user, options = {}) {
   const showingCount = visibleAlerts.length;
   const remainingCount = Math.max(0, totalAlerts - showingCount);
 
-  const title = `${showingCount} nuevas ofertas de ${totalAlerts}`;
-
+const title = `Resumen APD compatible con tus preferencias`;
   const intro =
     String(options?.intro_text || "").trim() ||
-    `Hola ${escHtml(user?.nombre || "docente")}, estas son las alertas nuevas compatibles con tus preferencias.`;
+    `Hola ${escHtml(user?.nombre || "docente")}, encontramos coincidencias con las preferencias que cargaste en APDocentePBA. Te mostramos las más recientes para que puedas revisarlas.`;
 
   const items = visibleAlerts.map(renderMailOfferCard).join("");
 
   const moreNote = remainingCount > 0
     ? `
       <div style="margin-top:14px;padding:12px 14px;background:#fff8e8;border:1px solid #f2d38b;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b4e00;">
-        Te mostramos ${showingCount} nuevas ofertas de ${totalAlerts}. Si querés ver el resto, entrá al panel.
-      </div>
+Hay más coincidencias disponibles. Podés ver el listado completo desde tu panel.      </div>
     `
     : "";
 
@@ -10053,8 +10086,7 @@ function buildDigestHtml(alerts, user, options = {}) {
                     APDocentePBA
                   </div>
                   <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;opacity:.9;margin-top:4px;">
-                    Alertas de Actos Públicos Digitales
-                  </div>
+Resumen personalizado                  </div>
                 </td>
               </tr>
 
