@@ -4,12 +4,94 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soporte - APDocentePBA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--azul:#0f3460;--borde:#dde6f0;--fondo:#f6f8fb;--texto:#10233f;--suave:#eef6ff;--verde:#0f8a5f}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#eef5ff 0%,var(--fondo) 42%,#ffffff 100%);color:var(--texto);font-family:'DM Sans',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6}
+.header{background:#fff;border-bottom:1px solid var(--borde)}
+.header-inner{max-width:980px;margin:0 auto;padding:18px;display:flex;justify-content:space-between;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;color:var(--azul)}
+.brand-icon{width:42px;height:42px;border-radius:14px;background:#e9f2ff;display:grid;place-items:center;font-size:22px}
+.brand-title{font-size:20px;margin:0}
+.brand-sub{font-size:13px;margin:2px 0 0;color:#5b6b80}
+.wrap{max-width:980px;margin:0 auto;padding:34px 18px 56px}
+.card{background:#fff;border:1px solid var(--borde);border-radius:22px;padding:30px;box-shadow:0 18px 45px rgba(15,52,96,.09)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;background:#e9f7f1;color:var(--verde);border:1px solid #bfe8d5;border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px}
+h1{font-size:34px;line-height:1.15;margin:18px 0 10px;color:var(--azul)}
+h2{font-size:20px;margin:26px 0 10px;color:var(--azul)}
+p,li{font-size:15px}
+.lead{font-size:17px;color:#40526b;max-width:760px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:22px}
+.box{background:#f9fbfe;border:1px solid var(--borde);border-radius:16px;padding:18px}
+.notice{background:var(--suave);border:1px solid #bfdcff;border-radius:16px;padding:18px;margin:22px 0}
+.mail{font-weight:800;color:var(--azul);font-size:18px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:999px;padding:11px 16px;font-weight:700;border:1px solid var(--borde)}
+.btn-primary{background:var(--azul);color:#fff;border-color:var(--azul)}
+.btn-secondary{background:#fff;color:var(--azul)}
+ul{padding-left:20px;margin-top:8px}.muted{color:#5b6b80;font-size:13px;margin-top:24px}
+@media(max-width:720px){.header-inner{align-items:flex-start}.grid{grid-template-columns:1fr}.card{padding:22px}h1{font-size:28px}}
+</style>
 </head>
 <body>
-<h1>Soporte APDocentePBA</h1>
-<p>Para consultas de acceso, pagos o alertas, escribi al canal de contacto publicado por APDocentePBA.</p>
-<p>Indica tu nombre, email registrado y una descripcion breve del problema.</p>
-<p>APDocentePBA es una herramienta privada de alertas y no pertenece a ABC ni a DGCyE.</p>
-<p><a href="./index.html">Volver</a></p>
+<header class="header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">📋</div>
+      <div>
+        <p class="brand-title">APDocentePBA</p>
+        <p class="brand-sub">Alertas docentes PBA</p>
+      </div>
+    </div>
+    <a class="btn btn-secondary" href="./index.html">Volver al inicio</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <span class="eyebrow">🛟 Soporte beta</span>
+    <h1>¿Necesitás ayuda con APDocentePBA?</h1>
+    <p class="lead">Usá este canal para problemas de acceso, pagos, suscripción, alertas por mail, WhatsApp, Telegram o configuración de preferencias.</p>
+
+    <div class="notice">
+      <p><strong>Email de soporte:</strong><br><span class="mail">apdocentepba@gmail.com</span></p>
+      <p>Para poder ayudarte más rápido, escribí desde el mismo email con el que te registraste en APDocentePBA.</p>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <h2>Qué datos enviar</h2>
+        <ul>
+          <li>Nombre y apellido.</li>
+          <li>Email registrado.</li>
+          <li>Descripción breve del problema.</li>
+          <li>Captura de pantalla si aparece un error.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h2>Pagos y plan</h2>
+        <p>Si pagaste y el plan no se actualizó, enviá captura o comprobante de Mercado Pago junto con tu email registrado.</p>
+      </div>
+      <div class="box">
+        <h2>Alertas</h2>
+        <p>Indicá si el problema es con mail, WhatsApp, Telegram o el panel de alertas.</p>
+      </div>
+      <div class="box">
+        <h2>Acceso a la cuenta</h2>
+        <p>Si no podés entrar, escribí desde el email registrado. Por seguridad, no compartas contraseñas por mensaje.</p>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <a class="btn btn-primary" href="mailto:apdocentepba@gmail.com?subject=Soporte%20APDocentePBA">Escribir a soporte</a>
+      <a class="btn btn-secondary" href="./index.html">Volver a APDocentePBA</a>
+    </div>
+
+    <p class="muted">APDocentePBA es una herramienta privada de asistencia y alertas. No pertenece a ABC, DGCyE ni a ningún organismo oficial. Verificá siempre la información en la fuente oficial antes de postularte o tomar decisiones.</p>
+  </section>
+</main>
 </body>
 </html>
