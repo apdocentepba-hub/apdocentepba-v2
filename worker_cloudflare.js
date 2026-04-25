@@ -10753,6 +10753,7 @@ __name(getChannelStateStore, "getChannelStateStore");
 function telegramStateKey(userId) {
   return `telegram:user:${String(userId || "").trim().toUpperCase()}`;
 }
+
 __name(telegramStateKey, "telegramStateKey");
 function telegramChatStateKey(chatId) {
   return `telegram:chat:${String(chatId || "").trim()}`;
@@ -11398,15 +11399,89 @@ __name(handleTelegramStatus, "handleTelegramStatus");
 async function handleTelegramWebhook(request, env) {
   requireTelegramWebhookSecret(request, env);
 
+  async function loadTelegramStoredAlerts(env, userId, limit = 10) {
+    const rows = await supabaseSelect(
+      env,
+      `user_offer_state?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=offer_id,offer_payload,last_seen_at&order=last_seen_at.desc&limit=${encodeURIComponent(String(limit))}`
+    ).catch((err) => {
+      console.error("TELEGRAM STORED ALERTS READ ERROR:", err);
+      return [];
+    });
+
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        offer_payload: normalizeOfferPayload(row?.offer_payload || {})
+      }))
+      .filter((item) => {
+        const p = item.offer_payload || {};
+        return !!(
+          p.offer_id ||
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.cargo ||
+          p.materia ||
+          p.title
+        );
+      });
+  }
+
+  async function loadTelegramLiveAlertsWithTimeout(env, userId, timeoutMs = 12000) {
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("timeout_consultando_alertas")), timeoutMs);
+    });
+
+    const data = await Promise.race([
+      construirAlertasParaUsuario(env, userId),
+      timeout
+    ]);
+
+    const rawAlerts = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.resultados)
+        ? data.resultados
+        : Array.isArray(data?.alertas)
+          ? data.alertas
+          : Array.isArray(data?.items)
+            ? data.items
+            : [];
+
+    return rawAlerts
+      .map((item) => ({
+        offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+      }))
+      .filter((item) => {
+        const p = item.offer_payload || {};
+        return !!(
+          p.offer_id ||
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.cargo ||
+          p.materia ||
+          p.title
+        );
+      });
+  }
+
   const update = await request.json().catch(() => ({}));
   const updateId = update?.update_id != null ? String(update.update_id).trim() : "";
 
   if (updateId) {
     const dedupeKey = telegramUpdateDedupeKey(updateId);
     if (await wasInboundEventProcessed(env, dedupeKey)) {
-      return json2({ ok: true, duplicate: true, update_id: updateId });
+      return json2({
+        ok: true,
+        duplicate: true,
+        update_id: updateId
+      });
     }
-    await markInboundEventProcessed(env, dedupeKey, TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS).catch(() => null);
+
+    await markInboundEventProcessed(
+      env,
+      dedupeKey,
+      TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS
+    ).catch(() => null);
   }
 
   const message = update?.message || {};
@@ -11414,7 +11489,11 @@ async function handleTelegramWebhook(request, env) {
   const chatType = String(message?.chat?.type || "private").trim();
 
   if (!chatId || (chatType && chatType !== "private")) {
-    return json2({ ok: true, ignored: true, reason: "invalid_chat" });
+    return json2({
+      ok: true,
+      ignored: true,
+      reason: "invalid_chat"
+    });
   }
 
   const command = extractTelegramCommand(message?.text || "");
@@ -11422,15 +11501,23 @@ async function handleTelegramWebhook(request, env) {
   if (command.kind === "start") {
     const userId = String(command.payload || "").trim();
 
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
-      await sendTelegramText(env, chatId, "No pude vincular tu cuenta. Entrá desde el panel y tocá el botón de conectar Telegram.").catch(() => null);
-      return json2({ ok: true, ignored: true, reason: "invalid_start_payload" });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(userId)) {
+      await sendTelegramText(
+        env,
+        chatId,
+        "No pude vincular tu cuenta. Entrá desde el panel y tocá el botón de conectar Telegram."
+      ).catch(() => null);
+
+      return json2({
+        ok: true,
+        ignored: true,
+        reason: "invalid_start_payload"
+      });
     }
 
     const entitlement = await resolveTelegramEntitlement(env, userId);
     const prev = await getTelegramState(env, userId) || {};
     const prefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
-    const alertsRequested = !!prefs?.alertas_telegram;
 
     const next = await saveTelegramState(env, userId, {
       connected: true,
@@ -11438,32 +11525,75 @@ async function handleTelegramWebhook(request, env) {
       username: String(message?.from?.username || "").trim(),
       first_name: String(message?.from?.first_name || "").trim(),
       connected_at: prev.connected_at || new Date().toISOString(),
-      alerts_requested: alertsRequested,
-      alerts_enabled: !!(entitlement.allowed && alertsRequested),
+      alerts_requested: !!prefs?.alertas_telegram,
+      alerts_enabled: !!entitlement?.allowed,
       last_inbound_at: new Date().toISOString()
     });
 
     await sendTelegramText(
       env,
       chatId,
-      "? APDocentePBA conectó este chat con tu cuenta.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles."
+      "✅ APDocentePBA conectó este chat con tu cuenta.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles."
     ).catch(() => null);
 
-    return json2({ ok: true, connected: true, user_id: userId, state: next });
+    return json2({
+      ok: true,
+      connected: true,
+      user_id: userId,
+      state: next
+    });
   }
 
   const linkedUserId = await getTelegramUserIdByChat(env, chatId);
+
   if (!linkedUserId) {
-    await sendTelegramText(env, chatId, "Todavía no vinculaste este chat con tu cuenta. Entrá al panel y usá el botón de conectar Telegram.").catch(() => null);
-    return json2({ ok: true, ignored: true, reason: "chat_not_linked" });
+    await sendTelegramText(
+      env,
+      chatId,
+      "Todavía no vinculaste este chat con tu cuenta. Entrá al panel y usá el botón de conectar Telegram."
+    ).catch(() => null);
+
+    return json2({
+      ok: true,
+      ignored: true,
+      reason: "chat_not_linked"
+    });
   }
 
   const user = await obtenerUsuario(env, linkedUserId);
+
   if (!user?.id) {
-    return json2({ ok: true, ignored: true, reason: "user_not_found" });
+    await sendTelegramText(
+      env,
+      chatId,
+      "No pude encontrar tu usuario vinculado. Volvé a conectar Telegram desde el panel."
+    ).catch(() => null);
+
+    return json2({
+      ok: true,
+      ignored: true,
+      reason: "user_not_found"
+    });
   }
 
-  const entitlement = await resolveTelegramEntitlement(env, user.id);
+  if (user.activo === false) {
+    await sendTelegramText(
+      env,
+      chatId,
+      "Tu usuario figura inactivo. Revisá tu cuenta en el panel.\n\n🌐 https://alertasapd.com.ar"
+    ).catch(() => null);
+
+    return json2({
+      ok: true,
+      ignored: true,
+      reason: "inactive_user"
+    });
+  }
+
+  const entitlement = await resolveTelegramEntitlement(env, user.id).catch(() => ({
+    allowed: false,
+    plan_code: "UNKNOWN"
+  }));
 
   const state = await saveTelegramState(env, user.id, {
     connected: true,
@@ -11477,84 +11607,131 @@ async function handleTelegramWebhook(request, env) {
 
   if (command.kind === "alertas") {
     const telegramConnected = !!state?.connected && !!String(state?.chat_id || "").trim();
-    const telegramEnabledNow =
-      !!prefs?.alertas_activas &&
-      !!prefs?.alertas_telegram &&
-      !!entitlement.allowed &&
-      telegramConnected;
 
     await saveTelegramState(env, user.id, {
       alerts_requested: !!prefs?.alertas_telegram,
-      alerts_enabled: telegramEnabledNow
+      alerts_enabled: !!(entitlement?.allowed && telegramConnected),
+      last_inbound_at: new Date().toISOString()
     }).catch(() => null);
 
-    if (!telegramEnabledNow) {
+    if (!telegramConnected) {
       await sendTelegramText(
         env,
         chatId,
-        "Telegram todavía no está activo en tus preferencias. Entrá al panel, activalo y después escribí ALERTAS."
+        "Todavía no pude vincular este chat con tu cuenta. Entrá al panel, tocá conectar Telegram y después escribí ALERTAS."
       ).catch(() => null);
 
       return json2({
         ok: true,
         delivered: false,
-        reason: "telegram_not_enabled",
-        connected: telegramConnected,
-        alerts_requested: !!prefs?.alertas_telegram,
-        alerts_enabled: telegramEnabledNow
+        reason: "telegram_not_connected",
+        connected: false,
+        channel_mode: "query_only"
       });
     }
 
-    let rawAlerts = [];
+    if (!entitlement?.allowed) {
+      await sendTelegramText(
+        env,
+        chatId,
+        "Tu plan todavía no habilita Telegram.\n\n🌐 https://alertasapd.com.ar"
+      ).catch(() => null);
 
-try {
-  const data = await construirAlertasParaUsuario(env, user.id);
-  rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
-} catch (err) {
-  console.error("TELEGRAM ALERTS BUILD ERROR:", err);
+      return json2({
+        ok: true,
+        delivered: false,
+        reason: "telegram_not_allowed_by_plan",
+        connected: telegramConnected,
+        plan_code: entitlement?.plan_code || null,
+        channel_mode: "query_only"
+      });
+    }
 
-  await sendTelegramText(
-    env,
-    chatId,
-    "No pude consultar tus alertas ahora mismo. Probá otra vez en un rato.\n\n🌐 https://alertasapd.com.ar"
-  ).catch(() => null);
+    await sendTelegramText(
+      env,
+      chatId,
+      "🔎 Estoy consultando tus alertas compatibles..."
+    ).catch(() => null);
+const limit = Number(TELEGRAM_QUERY_ALERTS_LIMIT || 50);
+const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 50;
 
-  return json2({
-    ok: true,
-    delivered: false,
-    reason: "build_failed",
-    channel_mode: "query_only"
-  });
-}
+    let alerts = [];
+    let source = "stored";
 
-const alerts = rawAlerts.map((item) => ({
-  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-}));
-const reply = alerts.length
-  ? buildTelegramQueryDigest(alerts)
-  : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+    try {
+      alerts = await loadTelegramStoredAlerts(env, user.id, safeLimit);
+    } catch (err) {
+      console.error("TELEGRAM STORED ALERTS ERROR:", err);
+      alerts = [];
+    }
 
-try {
-  await sendTelegramLongText(env, chatId, reply);
-} catch (err) {
-  console.error("TELEGRAM ALERTS SEND ERROR:", err);
+    if (!alerts.length) {
+      source = "live";
 
-  const fallback = rawAlerts.length
-    ? `Encontré ${rawAlerts.length} alerta(s) compatibles, pero no pude mandarte el detalle completo por Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
-    : "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar";
+      try {
+        alerts = await loadTelegramLiveAlertsWithTimeout(env, user.id, 12000);
+      } catch (err) {
+        console.error("TELEGRAM LIVE ALERTS ERROR:", err);
 
-  await sendTelegramText(env, chatId, fallback).catch(() => null);
-}
+        await sendTelegramText(
+          env,
+          chatId,
+          "No pude consultar tus alertas ahora mismo. La búsqueda está tardando demasiado.\n\nProbá de nuevo en unos minutos o miralas en el panel:\n🌐 https://alertasapd.com.ar"
+        ).catch(() => null);
 
-return json2({
-  ok: true,
-  delivered: true,
-  total_alerts: rawAlerts.length,
-  plan_code: entitlement.plan_code,
-  channel_mode: "query_only"
-});
+        return json2({
+          ok: true,
+          delivered: false,
+          reason: "live_build_failed_or_timeout",
+          error: String(err?.message || err || ""),
+          source,
+          channel_mode: "query_only"
+        });
+      }
+    }
 
+    const visibleAlerts = alerts.slice(0, safeLimit);
 
+    if (!visibleAlerts.length) {
+      await sendTelegramText(
+        env,
+        chatId,
+        "No encontré alertas compatibles en este momento.\n\n🌐 https://alertasapd.com.ar"
+      ).catch(() => null);
+
+      return json2({
+        ok: true,
+        delivered: true,
+        total_alerts: 0,
+        shown_alerts: 0,
+        source,
+        channel_mode: "query_only"
+      });
+    }
+
+    const reply = buildTelegramQueryDigest(visibleAlerts);
+
+    try {
+      await sendTelegramLongText(env, chatId, reply);
+    } catch (err) {
+      console.error("TELEGRAM ALERTS SEND ERROR:", err);
+
+      await sendTelegramText(
+        env,
+        chatId,
+        `Encontré ${visibleAlerts.length} alerta(s) compatibles, pero no pude mandarte el detalle completo por Telegram.\n\nMiralas en el panel:\nhttps://alertasapd.com.ar\n\nEscribí ALERTAS otra vez si querés refrescar.`
+      ).catch(() => null);
+    }
+
+    return json2({
+      ok: true,
+      delivered: true,
+      total_alerts: alerts.length,
+      shown_alerts: visibleAlerts.length,
+      source,
+      plan_code: entitlement?.plan_code || null,
+      channel_mode: "query_only"
+    });
   }
 
   await sendTelegramText(
@@ -11563,7 +11740,12 @@ return json2({
     "Hola. Escribí ALERTAS y te devuelvo tus ofertas compatibles ahora mismo.\n\n🌐 https://alertasapd.com.ar"
   ).catch(() => null);
 
-  return json2({ ok: true, delivered: true, help: true, channel_mode: "query_only" });
+  return json2({
+    ok: true,
+    delivered: true,
+    help: true,
+    channel_mode: "query_only"
+  });
 }
 __name(handleTelegramWebhook, "handleTelegramWebhook");
 async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
@@ -11751,178 +11933,543 @@ async function handleWhatsAppWebhookVerify(request, env) {
 }
 __name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 async function handleWhatsAppWebhook(request, env) {
-  try {
-    const body = await request.json().catch(() => ({}));
+  function waNormText(value) {
+    return String(value || "")
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
 
-    const entry = body?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value || {};
-    const message = value?.messages?.[0];
+  function waIsAlertasCommand(value) {
+    const t = waNormText(value);
+    return (
+      t === "ALERTAS" ||
+      t === "ALERTA" ||
+      t.startsWith("ALERTAS ") ||
+      t.startsWith("ALERTA ")
+    );
+  }
 
-    if (!message || typeof message !== "object") {
-      return json2({ ok: true, ignored: true, reason: "no_message_object" });
+  function waPickUrl(...values) {
+    for (const value of values) {
+      const s = String(value || "").trim();
+      if (!s) continue;
+      if (/^https?:\/\//i.test(s)) return s;
+    }
+    return "";
+  }
+
+  function waBuildPostuladosUrl(p) {
+    const direct = waPickUrl(
+      p?.url_postulados,
+      p?.link_postulados,
+      p?.postulados_url,
+      p?.postulantes_url,
+      p?.raw?.url_postulados,
+      p?.raw?.link_postulados,
+      p?.raw?.postulados_url,
+      p?.raw?.postulantes_url
+    );
+
+    if (direct) return direct;
+
+    const oferta = String(
+      p?.idoferta ||
+      p?.oferta ||
+      p?.raw?.idoferta ||
+      p?.raw?.oferta ||
+      ""
+    ).trim();
+
+    const detalle = String(
+      p?.iddetalle ||
+      p?.detalle ||
+      p?.raw?.iddetalle ||
+      p?.raw?.detalle ||
+      ""
+    ).trim();
+
+    if (oferta && detalle) {
+      return `https://servicios.abc.gob.ar/actos.publicos.digitales/postulantes/?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`;
     }
 
-    if (!message.from) {
-      return json2({ ok: true, ignored: true, reason: "missing_from" });
-    }
+    return "";
+  }
 
-    const messageId = String(message?.id || "").trim();
-    if (messageId) {
-      const dedupeKey = whatsappMessageDedupeKey(messageId);
-      if (await wasInboundEventProcessed(env, dedupeKey)) {
-        return json2({ ok: true, duplicate: true, message_id: messageId });
+  function waAlertTime(item) {
+    const p = item?.offer_payload || item || {};
+    const raw = p?.raw || {};
+    const candidates = [
+      item?.last_seen_at,
+      raw?.last_seen_at,
+      p?.last_seen_at,
+      raw?.ult_movimiento,
+      p?.ult_movimiento,
+      raw?.created_at,
+      p?.created_at,
+      raw?.finoferta,
+      p?.finoferta,
+      p?.fecha_cierre,
+      raw?.fecha_cierre
+    ];
+
+    for (const value of candidates) {
+      const s = String(value || "").trim();
+      if (!s) continue;
+
+      let d = null;
+
+      try {
+        d = typeof parseFechaFlexible === "function"
+          ? parseFechaFlexible(s)
+          : new Date(s);
+      } catch {
+        d = new Date(s);
       }
-      await markInboundEventProcessed(
-        env,
-        dedupeKey,
-        WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS
-      ).catch(() => null);
+
+      const t = d instanceof Date ? d.getTime() : 0;
+      if (Number.isFinite(t) && t > 0) return t;
     }
 
-    const from = String(message.from || "").trim();
-    const inboundText = String(message?.text?.body || "").trim();
+    return 0;
+  }
 
-    if (!norm2(inboundText).includes("ALERTA")) {
-      return json2({ ok: true, ignored: true, reason: "not_alert_command" });
+  function waOfferText(item, index, totalShown, totalAll) {
+    const p = normalizeOfferPayload(item?.offer_payload || item || {});
+    const raw = p?.raw || {};
+
+    const titulo = String(
+      p.cargo ||
+      p.materia ||
+      p.title ||
+      raw.cargo ||
+      raw.descripcioncargo ||
+      "Oferta APD"
+    ).trim();
+
+    const distrito = String(p.distrito || raw.descdistrito || "—").trim();
+    const escuela = String(p.escuela || raw.escuela || "—").trim();
+    const turno = String(p.turno || raw.turno || "—").trim();
+    const jornada = String(p.jornada || raw.jornada || "—").trim();
+    const nivel = String(p.nivel || p.nivel_modalidad || raw.descnivelmodalidad || "—").trim();
+    const curso = String(p.curso_division || p.cursodivision || raw.cursodivision || "—").trim();
+    const modulos = String(p.modulos || p.hsmodulos || raw.hsmodulos || "—").trim();
+    const dias = String(p.dias_horarios || p.diashora || p.horario || raw.diashorarios || "—").trim();
+    const vigencia = String(
+      p.vigencia ||
+      (
+        (p.desde || p.supl_desde || raw.supl_desde || "—") +
+        " / " +
+        (p.hasta || p.supl_hasta || raw.supl_hasta || "—")
+      )
+    ).trim();
+
+    const cierre = String(p.fecha_cierre || p.finoferta || raw.finoferta || "—").trim();
+    const postulantes = p.total_postulantes != null && p.total_postulantes !== ""
+      ? String(p.total_postulantes)
+      : "—";
+
+    const puntaje = p.puntaje_primero != null && p.puntaje_primero !== ""
+      ? String(p.puntaje_primero)
+      : "—";
+
+    const listado = String(p.listado_origen_primero || "—").trim();
+
+    const abcUrl = waPickUrl(
+      p.link,
+      p.url,
+      p.abc_url,
+      p.link_postular,
+      p.url_postular,
+      raw.link,
+      raw.url,
+      raw.abc_url,
+      raw.link_postular,
+      raw.url_postular
+    );
+
+    const postuladosUrl = waBuildPostuladosUrl(p);
+
+    const lines = [
+      `*${index + 1}/${totalShown} · ${titulo}*`,
+      ``,
+      `📍 Distrito: ${distrito}`,
+      `🏫 Escuela: ${escuela}`,
+      `🕒 Turno: ${turno}`,
+      `📌 Jornada: ${jornada}`,
+      `🎓 Nivel: ${nivel}`,
+      `📚 Curso/división: ${curso}`,
+      `🔢 Módulos: ${modulos}`,
+      `📅 Días/horarios: ${dias}`,
+      `🗓️ Vigencia: ${vigencia}`,
+      `⏰ Cierre: ${cierre}`,
+      ``,
+      `👥 Postulados: ${postulantes}`,
+      `📈 Puntaje más alto: ${puntaje}`,
+      `📄 Listado más alto: ${listado}`
+    ];
+
+    if (postuladosUrl) {
+      lines.push(``);
+      lines.push(`🔗 Postulados: ${postuladosUrl}`);
+    } else if (abcUrl) {
+      lines.push(``);
+      lines.push(`🔗 ABC: ${abcUrl}`);
     }
 
-    const user = await findUserByWhatsAppNumber(env, from);
-
-    if (!user?.id) {
-      await trySendWhatsAppText(
-        env,
-        from,
-        "No pude vincular este número con una cuenta activa.\n\nEntrá al panel, revisá tu celular y volvé a probar.\nhttps://alertasapd.com.ar",
-        "user_not_found"
-      );
-      return json2({ ok: true, delivered: false, reason: "user_not_found" });
+    if (index === totalShown - 1 && totalAll > totalShown) {
+      lines.push(``);
+      lines.push(`Hay ${totalAll - totalShown} oferta(s) más compatibles.`);
+      lines.push(`Ver todas: https://alertasapd.com.ar`);
     }
 
-    await saveWhatsAppState(env, user.id, {
-      connected: true,
-      phone: from,
-      last_inbound_at: new Date().toISOString()
-    }).catch(() => null);
+    return lines.join("\n");
+  }
 
-    const entitlement = await resolveWhatsAppEntitlement(env, user.id).catch(() => ({
-      allowed: false,
-      plan_code: "UNKNOWN",
-      plan_name: "Unknown"
-    }));
+  async function waSend(env, to, text, context = "wa_send") {
+    try {
+      if (typeof trySendWhatsAppText === "function") {
+        const r = await trySendWhatsAppText(env, to, text, context);
+        if (r && r.ok === false) {
+          console.error("WHATSAPP SEND FAIL", {
+            context,
+            to,
+            response: r
+          });
+        }
+        return r || { ok: true };
+      }
 
-    if (!entitlement.allowed) {
-      await trySendWhatsAppText(
-        env,
-        from,
-        "Tu plan actual no tiene WhatsApp habilitado.\n\nhttps://alertasapd.com.ar",
-        "plan_not_allowed"
-      );
-      return json2({ ok: true, delivered: false, reason: "plan_not_allowed" });
-    }
-
-    const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
-
-    if (!prefs?.alertas_activas || !prefs?.alertas_whatsapp) {
-      await trySendWhatsAppText(
-        env,
-        from,
-        "WhatsApp todavía no está activo en tus preferencias.\n\nEntrá al panel, activalo y después escribí ALERTAS.\nhttps://alertasapd.com.ar",
-        "whatsapp_not_enabled"
-      );
-      return json2({ ok: true, delivered: false, reason: "whatsapp_not_enabled" });
-    }
-
-    const data = await construirAlertasParaUsuario(env, user.id).catch((err) => ({
-      ok: false,
-      message: err?.message || "No se pudieron construir alertas"
-    }));
-
-    if (!data?.ok) {
-      console.error("WHATSAPP ALERTS BUILD ERROR", {
-        user_id: user.id,
-        from,
-        error: data?.message || "build_failed"
+      await sendWhatsAppText(env, to, text);
+      return { ok: true };
+    } catch (err) {
+      console.error("WHATSAPP SEND ERROR", {
+        context,
+        to,
+        error: String(err?.message || err || "")
       });
 
-      await trySendWhatsAppText(
-        env,
-        from,
-        "No pude consultar tus alertas ahora mismo.\n\nProbá de nuevo en unos minutos.\nhttps://alertasapd.com.ar",
-        "build_failed"
-      );
+      return {
+        ok: false,
+        error: String(err?.message || err || "")
+      };
+    }
+  }
 
-      return json2({ ok: true, delivered: false, reason: "build_failed" });
+  async function waLoadStoredAlerts(env, userId, limit = 50) {
+    const rows = await supabaseSelect(
+      env,
+      `user_offer_state?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=offer_id,offer_payload,last_seen_at&order=last_seen_at.desc&limit=${encodeURIComponent(String(limit))}`
+    ).catch((err) => {
+      console.error("WHATSAPP STORED ALERTS READ ERROR:", err);
+      return [];
+    });
+
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        offer_payload: normalizeOfferPayload(row?.offer_payload || {}),
+        last_seen_at: row?.last_seen_at || ""
+      }))
+      .filter((item) => {
+        const p = item.offer_payload || {};
+        return !!(
+          p.offer_id ||
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.codigo ||
+          p.cargo ||
+          p.materia ||
+          p.title
+        );
+      });
+  }
+
+  try {
+    if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) {
+      return json2({
+        ok: true,
+        skipped: true,
+        reason: "missing_config",
+        phone_number_id_ready: !!env.WHATSAPP_PHONE_NUMBER_ID,
+        access_token_ready: !!env.WHATSAPP_ACCESS_TOKEN
+      });
     }
 
-    const rawAlerts = Array.isArray(data?.resultados) ? data.resultados : [];
+    const body = await request.json().catch(() => ({}));
+    const entries = Array.isArray(body?.entry) ? body.entry : [];
 
-    if (!rawAlerts.length) {
-      await trySendWhatsAppText(
-        env,
-        from,
-        "No encontré alertas compatibles ahora.\n\nhttps://alertasapd.com.ar",
-        "no_alerts"
-      );
-      return json2({ ok: true, delivered: true, total_alerts: 0 });
-    }
+    let handled = 0;
+    let delivered = 0;
+    const results = [];
 
-    const MAX_WHATSAPP_ALERTS = 5;
-    const visibleAlerts = rawAlerts
-      .slice(0, MAX_WHATSAPP_ALERTS)
-      .map((item) => normalizeOfferPayload(item?.offer_payload || item || {}));
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
 
-    const parts = buildWhatsAppQueryDigestParts(visibleAlerts);
+      for (const change of changes) {
+        const value = change?.value || {};
+        const messages = Array.isArray(value?.messages) ? value.messages : [];
 
-    const intro =
-      rawAlerts.length > MAX_WHATSAPP_ALERTS
-        ? `Encontré ${rawAlerts.length} alertas para vos.\n\nTe muestro las primeras ${MAX_WHATSAPP_ALERTS}.\nLas demás en el panel:\nhttps://alertasapd.com.ar`
-        : `Encontré ${rawAlerts.length} alertas para vos.`;
+        for (const message of messages) {
+          handled += 1;
 
-    await trySendWhatsAppText(env, from, intro, "alert_intro");
+          const messageId = String(message?.id || "").trim();
 
-    for (let i = 0; i < parts.length; i++) {
-      const sendResult = await trySendWhatsAppText(
-        env,
-        from,
-        parts[i],
-        "alert_item"
-      );
+          if (messageId) {
+            const dedupeKey = whatsappMessageDedupeKey(messageId);
 
-      if (!sendResult?.ok) {
-        console.error("WHATSAPP SEND ERROR", {
-          user_id: user.id,
-          from,
-          index: i,
-          status: sendResult?.status || null,
-          error: sendResult?.error || sendResult?.data || null
-        });
-        continue;
+            if (await wasInboundEventProcessed(env, dedupeKey)) {
+              results.push({
+                message_id: messageId,
+                duplicate: true
+              });
+              continue;
+            }
+
+            await markInboundEventProcessed(
+              env,
+              dedupeKey,
+              WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS
+            ).catch(() => null);
+          }
+
+          const from = String(message?.from || "").trim();
+
+          if (!from) {
+            results.push({
+              message_id: messageId || null,
+              skipped: true,
+              reason: "missing_from"
+            });
+            continue;
+          }
+
+          const inboundText = String(
+            message?.text?.body ||
+            message?.button?.text ||
+            message?.interactive?.button_reply?.title ||
+            ""
+          ).trim();
+
+          const user = await findUserByWhatsAppNumber(env, from);
+
+          if (!user?.id) {
+            await waSend(
+              env,
+              from,
+              "No encontré una cuenta de APDocentePBA asociada a este número.\n\nGuardá tu celular en el panel y probá de nuevo:\nhttps://alertasapd.com.ar",
+              "user_not_found"
+            );
+
+            results.push({
+              message_id: messageId || null,
+              delivered: false,
+              reason: "user_not_found"
+            });
+            continue;
+          }
+
+          if (user.activo === false) {
+            await waSend(
+              env,
+              from,
+              "Tu usuario figura inactivo. Revisá tu cuenta en el panel.\n\nhttps://alertasapd.com.ar",
+              "inactive_user"
+            );
+
+            results.push({
+              message_id: messageId || null,
+              delivered: false,
+              user_id: user.id,
+              reason: "inactive_user"
+            });
+            continue;
+          }
+
+          await saveWhatsAppState(env, user.id, {
+            connected: true,
+            phone: from,
+            phone_masked: typeof maskPhone === "function" ? maskPhone(from) : "",
+            last_inbound_at: new Date().toISOString()
+          }).catch(() => null);
+
+          const entitlement = await resolveWhatsAppEntitlement(env, user.id).catch(() => ({
+            allowed: false,
+            plan_code: "UNKNOWN",
+            plan_name: "UNKNOWN"
+          }));
+
+          if (!entitlement?.allowed) {
+            await waSend(
+              env,
+              from,
+              "WhatsApp queda reservado para el plan Insigne.\n\nEn tu plan actual seguís teniendo email y Telegram.",
+              "plan_not_allowed"
+            );
+
+            results.push({
+              message_id: messageId || null,
+              delivered: false,
+              user_id: user.id,
+              reason: "plan_not_allowed",
+              plan_code: entitlement?.plan_code || null
+            });
+            continue;
+          }
+
+          const prefs = await obtenerPreferenciasUsuario(env, user.id).catch(() => null);
+
+          await saveWhatsAppState(env, user.id, {
+            connected: true,
+            phone: from,
+            alerts_requested: !!prefs?.alertas_whatsapp,
+            alerts_enabled: true,
+            last_inbound_at: new Date().toISOString()
+          }).catch(() => null);
+
+          if (!waIsAlertasCommand(inboundText)) {
+            await waSend(
+              env,
+              from,
+              "Hola. Escribí ALERTAS y te devuelvo las 5 ofertas compatibles más recientes.\n\nhttps://alertasapd.com.ar",
+              "help"
+            );
+
+            delivered += 1;
+
+            results.push({
+              message_id: messageId || null,
+              delivered: true,
+              user_id: user.id,
+              help: true
+            });
+
+            continue;
+          }
+
+          await waSend(
+            env,
+            from,
+            "🔎 Estoy consultando tus alertas compatibles...",
+            "lookup_start"
+          );
+
+          const storedAlerts = await waLoadStoredAlerts(env, user.id, 50);
+
+          const sortedAlerts = storedAlerts
+            .slice()
+            .sort((a, b) => waAlertTime(b) - waAlertTime(a));
+
+          const totalAlerts = sortedAlerts.length;
+          const MAX_WHATSAPP_ALERTS = 5;
+
+          const visibleAlerts = sortedAlerts
+            .slice(0, MAX_WHATSAPP_ALERTS)
+            .map((item) => ({
+              offer_payload: normalizeOfferPayload(item?.offer_payload || item || {}),
+              last_seen_at: item?.last_seen_at || ""
+            }));
+
+          if (!visibleAlerts.length) {
+            await waSend(
+              env,
+              from,
+              "No encontré alertas compatibles guardadas ahora.\n\nRevisá el panel:\nhttps://alertasapd.com.ar",
+              "no_stored_alerts"
+            );
+
+            delivered += 1;
+
+            results.push({
+              message_id: messageId || null,
+              delivered: true,
+              user_id: user.id,
+              total_alerts: 0,
+              shown_alerts: 0,
+              source: "stored"
+            });
+
+            continue;
+          }
+
+          const intro =
+            totalAlerts > visibleAlerts.length
+              ? `Encontré ${totalAlerts} alertas compatibles para vos.\n\nTe mando las ${visibleAlerts.length} más recientes para no saturarte WhatsApp.\n\nPara ver el carrusel completo entrá al panel:\nhttps://alertasapd.com.ar`
+              : `Encontré ${totalAlerts} alerta(s) compatible(s) para vos.\n\nTe mando las más recientes.`;
+
+          await waSend(env, from, intro, "alert_intro");
+
+          let sentParts = 0;
+          let failedParts = 0;
+
+          for (let i = 0; i < visibleAlerts.length; i++) {
+            const sendResult = await waSend(
+              env,
+              from,
+              waOfferText(visibleAlerts[i], i, visibleAlerts.length, totalAlerts),
+              "alert_item"
+            );
+
+            if (sendResult?.ok !== false) {
+              sentParts += 1;
+            } else {
+              failedParts += 1;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 900));
+          }
+
+          if (totalAlerts > visibleAlerts.length) {
+            await waSend(
+              env,
+              from,
+              `Hay ${totalAlerts - visibleAlerts.length} oferta(s) más compatibles.\n\nRevisá el resto en el panel:\nhttps://alertasapd.com.ar`,
+              "alert_more"
+            );
+          }
+
+          if (failedParts > 0) {
+            await waSend(
+              env,
+              from,
+              `Pude enviar ${sentParts} detalle(s), pero ${failedParts} no salieron correctamente.\n\nPodés ver todo en el panel:\nhttps://alertasapd.com.ar`,
+              "partial_failure"
+            );
+          }
+
+          delivered += sentParts > 0 ? 1 : 0;
+
+          results.push({
+            message_id: messageId || null,
+            delivered: sentParts > 0,
+            user_id: user.id,
+            total_alerts: totalAlerts,
+            shown_alerts: visibleAlerts.length,
+            sent_parts: sentParts,
+            failed_parts: failedParts,
+            source: "stored",
+            mode: "latest_5_only"
+          });
+        }
       }
-
-      await sleep(1500);
-    }
-
-    if (rawAlerts.length > MAX_WHATSAPP_ALERTS) {
-      await trySendWhatsAppText(
-        env,
-        from,
-        `Hay ${rawAlerts.length - MAX_WHATSAPP_ALERTS} alertas más.\nVer todas: https://alertasapd.com.ar`,
-        "alert_more"
-      );
     }
 
     return json2({
       ok: true,
-      delivered: true,
-      total_alerts: rawAlerts.length,
-      shown_alerts: visibleAlerts.length,
-      channel_mode: "query_only"
+      handled,
+      delivered,
+      channel_mode: "query_only",
+      results
     });
   } catch (err) {
     console.error("WHATSAPP WEBHOOK ERROR", err);
+
     return json2(
-      { ok: false, error: err?.message || "webhook_error" },
+      {
+        ok: false,
+        error: String(err?.message || err || "webhook_error")
+      },
       Number(err?.status || 500) || 500
     );
   }
