@@ -1519,6 +1519,48 @@ function stripPidFromPayload(payload) {
     pid_anio: ""
   };
 }
+function getPlanCodeValue(value) {
+  if (typeof value === "string") {
+    return String(value || "").trim().toUpperCase();
+  }
+
+  return String(
+    value?.plan_code ||
+    value?.planCode ||
+    value?.code ||
+    value?.plan?.code ||
+    value?.subscription?.plan_code ||
+    ""
+  ).trim().toUpperCase();
+}
+__name(getPlanCodeValue, "getPlanCodeValue");
+
+function canShowPidForPlan(value) {
+  return getPlanCodeValue(value) === "INSIGNE";
+}
+__name(canShowPidForPlan, "canShowPidForPlan");
+
+function applyPidVisibilityToPayload(payload, planOrEntitlement) {
+  const normalized = normalizeOfferPayload(payload || {});
+
+  if (canShowPidForPlan(planOrEntitlement)) {
+    return normalized;
+  }
+
+  return stripPidFromPayload(normalized);
+}
+__name(applyPidVisibilityToPayload, "applyPidVisibilityToPayload");
+
+function applyPidVisibilityToAlerts(alerts, planOrEntitlement) {
+  return (Array.isArray(alerts) ? alerts : []).map((item) => ({
+    ...item,
+    offer_payload: applyPidVisibilityToPayload(
+      item?.offer_payload || item || {},
+      planOrEntitlement
+    )
+  }));
+}
+__name(applyPidVisibilityToAlerts, "applyPidVisibilityToAlerts");
 function buildMailChanceInfo(p) {
   const payload = normalizeOfferPayload(p || {});
 
@@ -5012,7 +5054,7 @@ async function runEmailAlertsSweep(env, options = {}) {
       continue;
     }
 
-    if (!String(user?.email || "").trim()) {
+       if (!String(user?.email || "").trim()) {
       skippedAlerts += 1;
 
       pushDebug({
@@ -5025,6 +5067,10 @@ async function runEmailAlertsSweep(env, options = {}) {
 
       continue;
     }
+
+    const resolvedPlanForEmail = await resolverPlanUsuario(env, userId).catch(() => null);
+    const emailPlanCode = getPlanCodeValue(resolvedPlanForEmail) || "TRIAL_7D";
+    const emailCanShowPid = canShowPidForPlan(emailPlanCode);
 
     const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);
 
@@ -5050,7 +5096,7 @@ async function runEmailAlertsSweep(env, options = {}) {
       const totalAlerts = sortedLatest.length;
     const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
-    const visibleAlerts = await enrichEmailVisibleAlertsWithPostulantes(
+       const visibleAlerts = await enrichEmailVisibleAlertsWithPostulantes(
       env,
       visibleSource.map((item) => ({
         offer_id: item?.offer_id || "",
@@ -5059,7 +5105,12 @@ async function runEmailAlertsSweep(env, options = {}) {
       }))
     );
 
-    const shownCount = visibleAlerts.length;
+    const visibleAlertsForRender = applyPidVisibilityToAlerts(
+      visibleAlerts,
+      emailPlanCode
+    );
+
+    const shownCount = visibleAlertsForRender.length;
 
     if (!shownCount) {
       skippedAlerts += 1;
@@ -5095,8 +5146,7 @@ async function runEmailAlertsSweep(env, options = {}) {
         ).trim();
       })
       .filter(Boolean);
-
-        const sampleTitles = visibleAlerts
+    const sampleTitles = visibleAlertsForRender
       .map((item) => {
         const p = normalizeOfferPayload(item?.offer_payload || item || {});
         return String(
@@ -5105,8 +5155,8 @@ async function runEmailAlertsSweep(env, options = {}) {
       })
       .filter(Boolean);
 
-    const enrichedSamples = visibleAlerts.map((item) => {
-      const p = normalizeOfferPayload(item?.offer_payload || item || {});
+    const enrichedSamples = visibleAlertsForRender.map((item) => {
+            const p = normalizeOfferPayload(item?.offer_payload || item || {});
       return {
         offer_id: String(
           p.source_offer_key ||
@@ -5144,6 +5194,8 @@ async function runEmailAlertsSweep(env, options = {}) {
         visible_alert_keys: visibleAlertKeys,
         visible_offer_ids: visibleOfferIds,
         sample_titles: sampleTitles,
+                plan_code: emailPlanCode,
+        pid_visible: emailCanShowPid,
         enriched_postulantes: true,
         enriched_samples: enrichedSamples,
         send_ok: null,
@@ -5155,8 +5207,7 @@ async function runEmailAlertsSweep(env, options = {}) {
 
       continue;
     }
-
-    const html = buildDigestHtml(visibleAlerts, user, {
+    const html = buildDigestHtml(visibleAlertsForRender, user, {
       total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
       panel_url: "https://alertasapd.com.ar"
@@ -5191,6 +5242,8 @@ async function runEmailAlertsSweep(env, options = {}) {
       visible_alert_keys: visibleAlertKeys,
       visible_offer_ids: visibleOfferIds,
       sample_titles: sampleTitles,
+            plan_code: emailPlanCode,
+      pid_visible: emailCanShowPid,
       enriched_postulantes: true,
       enriched_samples: enrichedSamples,
       send_ok: !!send?.ok,
@@ -12166,8 +12219,12 @@ async function handleTelegramWebhook(request, env) {
       });
     }
 
-    const reply = buildTelegramQueryDigest(visibleAlerts);
+    const visibleAlertsForRender = applyPidVisibilityToAlerts(
+      visibleAlerts,
+      entitlement?.plan_code
+    );
 
+    const reply = buildTelegramQueryDigest(visibleAlertsForRender);
     try {
       await sendTelegramLongText(env, chatId, reply);
     } catch (err) {
@@ -12188,8 +12245,10 @@ async function handleTelegramWebhook(request, env) {
       source,
       plan_code: entitlement?.plan_code || null,
       channel_mode: "query_only",
-      enriched_postulantes: true,
-      enriched_limit: Math.min(safeLimit, 30)
+            enriched_postulantes: true,
+      enriched_limit: Math.min(safeLimit, 30),
+      plan_code: entitlement?.plan_code || null,
+      pid_visible: canShowPidForPlan(entitlement)
     });
   }
 
@@ -12981,10 +13040,14 @@ async function handleWhatsAppWebhook(request, env) {
               offer_payload: normalizeOfferPayload(item?.offer_payload || item || {}),
               last_seen_at: item?.last_seen_at || ""
             }));
-
           const visibleAlerts = await waEnrichVisibleAlerts(env, visibleBaseAlerts);
 
-          if (!visibleAlerts.length) {
+          const visibleAlertsForRender = applyPidVisibilityToAlerts(
+            visibleAlerts,
+            entitlement?.plan_code
+          );
+
+          if (!visibleAlertsForRender.length) {
             await waSend(
               env,
               from,
@@ -13008,7 +13071,7 @@ async function handleWhatsAppWebhook(request, env) {
 
           const intro =
             totalAlerts > visibleAlerts.length
-              ? `Encontré ${totalAlerts} alertas compatibles para vos.\n\nTe mando las ${visibleAlerts.length} más recientes para no saturarte WhatsApp.\n\nPara ver el carrusel completo entrá al panel:\nhttps://alertasapd.com.ar`
+                          ? `Encontré ${totalAlerts} alertas compatibles para vos.\n\nTe mando las ${visibleAlertsForRender.length} más recientes para no saturarte WhatsApp.\n\nPara ver el carrusel completo entrá al panel:\nhttps://alertasapd.com.ar`
               : `Encontré ${totalAlerts} alerta(s) compatible(s) para vos.\n\nTe mando las más recientes.`;
 
           await waSend(env, from, intro, "alert_intro");
@@ -13016,11 +13079,11 @@ async function handleWhatsAppWebhook(request, env) {
           let sentParts = 0;
           let failedParts = 0;
 
-          for (let i = 0; i < visibleAlerts.length; i++) {
+                    for (let i = 0; i < visibleAlertsForRender.length; i++) {
             const sendResult = await waSend(
               env,
               from,
-              waOfferText(visibleAlerts[i], i, visibleAlerts.length),
+              waOfferText(visibleAlertsForRender[i], i, visibleAlertsForRender.length),
               "alert_item"
             );
 
@@ -13033,12 +13096,12 @@ async function handleWhatsAppWebhook(request, env) {
             await new Promise((resolve) => setTimeout(resolve, 900));
           }
 
-          if (totalAlerts > visibleAlerts.length) {
-            await waSend(
+          if (totalAlerts > visibleAlertsForRender.length) {
+                        await waSend(
               env,
               from,
-              `Hay ${totalAlerts - visibleAlerts.length} oferta(s) más compatibles.\n\nRevisá el resto en el panel:\nhttps://alertasapd.com.ar`,
-              "alert_more"
+              `Hay ${totalAlerts - visibleAlertsForRender.length} oferta(s) más compatibles.\n\nRevisá el resto en el panel:\nhttps://alertasapd.com.ar`,
+                            "alert_more"
             );
           }
 
@@ -13058,8 +13121,10 @@ async function handleWhatsAppWebhook(request, env) {
             delivered: sentParts > 0,
             user_id: user.id,
             total_alerts: totalAlerts,
-            shown_alerts: visibleAlerts.length,
-            sent_parts: sentParts,
+            shown_alerts: visibleAlertsForRender.length,
+            plan_code: entitlement?.plan_code || null,
+            pid_visible: canShowPidForPlan(entitlement),
+                        sent_parts: sentParts,
             failed_parts: failedParts,
             source: "stored_enriched",
             mode: "latest_5_only"
