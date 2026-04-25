@@ -4611,131 +4611,247 @@ async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
 }
 __name(sendEmailAlertForUser, "sendEmailAlertForUser");
 async function runEmailAlertsSweep(env, options = {}) {
- let prefError = null;
-let prefSource = "user_preferences";
+  const source = String(options?.source || "").trim();
+  const isManualRun = source.startsWith("manual_");
 
-const MAX_DIGEST_EMAILS_PER_RUN = clampInt(
-  options?.max_users || env.EMAIL_DIGEST_MAX_USERS_PER_RUN,
-  1,
-  500,
-  200
-);
+  const targetUserId = String(options?.target_user_id || "").trim();
 
-const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
-const targetUserId = String(options?.target_user_id || "").trim();
-const debugEnabled =
-  options?.debug === true ||
-  !!String(options?.debug_user_id || "").trim();
-const debugUserId = String(
-  options?.debug_user_id || targetUserId || ""
-).trim();
-const dryRun = options?.dry_run === true;
+  const slotKey = String(
+    options?.slot_key ||
+    options?.slot_info?.slot_key ||
+    ""
+  ).trim();
 
-let prefRows = await supabaseSelect(
-  env,
-  `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
-).catch((err) => {
-  prefError = String(err?.message || err || "");
-  return [];
-});
+  const kv = getChannelStateStore(env);
 
-if ((!Array.isArray(prefRows) || prefRows.length === 0) && targetUserId) {
-  prefRows = [{ user_id: targetUserId }];
-  prefSource = "target_user_id_fallback";
-}
+  const DEFAULT_BATCH_SIZE = 80;
 
-if (!Array.isArray(prefRows) || prefRows.length === 0) {
-  const userRows = await supabaseSelect(
-    env,
-    `users?activo=is.true&alertas_activas=is.true&alertas_email=is.true&select=id&order=id.asc`
-  ).catch((err) => {
-    if (!prefError) prefError = String(err?.message || err || "");
+  const BATCH_USERS_PER_RUN = clampInt(
+    options?.max_users ||
+      env.EMAIL_DIGEST_BATCH_USERS_PER_RUN ||
+      env.EMAIL_DIGEST_MAX_USERS_PER_RUN,
+    1,
+    200,
+    DEFAULT_BATCH_SIZE
+  );
+
+  const MANUAL_SWEEP_LIMIT = clampInt(
+    options?.manual_limit || env.EMAIL_MANUAL_SWEEP_LIMIT,
+    1,
+    50,
+    5
+  );
+
+  const MAX_VISIBLE_ALERTS_IN_EMAIL = 5;
+
+  const debugEnabled =
+    options?.debug === true ||
+    !!String(options?.debug_user_id || "").trim();
+
+  const debugUserId = String(
+    options?.debug_user_id || targetUserId || ""
+  ).trim();
+
+  const dryRun = options?.dry_run === true;
+
+  const useSlotCursor =
+    !!slotKey &&
+    !!kv &&
+    !targetUserId &&
+    !isManualRun;
+
+  const cursorKey = useSlotCursor
+    ? `email:slot:${slotKey}:cursor_user_id`
+    : "";
+
+  const finishedKey = useSlotCursor
+    ? `email:slot:${slotKey}:finished`
+    : "";
+
+  const cursorUserId = useSlotCursor
+    ? String(await kv.get(cursorKey).catch(() => "") || "").trim()
+    : "";
+
+  if (useSlotCursor) {
+    const alreadyFinished = await kv.get(finishedKey).catch(() => null);
+    if (alreadyFinished) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "slot_already_finished",
+        slot_key: slotKey,
+        processed_users: 0,
+        send_attempts: 0,
+        sent_count: 0,
+        notified_alerts_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        batch_size: BATCH_USERS_PER_RUN,
+        cursor_user_id: cursorUserId || null,
+        finished: true,
+        debug_enabled: debugEnabled,
+        debug_user_id: debugUserId || null,
+        dry_run: dryRun,
+        debug_users: []
+      };
+    }
+  }
+
+  let prefError = null;
+  let prefSource = "user_preferences";
+
+  let prefQuery =
+    `user_preferences?alertas_activas=is.true&alertas_email=is.true` +
+    `&select=user_id&order=user_id.asc`;
+
+  if (targetUserId) {
+    prefQuery += `&user_id=eq.${encodeURIComponent(targetUserId)}&limit=1`;
+  } else if (useSlotCursor) {
+    if (cursorUserId) {
+      prefQuery += `&user_id=gt.${encodeURIComponent(cursorUserId)}`;
+    }
+
+    prefQuery += `&limit=${encodeURIComponent(String(BATCH_USERS_PER_RUN))}`;
+  } else {
+    const manualLimit = isManualRun ? MANUAL_SWEEP_LIMIT : BATCH_USERS_PER_RUN;
+    prefQuery += `&limit=${encodeURIComponent(String(manualLimit))}`;
+  }
+
+  let prefRows = await supabaseSelect(env, prefQuery).catch((err) => {
+    prefError = String(err?.message || err || "");
     return [];
   });
 
-  if (Array.isArray(userRows) && userRows.length > 0) {
-    prefRows = userRows
-      .map((u) => ({ user_id: String(u?.id || "").trim() }))
-      .filter((u) => !!u.user_id);
-
-    prefSource = "users_fallback";
+  if ((!Array.isArray(prefRows) || prefRows.length === 0) && targetUserId) {
+    prefRows = [{ user_id: targetUserId }];
+    prefSource = "target_user_id_fallback";
   }
-}
 
-const total = Array.isArray(prefRows) ? prefRows.length : 0;
+  const rowsToProcess = Array.isArray(prefRows) ? prefRows : [];
 
-if (!total) {
-  return {
-    ok: true,
-    processed_users: 0,
-    send_attempts: 0,
-    sent_count: 0,
-    notified_alerts_count: 0,
-    skipped_count: 0,
-    failed_count: 0,
-    total_users: 0,
-limit_per_run: isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN,    stopped_early: false,
-    failed_samples: [],
-    message: "No hay usuarios con alertas por email activas",
-    pref_source: prefSource,
-    pref_error: prefError,
-    debug_enabled: debugEnabled,
-    debug_user_id: debugUserId || null,
-    dry_run: dryRun,
-    debug_users: []
-  };
-}
+  if (!rowsToProcess.length) {
+    if (useSlotCursor) {
+      await kv.put(finishedKey, new Date().toISOString(), {
+        expirationTtl: 60 * 60 * 36
+      }).catch(() => null);
+    }
 
-const rowsBase = targetUserId
-  ? prefRows.filter(
-      (r) => String(r?.user_id || "").trim() === targetUserId
-    )
-  : prefRows;
+    return {
+      ok: true,
+      processed_users: 0,
+      send_attempts: 0,
+      sent_count: 0,
+      notified_alerts_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      total_users: null,
+      batch_size: BATCH_USERS_PER_RUN,
+      limit_per_run: targetUserId
+        ? 1
+        : (isManualRun ? MANUAL_SWEEP_LIMIT : BATCH_USERS_PER_RUN),
+      stopped_early: false,
+      finished: useSlotCursor ? true : false,
+      slot_key: slotKey || null,
+      cursor_user_id: cursorUserId || null,
+      failed_samples: [],
+      message: targetUserId
+        ? "No hay preferencias activas para ese usuario"
+        : "No quedan usuarios pendientes para esta tanda",
+      pref_source: prefSource,
+      pref_error: prefError,
+      debug_enabled: debugEnabled,
+      debug_user_id: debugUserId || null,
+      dry_run: dryRun,
+      debug_users: targetUserId
+        ? [
+            {
+              user_id: targetUserId,
+              stage: "pref_lookup",
+              skipped: true,
+              reason: "user_not_in_email_pref_rows"
+            }
+          ]
+        : []
+    };
+  }
 
-const MANUAL_SWEEP_LIMIT = clampInt(
-  options?.manual_limit || env.EMAIL_MANUAL_SWEEP_LIMIT,
-  1,
-  10,
-  1
-);
+  function emailAlertTime(item) {
+    const p = item?.offer_payload || item || {};
+    const raw = p?.raw || {};
 
-const isManualRun = String(options?.source || "").startsWith("manual_");
+    const candidates = [
+      item?.last_seen_at,
+      p?.last_seen_at,
+      raw?.last_seen_at,
+      p?.ult_movimiento,
+      raw?.ult_movimiento,
+      p?.created_at,
+      raw?.created_at,
+      p?.finoferta,
+      raw?.finoferta,
+      p?.fecha_cierre,
+      raw?.fecha_cierre
+    ];
 
-const rowsToProcess = targetUserId
-  ? rowsBase
-  : isManualRun
-    ? rowsBase.slice(0, MANUAL_SWEEP_LIMIT)
-    : rowsBase.slice(0, MAX_DIGEST_EMAILS_PER_RUN);
+    for (const value of candidates) {
+      const s = String(value || "").trim();
+      if (!s) continue;
 
-   if (targetUserId && !rowsToProcess.length) {
-  return {
-    ok: true,
-    processed_users: 0,
-    send_attempts: 0,
-    sent_count: 0,
-    notified_alerts_count: 0,
-    skipped_count: 0,
-    failed_count: 0,
-    total_users: total,
-limit_per_run: targetUserId
-  ? 1
-  : (isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN),    stopped_early: false,
-    failed_samples: [],
-    pref_source: prefSource,
-    pref_error: prefError,
-    debug_enabled: debugEnabled,
-    debug_user_id: debugUserId || null,
-    dry_run: dryRun,
-    debug_users: [
-      {
-        user_id: targetUserId,
-        stage: "pref_lookup",
-        skipped: true,
-        reason: "user_not_in_email_pref_rows"
+      let d = null;
+
+      try {
+        d = typeof parseFechaFlexible === "function"
+          ? parseFechaFlexible(s)
+          : new Date(s);
+      } catch {
+        d = new Date(s);
       }
-    ]
-  };
-}
+
+      const t = d instanceof Date ? d.getTime() : 0;
+      if (Number.isFinite(t) && t > 0) return t;
+    }
+
+    return 0;
+  }
+
+  async function loadStoredEmailAlerts(env, userId, limit = 80) {
+    const rows = await supabaseSelect(
+      env,
+      `user_offer_state?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=offer_id,offer_payload,last_seen_at&order=last_seen_at.desc&limit=${encodeURIComponent(String(limit))}`
+    ).catch((err) => {
+      console.error("EMAIL STORED ALERTS READ ERROR:", {
+        user_id: userId,
+        error: String(err?.message || err || "")
+      });
+      return [];
+    });
+
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        offer_id: row?.offer_id || "",
+        offer_payload: normalizeOfferPayload(row?.offer_payload || {}),
+        last_seen_at: row?.last_seen_at || ""
+      }))
+      .filter((item) => {
+        const p = item.offer_payload || {};
+        return !!(
+          p.offer_id ||
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.codigo ||
+          p.cargo ||
+          p.materia ||
+          p.title
+        );
+      });
+  }
+
+  const userIds = rowsToProcess
+    .map((row) => String(row?.user_id || "").trim())
+    .filter(Boolean);
+
+  const usersMap = await loadUsersMapByIds(env, userIds).catch(() => new Map());
 
   let processedUsers = 0;
   let attemptedDigests = 0;
@@ -4743,6 +4859,7 @@ limit_per_run: targetUserId
   let notifiedAlertsCount = 0;
   let skippedAlerts = 0;
   let failedDigests = 0;
+
   const failed_samples = [];
   const debug_users = [];
 
@@ -4752,23 +4869,48 @@ limit_per_run: targetUserId
     const entryUserId = String(entry?.user_id || "").trim();
 
     if (debugUserId && entryUserId && entryUserId !== debugUserId) return;
-    if (!debugUserId && debug_users.length >= 10) return;
+    if (!debugUserId && debug_users.length >= 30) return;
 
     debug_users.push(entry);
   };
 
-  for (const row of rowsToProcess) {
-    if (attemptedDigests >= MAX_DIGEST_EMAILS_PER_RUN) break;
+  let lastProcessedUserId = cursorUserId || "";
 
+  for (const row of rowsToProcess) {
     const userId = String(row?.user_id || "").trim();
     if (!userId) continue;
 
+    lastProcessedUserId = userId;
     processedUsers += 1;
 
-    const user = await obtenerUsuario(env, userId).catch(() => null);
+    const perUserSentKey =
+      useSlotCursor && slotKey
+        ? `email:slot:${slotKey}:user:${userId}:sent`
+        : "";
+
+    if (perUserSentKey) {
+      const alreadySentForUser = await kv.get(perUserSentKey).catch(() => null);
+
+      if (alreadySentForUser) {
+        skippedAlerts += 1;
+
+        pushDebug({
+          user_id: userId,
+          stage: "dedupe",
+          skipped: true,
+          reason: "already_sent_for_user_in_slot",
+          slot_key: slotKey
+        });
+
+        continue;
+      }
+    }
+
+    const user = usersMap.get(userId) || null;
 
     if (!user?.activo) {
       skippedAlerts += 1;
+
       pushDebug({
         user_id: userId,
         stage: "user_check",
@@ -4776,11 +4918,13 @@ limit_per_run: targetUserId
         reason: "inactive_user",
         destination: user?.email || null
       });
+
       continue;
     }
 
     if (!String(user?.email || "").trim()) {
       skippedAlerts += 1;
+
       pushDebug({
         user_id: userId,
         stage: "user_check",
@@ -4788,102 +4932,73 @@ limit_per_run: targetUserId
         reason: "missing_email",
         destination: null
       });
+
       continue;
     }
 
-    const alertData = await construirAlertasParaUsuario(env, userId).catch(
-      (err) => ({
-        ok: false,
-        message: err?.message || "No se pudieron construir alertas"
-      })
-    );
+    const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);
 
-    if (!alertData?.ok) {
+    if (!storedAlerts.length) {
       skippedAlerts += 1;
+
       pushDebug({
         user_id: userId,
-        stage: "build_alerts",
+        stage: "stored_alerts",
         skipped: true,
-        reason: "build_failed",
-        destination: user.email,
-        message: alertData?.message || null
-      });
-      continue;
-    }
-
-    const items = Array.isArray(alertData?.resultados)
-      ? alertData.resultados
-      : Array.isArray(alertData?.alertas)
-        ? alertData.alertas
-        : [];
-
-    if (!items.length) {
-      skippedAlerts += 1;
-      pushDebug({
-        user_id: userId,
-        stage: "alerts_ready",
-        skipped: true,
-        reason: "no_alerts",
+        reason: "no_stored_alerts",
         destination: user.email,
         total_alerts: 0
       });
+
       continue;
     }
 
-    const sortedLatest = items
+    const sortedLatest = storedAlerts
       .slice()
-      .sort((a, b) => {
-        const ta =
-          parseFechaFlexible(
-            a?.raw?.ult_movimiento ||
-            a?.ult_movimiento ||
-            a?.raw?.finoferta ||
-            a?.finoferta ||
-            ""
-          )?.getTime() || 0;
-
-        const tb =
-          parseFechaFlexible(
-            b?.raw?.ult_movimiento ||
-            b?.ult_movimiento ||
-            b?.raw?.finoferta ||
-            b?.finoferta ||
-            ""
-          )?.getTime() || 0;
-
-        return tb - ta;
-      });
+      .sort((a, b) => emailAlertTime(b) - emailAlertTime(a));
 
     const totalAlerts = sortedLatest.length;
-const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
+    const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
 
-const visibleAlerts = visibleSource.map((item) => ({
-  offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
-}));
+    const visibleAlerts = visibleSource.map((item) => ({
+      offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+    }));
 
-const shownCount = visibleAlerts.length;
-const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+    const shownCount = visibleAlerts.length;
 
-    const payload = {
-      source: options.source || "cron",
-      total_alerts: totalAlerts,
-      shown_alerts: shownCount,
-      visible_alert_keys: visibleSource
-        .map((item) => buildEmailAlertKey(userId, item))
-        .filter(Boolean),
-      cycle_mode: "always_send_latest_5"
-    };
+    if (!shownCount) {
+      skippedAlerts += 1;
+
+      pushDebug({
+        user_id: userId,
+        stage: "stored_alerts",
+        skipped: true,
+        reason: "no_visible_alerts_after_normalize",
+        destination: user.email,
+        total_alerts: totalAlerts
+      });
+
+      continue;
+    }
+
+    const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
+
+    const visibleAlertKeys = visibleSource
+      .map((item) => buildEmailAlertKey(userId, item?.offer_payload || item || {}))
+      .filter(Boolean);
 
     const visibleOfferIds = visibleSource
-      .map((item) =>
-        String(
-          item?.source_offer_key ||
-          item?.iddetalle ||
-          item?.idoferta ||
-          item?.codigo ||
+      .map((item) => {
+        const p = normalizeOfferPayload(item?.offer_payload || item || {});
+        return String(
+          p.source_offer_key ||
+          p.iddetalle ||
+          p.idoferta ||
+          p.offer_id ||
+          item?.offer_id ||
           ""
-        ).trim()
-      )
+        ).trim();
+      })
       .filter(Boolean);
 
     const sampleTitles = visibleAlerts
@@ -4895,6 +5010,16 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
       })
       .filter(Boolean);
 
+    const payload = {
+      source: options.source || "cron",
+      slot_key: slotKey || null,
+      total_alerts: totalAlerts,
+      shown_alerts: shownCount,
+      visible_alert_keys: visibleAlertKeys,
+      visible_offer_ids: visibleOfferIds,
+      cycle_mode: "batched_cursor_user_offer_state"
+    };
+
     attemptedDigests += 1;
 
     if (dryRun) {
@@ -4905,13 +5030,16 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
         total_alerts: totalAlerts,
         shown_alerts: shownCount,
         subject,
-        visible_alert_keys: payload.visible_alert_keys,
+        visible_alert_keys: visibleAlertKeys,
         visible_offer_ids: visibleOfferIds,
         sample_titles: sampleTitles,
         send_ok: null,
         send_status: null,
-        dry_run: true
+        dry_run: true,
+        source: "user_offer_state",
+        slot_key: slotKey || null
       });
+
       continue;
     }
 
@@ -4947,7 +5075,7 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
       total_alerts: totalAlerts,
       shown_alerts: shownCount,
       subject,
-      visible_alert_keys: payload.visible_alert_keys,
+      visible_alert_keys: visibleAlertKeys,
       visible_offer_ids: visibleOfferIds,
       sample_titles: sampleTitles,
       send_ok: !!send?.ok,
@@ -4955,16 +5083,24 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
       send_data:
         typeof send?.data === "string"
           ? send.data.slice(0, 500)
-          : send?.data || null
+          : send?.data || null,
+      source: "user_offer_state",
+      slot_key: slotKey || null
     });
 
     if (send?.ok) {
       sentDigests += 1;
       notifiedAlertsCount += shownCount;
+
+      if (perUserSentKey) {
+        await kv.put(perUserSentKey, new Date().toISOString(), {
+          expirationTtl: 60 * 60 * 36
+        }).catch(() => null);
+      }
     } else {
       failedDigests += 1;
 
-      if (failed_samples.length < 5) {
+      if (failed_samples.length < 10) {
         failed_samples.push({
           user_id: userId,
           destination: user.email || null,
@@ -4977,6 +5113,24 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
     }
   }
 
+  let finished = false;
+
+  if (useSlotCursor && !dryRun) {
+    if (lastProcessedUserId) {
+      await kv.put(cursorKey, lastProcessedUserId, {
+        expirationTtl: 60 * 60 * 36
+      }).catch(() => null);
+    }
+
+    if (rowsToProcess.length < BATCH_USERS_PER_RUN) {
+      finished = true;
+
+      await kv.put(finishedKey, new Date().toISOString(), {
+        expirationTtl: 60 * 60 * 36
+      }).catch(() => null);
+    }
+  }
+
   return {
     ok: true,
     processed_users: processedUsers,
@@ -4985,10 +5139,18 @@ const subject = `${shownCount} nuevas ofertas de ${totalAlerts}`;
     notified_alerts_count: notifiedAlertsCount,
     skipped_count: skippedAlerts,
     failed_count: failedDigests,
-    total_users: total,
-limit_per_run: isManualRun ? MANUAL_SWEEP_LIMIT : MAX_DIGEST_EMAILS_PER_RUN,
-    stopped_early: attemptedDigests >= MAX_DIGEST_EMAILS_PER_RUN,
+    total_users: null,
+    batch_size: BATCH_USERS_PER_RUN,
+    limit_per_run: targetUserId
+      ? 1
+      : (isManualRun ? MANUAL_SWEEP_LIMIT : BATCH_USERS_PER_RUN),
+    stopped_early: rowsToProcess.length >= BATCH_USERS_PER_RUN,
+    finished,
+    slot_key: slotKey || null,
+    cursor_user_id: lastProcessedUserId || null,
     failed_samples,
+    pref_source: prefSource,
+    pref_error: prefError,
     debug_enabled: debugEnabled,
     debug_user_id: debugUserId || null,
     dry_run: dryRun,
@@ -5018,7 +5180,11 @@ function getArgentinaDigestSlotInfo(input = Date.now()) {
   const day = String(map.day || "");
   const hour = Number(map.hour || 0);
   const minute = Number(map.minute || 0);
-const slotHour = [14, 18, 22].includes(hour) ? hour : null;
+
+  // Franjas habilitadas en horario Argentina.
+  // 8 queda agregada solo para probar el envío de la mañana.
+  const slotHour = [14, 18, 22].includes(hour) ? hour : null;
+
   const slotKey = slotHour != null
     ? `${year}-${month}-${day}_${String(slotHour).padStart(2, "0")}`
     : "";
@@ -10991,6 +11157,8 @@ function extractTelegramCommand(text) {
   if (normalized.includes("ALERTA")) return { kind: "alertas", payload: "" };
   return { kind: "other", payload: raw };
 }
+__name(extractTelegramCommand, "extractTelegramCommand");
+
 function buildRichTextAlertLines(payload, index) {
   const p = normalizeOfferPayload(payload || {});
 
@@ -11000,95 +11168,167 @@ function buildRichTextAlertLines(payload, index) {
       .filter((v, i, arr) => arr.indexOf(v) === i)
       .join(" · ") || "Oferta APD";
 
-  const lines = [
-    `${index + 1}) ${title}`
-  ];
+  const safe = (v, fallback = "—") => {
+    const s = String(v ?? "").trim();
+    return s ? s : fallback;
+  };
 
-  if (p.distrito) lines.push(`📍 Distrito: ${String(p.distrito).trim()}`);
-  if (p.escuela) lines.push(`🏫 Escuela: ${String(p.escuela).trim()}`);
-  if (p.turno) lines.push(`🕒 Turno: ${String(p.turno).trim()}`);
-  if (p.jornada) lines.push(`🏷️ Jornada: ${String(p.jornada).trim()}`);
-  if (p.nivel) lines.push(`🎓 Nivel: ${String(p.nivel).trim()}`);
-  if (p.curso_division) lines.push(`👥 Curso/división: ${String(p.curso_division).trim()}`);
-  if (p.modulos) lines.push(`📦 Módulos: ${String(p.modulos).trim()}`);
-  if (p.dias_horarios) lines.push(`🗓️ Días y horarios: ${String(p.dias_horarios).trim()}`);
+  const num = (v) => {
+    const n = typeof parseMailNumber === "function"
+      ? parseMailNumber(v)
+      : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const fmt = (v, fallback = "—") => {
+    const n = num(v);
+    if (!Number.isFinite(n)) return fallback;
+    return typeof formatMailNumber === "function"
+      ? formatMailNumber(n)
+      : String(n);
+  };
+
+  function tgPostuladosUrl() {
+    const raw = p?.raw || {};
+
+    const oferta = String(
+      p.idoferta ||
+      raw.idoferta ||
+      raw.oferta ||
+      raw.id_oferta ||
+      ""
+    ).replace(/\D/g, "");
+
+    const detalle = String(
+      p.iddetalle ||
+      raw.iddetalle ||
+      raw.detalle ||
+      raw.id_detalle ||
+      p.offer_id ||
+      raw.offer_id ||
+      ""
+    ).replace(/\D/g, "");
+
+    if (oferta && detalle && typeof buildAbcPostulantesUrl === "function") {
+      return buildAbcPostulantesUrl(oferta, detalle);
+    }
+
+    const direct = String(
+      p.url_postulados ||
+      p.link_postulados ||
+      p.postulantes_url ||
+      p.postulados_url ||
+      ""
+    ).trim();
+
+    return direct;
+  }
+
+  const lines = [`${index + 1}) ${title}`];
+
+  if (p.distrito) lines.push(`📍 Distrito: ${safe(p.distrito)}`);
+  if (p.escuela) lines.push(`🏫 Escuela: ${safe(p.escuela)}`);
+  if (p.turno) lines.push(`🕒 Turno: ${safe(p.turno)}`);
+  if (p.jornada) lines.push(`🏷️ Jornada: ${safe(p.jornada)}`);
+  if (p.nivel) lines.push(`🎓 Nivel: ${safe(p.nivel)}`);
+  if (p.curso_division) lines.push(`👥 Curso/división: ${safe(p.curso_division)}`);
+  if (p.modulos) lines.push(`📦 Módulos: ${safe(p.modulos)}`);
+  if (p.dias_horarios) lines.push(`🗓️ Días y horarios: ${safe(p.dias_horarios)}`);
 
   const vigencia = [String(p.desde || "").trim(), String(p.hasta || "").trim()]
     .filter(Boolean)
     .join(" → ");
+
   if (vigencia) lines.push(`📅 Vigencia: ${vigencia}`);
 
   if (p.fecha_cierre || p.finoferta_label) {
-    lines.push(`⏰ Cierre: ${String(p.fecha_cierre || p.finoferta_label).trim()}`);
+    lines.push(`⏰ Cierre: ${safe(p.fecha_cierre || p.finoferta_label)}`);
   }
 
   if (p.observaciones) {
-    lines.push(`📝 Observaciones: ${String(p.observaciones).trim()}`);
+    lines.push(`📝 Observaciones: ${safe(p.observaciones)}`);
   }
 
-  if (p.total_postulantes != null && p.total_postulantes !== "") {
-    lines.push(`👥 Postulados: ${String(p.total_postulantes)}`);
-  }
+  const totalPostulantes =
+    p.total_postulantes != null && p.total_postulantes !== ""
+      ? String(p.total_postulantes)
+      : "Sin postulados visibles";
 
-  if (p.puntaje_primero != null && p.puntaje_primero !== "") {
-    lines.push(`📈 Puntaje más alto: ${String(p.puntaje_primero)}`);
-  }
+  const puntajeMasAlto =
+    p.puntaje_primero != null && p.puntaje_primero !== ""
+      ? fmt(p.puntaje_primero, "Sin datos")
+      : "Sin datos";
 
-  if (p.listado_origen_primero) {
-    lines.push(`📄 Listado del más alto: ${String(p.listado_origen_primero)}`);
-  }
+  const listadoMasAlto = safe(p.listado_origen_primero, "Sin datos");
+
+  lines.push("");
+  lines.push("📌 Referencia de postulantes");
+  lines.push(`👥 Postulados visibles: ${totalPostulantes}`);
+  lines.push(`📈 Puntaje más alto: ${puntajeMasAlto}`);
+  lines.push(`📄 Listado del más alto: ${listadoMasAlto}`);
 
   if (hasPidEvidence(p)) {
     const chance = buildMailChanceInfo(p);
 
-    if (chance?.title) {
-      lines.push(`🧠 PID: ${chance.title}`);
-    }
-
-    if (p.pid_reason) {
-      lines.push(`🧾 Motivo PID: ${String(p.pid_reason)}`);
-    }
-
-    if (p.pid_area) {
-      lines.push(`📚 Área PID: ${String(p.pid_area)}`);
-    }
-
-    if (p.pid_bloque) {
-      lines.push(`🗂️ Bloque PID: ${String(p.pid_bloque)}`);
-    }
-
     const puntajeBase = Number.isFinite(Number(p.pid_puntaje_total_base))
       ? Number(p.pid_puntaje_total_base)
-      : parseMailNumber(p.pid_puntaje_total);
+      : num(p.pid_puntaje_total);
 
-    if (Number.isFinite(puntajeBase)) {
-      lines.push(`📊 Puntaje PID base: ${formatMailNumber(puntajeBase)}`);
-    }
-
-    if (p.pid_residencia_bonus_aplicado) {
-      lines.push(`➕ Bonus residencia: +${Number(p.pid_residencia_bonus_puntos || 0)}`);
-    }
+    const bonusResidencia = p.pid_residencia_bonus_aplicado
+      ? Number(p.pid_residencia_bonus_puntos || 0)
+      : 0;
 
     const puntajeFinal = Number.isFinite(Number(p.pid_puntaje_total_final))
       ? Number(p.pid_puntaje_total_final)
+      : (
+          Number.isFinite(puntajeBase)
+            ? puntajeBase + bonusResidencia
+            : null
+        );
+
+    const primero = num(p.puntaje_primero);
+    const diff = Number.isFinite(puntajeFinal) && Number.isFinite(primero)
+      ? puntajeFinal - primero
       : null;
 
-    if (Number.isFinite(puntajeFinal)) {
-      lines.push(`⭐ Puntaje PID final: ${formatMailNumber(puntajeFinal)}`);
+    lines.push("");
+    lines.push(`🧠 ${chance?.title || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID")}`);
+    lines.push(`🧾 Motivo PID: ${safe(p.pid_reason || (p.pid_compatible ? "Compatible con tu PID" : "No compatible con tu PID"))}`);
+    lines.push(`📚 Área PID: ${safe(p.pid_area || p.area || p.materia)}`);
+    lines.push(`🗂️ Bloque PID: ${safe(p.pid_bloque || p.bloque_pid)}`);
+    lines.push(`📊 Puntaje PID base: ${Number.isFinite(puntajeBase) ? fmt(puntajeBase) : "—"}`);
+
+    if (p.pid_residencia_bonus_aplicado) {
+      lines.push(`➕ Bonus residencia: +${fmt(bonusResidencia, "0")}`);
+      lines.push(`🏠 Distrito residencia: ${safe(p.pid_distrito_residencia)}`);
+    } else {
+      lines.push("➕ Bonus residencia: No");
     }
 
-    if (p.pid_listado || p.pid_anio) {
-      lines.push(`🧷 Listado/año PID: ${p.pid_listado || "-"} · ${p.pid_anio || "-"}`);
+    lines.push(`⭐ Tu puntaje total: ${Number.isFinite(puntajeFinal) ? fmt(puntajeFinal) : "—"}`);
+    lines.push(`🧷 Listado/año PID: ${safe(p.pid_listado)} · ${safe(p.pid_anio)}`);
+
+    if (Number.isFinite(diff)) {
+      const sign = diff > 0 ? "+" : "";
+      lines.push(`🧮 Diferencia vs más alto: ${sign}${fmt(diff)}`);
+    }
+
+    if (chance?.text) {
+      lines.push(`ℹ️ ${chance.text}`);
     }
   }
 
-  if (p.link) {
-    lines.push(`🔗 ${String(p.link).trim()}`);
+  const postuladosUrl = tgPostuladosUrl();
+
+  if (postuladosUrl) {
+    lines.push("");
+    lines.push(`🔗 Postulados: ${postuladosUrl}`);
   }
 
   return lines;
 }
-__name(extractTelegramCommand, "extractTelegramCommand");
+__name(buildRichTextAlertLines, "buildRichTextAlertLines");
+
 function buildTelegramQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
 
@@ -11410,7 +11650,8 @@ async function handleTelegramWebhook(request, env) {
 
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
-        offer_payload: normalizeOfferPayload(row?.offer_payload || {})
+        offer_payload: normalizeOfferPayload(row?.offer_payload || {}),
+        last_seen_at: row?.last_seen_at || ""
       }))
       .filter((item) => {
         const p = item.offer_payload || {};
@@ -11464,11 +11705,105 @@ async function handleTelegramWebhook(request, env) {
       });
   }
 
+  function tgCleanId(value) {
+    const s = String(value || "").trim();
+    if (!s) return "";
+    const m = s.match(/\d+/);
+    return m ? m[0] : "";
+  }
+
+  function tgGetOfertaDetalle(payload) {
+    const p = normalizeOfferPayload(payload || {});
+    const raw = p?.raw || {};
+
+    const oferta = tgCleanId(
+      p.idoferta ||
+      raw.idoferta ||
+      raw.oferta ||
+      raw.id_oferta ||
+      ""
+    );
+
+    const detalle = tgCleanId(
+      p.iddetalle ||
+      raw.iddetalle ||
+      raw.detalle ||
+      raw.id_detalle ||
+      p.offer_id ||
+      raw.offer_id ||
+      ""
+    );
+
+    return { oferta, detalle };
+  }
+
+  async function enrichTelegramAlertsWithPostulantes(env, alerts, maxEnrich = 30) {
+    const source = Array.isArray(alerts) ? alerts : [];
+    const limit = Math.max(0, Math.min(Number(maxEnrich || 0), source.length));
+
+    const enrichedHead = await Promise.all(
+      source.slice(0, limit).map(async (item) => {
+        const base = normalizeOfferPayload(item?.offer_payload || item || {});
+        const ids = tgGetOfertaDetalle(base);
+
+        if (!ids.oferta || !ids.detalle || typeof obtenerResumenPostulantesABC !== "function") {
+          return {
+            ...item,
+            offer_payload: base
+          };
+        }
+
+        try {
+          const resumen = await Promise.race([
+            obtenerResumenPostulantesABC(ids.oferta, ids.detalle),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("timeout_postulantes_telegram")), 4500)
+            )
+          ]);
+
+          return {
+            ...item,
+            offer_payload: normalizeOfferPayload({
+              ...base,
+              total_postulantes:
+                resumen?.total_postulantes ?? base.total_postulantes ?? null,
+              puntaje_primero:
+                resumen?.puntaje_primero ?? base.puntaje_primero ?? null,
+              listado_origen_primero:
+                resumen?.listado_origen_primero ||
+                base.listado_origen_primero ||
+                ""
+            })
+          };
+        } catch (err) {
+          console.error("TELEGRAM POSTULANTES ENRICH ERROR:", {
+            oferta: ids.oferta || null,
+            detalle: ids.detalle || null,
+            error: String(err?.message || err || "")
+          });
+
+          return {
+            ...item,
+            offer_payload: base
+          };
+        }
+      })
+    );
+
+    const tail = source.slice(limit).map((item) => ({
+      ...item,
+      offer_payload: normalizeOfferPayload(item?.offer_payload || item || {})
+    }));
+
+    return [...enrichedHead, ...tail];
+  }
+
   const update = await request.json().catch(() => ({}));
   const updateId = update?.update_id != null ? String(update.update_id).trim() : "";
 
   if (updateId) {
     const dedupeKey = telegramUpdateDedupeKey(updateId);
+
     if (await wasInboundEventProcessed(env, dedupeKey)) {
       return json2({
         ok: true,
@@ -11652,8 +11987,9 @@ async function handleTelegramWebhook(request, env) {
       chatId,
       "🔎 Estoy consultando tus alertas compatibles..."
     ).catch(() => null);
-const limit = Number(TELEGRAM_QUERY_ALERTS_LIMIT || 50);
-const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 50;
+
+    const limit = Number(TELEGRAM_QUERY_ALERTS_LIMIT || 50);
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 50;
 
     let alerts = [];
     let source = "stored";
@@ -11690,7 +12026,13 @@ const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 50
       }
     }
 
-    const visibleAlerts = alerts.slice(0, safeLimit);
+    const visibleBaseAlerts = alerts.slice(0, safeLimit);
+
+    const visibleAlerts = await enrichTelegramAlertsWithPostulantes(
+      env,
+      visibleBaseAlerts,
+      Math.min(safeLimit, 30)
+    );
 
     if (!visibleAlerts.length) {
       await sendTelegramText(
@@ -11730,7 +12072,9 @@ const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 50
       shown_alerts: visibleAlerts.length,
       source,
       plan_code: entitlement?.plan_code || null,
-      channel_mode: "query_only"
+      channel_mode: "query_only",
+      enriched_postulantes: true,
+      enriched_limit: Math.min(safeLimit, 30)
     });
   }
 
@@ -11951,55 +12295,56 @@ async function handleWhatsAppWebhook(request, env) {
     );
   }
 
-  function waPickUrl(...values) {
-    for (const value of values) {
-      const s = String(value || "").trim();
-      if (!s) continue;
-      if (/^https?:\/\//i.test(s)) return s;
-    }
-    return "";
+  function waCleanId(value) {
+    const s = String(value || "").trim();
+    if (!s) return "";
+    const m = s.match(/\d+/);
+    return m ? m[0] : "";
   }
 
-  function waBuildPostuladosUrl(p) {
-    const direct = waPickUrl(
-      p?.url_postulados,
-      p?.link_postulados,
-      p?.postulados_url,
-      p?.postulantes_url,
-      p?.raw?.url_postulados,
-      p?.raw?.link_postulados,
-      p?.raw?.postulados_url,
-      p?.raw?.postulantes_url
+  function waGetOfertaDetalle(payload) {
+    const p = normalizeOfferPayload(payload || {});
+    const raw = p?.raw || {};
+
+    const oferta = waCleanId(
+      p.idoferta ||
+      raw.idoferta ||
+      raw.oferta ||
+      raw.id_oferta ||
+      ""
     );
 
-    if (direct) return direct;
-
-    const oferta = String(
-      p?.idoferta ||
-      p?.oferta ||
-      p?.raw?.idoferta ||
-      p?.raw?.oferta ||
+    const detalle = waCleanId(
+      p.iddetalle ||
+      raw.iddetalle ||
+      raw.detalle ||
+      raw.id_detalle ||
+      p.offer_id ||
+      raw.offer_id ||
       ""
-    ).trim();
+    );
 
-    const detalle = String(
-      p?.iddetalle ||
-      p?.detalle ||
-      p?.raw?.iddetalle ||
-      p?.raw?.detalle ||
-      ""
-    ).trim();
+    return { oferta, detalle };
+  }
 
-    if (oferta && detalle) {
-      return `https://servicios.abc.gob.ar/actos.publicos.digitales/postulantes/?oferta=${encodeURIComponent(oferta)}&detalle=${encodeURIComponent(detalle)}`;
+  function waBuildPostuladosUrl(payload) {
+    const ids = waGetOfertaDetalle(payload);
+
+    if (!ids.oferta || !ids.detalle) {
+      return "";
     }
 
-    return "";
+    if (typeof buildAbcPostulantesUrl === "function") {
+      return buildAbcPostulantesUrl(ids.oferta, ids.detalle);
+    }
+
+    return `http://servicios.abc.gov.ar/actos.publicos.digitales/postulantes/?oferta=${encodeURIComponent(ids.oferta)}&detalle=${encodeURIComponent(ids.detalle)}`;
   }
 
   function waAlertTime(item) {
     const p = item?.offer_payload || item || {};
     const raw = p?.raw || {};
+
     const candidates = [
       item?.last_seen_at,
       raw?.last_seen_at,
@@ -12035,59 +12380,71 @@ async function handleWhatsAppWebhook(request, env) {
     return 0;
   }
 
-  function waOfferText(item, index, totalShown, totalAll) {
+  function waFormatNumber(value) {
+    const n = typeof parseMailNumber === "function"
+      ? parseMailNumber(value)
+      : Number(value);
+
+    if (!Number.isFinite(n)) return "Sin datos";
+
+    if (typeof formatMailNumber === "function") {
+      return formatMailNumber(n);
+    }
+
+    return String(n);
+  }
+
+  function waValue(value, fallback = "—") {
+    const s = String(value ?? "").trim();
+    return s ? s : fallback;
+  }
+
+  function waOfferText(item, index, totalShown) {
     const p = normalizeOfferPayload(item?.offer_payload || item || {});
     const raw = p?.raw || {};
 
-    const titulo = String(
+    const titulo = waValue(
       p.cargo ||
       p.materia ||
       p.title ||
       raw.cargo ||
       raw.descripcioncargo ||
+      raw.descripcionarea,
       "Oferta APD"
-    ).trim();
-
-    const distrito = String(p.distrito || raw.descdistrito || "—").trim();
-    const escuela = String(p.escuela || raw.escuela || "—").trim();
-    const turno = String(p.turno || raw.turno || "—").trim();
-    const jornada = String(p.jornada || raw.jornada || "—").trim();
-    const nivel = String(p.nivel || p.nivel_modalidad || raw.descnivelmodalidad || "—").trim();
-    const curso = String(p.curso_division || p.cursodivision || raw.cursodivision || "—").trim();
-    const modulos = String(p.modulos || p.hsmodulos || raw.hsmodulos || "—").trim();
-    const dias = String(p.dias_horarios || p.diashora || p.horario || raw.diashorarios || "—").trim();
-    const vigencia = String(
-      p.vigencia ||
-      (
-        (p.desde || p.supl_desde || raw.supl_desde || "—") +
-        " / " +
-        (p.hasta || p.supl_hasta || raw.supl_hasta || "—")
-      )
-    ).trim();
-
-    const cierre = String(p.fecha_cierre || p.finoferta || raw.finoferta || "—").trim();
-    const postulantes = p.total_postulantes != null && p.total_postulantes !== ""
-      ? String(p.total_postulantes)
-      : "—";
-
-    const puntaje = p.puntaje_primero != null && p.puntaje_primero !== ""
-      ? String(p.puntaje_primero)
-      : "—";
-
-    const listado = String(p.listado_origen_primero || "—").trim();
-
-    const abcUrl = waPickUrl(
-      p.link,
-      p.url,
-      p.abc_url,
-      p.link_postular,
-      p.url_postular,
-      raw.link,
-      raw.url,
-      raw.abc_url,
-      raw.link_postular,
-      raw.url_postular
     );
+
+    const distrito = waValue(p.distrito || raw.descdistrito);
+    const escuela = waValue(p.escuela || raw.escuela || raw.nombreestablecimiento);
+    const turno = waValue(p.turno || raw.turno);
+    const jornada = waValue(p.jornada || raw.jornada);
+    const nivel = waValue(p.nivel || p.nivel_modalidad || raw.descnivelmodalidad);
+    const curso = waValue(p.curso_division || p.cursodivision || raw.cursodivision);
+    const modulos = waValue(p.modulos || p.hsmodulos || raw.hsmodulos);
+    const dias = waValue(
+      p.dias_horarios ||
+      p.diashora ||
+      p.horario ||
+      raw.diashorarios ||
+      raw.dias_horarios
+    );
+
+    const desde = waValue(p.desde || p.supl_desde || raw.supl_desde, "Sin fecha");
+    const hasta = waValue(p.hasta || p.supl_hasta || raw.supl_hasta, "Sin fecha");
+    const vigencia = waValue(p.vigencia, `${desde} / ${hasta}`);
+
+    const cierre = waValue(p.fecha_cierre || p.finoferta || raw.finoferta);
+
+    const totalPostulantes =
+      p.total_postulantes != null && p.total_postulantes !== ""
+        ? String(p.total_postulantes)
+        : "Sin datos";
+
+    const puntajeMasAlto =
+      p.puntaje_primero != null && p.puntaje_primero !== ""
+        ? waFormatNumber(p.puntaje_primero)
+        : "Sin datos";
+
+    const listadoMasAlto = waValue(p.listado_origen_primero, "Sin datos");
 
     const postuladosUrl = waBuildPostuladosUrl(p);
 
@@ -12105,23 +12462,14 @@ async function handleWhatsAppWebhook(request, env) {
       `🗓️ Vigencia: ${vigencia}`,
       `⏰ Cierre: ${cierre}`,
       ``,
-      `👥 Postulados: ${postulantes}`,
-      `📈 Puntaje más alto: ${puntaje}`,
-      `📄 Listado más alto: ${listado}`
+      `👥 Postulados visibles: ${totalPostulantes}`,
+      `📈 Puntaje más alto: ${puntajeMasAlto}`,
+      `📄 Listado del más alto: ${listadoMasAlto}`
     ];
 
     if (postuladosUrl) {
       lines.push(``);
       lines.push(`🔗 Postulados: ${postuladosUrl}`);
-    } else if (abcUrl) {
-      lines.push(``);
-      lines.push(`🔗 ABC: ${abcUrl}`);
-    }
-
-    if (index === totalShown - 1 && totalAll > totalShown) {
-      lines.push(``);
-      lines.push(`Hay ${totalAll - totalShown} oferta(s) más compatibles.`);
-      lines.push(`Ver todas: https://alertasapd.com.ar`);
     }
 
     return lines.join("\n");
@@ -12131,6 +12479,7 @@ async function handleWhatsAppWebhook(request, env) {
     try {
       if (typeof trySendWhatsAppText === "function") {
         const r = await trySendWhatsAppText(env, to, text, context);
+
         if (r && r.ok === false) {
           console.error("WHATSAPP SEND FAIL", {
             context,
@@ -12138,6 +12487,7 @@ async function handleWhatsAppWebhook(request, env) {
             response: r
           });
         }
+
         return r || { ok: true };
       }
 
@@ -12168,6 +12518,7 @@ async function handleWhatsAppWebhook(request, env) {
 
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
+        offer_id: row?.offer_id || "",
         offer_payload: normalizeOfferPayload(row?.offer_payload || {}),
         last_seen_at: row?.last_seen_at || ""
       }))
@@ -12184,6 +12535,61 @@ async function handleWhatsAppWebhook(request, env) {
           p.title
         );
       });
+  }
+
+  async function waEnrichVisibleAlerts(env, alerts) {
+    const source = Array.isArray(alerts) ? alerts : [];
+
+    const enriched = await Promise.all(
+      source.map(async (item) => {
+        const base = normalizeOfferPayload(item?.offer_payload || item || {});
+        const ids = waGetOfertaDetalle(base);
+
+        if (!ids.oferta && !ids.detalle) {
+          return {
+            ...item,
+            offer_payload: base
+          };
+        }
+
+        try {
+          const resumen = await Promise.race([
+            obtenerResumenPostulantesABC(ids.oferta, ids.detalle),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("timeout_postulantes_abc")), 4500)
+            )
+          ]);
+
+          return {
+            ...item,
+            offer_payload: normalizeOfferPayload({
+              ...base,
+              total_postulantes:
+                resumen?.total_postulantes ?? base.total_postulantes ?? null,
+              puntaje_primero:
+                resumen?.puntaje_primero ?? base.puntaje_primero ?? null,
+              listado_origen_primero:
+                resumen?.listado_origen_primero ||
+                base.listado_origen_primero ||
+                ""
+            })
+          };
+        } catch (err) {
+          console.error("WHATSAPP POSTULANTES ENRICH ERROR", {
+            oferta: ids.oferta || null,
+            detalle: ids.detalle || null,
+            error: String(err?.message || err || "")
+          });
+
+          return {
+            ...item,
+            offer_payload: base
+          };
+        }
+      })
+    );
+
+    return enriched;
   }
 
   try {
@@ -12267,6 +12673,7 @@ async function handleWhatsAppWebhook(request, env) {
               delivered: false,
               reason: "user_not_found"
             });
+
             continue;
           }
 
@@ -12284,6 +12691,7 @@ async function handleWhatsAppWebhook(request, env) {
               user_id: user.id,
               reason: "inactive_user"
             });
+
             continue;
           }
 
@@ -12315,6 +12723,7 @@ async function handleWhatsAppWebhook(request, env) {
               reason: "plan_not_allowed",
               plan_code: entitlement?.plan_code || null
             });
+
             continue;
           }
 
@@ -12364,12 +12773,14 @@ async function handleWhatsAppWebhook(request, env) {
           const totalAlerts = sortedAlerts.length;
           const MAX_WHATSAPP_ALERTS = 5;
 
-          const visibleAlerts = sortedAlerts
+          const visibleBaseAlerts = sortedAlerts
             .slice(0, MAX_WHATSAPP_ALERTS)
             .map((item) => ({
               offer_payload: normalizeOfferPayload(item?.offer_payload || item || {}),
               last_seen_at: item?.last_seen_at || ""
             }));
+
+          const visibleAlerts = await waEnrichVisibleAlerts(env, visibleBaseAlerts);
 
           if (!visibleAlerts.length) {
             await waSend(
@@ -12407,7 +12818,7 @@ async function handleWhatsAppWebhook(request, env) {
             const sendResult = await waSend(
               env,
               from,
-              waOfferText(visibleAlerts[i], i, visibleAlerts.length, totalAlerts),
+              waOfferText(visibleAlerts[i], i, visibleAlerts.length),
               "alert_item"
             );
 
@@ -12448,7 +12859,7 @@ async function handleWhatsAppWebhook(request, env) {
             shown_alerts: visibleAlerts.length,
             sent_parts: sentParts,
             failed_parts: failedParts,
-            source: "stored",
+            source: "stored_enriched",
             mode: "latest_5_only"
           });
         }
@@ -12773,34 +13184,72 @@ if (path === `${API_URL_PREFIX3}/debug-lomas-pr` && request.method === "GET") {
 async scheduled(event, env, ctx) {
   const slot = getArgentinaDigestSlotInfo(event?.scheduledTime || Date.now());
 
-  if (!slot.slot_hour || !slot.slot_key) {
-    console.log("CRON fuera de franja, no envia nada");
-    return;
-  }
-
   const kv = getChannelStateStore(env);
   if (!kv) {
     console.log("Sin KV de estado, no envio para evitar duplicados");
     return;
   }
 
-  const lockKey = `email:sent:${slot.slot_key}`;
-  const alreadySent = await kv.get(lockKey);
-  if (alreadySent) {
-    console.log("Ya enviado en esta franja:", slot.slot_key);
+  const ACTIVE_SLOT_KEY = "email:active_slot_key";
+
+  let activeSlotKey = String(await kv.get(ACTIVE_SLOT_KEY).catch(() => "") || "").trim();
+
+  if (slot.slot_hour && slot.slot_key) {
+    const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;
+    const currentFinished = await kv.get(currentFinishedKey).catch(() => null);
+
+    if (!activeSlotKey && !currentFinished) {
+      activeSlotKey = slot.slot_key;
+
+      await kv.put(ACTIVE_SLOT_KEY, activeSlotKey, {
+        expirationTtl: 60 * 60 * 36
+      }).catch(() => null);
+
+      await kv.put(`email:slot:${activeSlotKey}:started_at`, new Date().toISOString(), {
+        expirationTtl: 60 * 60 * 36
+      }).catch(() => null);
+
+      console.log("CRON EMAIL SLOT START", activeSlotKey);
+    } else if (activeSlotKey && activeSlotKey !== slot.slot_key) {
+      console.log("CRON EMAIL SLOT PENDING, continuo slot anterior:", activeSlotKey, "nuevo slot:", slot.slot_key);
+    } else if (currentFinished) {
+      console.log("CRON EMAIL SLOT YA FINALIZADO:", slot.slot_key);
+    }
+  }
+
+  if (!activeSlotKey) {
+    return;
+  }
+
+  const activeFinishedKey = `email:slot:${activeSlotKey}:finished`;
+  const activeFinished = await kv.get(activeFinishedKey).catch(() => null);
+
+  if (activeFinished) {
+    await kv.delete(ACTIVE_SLOT_KEY).catch(() => null);
+    console.log("CRON EMAIL ACTIVE SLOT CLEANED", activeSlotKey);
     return;
   }
 
   const result = await runEmailAlertsSweep(env, {
     source: "cron_slot",
-    max_users: 200
-  });
-
-  await kv.put(lockKey, new Date().toISOString(), {
-    expirationTtl: 60 * 60 * 8
+    slot_key: activeSlotKey,
+    max_users:
+      env.EMAIL_DIGEST_BATCH_USERS_PER_RUN ||
+      env.EMAIL_DIGEST_MAX_USERS_PER_RUN ||
+      80
   });
 
   console.log("CRON EMAIL SWEEP RESULT", JSON.stringify(result || {}));
+
+  if (result?.finished) {
+    await kv.put(activeFinishedKey, new Date().toISOString(), {
+      expirationTtl: 60 * 60 * 36
+    }).catch(() => null);
+
+    await kv.delete(ACTIVE_SLOT_KEY).catch(() => null);
+
+    console.log("CRON EMAIL SLOT FINISHED", activeSlotKey);
+  }
 }
 };
 async function handleTestMail(env) {
