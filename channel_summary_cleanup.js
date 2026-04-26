@@ -89,6 +89,25 @@ function cleanCanales(){
   });
 }
 
+function styleFooterSupportButton(){
+  const footer = document.querySelector('.footer-inner');
+  if(!footer || footer.dataset.apdSupportButtonReady === '1') return;
+  footer.innerHTML = [
+    '<div class="apd-footer-brand" style="color:#dbeafe;font-weight:700;">APDocentePBA · Sistema de alertas para docentes PBA · 2026</div>',
+    '<div class="apd-footer-legal" style="margin-top:7px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;align-items:center;color:#93c5fd;">',
+      '<a href="./terminos.html" style="color:#dbeafe;text-decoration:none;font-weight:700;">Términos</a>',
+      '<span style="color:#60a5fa;">·</span>',
+      '<a href="./privacidad.html" style="color:#dbeafe;text-decoration:none;font-weight:700;">Privacidad</a>',
+      '<span style="color:#60a5fa;">·</span>',
+      '<a href="./suscripciones.html" style="color:#dbeafe;text-decoration:none;font-weight:700;">Suscripciones</a>',
+    '</div>',
+    '<div class="apd-footer-support-wrap" style="margin-top:16px;display:flex;justify-content:center;">',
+      '<a class="apd-footer-support-btn" href="./soporte.html" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 26px;border-radius:999px;background:#ffffff;color:#0f3460;text-decoration:none;font-weight:900;font-size:15px;box-shadow:0 10px 28px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.75);">🛟 Soporte</a>',
+    '</div>'
+  ].join('');
+  footer.dataset.apdSupportButtonReady = '1';
+}
+
 function publicCopy(){
   const hero = document.querySelector('.hero-eyebrow');
   if(hero && /Beta abierta/i.test(hero.textContent || '')) hero.textContent = '🎯 Alertas docentes para APD de la Provincia de Buenos Aires';
@@ -100,6 +119,7 @@ function publicCopy(){
   const pidHint = byId('panel-listados-pid-card') && byId('panel-listados-pid-card').querySelector('.prefs-hint');
   if(pidHint && !/Insigne/i.test(pidHint.textContent || '')) pidHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función disponible según tu plan; el acceso completo corresponde al plan Insigne.';
   document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){ a.setAttribute('href','./soporte.html'); });
+  styleFooterSupportButton();
 }
 
 function planNameFromInfo(info){
