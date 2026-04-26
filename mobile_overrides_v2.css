@@ -12,201 +12,27 @@
   .apd-pill,.apd-channel-chip,.apd-extra-chip{max-width:100%;white-space:normal}
 }
 
-.apd-theme-toggle{
-  position:fixed;
-  right:16px;
-  bottom:16px;
-  z-index:99999;
-  border:1px solid rgba(15,52,96,.22);
-  border-radius:999px;
-  padding:10px 14px;
-  background:#ffffff;
-  color:#0f3460;
-  box-shadow:0 8px 24px rgba(15,52,96,.18);
-  font:700 13px 'DM Sans',system-ui,sans-serif;
-  cursor:pointer;
-}
-.apd-theme-toggle:hover{filter:brightness(.98);transform:translateY(-1px)}
-body.apd-dark{
-  --azul:#071a33;
-  --azul-mid:#0d2b50;
-  --azul-claro:#76adff;
-  --azul-light:#14345c;
-  --verde:#5ee59a;
-  --verde-bg:#123a25;
-  --rojo:#ff9999;
-  --rojo-bg:#3a1717;
-  --gris-bg:#0b1524;
-  --gris-card:#12243a;
-  --gris-b:#31455f;
-  --gris-b2:#263950;
-  --texto:#f2f7ff;
-  --texto-mid:#d6e2f2;
-  --texto-sub:#aec0d4;
-  --sombra:0 2px 18px rgba(0,0,0,.34);
-  --sombra-md:0 10px 34px rgba(0,0,0,.42);
-  background:#0b1524!important;
-  color:#f2f7ff!important;
-  color-scheme:dark;
-}
-body.apd-dark .header{background:#071a33!important;border-bottom:1px solid #244060}
-body.apd-dark .hero-card{background:linear-gradient(135deg,#071a33 0%,#0d2b50 100%)!important;border:1px solid #2d4d72}
-body.apd-dark .form-card,
-body.apd-dark .panel-card,
-body.apd-dark .stat-box,
-body.apd-dark .soft-item,
-body.apd-dark .alerta-floating,
-body.apd-dark .alerta-row,
-body.apd-dark .alerta-meta-item,
-body.apd-dark .historico-box,
-body.apd-dark .historico-offer,
-body.apd-dark .ac-list,
-body.apd-dark .channel-pref-box{background:#12243a!important;color:#f2f7ff!important;border-color:#31455f!important}
-body.apd-dark .form-card-hdr{background:#071a33!important;border-bottom:1px solid #31455f}
-body.apd-dark input[type="text"],
-body.apd-dark input[type="email"],
-body.apd-dark input[type="password"],
-body.apd-dark select,
-body.apd-dark textarea{background:#0d1d31!important;color:#f2f7ff!important;border-color:#405873!important}
-body.apd-dark input::placeholder,
-body.apd-dark textarea::placeholder{color:#9cafc5!important}
-body.apd-dark label,
-body.apd-dark .panel-sub,
-body.apd-dark .ph,
-body.apd-dark .prefs-hint,
-body.apd-dark .plan-note,
-body.apd-dark .form-foot,
-body.apd-dark .separator,
-body.apd-dark .hist-list li,
-body.apd-dark .alerta-subtitle,
-body.apd-dark .alerta-key,
-body.apd-dark .alerta-meta-k,
-body.apd-dark .historico-note,
-body.apd-dark .historico-updated{color:#aec0d4!important}
-body.apd-dark .panel-header h2,
-body.apd-dark .card-lbl,
-body.apd-dark .plan-title,
-body.apd-dark .alerta-title,
-body.apd-dark .soft-title,
-body.apd-dark .historico-box h4,
-body.apd-dark .stat-n,
-body.apd-dark #panel-datos-docente strong,
-body.apd-dark #panel-preferencias-resumen strong{color:#f2f7ff!important}
-body.apd-dark .card-lbl{opacity:.86}
-body.apd-dark .btn-secondary,
-body.apd-dark .mini-btn{background:#1a304a!important;color:#f2f7ff!important;border-color:#405873!important}
-body.apd-dark .btn-outline{color:#b8d6ff!important;border-color:#76adff!important;background:transparent!important}
-body.apd-dark .btn-outline:hover,
-body.apd-dark .mini-btn:hover{background:#14345c!important}
-body.apd-dark .btn-primary{background:#2d7dff!important;color:#fff!important}
-body.apd-dark .ac-item{background:#12243a!important;color:#d6e2f2!important;border-color:#263950!important}
-body.apd-dark .ac-item:hover,
-body.apd-dark .ac-item.is-active{background:#14345c!important;color:#ffffff!important}
-body.apd-dark .msg-info{background:#14345c!important;color:#d1e4ff!important}
-body.apd-dark .msg-ok{background:#123a25!important;color:#a8f5c9!important}
-body.apd-dark .msg-error{background:#3a1717!important;color:#ffc2c2!important}
-body.apd-dark .alerta-progress{background:#1a304a!important}
-body.apd-dark .alerta-progress-bar{background:linear-gradient(90deg,#76adff,#2d7dff)!important}
-body.apd-dark .tag-nivel,
-body.apd-dark .plan-pill{background:#14345c!important;color:#d1e4ff!important}
-body.apd-dark .plan-pill-neutral,
-body.apd-dark .historico-chip{background:#1a304a!important;color:#d6e2f2!important;border-color:#405873!important}
-body.apd-dark .google-wrap iframe{filter:brightness(.92)}
-body.apd-dark .apd-theme-toggle{background:#12243a;color:#f2f7ff;border-color:#405873;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.apd-theme-toggle{position:fixed;right:16px;bottom:16px;z-index:99999;border:1px solid rgba(15,52,96,.22);border-radius:999px;padding:10px 14px;background:#ffffff;color:#0f3460;box-shadow:0 8px 24px rgba(15,52,96,.18);font:700 13px 'DM Sans',system-ui,sans-serif;cursor:pointer}.apd-theme-toggle:hover{filter:brightness(.98);transform:translateY(-1px)}
+body.apd-dark{--azul:#071a33;--azul-mid:#0d2b50;--azul-claro:#76adff;--azul-light:#14345c;--verde:#5ee59a;--verde-bg:#123a25;--rojo:#ff9999;--rojo-bg:#3a1717;--gris-bg:#0b1524;--gris-card:#12243a;--gris-b:#31455f;--gris-b2:#263950;--texto:#f2f7ff;--texto-mid:#d6e2f2;--texto-sub:#aec0d4;--sombra:0 2px 18px rgba(0,0,0,.34);--sombra-md:0 10px 34px rgba(0,0,0,.42);background:#0b1524!important;color:#f2f7ff!important;color-scheme:dark}
+body.apd-dark .header{background:#071a33!important;border-bottom:1px solid #244060}body.apd-dark .hero-card{background:linear-gradient(135deg,#071a33 0%,#0d2b50 100%)!important;border:1px solid #2d4d72}
+body.apd-dark .form-card,body.apd-dark .panel-card,body.apd-dark .stat-box,body.apd-dark .soft-item,body.apd-dark .alerta-floating,body.apd-dark .alerta-row,body.apd-dark .alerta-meta-item,body.apd-dark .historico-box,body.apd-dark .historico-offer,body.apd-dark .ac-list,body.apd-dark .channel-pref-box{background:#12243a!important;color:#f2f7ff!important;border-color:#31455f!important}
+body.apd-dark .form-card-hdr{background:#071a33!important;border-bottom:1px solid #31455f}body.apd-dark input[type="text"],body.apd-dark input[type="email"],body.apd-dark input[type="password"],body.apd-dark select,body.apd-dark textarea{background:#0d1d31!important;color:#f2f7ff!important;border-color:#405873!important}body.apd-dark input::placeholder,body.apd-dark textarea::placeholder{color:#9cafc5!important}
+body.apd-dark label,body.apd-dark .panel-sub,body.apd-dark .ph,body.apd-dark .prefs-hint,body.apd-dark .plan-note,body.apd-dark .form-foot,body.apd-dark .separator,body.apd-dark .hist-list li,body.apd-dark .alerta-subtitle,body.apd-dark .alerta-key,body.apd-dark .alerta-meta-k,body.apd-dark .historico-note,body.apd-dark .historico-updated{color:#aec0d4!important}
+body.apd-dark .panel-header h2,body.apd-dark .card-lbl,body.apd-dark .plan-title,body.apd-dark .alerta-title,body.apd-dark .soft-title,body.apd-dark .historico-box h4,body.apd-dark .stat-n,body.apd-dark #panel-datos-docente strong,body.apd-dark #panel-preferencias-resumen strong{color:#f2f7ff!important}body.apd-dark .card-lbl{opacity:.86}
+body.apd-dark .btn-secondary,body.apd-dark .mini-btn{background:#1a304a!important;color:#f2f7ff!important;border-color:#405873!important}body.apd-dark .btn-outline{color:#b8d6ff!important;border-color:#76adff!important;background:transparent!important}body.apd-dark .btn-outline:hover,body.apd-dark .mini-btn:hover{background:#14345c!important}body.apd-dark .btn-primary{background:#2d7dff!important;color:#fff!important}
+body.apd-dark .ac-item{background:#12243a!important;color:#d6e2f2!important;border-color:#263950!important}body.apd-dark .ac-item:hover,body.apd-dark .ac-item.is-active{background:#14345c!important;color:#ffffff!important}body.apd-dark .msg-info{background:#14345c!important;color:#d1e4ff!important}body.apd-dark .msg-ok{background:#123a25!important;color:#a8f5c9!important}body.apd-dark .msg-error{background:#3a1717!important;color:#ffc2c2!important}
+body.apd-dark .alerta-progress{background:#1a304a!important}body.apd-dark .alerta-progress-bar{background:linear-gradient(90deg,#76adff,#2d7dff)!important}body.apd-dark .tag-nivel,body.apd-dark .plan-pill{background:#14345c!important;color:#d1e4ff!important}body.apd-dark .plan-pill-neutral,body.apd-dark .historico-chip{background:#1a304a!important;color:#d6e2f2!important;border-color:#405873!important}body.apd-dark .google-wrap iframe{filter:brightness(.92)}body.apd-dark .apd-theme-toggle{background:#12243a;color:#f2f7ff;border-color:#405873;box-shadow:0 8px 24px rgba(0,0,0,.45)}
 
 /* Ajustes extra de contraste para bloques que seguían claros en modo oscuro */
-body.apd-dark .plan-card,
-body.apd-dark .plan-option,
-body.apd-dark .plan-option-card,
-body.apd-dark .plan-box,
-body.apd-dark .repo-shell,
-body.apd-dark .repo-panel,
-body.apd-dark .repo-table-wrap,
-body.apd-dark .repo-drive-box,
-body.apd-dark .pid-shell,
-body.apd-dark .pid-panel,
-body.apd-dark .pid-table-wrap,
-body.apd-dark .pid-result-box,
-body.apd-dark .pid-summary-box,
-body.apd-dark .white-card,
-body.apd-dark .light-card,
-body.apd-dark .surface-light,
-body.apd-dark .apd-plan-card,
-body.apd-dark .apd-soft-card,
-body.apd-dark .apd-status-card,
-body.apd-dark .apd-extra-card,
-body.apd-dark .apd-benefit-card,
-body.apd-dark .apd-roadmap-step,
-body.apd-dark .repositorio-card,
-body.apd-dark .repo-card,
-body.apd-dark .pid-card,
-body.apd-dark .listados-card{background:#12243a!important;border-color:#31455f!important;color:#f2f7ff!important}
-body.apd-dark .plan-card h1,
-body.apd-dark .plan-card h2,
-body.apd-dark .plan-card h3,
-body.apd-dark .plan-card h4,
-body.apd-dark .plan-card h5,
-body.apd-dark .plan-card h6,
-body.apd-dark .plan-option h1,
-body.apd-dark .plan-option h2,
-body.apd-dark .plan-option h3,
-body.apd-dark .plan-option h4,
-body.apd-dark .repo-panel h1,
-body.apd-dark .repo-panel h2,
-body.apd-dark .repo-panel h3,
-body.apd-dark .repo-panel h4,
-body.apd-dark .pid-panel h1,
-body.apd-dark .pid-panel h2,
-body.apd-dark .pid-panel h3,
-body.apd-dark .pid-panel h4,
-body.apd-dark .plan-card p,
-body.apd-dark .plan-option p,
-body.apd-dark .repo-panel p,
-body.apd-dark .pid-panel p,
-body.apd-dark .plan-card li,
-body.apd-dark .plan-option li,
-body.apd-dark .repo-panel li,
-body.apd-dark .pid-panel li,
-body.apd-dark .plan-card span,
-body.apd-dark .plan-option span,
-body.apd-dark .repo-panel span,
-body.apd-dark .pid-panel span,
-body.apd-dark .plan-card strong,
-body.apd-dark .plan-option strong,
-body.apd-dark .repo-panel strong,
-body.apd-dark .pid-panel strong,
-body.apd-dark .plan-card small,
-body.apd-dark .plan-option small,
-body.apd-dark .repo-panel small,
-body.apd-dark .pid-panel small,
-body.apd-dark .apd-plan-card *,
-body.apd-dark .repo-card *,
-body.apd-dark .repositorio-card *,
-body.apd-dark .pid-card *,
-body.apd-dark .listados-card *{color:#f2f7ff!important}
-body.apd-dark .plan-note,
-body.apd-dark .muted,
-body.apd-dark .subtle,
-body.apd-dark .soft,
-body.apd-dark .prefs-hint,
-body.apd-dark .panel-sub,
-body.apd-dark .historico-note,
-body.apd-dark .historico-updated{color:#aec0d4!important}
-body.apd-dark table{background:#12243a!important;color:#f2f7ff!important}
-body.apd-dark thead,
-body.apd-dark thead tr,
-body.apd-dark thead th{background:#0d1d31!important;color:#f2f7ff!important;border-color:#31455f!important}
-body.apd-dark tbody tr{background:#12243a!important}
-body.apd-dark tbody tr:nth-child(even){background:#102035!important}
-body.apd-dark td,
-body.apd-dark th{color:#f2f7ff!important;border-color:#31455f!important}
-body.apd-dark .plan-pill,
-body.apd-dark .tag,
-body.apd-dark .badge,
-body.apd-dark .chip{background:#14345c!important;color:#d9e9ff!important;border-color:#406287!important}
-body.apd-dark .apd-plan-card .btn-primary,
-body.apd-dark .plan-card .btn-primary,
-body.apd-dark .plan-option .btn-primary{background:#2d7dff!important;color:#fff!important}
-body.apd-dark .apd-plan-card .btn-secondary,
-body.apd-dark .plan-card .btn-secondary,
-body.apd-dark .plan-option .btn-secondary{background:#1a304a!important;color:#f2f7ff!important;border-color:#405873!important}
+body.apd-dark .plan-card,body.apd-dark .plan-option,body.apd-dark .plan-option-card,body.apd-dark .plan-box,body.apd-dark .repo-shell,body.apd-dark .repo-panel,body.apd-dark .repo-table-wrap,body.apd-dark .repo-drive-box,body.apd-dark .pid-shell,body.apd-dark .pid-panel,body.apd-dark .pid-table-wrap,body.apd-dark .pid-result-box,body.apd-dark .pid-summary-box,body.apd-dark .white-card,body.apd-dark .light-card,body.apd-dark .surface-light,body.apd-dark .apd-plan-card,body.apd-dark .apd-soft-card,body.apd-dark .apd-status-card,body.apd-dark .apd-extra-card,body.apd-dark .apd-benefit-card,body.apd-dark .apd-roadmap-step,body.apd-dark .repositorio-card,body.apd-dark .repo-card,body.apd-dark .pid-card,body.apd-dark .listados-card{background:#12243a!important;border-color:#31455f!important;color:#f2f7ff!important}
+body.apd-dark .plan-card h1,body.apd-dark .plan-card h2,body.apd-dark .plan-card h3,body.apd-dark .plan-card h4,body.apd-dark .plan-card h5,body.apd-dark .plan-card h6,body.apd-dark .plan-option h1,body.apd-dark .plan-option h2,body.apd-dark .plan-option h3,body.apd-dark .plan-option h4,body.apd-dark .repo-panel h1,body.apd-dark .repo-panel h2,body.apd-dark .repo-panel h3,body.apd-dark .repo-panel h4,body.apd-dark .pid-panel h1,body.apd-dark .pid-panel h2,body.apd-dark .pid-panel h3,body.apd-dark .pid-panel h4,body.apd-dark .plan-card p,body.apd-dark .plan-option p,body.apd-dark .repo-panel p,body.apd-dark .pid-panel p,body.apd-dark .plan-card li,body.apd-dark .plan-option li,body.apd-dark .repo-panel li,body.apd-dark .pid-panel li,body.apd-dark .plan-card span,body.apd-dark .plan-option span,body.apd-dark .repo-panel span,body.apd-dark .pid-panel span,body.apd-dark .plan-card strong,body.apd-dark .plan-option strong,body.apd-dark .repo-panel strong,body.apd-dark .pid-panel strong,body.apd-dark .plan-card small,body.apd-dark .plan-option small,body.apd-dark .repo-panel small,body.apd-dark .pid-panel small,body.apd-dark .apd-plan-card *,body.apd-dark .repo-card *,body.apd-dark .repositorio-card *,body.apd-dark .pid-card *,body.apd-dark .listados-card *{color:#f2f7ff!important}
+body.apd-dark .plan-note,body.apd-dark .muted,body.apd-dark .subtle,body.apd-dark .soft,body.apd-dark .prefs-hint,body.apd-dark .panel-sub,body.apd-dark .historico-note,body.apd-dark .historico-updated{color:#aec0d4!important}
+body.apd-dark table{background:#12243a!important;color:#f2f7ff!important}body.apd-dark thead,body.apd-dark thead tr,body.apd-dark thead th{background:#0d1d31!important;color:#f2f7ff!important;border-color:#31455f!important}body.apd-dark tbody tr{background:#12243a!important}body.apd-dark tbody tr:nth-child(even){background:#102035!important}body.apd-dark td,body.apd-dark th{color:#f2f7ff!important;border-color:#31455f!important}body.apd-dark .plan-pill,body.apd-dark .tag,body.apd-dark .badge,body.apd-dark .chip{background:#14345c!important;color:#d9e9ff!important;border-color:#406287!important}body.apd-dark .apd-plan-card .btn-primary,body.apd-dark .plan-card .btn-primary,body.apd-dark .plan-option .btn-primary{background:#2d7dff!important;color:#fff!important}body.apd-dark .apd-plan-card .btn-secondary,body.apd-dark .plan-card .btn-secondary,body.apd-dark .plan-option .btn-secondary{background:#1a304a!important;color:#f2f7ff!important;border-color:#405873!important}
+
+/* Capa final: tarjetas y paneles generados dinámicamente */
+body.apd-dark [class*="card"],body.apd-dark [class*="panel"],body.apd-dark [class*="box"],body.apd-dark [class*="table-wrap"],body.apd-dark [class*="result"],body.apd-dark [class*="summary"]{border-color:#31455f!important}
+body.apd-dark [class*="card"]:not(.btn):not(button),body.apd-dark [class*="box"]:not(.btn):not(button),body.apd-dark [class*="panel"]:not(.btn):not(button),body.apd-dark [class*="table-wrap"],body.apd-dark [class*="result"],body.apd-dark [class*="summary"]{background-color:#12243a!important;color:#f2f7ff!important}
+body.apd-dark [style*="background:#fff"],body.apd-dark [style*="background: #fff"],body.apd-dark [style*="background:white"],body.apd-dark [style*="background: white"],body.apd-dark [style*="background-color:#fff"],body.apd-dark [style*="background-color: #fff"],body.apd-dark [style*="background-color:white"],body.apd-dark [style*="background-color: white"]{background:#12243a!important;color:#f2f7ff!important;border-color:#31455f!important}
+body.apd-dark [class*="card"] h1,body.apd-dark [class*="card"] h2,body.apd-dark [class*="card"] h3,body.apd-dark [class*="card"] h4,body.apd-dark [class*="panel"] h1,body.apd-dark [class*="panel"] h2,body.apd-dark [class*="panel"] h3,body.apd-dark [class*="panel"] h4{color:#f2f7ff!important}
+body.apd-dark [class*="card"] p,body.apd-dark [class*="card"] li,body.apd-dark [class*="panel"] p,body.apd-dark [class*="panel"] li{color:#d6e2f2!important}
+body.apd-dark .footer{background:#071a33!important;border-top:1px solid #244060!important;color:#aec0d4!important}body.apd-dark .footer a{color:#b8d6ff!important}
