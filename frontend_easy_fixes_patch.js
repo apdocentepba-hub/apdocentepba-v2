@@ -65,6 +65,28 @@ function addStyle(){
  document.head.appendChild(s);
 }
 
+function applyPublicCopy(){
+ const hero = document.querySelector('.hero-eyebrow');
+ if(hero && /Beta abierta/i.test(hero.textContent || '')) {
+  hero.textContent = '🎯 Alertas docentes para APD de la Provincia de Buenos Aires';
+ }
+
+ document.querySelectorAll('.card-lbl').forEach(function(el){
+  const txt = String(el.textContent || '').trim();
+  if(/Backfill provincial/i.test(txt)) el.textContent = '🛠️ Actualización provincial';
+ });
+
+ const pidCard = document.getElementById('panel-listados-pid-card');
+ const pidHint = pidCard && pidCard.querySelector('.prefs-hint');
+ if(pidHint && !/Insigne/i.test(pidHint.textContent || '')) {
+  pidHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función disponible según tu plan; el acceso completo corresponde al plan Insigne.';
+ }
+
+ document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){
+  a.setAttribute('href','./soporte.html');
+ });
+}
+
 async function fetchJson(url){
  const r=await fetch(url,{headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}});
  if(!r.ok) throw new Error(`fetch failed ${r.status}`);
@@ -215,6 +237,7 @@ async function openList(input,list,type){
 
 function bind(){
  addStyle();
+ applyPublicCopy();
  pairs.forEach(function(pair){
    const input=document.getElementById(pair[0]);
    const list=document.getElementById(pair[1]);
