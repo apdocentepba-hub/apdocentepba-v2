@@ -8053,17 +8053,17 @@ async function resolverPlanUsuario(env, userId) {
   const trialPlan = planMap.get("TRIAL_7D") || normalizePlanOut(planPorCode("TRIAL_7D"));
   return {
     plan: trialPlan,
-    subscription: {
-      id: null,
-      user_id: userId,
-      plan_code: "TRIAL_7D",
-      status: "available",
-      source: "catalogo_default",
-      started_at: (/* @__PURE__ */ new Date()).toISOString(),
-      trial_ends_at: null,
-      current_period_ends_at: null,
-      mercadopago_preapproval_id: null
-    }
+    subscription: normalizeSubscriptionOut({
+  id: null,
+  user_id: userId,
+  plan_code: "TRIAL_7D",
+  status: "available",
+  source: "catalogo_default",
+  started_at: (/* @__PURE__ */ new Date()).toISOString(),
+  trial_ends_at: null,
+  current_period_ends_at: null,
+  mercadopago_preapproval_id: null
+})
   };
 }
 __name(resolverPlanUsuario, "resolverPlanUsuario");
@@ -8204,17 +8204,114 @@ function buildPlanFeatures(plan) {
   return items;
 }
 __name(buildPlanFeatures, "buildPlanFeatures");
+function resolveSubscriptionEndDate(row) {
+  const status = String(row?.status || "").trim().toUpperCase();
+  const planCode = String(row?.plan_code || "").trim().toUpperCase();
+
+  const trialEnds = row?.trial_ends_at || null;
+  const currentEnds = row?.current_period_ends_at || null;
+
+  if (planCode === "TRIAL_7D" || status === "TRIALING") {
+    return {
+      ends_at: trialEnds || currentEnds || null,
+      ends_at_source: trialEnds ? "trial_ends_at" : (currentEnds ? "current_period_ends_at" : null)
+    };
+  }
+
+  if (currentEnds) {
+    return {
+      ends_at: currentEnds,
+      ends_at_source: "current_period_ends_at"
+    };
+  }
+
+  if (trialEnds) {
+    return {
+      ends_at: trialEnds,
+      ends_at_source: "trial_ends_at"
+    };
+  }
+
+  return {
+    ends_at: null,
+    ends_at_source: null
+  };
+}
+__name(resolveSubscriptionEndDate, "resolveSubscriptionEndDate");
+
+function calculateSubscriptionDaysRemaining(row) {
+  const resolved = resolveSubscriptionEndDate(row);
+
+  if (!resolved.ends_at) {
+    return {
+      ...resolved,
+      days_remaining: null,
+      is_expired: false,
+      ends_at_label: null
+    };
+  }
+
+  const endTs = parseFechaFlexible(resolved.ends_at)?.getTime();
+
+  if (!Number.isFinite(endTs)) {
+    return {
+      ...resolved,
+      days_remaining: null,
+      is_expired: false,
+      ends_at_label: null
+    };
+  }
+
+  const nowTs = Date.now();
+  const diffMs = endTs - nowTs;
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+  let label = null;
+  try {
+    label = new Date(endTs).toLocaleDateString("es-AR", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  } catch {
+    label = new Date(endTs).toISOString().slice(0, 10);
+  }
+
+  return {
+    ...resolved,
+    days_remaining: daysRemaining,
+    is_expired: diffMs < 0,
+    ends_at_label: label
+  };
+}
+__name(calculateSubscriptionDaysRemaining, "calculateSubscriptionDaysRemaining");
 function normalizeSubscriptionOut(row) {
+  const planCode = String(row?.plan_code || "PLUS").trim().toUpperCase();
+  const status = String(row?.status || "active").trim().toLowerCase();
+  const expiration = calculateSubscriptionDaysRemaining({
+    ...row,
+    plan_code: planCode,
+    status
+  });
+
   return {
     id: row?.id || null,
     user_id: row?.user_id || null,
-    plan_code: String(row?.plan_code || "PLUS").trim().toUpperCase(),
-    status: String(row?.status || "active").trim().toLowerCase(),
+    plan_code: planCode,
+    status,
     source: row?.source || null,
     started_at: row?.started_at || null,
     trial_ends_at: row?.trial_ends_at || null,
     current_period_ends_at: row?.current_period_ends_at || null,
-    mercadopago_preapproval_id: row?.mercadopago_preapproval_id || null
+    mercadopago_preapproval_id: row?.mercadopago_preapproval_id || null,
+
+    // Campos calculados para mostrar en el panel
+    ends_at: expiration.ends_at,
+    ends_at_source: expiration.ends_at_source,
+    ends_at_label: expiration.ends_at_label,
+    days_remaining: expiration.days_remaining,
+    is_expired: expiration.is_expired
   };
 }
 __name(normalizeSubscriptionOut, "normalizeSubscriptionOut");
@@ -11193,6 +11290,66 @@ function buildTelegramBotLink(env, userId) {
   return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(normalizedUserId)}`;
 }
 __name(buildTelegramBotLink, "buildTelegramBotLink");
+function buildWhatsAppBotNumber(env) {
+  const raw = String(
+    env.WHATSAPP_BOT_NUMBER ||
+    env.WHATSAPP_BOT_PHONE ||
+    env.WHATSAPP_BUSINESS_PHONE ||
+    env.WHATSAPP_DISPLAY_PHONE ||
+    env.WHATSAPP_FROM_PHONE ||
+    env.WHATSAPP_PHONE ||
+    env.WHATSAPP_NUMBER ||
+    ""
+  ).trim();
+
+  if (!raw) return "";
+
+  let digits = raw.replace(/\D/g, "");
+
+  if (!digits) return "";
+
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.startsWith("549")) {
+    return digits;
+  }
+
+  if (digits.startsWith("54")) {
+    return `549${digits.slice(2)}`;
+  }
+
+  if (digits.startsWith("9") && digits.length >= 11) {
+    return `54${digits}`;
+  }
+
+  if (digits.startsWith("15") && digits.length > 8) {
+    digits = digits.slice(2);
+  }
+
+  return `549${digits}`;
+}
+__name(buildWhatsAppBotNumber, "buildWhatsAppBotNumber");
+function buildWhatsAppBotLink(env) {
+  const directLink = String(
+    env.WHATSAPP_BOT_LINK ||
+    env.WHATSAPP_LINK ||
+    env.WHATSAPP_CONNECT_URL ||
+    ""
+  ).trim();
+
+  if (/^https?:\/\//i.test(directLink)) {
+    return directLink;
+  }
+
+  const phone = buildWhatsAppBotNumber(env);
+  if (!phone) return "";
+
+  return `https://wa.me/${phone}?text=ALERTAS`;
+}
+__name(buildWhatsAppBotLink, "buildWhatsAppBotLink");
+
 async function sendTelegramText(env, chatId, text) {
   const token = String(env.TELEGRAM_BOT_TOKEN || "").trim();
   if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
@@ -12034,21 +12191,42 @@ async function handleTelegramWebhook(request, env) {
   const command = extractTelegramCommand(message?.text || "");
 
   if (command.kind === "start") {
-    const userId = String(command.payload || "").trim();
+  const userId = String(command.payload || "").trim();
 
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(userId)) {
+  const validStartPayload =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+
+  if (!validStartPayload) {
+    const alreadyLinkedUserId = await getTelegramUserIdByChat(env, chatId).catch(() => "");
+
+    if (alreadyLinkedUserId) {
       await sendTelegramText(
         env,
         chatId,
-        "No pude vincular tu cuenta. Entrá desde el panel y tocá el botón de conectar Telegram."
+        "✅ Este chat ya está vinculado con tu cuenta de APDocentePBA.\n\nEscribí ALERTAS cuando quieras consultar tus ofertas compatibles."
       ).catch(() => null);
 
       return json2({
         ok: true,
-        ignored: true,
-        reason: "invalid_start_payload"
+        ignored: false,
+        already_linked: true,
+        user_id: alreadyLinkedUserId,
+        reason: "start_without_payload_but_chat_already_linked"
       });
     }
+
+    await sendTelegramText(
+      env,
+      chatId,
+      "⚠️ Telegram abrió el bot, pero no llegó el código de vinculación.\n\nVolvé al panel de APDocentePBA y tocá nuevamente el botón “Conectar Telegram”.\n\nSi el problema sigue, cerrá esta conversación de Telegram, recargá el panel y volvé a intentarlo."
+    ).catch(() => null);
+
+    return json2({
+      ok: true,
+      ignored: true,
+      reason: "invalid_start_payload"
+    });
+  }
 
     const entitlement = await resolveTelegramEntitlement(env, userId);
     const prev = await getTelegramState(env, userId) || {};
@@ -12366,6 +12544,10 @@ async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
     const waState = await getWhatsAppState(env, userId) || {};
     const currentUser = await obtenerUsuario(env, userId).catch(() => null);
 
+       const whatsappBotNumber = String(env.WHATSAPP_BOT_NUMBER || "").trim();
+    const whatsappBotPhone = buildWhatsAppBotNumber(env);
+    const whatsappBotLink = buildWhatsAppBotLink(env);
+
     whatsappStatus = {
       ok: true,
       connected: !!waState.connected,
@@ -12376,9 +12558,20 @@ async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
       plan_code: waEntitlement.plan_code,
       plan_name: waEntitlement.plan_name,
       phone_masked: maskPhone(currentUser?.celular || waState?.phone || ""),
-      connect_hint: String(env.WHATSAPP_BOT_NUMBER || "").trim()
-        ? `Guardá tu celular en el panel y escribí a ${String(env.WHATSAPP_BOT_NUMBER || "").trim()} por WhatsApp para consultar alertas.`
-        : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
+
+      bot_link: whatsappBotLink,
+      whatsapp_link: whatsappBotLink,
+      wa_link: whatsappBotLink,
+      connect_url: whatsappBotLink,
+      deep_link: whatsappBotLink,
+      bot_phone: whatsappBotPhone,
+      whatsapp_phone: whatsappBotPhone,
+
+      connect_hint: whatsappBotLink
+        ? "Abrí el bot de WhatsApp y escribí ALERTAS para pedir tus alertas del momento."
+        : whatsappBotNumber
+          ? `Guardá tu celular en el panel y escribí a ${whatsappBotNumber} por WhatsApp para consultar alertas.`
+          : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
     };
   }
 
@@ -12426,6 +12619,9 @@ async function handleWhatsAppStatus(request, env) {
   const state = await getWhatsAppState(env, user.id) || {};
 
   const botNumber = String(env.WHATSAPP_BOT_NUMBER || "").trim();
+  const botPhone = buildWhatsAppBotNumber(env);
+  const botLink = buildWhatsAppBotLink(env);
+
   const alertsRequested = !!prefs?.alertas_whatsapp;
   const connected = !!state.connected;
   const alertsEnabled = !!(entitlement.allowed && alertsRequested && connected);
@@ -12440,9 +12636,20 @@ async function handleWhatsAppStatus(request, env) {
     plan_code: entitlement.plan_code,
     plan_name: entitlement.plan_name,
     phone_masked: maskPhone(user?.celular || state?.phone || ""),
-    connect_hint: botNumber
-      ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.`
-      : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
+
+    bot_link: botLink,
+    whatsapp_link: botLink,
+    wa_link: botLink,
+    connect_url: botLink,
+    deep_link: botLink,
+    bot_phone: botPhone,
+    whatsapp_phone: botPhone,
+
+    connect_hint: botLink
+      ? "Abrí el bot de WhatsApp y escribí ALERTAS para pedir tus alertas del momento."
+      : botNumber
+        ? `Guardá tu celular en el panel y escribí a ${botNumber} por WhatsApp para consultar alertas.`
+        : "Guardá tu celular en el panel y escribile al número del bot por WhatsApp para consultar alertas."
   });
 }
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
