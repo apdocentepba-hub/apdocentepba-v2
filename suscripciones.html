@@ -12,12 +12,11 @@ body{margin:0;background:#f6f8fb;color:#10233f;font-family:'DM Sans',system-ui,s
 .wrap{max-width:980px;margin:0 auto;padding:28px 18px 56px}
 .card{background:#fff;border:1px solid #dde6f0;border-radius:18px;padding:28px}
 .back{display:inline-block;margin-bottom:16px;text-decoration:none;border:1px solid #dde6f0;border-radius:999px;padding:10px 14px;color:#0f3460;font-weight:700}
-h1,h2{color:#0f3460}
+h1,h2,h3{color:#0f3460}
 h1{margin:0 0 8px}
 h2{margin-top:26px}
 p,li{font-size:15px}
-ul{padding-left:20px}
-small.muted{color:#5b6b80}
+ul{padding-left:20px}.plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}.plan-box{border:1px solid #dde6f0;border-radius:16px;padding:16px;background:#f9fbfe}.plan-box h3{margin:0 0 8px}.notice{background:#eef6ff;border:1px solid #bfdcff;border-radius:16px;padding:16px;margin:18px 0}.muted{color:#5b6b80;font-size:13px}@media(max-width:720px){.plan-grid{grid-template-columns:1fr}.card{padding:22px}}
 </style>
 </head>
 <body>
@@ -26,23 +25,75 @@ small.muted{color:#5b6b80}
 <div class="card">
 
 <h1>Política de Suscripciones, Cancelaciones y Reembolsos de APDocentePBA</h1>
-<p><strong>Última actualización:</strong> 5 de abril de 2026</p>
+<p><strong>Última actualización:</strong> 25 de abril de 2026</p>
 
-<h2>1. Planes</h2>
-<p>APDocentePBA podrá ofrecer funciones o planes gratuitos, promocionales o pagos, con distintos alcances, límites, prioridades y canales de alerta.</p>
+<div class="notice">
+  <p><strong>APDocentePBA es una herramienta privada de alertas y organización de información.</strong> No pertenece a ABC, DGCyE ni a ningún organismo oficial. La información debe verificarse siempre en la fuente oficial antes de postularse o tomar decisiones.</p>
+</div>
 
-<h2>2. Promociones y pruebas</h2>
+<h2>1. Planes disponibles y alcance general</h2>
+<p>APDocentePBA puede ofrecer una prueba inicial y planes pagos con distintos límites de distritos, cargos/materias, canales y herramientas. Los límites exactos, precios y condiciones vigentes se informan dentro de la Plataforma al momento de contratar o cambiar de plan.</p>
+
+<div class="plan-grid">
+  <div class="plan-box">
+    <h3>Prueba 7 días</h3>
+    <ul>
+      <li>Acceso temporal de prueba.</li>
+      <li>Alertas por email cuando estén activadas.</li>
+      <li>Telegram disponible según configuración de cuenta.</li>
+      <li>WhatsApp no incluido.</li>
+      <li>Límites reducidos de distritos y cargos/materias.</li>
+    </ul>
+  </div>
+  <div class="plan-box">
+    <h3>Plus</h3>
+    <ul>
+      <li>Mayor alcance que la prueba inicial.</li>
+      <li>Alertas por email.</li>
+      <li>Telegram incluido según configuración de cuenta.</li>
+      <li>WhatsApp no incluido.</li>
+      <li>Límites de búsqueda según el plan activo.</li>
+    </ul>
+  </div>
+  <div class="plan-box">
+    <h3>Premium</h3>
+    <ul>
+      <li>Cobertura ampliada para más preferencias.</li>
+      <li>Alertas por email.</li>
+      <li>Telegram incluido según configuración de cuenta.</li>
+      <li>WhatsApp no incluido.</li>
+      <li>Mayor límite de distritos y cargos/materias que planes inferiores, sujeto al catálogo vigente.</li>
+    </ul>
+  </div>
+  <div class="plan-box">
+    <h3>Insigne</h3>
+    <ul>
+      <li>Cobertura máxima dentro de la Plataforma.</li>
+      <li>Alertas por email.</li>
+      <li>Telegram incluido según configuración de cuenta.</li>
+      <li>WhatsApp en modo consulta manual: la persona usuaria escribe ALERTAS y recibe la respuesta disponible en ese momento.</li>
+      <li>Acceso a funciones de PID/Listados y puntaje cuando estén habilitadas para la cuenta.</li>
+    </ul>
+  </div>
+</div>
+
+<p class="muted">Los nombres de planes pueden aparecer como Prueba 7 días, Plus, Premium o Insigne. Cualquier referencia histórica a Basic, Pro o Signature debe entenderse como nomenclatura anterior o equivalente según el catálogo vigente.</p>
+
+<h2>2. Canales de alerta y consulta</h2>
+<p>Los canales disponibles pueden incluir email, Telegram y WhatsApp según el plan activo, la configuración de la cuenta, la vinculación del canal y la disponibilidad técnica. WhatsApp no funciona como envío masivo libre para todos los planes: queda reservado al plan correspondiente y opera en modo consulta manual cuando esté habilitado.</p>
+
+<h2>3. Promociones y pruebas</h2>
 <p>APDocentePBA podrá ofrecer promociones o períodos promocionales de manera excepcional y revocable.</p>
 <p>Salvo indicación expresa en contrario, las promociones podrán ser limitadas, modificadas o discontinuadas hacia el futuro.</p>
 
-<h2>3. Activación del servicio pago</h2>
+<h2>4. Activación del servicio pago</h2>
 <p>El acceso al plan pago se considerará habilitado cuando el Prestador reciba confirmación suficiente del pago o de la autorización del medio de pago correspondiente.</p>
 
-<h2>4. Renovación automática</h2>
+<h2>5. Renovación automática</h2>
 <p>La renovación automática solo operará cuando la persona usuaria la autorice expresamente.</p>
 <p>Si la renovación automática no estuviera activa, el acceso podrá vencer al finalizar el período cubierto sin cobro posterior automático.</p>
 
-<h2>5. Fallas o rechazos de cobro</h2>
+<h2>6. Fallas o rechazos de cobro</h2>
 <p>Si el procesador de pagos rechazara, observara, impugnara o no pudiera procesar un cargo, APDocentePBA podrá:</p>
 <ul>
   <li>reintentar el cobro;</li>
@@ -51,7 +102,7 @@ small.muted{color:#5b6b80}
   <li>dar de baja el acceso al finalizar el período cubierto.</li>
 </ul>
 
-<h2>6. Cambios de plan</h2>
+<h2>7. Cambios de plan</h2>
 <p>Los cambios de plan estarán sujetos a las reglas operativas vigentes al momento de la solicitud.</p>
 <p>Salvo indicación expresa en contrario:</p>
 <ul>
@@ -60,11 +111,11 @@ small.muted{color:#5b6b80}
   <li>ciertas transiciones podrán postergarse o bloquearse por razones técnicas o de consistencia de facturación.</li>
 </ul>
 
-<h2>7. Cancelación y baja</h2>
+<h2>8. Cancelación y baja</h2>
 <p>La baja del servicio o cancelación de la renovación deberá poder solicitarse por los medios habilitados por la Plataforma.</p>
 <p>En los supuestos de contratación a distancia, APDocentePBA procurará cumplir con la exigencia de un mecanismo claro y visible de baja digital.</p>
 
-<h2>8. Efectos de la baja</h2>
+<h2>9. Efectos de la baja</h2>
 <p>La baja de la renovación automática:</p>
 <ul>
   <li>evita cargos futuros;</li>
@@ -72,7 +123,7 @@ small.muted{color:#5b6b80}
   <li>no obliga al Prestador a mantener condiciones comerciales anteriores para futuras contrataciones.</li>
 </ul>
 
-<h2>9. Reembolsos</h2>
+<h2>10. Reembolsos</h2>
 <p>Como regla general, no se otorgan reembolsos.</p>
 <p>Solo podrán evaluarse excepciones en caso de:</p>
 <ul>
@@ -82,10 +133,10 @@ small.muted{color:#5b6b80}
 </ul>
 <p>No corresponderán reembolsos por falta de uso, uso parcial, resultados no obtenidos, errores de configuración o baja del servicio una vez iniciado un período ya abonado.</p>
 
-<h2>10. Terceros procesadores</h2>
+<h2>11. Terceros procesadores</h2>
 <p>Los pagos podrán ser gestionados por terceros. La persona usuaria acepta además las políticas, validaciones y restricciones del procesador de pago correspondiente.</p>
 
-<h2>11. Fraude y abuso</h2>
+<h2>12. Fraude y abuso</h2>
 <p>APDocentePBA podrá rechazar pagos, cancelar promociones, restringir accesos, suspender cuentas o exigir validaciones adicionales cuando detecte fraude, abuso, contracargos improcedentes, duplicación artificial de cuentas o cualquier maniobra destinada a eludir restricciones del servicio.</p>
 
 </div>
