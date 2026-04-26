@@ -1,15 +1,16 @@
 (function () {
   'use strict';
 
-  if (window.__apdPanelListadosPidPatchLoaded) return;
-  window.__apdPanelListadosPidPatchLoaded = true;
+  if (window.__apdPanelListadosPidPatchLoadedV8) return;
+  window.__apdPanelListadosPidPatchLoadedV8 = true;
 
   const PID_API_URL = 'https://jolly-haze-f505.apdocentepba.workers.dev';
   const PID_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1YKJgKvIlNInD_NbkuDc8xvrlDr6qKgAsJUQE1le4e8o/edit';
   const PID_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec';
   const PID_TOKEN_KEY = 'apd_token_v2';
-  const PID_STORAGE_KEY = 'apd_pid_panel_state_v4';
+  const PID_STORAGE_KEY = 'apd_pid_panel_state_v8';
   const PID_LAST_OK_KEY = 'apd_pid_last_save_ok_v1';
+
   const PID_LISTADOS = [
     ['oficial', 'Listado Oficial'],
     ['108a', 'Listado 108 a'],
@@ -30,18 +31,25 @@
     ['formacionProfesionalComplementarioFp', 'Listado Complementario Formacion Profesional']
   ];
 
-  function byId(id) { return document.getElementById(id); }
+  let observer = null;
+  let bootTimer = null;
+  let hydratedFromDrive = false;
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
 
   function esc(v) {
-    return String(v || '')
+    return String(v == null ? '' : v)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/\"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function clean(v) {
-    return String(v || '')
+    return String(v == null ? '' : v)
       .replace(/\u00a0/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -53,6 +61,10 @@
     } catch (_) {
       return '';
     }
+  }
+
+  function currentYear() {
+    return String(new Date().getFullYear());
   }
 
   function readState() {
@@ -109,18 +121,28 @@
   function renderLastOk() {
     const el = byId('pidlist-lastok');
     if (!el) return;
+
     const info = readLastOk();
     if (!info || !info.saved_at) {
       el.style.display = 'none';
       el.textContent = '';
       return;
     }
+
     const bits = ['Último guardado OK: ' + fmtDateTime(info.saved_at)];
     if (info.dni) bits.push('DNI ' + info.dni);
     if (info.label || info.listado) bits.push(info.label || info.listado);
     if (info.anio) bits.push('año ' + info.anio);
+
     el.textContent = bits.join(' · ');
     el.style.display = 'block';
+  }
+
+  function setMsg(text, type) {
+    const el = byId('pidlist-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'pidlist-msg ' + (type || 'pidlist-info');
   }
 
   function saveFormState() {
@@ -135,6 +157,7 @@
 
   function injectStyles() {
     if (byId('panel-listados-pid-style')) return;
+
     const style = document.createElement('style');
     style.id = 'panel-listados-pid-style';
     style.textContent = `
@@ -147,9 +170,10 @@
       .pidlist-field input,.pidlist-field select{width:100%;min-height:46px;padding:12px 14px;border:1px solid #dbe3f0;border-radius:12px;font:inherit;background:#fff}
       .pidlist-field input:focus,.pidlist-field select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 3px rgba(15,52,96,.10)}
       .pidlist-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
-      .pidlist-actions .btn,.pidlist-actions a{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center}
+      .pidlist-actions .btn,.pidlist-actions a{min-height:46px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
       .pidlist-lastok{display:none;padding:10px 12px;border:1px solid rgba(11,122,68,.18);background:#eefbf3;color:#0b7a44;border-radius:12px;font-size:13px;font-weight:700}
-      .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}.pidlist-info{color:#0f3460}.pidlist-ok{color:#0b7a44}.pidlist-err{color:#b42318}.pidlist-warn{color:#9a6700}
+      .pidlist-msg{min-height:22px;font-weight:700;font-size:14px}
+      .pidlist-info{color:#0f3460}.pidlist-ok{color:#0b7a44}.pidlist-err{color:#b42318}.pidlist-warn{color:#9a6700}
       .pidlist-empty{padding:20px 16px;border:1px dashed #dbe3f0;border-radius:14px;background:#f8fafc;color:#607086;text-align:center;line-height:1.6}
       .pidlist-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
       .pidlist-box{background:#f8fafc;border:1px solid rgba(15,52,96,.10);border-radius:14px;padding:14px}
@@ -168,13 +192,6 @@
     document.head.appendChild(style);
   }
 
-  function setMsg(text, type) {
-    const el = byId('pidlist-msg');
-    if (!el) return;
-    el.textContent = text || '';
-    el.className = 'pidlist-msg ' + (type || 'pidlist-info');
-  }
-
   async function fetchListadosFromWorker() {
     try {
       const res = await fetch(PID_API_URL + '/api/pid-listados');
@@ -190,11 +207,13 @@
 
   async function fillListados(select) {
     if (!select) return;
+    const current = select.value || readState().listado || 'oficial';
     const listados = await fetchListadosFromWorker();
     select.innerHTML = listados.map(function (item) {
       return '<option value="' + esc(item[0]) + '">' + esc(item[1]) + '</option>';
     }).join('');
-    select.value = 'oficial';
+    select.value = current;
+    if (!select.value) select.value = 'oficial';
   }
 
   function renderIdle() {
@@ -204,15 +223,16 @@
   }
 
   function normalizePidRows(result) {
-    const rows = Array.isArray(result && result.table_rows)
-      ? result.table_rows
-      : (Array.isArray(result && result.section_rows) ? result.section_rows : []);
+    let rows = [];
+    if (Array.isArray(result && result.table_rows)) rows = result.table_rows;
+    else if (Array.isArray(result && result.section_rows)) rows = result.section_rows;
+    else if (Array.isArray(result && result.items)) rows = result.items;
 
     return rows.map(function (row) {
       return {
-        bloque: clean(row && row.bloque || ''),
-        area: clean(row && row.area || ''),
-        puntaje_total: clean(row && row.puntaje_total || '')
+        bloque: clean(row && (row.bloque || row.rama || row.nivel || row.modalidad) || ''),
+        area: clean(row && (row.area || row.codigo || row.cargo || row.materia || row.titulo || row.descripcion) || ''),
+        puntaje_total: clean(row && (row.puntaje_total || row.puntaje || row.total || row.valor) || '')
       };
     }).filter(function (row) {
       return row.area || row.puntaje_total;
@@ -222,7 +242,6 @@
   function groupRowsByBlock(rows) {
     const groups = [];
     let current = null;
-
     rows.forEach(function (row) {
       const bloque = row.bloque || 'Otros puntajes';
       if (!current || current.bloque !== bloque) {
@@ -231,7 +250,6 @@
       }
       current.rows.push(row);
     });
-
     return groups;
   }
 
@@ -242,9 +260,7 @@
           <div class="pidlist-block-title">${esc(group.bloque)}</div>
           <div class="pidlist-table-wrap">
             <table class="pidlist-table">
-              <thead>
-                <tr><th>Área</th><th>Puntaje total</th></tr>
-              </thead>
+              <thead><tr><th>Área</th><th>Puntaje total</th></tr></thead>
               <tbody>
                 ${group.rows.map(function (row) {
                   return `<tr><td>${esc(row.area || '-')}</td><td>${esc(row.puntaje_total || '-')}</td></tr>`;
@@ -261,18 +277,21 @@
     const out = byId('pidlist-out');
     if (!out) return;
 
+    result = result || {};
+    meta = meta || {};
+
     const rows = normalizePidRows(result);
     const groups = groupRowsByBlock(rows);
 
     out.innerHTML = `
       <div class="pidlist-meta">
-        <div class="pidlist-box"><span class="pidlist-k">Apellido y nombre</span><strong class="pidlist-v">${esc(result && result.apellido_nombre || '-')}</strong></div>
-        <div class="pidlist-box"><span class="pidlist-k">Distrito de residencia</span><strong class="pidlist-v">${esc(result && result.distrito_residencia || '-')}</strong></div>
-        <div class="pidlist-box"><span class="pidlist-k">Distritos solicitados</span><strong class="pidlist-v">${esc(result && result.distritos_solicitados || '-')}</strong></div>
-        <div class="pidlist-box"><span class="pidlist-k">Oblea</span><strong class="pidlist-v">${esc(result && result.oblea || '-')}</strong></div>
+        <div class="pidlist-box"><span class="pidlist-k">Apellido y nombre</span><strong class="pidlist-v">${esc(result.apellido_nombre || '-')}</strong></div>
+        <div class="pidlist-box"><span class="pidlist-k">Distrito de residencia</span><strong class="pidlist-v">${esc(result.distrito_residencia || '-')}</strong></div>
+        <div class="pidlist-box"><span class="pidlist-k">Distritos solicitados</span><strong class="pidlist-v">${esc(result.distritos_solicitados || '-')}</strong></div>
+        <div class="pidlist-box"><span class="pidlist-k">Oblea</span><strong class="pidlist-v">${esc(result.oblea || '-')}</strong></div>
       </div>
-      <p class="prefs-hint">Consulta hecha para DNI ${esc(meta.dni)} · listado ${esc(meta.label)} · año ${esc(meta.anio)}.</p>
-      ${groups.length ? renderGroups(groups) : '<div class="pidlist-empty">No se encontraron filas.</div>'}
+      <p class="prefs-hint">Consulta hecha para DNI ${esc(meta.dni || '-')} · listado ${esc(meta.label || meta.listado || '-')} · año ${esc(meta.anio || '-')}.</p>
+      ${groups.length ? renderGroups(groups) : '<div class="pidlist-empty">No se encontraron filas de puntaje para este listado. Si aparece apellido/oblea, la consulta respondió pero ese listado vino sin tabla de puntajes.</div>'}
     `;
   }
 
@@ -281,7 +300,9 @@
       ? data.result.table_rows
       : Array.isArray(data && data.result && data.result.section_rows)
         ? data.result.section_rows
-        : [];
+        : Array.isArray(data && data.result && data.result.items)
+          ? data.result.items
+          : [];
 
     return {
       action: 'guardar_pid_consulta',
@@ -298,54 +319,43 @@
         oblea: clean(data && data.result && data.result.oblea || ''),
         table_rows: sourceRows.map(function (row) {
           const out = {};
-          Object.keys(row || {}).forEach(function (k) {
-            out[k] = clean(row[k]);
-          });
+          Object.keys(row || {}).forEach(function (k) { out[k] = clean(row[k]); });
           return out;
         })
       }
     };
   }
 
-  async function savePidResult(data, meta) {
+  async function postWebApp(payload, timeoutMs) {
     const controller = new AbortController();
-    const timer = setTimeout(function () {
-      controller.abort();
-    }, 8000);
-
+    const timer = setTimeout(function () { controller.abort(); }, timeoutMs || 10000);
     try {
       const res = await fetch(PID_WEBAPP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(savePayload(data, meta)),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
-
       const text = await res.text();
       let parsed = null;
-      try {
-        parsed = text ? JSON.parse(text) : null;
-      } catch (_) {
-        throw new Error('El guardado no devolvió JSON válido');
-      }
-
-      if (!res.ok) {
-        throw new Error(clean(parsed && (parsed.error || parsed.message) || ('HTTP ' + res.status)));
-      }
-
-      if (!parsed || parsed.ok !== true) {
-        throw new Error(clean(parsed && (parsed.error || parsed.message) || 'El guardado no confirmó ok:true'));
-      }
-
+      try { parsed = text ? JSON.parse(text) : null; }
+      catch (_) { throw new Error('El Web App no devolvió JSON válido'); }
+      if (!res.ok) throw new Error(clean(parsed && (parsed.error || parsed.message) || ('HTTP ' + res.status)));
       return parsed;
     } catch (err) {
-      if (err && err.name === 'AbortError') {
-        throw new Error('El guardado tardó demasiado en responder');
-      }
+      if (err && err.name === 'AbortError') throw new Error('El Web App tardó demasiado en responder');
       throw err;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function savePidResult(data, meta) {
+    const parsed = await postWebApp(savePayload(data, meta), 10000);
+    if (!parsed || parsed.ok !== true) {
+      throw new Error(clean(parsed && (parsed.error || parsed.message) || 'El guardado no confirmó ok:true'));
+    }
+    return parsed;
   }
 
   function restoreLastState() {
@@ -355,7 +365,7 @@
     const anio = byId('pidlist-anio');
 
     if (dni && state.dni) dni.value = state.dni;
-    if (anio) anio.value = state.anio || String(new Date().getFullYear());
+    if (anio) anio.value = state.anio || currentYear();
     if (listado) {
       if (state.listado) listado.value = state.listado;
       if (!listado.value) listado.value = 'oficial';
@@ -369,13 +379,77 @@
         label: state.label || clean(listado && listado.selectedOptions && listado.selectedOptions[0] && listado.selectedOptions[0].textContent || state.listado || '')
       });
       setMsg(state.msg || '', state.msgType || 'pidlist-info');
-      renderLastOk();
-      return;
+    } else {
+      renderIdle();
+      if (state.msg) setMsg(state.msg, state.msgType || 'pidlist-info');
     }
 
-    renderIdle();
-    if (state.msg) setMsg(state.msg, state.msgType || 'pidlist-info');
     renderLastOk();
+  }
+
+  function labelForSelectedList() {
+    const listado = byId('pidlist-listado');
+    return clean(listado && listado.selectedOptions && listado.selectedOptions[0] && listado.selectedOptions[0].textContent || listado && listado.value || '');
+  }
+
+  async function hydratePidFromDrive() {
+    if (hydratedFromDrive) return;
+    hydratedFromDrive = true;
+
+    const docenteId = token();
+    if (!docenteId) return;
+
+    try {
+      setMsg('Cargando PID guardado...', 'pidlist-info');
+      const data = await postWebApp({ action: 'leer_pid_consulta', docente_id: docenteId }, 10000);
+
+      if (!data || data.ok !== true) {
+        throw new Error(clean(data && data.error || 'No se pudo leer el PID guardado.'));
+      }
+
+      if (!data.found || !data.consulta) {
+        setMsg('', 'pidlist-info');
+        return;
+      }
+
+      const consulta = data.consulta;
+      const result = consulta.result || {};
+      const dniInput = byId('pidlist-dni');
+      const anioInput = byId('pidlist-anio');
+      const listadoSelect = byId('pidlist-listado');
+
+      if (dniInput) dniInput.value = clean(consulta.dni || '');
+      if (anioInput) anioInput.value = clean(consulta.anio || currentYear());
+      if (listadoSelect && consulta.listado) {
+        listadoSelect.value = clean(consulta.listado);
+        if (!listadoSelect.value) listadoSelect.value = 'oficial';
+      }
+
+      const label = labelForSelectedList() || clean(consulta.listado || '');
+      const meta = {
+        dni: clean(consulta.dni || ''),
+        anio: clean(consulta.anio || ''),
+        listado: clean(consulta.listado || ''),
+        label: label
+      };
+
+      renderResult(result, meta);
+      writeLastOk(meta);
+      renderLastOk();
+      writeState({
+        dni: meta.dni,
+        listado: meta.listado,
+        label: meta.label,
+        anio: meta.anio,
+        result: result,
+        msg: 'PID guardado cargado correctamente.',
+        msgType: 'pidlist-ok'
+      });
+      setMsg('PID guardado cargado correctamente.', 'pidlist-ok');
+    } catch (err) {
+      console.error('ERROR CARGANDO PID GUARDADO:', err);
+      setMsg('No se pudo cargar el PID guardado. Podés consultar nuevamente.', 'pidlist-warn');
+    }
   }
 
   async function runPid() {
@@ -383,12 +457,7 @@
     const listado = clean(byId('pidlist-listado') && byId('pidlist-listado').value || '');
     const anio = clean(byId('pidlist-anio') && byId('pidlist-anio').value || '');
     const btn = byId('pidlist-buscar');
-    const label = clean(
-      byId('pidlist-listado') &&
-      byId('pidlist-listado').selectedOptions &&
-      byId('pidlist-listado').selectedOptions[0] &&
-      byId('pidlist-listado').selectedOptions[0].textContent || listado
-    );
+    const label = labelForSelectedList() || listado;
     const meta = { dni: dni, anio: anio, listado: listado, label: label };
 
     saveFormState();
@@ -412,70 +481,32 @@
       if (!res.ok || !data || !data.ok) throw new Error(data && data.error || 'No se pudo consultar PID.');
 
       renderResult(data.result || {}, meta);
-      writeState({
-        dni: dni,
-        listado: listado,
-        label: label,
-        anio: anio,
-        result: data.result || {},
-        msg: 'Consulta PID realizada. Guardando en planilla...',
-        msgType: 'pidlist-info'
-      });
+      writeState({ dni: dni, listado: listado, label: label, anio: anio, result: data.result || {}, msg: 'Consulta PID realizada. Guardando en planilla...', msgType: 'pidlist-info' });
       setMsg('Consulta PID realizada. Guardando en planilla...', 'pidlist-info');
 
       try {
         const saved = await savePidResult(data, meta);
         writeLastOk(meta);
         renderLastOk();
-        writeState({
-          dni: dni,
-          listado: listado,
-          label: label,
-          anio: anio,
-          result: data.result || {},
-          msg: clean(saved && (saved.message || saved.msg) || 'Consulta PID realizada y guardada en planilla.'),
-          msgType: 'pidlist-ok'
-        });
+        writeState({ dni: dni, listado: listado, label: label, anio: anio, result: data.result || {}, msg: clean(saved && (saved.message || saved.msg) || 'Consulta PID realizada y guardada en planilla.'), msgType: 'pidlist-ok' });
         setMsg(clean(saved && (saved.message || saved.msg) || 'Consulta PID realizada y guardada en planilla.'), 'pidlist-ok');
       } catch (saveErr) {
         console.error('ERROR GUARDANDO PID EN PLANILLA:', saveErr);
+        const msg = String(saveErr && saveErr.message || '').includes('tardó demasiado')
+          ? 'La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.'
+          : 'Consulta PID realizada, pero no se pudo guardar en planilla.';
         if (String(saveErr && saveErr.message || '').includes('tardó demasiado')) {
           writeLastOk(meta);
           renderLastOk();
-          writeState({
-            dni: dni,
-            listado: listado,
-            label: label,
-            anio: anio,
-            result: data.result || {},
-            msg: 'La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.',
-            msgType: 'pidlist-warn'
-          });
-          setMsg('La consulta probablemente se guardó, pero la confirmación del Web App tardó demasiado.', 'pidlist-warn');
-        } else {
-          writeState({
-            dni: dni,
-            listado: listado,
-            label: label,
-            anio: anio,
-            result: data.result || {},
-            msg: 'Consulta PID realizada, pero no se pudo guardar en planilla.',
-            msgType: 'pidlist-warn'
-          });
-          setMsg('Consulta PID realizada, pero no se pudo guardar en planilla.', 'pidlist-warn');
         }
+        writeState({ dni: dni, listado: listado, label: label, anio: anio, result: data.result || {}, msg: msg, msgType: 'pidlist-warn' });
+        setMsg(msg, 'pidlist-warn');
       }
     } catch (err) {
-      if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(err && err.message || 'No se pudo consultar PID.') + '</div>';
-      writeState({
-        dni: dni,
-        listado: listado,
-        label: label,
-        anio: anio,
-        msg: err && err.message || 'No se pudo consultar PID.',
-        msgType: 'pidlist-err'
-      });
-      setMsg(err && err.message || 'No se pudo consultar PID.', 'pidlist-err');
+      const msg = err && err.message || 'No se pudo consultar PID.';
+      if (out) out.innerHTML = '<div class="pidlist-empty">' + esc(msg) + '</div>';
+      writeState({ dni: dni, listado: listado, label: label, anio: anio, msg: msg, msgType: 'pidlist-err' });
+      setMsg(msg, 'pidlist-err');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Buscar'; }
     }
@@ -486,7 +517,7 @@
       <div class="pidlist-card" id="pidlist-card-inner" data-apd-pid-card="1">
         <div class="pidlist-head">
           <div class="card-lbl-row"><span class="card-lbl">🪪 Consulta PID por DNI</span></div>
-          <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados.</p>
+          <p class="prefs-hint">Consulta por DNI, listado y año directamente dentro de Listados. Al abrir, intenta recuperar el último PID guardado en Drive.</p>
         </div>
         <div class="pidlist-grid">
           <div class="pidlist-field"><label for="pidlist-dni">DNI</label><input id="pidlist-dni" type="text" inputmode="numeric" placeholder="34535989"></div>
@@ -507,10 +538,13 @@
     const listado = byId('pidlist-listado');
     const anio = byId('pidlist-anio');
     if (!btn || btn.dataset.bound === '1') return;
+
     btn.dataset.bound = '1';
+    if (anio && !anio.value) anio.value = currentYear();
     await fillListados(listado);
     restoreLastState();
-    if (anio && !anio.value) anio.value = String(new Date().getFullYear());
+    hydratePidFromDrive();
+
     btn.addEventListener('click', runPid);
     if (dni) {
       dni.addEventListener('input', saveFormState);
@@ -527,19 +561,12 @@
 
   function moveCardToPerfil(grid) {
     const existing = byId('pidlist-card-inner');
-    if (existing && grid && existing.parentElement !== grid) {
-      grid.prepend(existing);
-    }
+    if (existing && grid && existing.parentElement !== grid) grid.prepend(existing);
   }
 
   function removeWrongPidCards() {
-    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) #panel-listados-pid-card').forEach(function (el) {
-      el.remove();
-    });
-
-    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) [data-apd-pid-card="1"]').forEach(function (el) {
-      el.remove();
-    });
+    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) #panel-listados-pid-card').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('#panel-tabs-wrap .panel-tab-pane:not(#panel-tab-pane-perfil) [data-apd-pid-card="1"]').forEach(function (el) { el.remove(); });
   }
 
   function enforceListadosPane() {
@@ -574,11 +601,15 @@
     enforceListadosPane();
   }
 
-  let observer = null;
+  function scheduleBoot() {
+    clearTimeout(bootTimer);
+    bootTimer = setTimeout(bootPass, 60);
+  }
+
   function startObserver() {
     const host = byId('panel-tabs-wrap') || byId('panel-docente') || document.body;
     if (!host || observer) return;
-    observer = new MutationObserver(function () { bootPass(); });
+    observer = new MutationObserver(function () { scheduleBoot(); });
     observer.observe(host, { childList: true, subtree: true });
   }
 
