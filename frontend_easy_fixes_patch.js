@@ -65,6 +65,66 @@ function addStyle(){
  document.head.appendChild(s);
 }
 
+function currentPlanIsInsigne(){
+ const parts = [
+  document.getElementById('panel-plan')?.textContent || '',
+  document.getElementById('panel-datos-docente')?.textContent || '',
+  document.getElementById('panel-preferencias-resumen')?.textContent || ''
+ ].join(' ');
+ return /\bINSIGNE\b/i.test(parts);
+}
+
+function setAvailablePill(el){
+ if(!el) return;
+ const txt = String(el.textContent || '').trim();
+ if(/No incluido|Solo disponible|Reservado/i.test(txt)) {
+  el.textContent = 'Incluido en Insigne';
+  el.style.background = '#ecfdf3';
+  el.style.color = '#166534';
+  el.style.borderColor = '#bbf7d0';
+ }
+}
+
+function fixInsigneChannelsCopy(){
+ if(!currentPlanIsInsigne()) return;
+
+ ['pref-alertas-telegram','pref-alertas-whatsapp'].forEach(function(id){
+  const input = document.getElementById(id);
+  if(input) input.disabled = false;
+ });
+
+ const resumen = document.getElementById('panel-preferencias-resumen');
+ if(resumen){
+  const tg = resumen.querySelector('[data-telegram-summary="1"]');
+  if(tg && /No incluido|no está habilitado/i.test(tg.textContent || '')) tg.innerHTML = '<strong>Telegram:</strong> Incluido en Insigne';
+  const wa = resumen.querySelector('[data-whatsapp-summary="1"]');
+  if(wa && /No incluido|Solo disponible|reservado/i.test(wa.textContent || '')) wa.innerHTML = '<strong>WhatsApp:</strong> Incluido en Insigne';
+ }
+
+ ['telegram-pref-pill','whatsapp-pref-pill'].forEach(function(id){ setAvailablePill(document.getElementById(id)); });
+
+ const tgNote = document.getElementById('telegram-pref-note');
+ if(tgNote && /no está habilitado|No incluido/i.test(tgNote.textContent || '')) {
+  tgNote.textContent = 'Telegram está incluido en tu plan Insigne. Si todavía no aparece activo, vinculá el bot o guardá nuevamente tus preferencias.';
+ }
+ const waNote = document.getElementById('whatsapp-pref-note');
+ if(waNote && /reservado|No incluido|no está habilitado/i.test(waNote.textContent || '')) {
+  waNote.textContent = 'WhatsApp está incluido en tu plan Insigne. Funciona como consulta manual: escribís ALERTAS y recibís las alertas disponibles.';
+ }
+
+ const canales = document.getElementById('panel-canales');
+ if(canales){
+  canales.querySelectorAll('*').forEach(function(el){
+   const t = String(el.textContent || '').trim();
+   if(t === 'No incluido' || t === 'Solo disponible en Insigne') {
+    el.textContent = 'Incluido en Insigne';
+   }
+   if(/Telegram no está habilitado/i.test(t)) el.textContent = 'Telegram incluido en tu plan Insigne.';
+   if(/WhatsApp queda reservado|WhatsApp no está habilitado/i.test(t)) el.textContent = 'WhatsApp incluido en tu plan Insigne. Modo consulta manual: ALERTAS.';
+  });
+ }
+}
+
 function applyPublicCopy(){
  const hero = document.querySelector('.hero-eyebrow');
  if(hero && /Beta abierta/i.test(hero.textContent || '')) {
@@ -85,6 +145,8 @@ function applyPublicCopy(){
  document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){
   a.setAttribute('href','./soporte.html');
  });
+
+ fixInsigneChannelsCopy();
 }
 
 async function fetchJson(url){
