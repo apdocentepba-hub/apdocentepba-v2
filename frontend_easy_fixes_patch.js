@@ -49,6 +49,25 @@ function debounce(fn, ms){
  };
 }
 
+function setupThemeToggle(){
+ if(document.getElementById('apd-theme-toggle')) return;
+ const saved = localStorage.getItem('apd_theme') || 'light';
+ document.body.classList.toggle('apd-dark', saved === 'dark');
+ const btn = document.createElement('button');
+ btn.id = 'apd-theme-toggle';
+ btn.className = 'apd-theme-toggle';
+ btn.type = 'button';
+ function sync(){ btn.textContent = document.body.classList.contains('apd-dark') ? '☀️ Claro' : '🌙 Oscuro'; }
+ btn.addEventListener('click', function(){
+  const nextDark = !document.body.classList.contains('apd-dark');
+  document.body.classList.toggle('apd-dark', nextDark);
+  localStorage.setItem('apd_theme', nextDark ? 'dark' : 'light');
+  sync();
+ });
+ sync();
+ document.body.appendChild(btn);
+}
+
 function addStyle(){
  if(document.getElementById('apd-listbox-fix-style-5')) return;
  const s=document.createElement('style');
@@ -299,6 +318,7 @@ async function openList(input,list,type){
 
 function bind(){
  addStyle();
+ setupThemeToggle();
  applyPublicCopy();
  pairs.forEach(function(pair){
    const input=document.getElementById(pair[0]);
