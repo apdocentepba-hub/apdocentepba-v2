@@ -16,14 +16,30 @@
       .replace(/\"/g, '&quot;');
   }
 
+  function planCode(raw) {
+    return String(raw || '').trim().toUpperCase();
+  }
+
+  function isInsigne(raw) {
+    return planCode(raw) === 'INSIGNE';
+  }
+
   function planDisplayName(raw) {
-    const key = String(raw || '').trim().toUpperCase();
+    const key = planCode(raw);
     if (!key) return 'tu plan';
     if (key === 'TRIAL_7D') return 'Prueba 7 días';
     if (key === 'PLUS') return 'Plus';
-    if (key === 'PREMIUM' || key === 'PRO') return 'Pro';
+    if (key === 'PREMIUM' || key === 'PRO') return 'Premium';
     if (key === 'INSIGNE') return 'Insigne';
     return key;
+  }
+
+  function safeAllowed(status, channel) {
+    const code = planCode(status?.plan_code || status?.plan_name || '');
+    if (code === 'INSIGNE') return true;
+    if (channel === 'telegram') return status?.allowed_by_plan !== false;
+    if (typeof status?.allowed_by_plan === 'boolean') return status.allowed_by_plan;
+    return true;
   }
 
   function patchPlanesPayload(data) {
@@ -31,7 +47,7 @@
     const planes = Array.isArray(copy?.planes) ? copy.planes : [];
 
     planes.forEach((plan) => {
-      const code = String(plan?.code || plan?.display_code || '').trim().toUpperCase();
+      const code = planCode(plan?.code || plan?.display_code || '');
       const flags = (plan && typeof plan.feature_flags === 'object' && plan.feature_flags) ? plan.feature_flags : {};
       flags.email = true;
       flags.telegram = true;
@@ -203,7 +219,7 @@
     const botUser = String(status?.bot_username || '').replace(/^@+/, '').trim();
     const masked = String(status?.chat_id_masked || '').trim();
     const user = String(status?.username || '').trim();
-    const allowedByPlan = status?.allowed_by_plan !== false;
+    const allowedByPlan = safeAllowed(status, 'telegram');
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
     const isRequested = !!requested;
 
@@ -211,10 +227,10 @@
     checkbox.checked = allowedByPlan ? isRequested : false;
 
     if (!allowedByPlan) {
-      setPill(pill, 'No incluido', '#f8fafc', '#475569', '#cbd5e1');
-      note.textContent = `Telegram no está habilitado para ${planName}.`;
+      setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
+      note.textContent = `Telegram depende de la configuración del plan. Si tu cuenta es Insigne y aparece mal, recargá el panel.`;
       actions.innerHTML = '';
-      mini.textContent = '';
+      mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       return;
     }
 
@@ -236,10 +252,10 @@
       return;
     }
 
-    setPill(pill, isRequested ? 'Pendiente de conexión' : 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
+    setPill(pill, isRequested ? 'Pendiente de conexión' : 'Disponible', '#fff7ed', '#9a3412', '#fed7aa');
     note.textContent = botUser
       ? `Abrí el bot @${botUser}, tocá Iniciar y después ya vas a poder recibir alertas en Telegram.`
-      : 'Abrí el bot de Telegram y tocá Iniciar para vincular el chat.';
+      : 'Telegram está disponible. Abrí el bot y tocá Iniciar para vincular el chat.';
     actions.innerHTML = botLink ? `<a class="btn btn-primary" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Conectar Telegram</a>` : '';
     mini.textContent = `Incluido en ${planName || 'tu plan'}.`;
   }
@@ -253,7 +269,7 @@
     const checkbox = byId('pref-alertas-whatsapp');
     if (!pill || !note || !actions || !mini || !checkbox) return;
 
-    const allowedByPlan = status?.allowed_by_plan !== false;
+    const allowedByPlan = safeAllowed(status, 'whatsapp');
     const connected = !!status?.connected;
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
     const phoneMasked = String(status?.phone_masked || '').trim();
@@ -264,10 +280,10 @@
     checkbox.checked = allowedByPlan ? isRequested : false;
 
     if (!allowedByPlan) {
-      setPill(pill, 'No incluido', '#f8fafc', '#475569', '#cbd5e1');
-      note.textContent = `WhatsApp queda reservado para Insigne. Con ${planName || 'tu plan'} podés usar email y Telegram.`;
+      setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
+      note.textContent = 'WhatsApp se habilita según el plan activo. En Insigne debe figurar disponible.';
       actions.innerHTML = '';
-      mini.textContent = '';
+      mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       return;
     }
 
@@ -289,28 +305,30 @@
       return;
     }
 
-    setPill(pill, isRequested ? 'Pendiente de conexión' : 'Pendiente', '#fff7ed', '#9a3412', '#fed7aa');
-    note.textContent = connectHint || 'Escribí al número del bot desde tu WhatsApp para vincularlo y consultar alertas.';
+    setPill(pill, isRequested ? 'Pendiente de conexión' : 'Disponible', '#fff7ed', '#9a3412', '#fed7aa');
+    note.textContent = connectHint || 'WhatsApp está disponible según tu plan. Vinculá tu número para poder consultarlo.';
     actions.innerHTML = '';
     mini.textContent = planName ? `Incluido en ${planName}.` : '';
   }
 
   function renderChannelSummary(pref) {
-    const telegramAllowed = pref.telegram_allowed_by_plan !== false;
+    const tgCode = pref.telegram_plan_code || pref.telegram_plan_name || '';
+    const telegramAllowed = isInsigne(tgCode) || pref.telegram_allowed_by_plan !== false;
     const telegramRequested = !!pref.alertas_telegram;
     const telegramLabel = !telegramAllowed
-      ? `No incluido en ${planDisplayName(pref.telegram_plan_name || pref.telegram_plan_code || '')}`
+      ? 'Según plan'
       : pref.telegram_connected
         ? (telegramRequested ? 'Conectado y activo' : 'Conectado')
-        : (telegramRequested ? 'Pendiente de conexión' : 'No conectado');
+        : (telegramRequested ? 'Pendiente de conexión' : 'Disponible');
 
-    const whatsappAllowed = pref.whatsapp_allowed_by_plan !== false;
+    const waCode = pref.whatsapp_plan_code || pref.whatsapp_plan_name || '';
+    const whatsappAllowed = isInsigne(waCode) || pref.whatsapp_allowed_by_plan !== false;
     const whatsappRequested = !!pref.alertas_whatsapp;
     const whatsappLabel = !whatsappAllowed
-      ? 'Solo disponible en Insigne'
+      ? 'Según plan'
       : pref.whatsapp_connected
         ? (whatsappRequested ? 'Conectado y activo' : 'Conectado')
-        : (whatsappRequested ? 'Pendiente de conexión' : 'No conectado');
+        : (whatsappRequested ? 'Pendiente de conexión' : 'Disponible');
 
     const resumen = byId('panel-preferencias-resumen');
     if (resumen) {
@@ -365,7 +383,7 @@
 
         if (tg) {
           pref.telegram_connected = !!tg.connected;
-          pref.telegram_allowed_by_plan = tg.allowed_by_plan !== false;
+          pref.telegram_allowed_by_plan = safeAllowed(tg, 'telegram');
           pref.telegram_plan_name = tg.plan_name || tg.plan_code || '';
           pref.telegram_plan_code = tg.plan_code || '';
           pref.telegram_bot_link = tg.bot_link || '';
@@ -378,7 +396,7 @@
 
         if (wa) {
           pref.whatsapp_connected = !!wa.connected;
-          pref.whatsapp_allowed_by_plan = wa.allowed_by_plan !== false;
+          pref.whatsapp_allowed_by_plan = safeAllowed(wa, 'whatsapp');
           pref.whatsapp_plan_name = wa.plan_name || wa.plan_code || '';
           pref.whatsapp_plan_code = wa.plan_code || '';
           pref.whatsapp_phone_masked = wa.phone_masked || '';
