@@ -42,6 +42,26 @@
     return true;
   }
 
+  function normalizePhone(raw) {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits || digits.length < 8 || /x/i.test(String(raw || ''))) return '';
+    return digits;
+  }
+
+  function whatsappBotUrl(status) {
+    const direct = String(status?.bot_link || status?.whatsapp_link || status?.wa_link || status?.connect_url || status?.deep_link || '').trim();
+    if (/^https?:\/\//i.test(direct)) return direct;
+    const phone = normalizePhone(status?.bot_phone || status?.whatsapp_phone || status?.phone || status?.phone_e164 || status?.from_number || status?.business_phone || '');
+    if (phone) return `https://wa.me/${phone}?text=ALERTAS`;
+    return '';
+  }
+
+  function renderWhatsAppButton(status, label) {
+    const url = whatsappBotUrl(status || {});
+    if (!url) return '';
+    return `<a class="btn btn-primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label || 'Abrir WhatsApp')}</a>`;
+  }
+
   function patchPlanesPayload(data) {
     const copy = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data;
     const planes = Array.isArray(copy?.planes) ? copy.planes : [];
@@ -274,6 +294,7 @@
     const planName = planDisplayName(status?.plan_name || status?.plan_code || '');
     const phoneMasked = String(status?.phone_masked || '').trim();
     const connectHint = String(status?.connect_hint || '').trim();
+    const botButton = renderWhatsAppButton(status, connected ? 'Abrir bot de WhatsApp' : 'Conectar WhatsApp');
     const isRequested = !!requested;
 
     checkbox.disabled = !allowedByPlan;
@@ -282,7 +303,7 @@
     if (!allowedByPlan) {
       setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
       note.textContent = 'WhatsApp se habilita según el plan activo. En Insigne debe figurar disponible.';
-      actions.innerHTML = '';
+      actions.innerHTML = botButton;
       mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       return;
     }
@@ -296,9 +317,9 @@
         isRequested ? '#bbf7d0' : '#d6e4ff'
       );
       note.textContent = isRequested
-        ? 'WhatsApp quedó listo para consultas desde el número vinculado.'
-        : 'WhatsApp ya está vinculado, pero el canal está apagado en tus preferencias.';
-      actions.innerHTML = '';
+        ? 'WhatsApp quedó listo para consultas desde el número vinculado. Escribí ALERTAS en el bot para pedir tus alertas del momento.'
+        : 'WhatsApp ya está vinculado, pero el canal está apagado en tus preferencias. Igual podés abrir el bot y escribir ALERTAS.';
+      actions.innerHTML = botButton;
       mini.textContent = [planName ? `Plan: ${planName}` : '', phoneMasked ? `Número: ${phoneMasked}` : '']
         .filter(Boolean)
         .join(' · ');
@@ -306,8 +327,8 @@
     }
 
     setPill(pill, isRequested ? 'Pendiente de conexión' : 'Disponible', '#fff7ed', '#9a3412', '#fed7aa');
-    note.textContent = connectHint || 'WhatsApp está disponible según tu plan. Vinculá tu número para poder consultarlo.';
-    actions.innerHTML = '';
+    note.textContent = connectHint || 'WhatsApp está disponible según tu plan. Abrí el bot, escribí ALERTAS y seguí las indicaciones.';
+    actions.innerHTML = botButton;
     mini.textContent = planName ? `Incluido en ${planName}.` : '';
   }
 
@@ -401,6 +422,8 @@
           pref.whatsapp_plan_code = wa.plan_code || '';
           pref.whatsapp_phone_masked = wa.phone_masked || '';
           pref.whatsapp_connect_hint = wa.connect_hint || '';
+          pref.whatsapp_bot_link = wa.bot_link || wa.whatsapp_link || wa.wa_link || wa.connect_url || wa.deep_link || '';
+          pref.whatsapp_bot_phone = wa.bot_phone || wa.whatsapp_phone || wa.phone || wa.phone_e164 || wa.from_number || wa.business_phone || '';
         }
 
         return pref;
@@ -440,7 +463,9 @@
           plan_name: pref.whatsapp_plan_name || '',
           plan_code: pref.whatsapp_plan_code || '',
           phone_masked: pref.whatsapp_phone_masked || '',
-          connect_hint: pref.whatsapp_connect_hint || ''
+          connect_hint: pref.whatsapp_connect_hint || '',
+          bot_link: pref.whatsapp_bot_link || '',
+          bot_phone: pref.whatsapp_bot_phone || ''
         };
 
         renderTelegramStatus(lastTelegramStatus, tgRequested);
