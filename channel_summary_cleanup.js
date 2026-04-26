@@ -6,6 +6,25 @@ window.__apdChannelSummaryCleanupLoaded = true;
 function byId(id){return document.getElementById(id);}
 function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+function setupThemeToggle(){
+  if(byId('apd-theme-toggle')) return;
+  const saved = localStorage.getItem('apd_theme') || 'light';
+  document.body.classList.toggle('apd-dark', saved === 'dark');
+  const btn = document.createElement('button');
+  btn.id = 'apd-theme-toggle';
+  btn.className = 'apd-theme-toggle';
+  btn.type = 'button';
+  function sync(){ btn.textContent = document.body.classList.contains('apd-dark') ? '☀️ Claro' : '🌙 Oscuro'; }
+  btn.addEventListener('click', function(){
+    const nextDark = !document.body.classList.contains('apd-dark');
+    document.body.classList.toggle('apd-dark', nextDark);
+    localStorage.setItem('apd_theme', nextDark ? 'dark' : 'light');
+    sync();
+  });
+  sync();
+  document.body.appendChild(btn);
+}
+
 function prefStatus(label){
   const pref = byId('panel-preferencias-resumen');
   const text = String(pref && pref.textContent || '');
@@ -26,7 +45,7 @@ function formStatus(label){
 }
 
 function isInsigne(){
-  const txt = [byId('panel-plan')&&byId('panel-plan').textContent, byId('panel-datos-docente')&&byId('panel-datos-docente').textContent, byId('panel-preferencias-resumen')&&byId('panel-preferencias-resumen').textContent].join(' ');
+  const txt = [byId('panel-plan')&&byId('panel-plan').textContent, byId('panel-datos-docente')&&byId('panel-datos-docente').textContent, byId('panel-preferencias-resumen')&&byId('panel-preferencias-resumen').textContent, byId('panel-canales')&&byId('panel-canales').textContent].join(' ');
   return /INSIGNE|Plan\s+Insigne/i.test(txt);
 }
 
@@ -34,7 +53,7 @@ function wanted(label){
   return formStatus(label) || prefStatus(label) || (isInsigne() ? 'Incluido en Insigne' : 'Según plan');
 }
 
-function cleanup(){
+function cleanupSummary(){
   const resumen = byId('panel-preferencias-resumen');
   if(!resumen) return;
   const telegram = wanted('Telegram');
@@ -53,6 +72,39 @@ function cleanup(){
   resumen.appendChild(p2);
 }
 
-if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cleanup, {once:true}); else cleanup();
-[300,800,1500,2500,4000,6000,9000,12000,16000].forEach(function(ms){setTimeout(cleanup,ms);});
+function cleanCanales(){
+  if(!isInsigne()) return;
+  const canales = byId('panel-canales');
+  if(!canales) return;
+  canales.querySelectorAll('*').forEach(function(el){
+    if(el.children.length) return;
+    const t = String(el.textContent||'').trim();
+    if(/^(No incluido|Solo disponible en Insigne|En preparación|Según plan)$/i.test(t)) el.textContent = 'Incluido en Insigne';
+    if(/Telegram aún no disponible|Telegram no está habilitado/i.test(t)) el.textContent = 'Telegram incluido en tu plan Insigne. Abrí el bot desde Preferencias para conectarlo.';
+    if(/WhatsApp en preparación|WhatsApp no está habilitado|WhatsApp queda reservado/i.test(t)) el.textContent = 'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.';
+  });
+}
+
+function publicCopy(){
+  const hero = document.querySelector('.hero-eyebrow');
+  if(hero && /Beta abierta/i.test(hero.textContent || '')) hero.textContent = '🎯 Alertas docentes para APD de la Provincia de Buenos Aires';
+  document.querySelectorAll('.card-lbl').forEach(function(el){
+    if(/Backfill provincial/i.test(String(el.textContent||''))) el.textContent = '🛠️ Actualización provincial';
+  });
+  const reset = byId('btn-provincia-reset');
+  if(reset && reset.textContent.trim()==='Reset') reset.textContent = 'Reiniciar';
+  const pidHint = byId('panel-listados-pid-card') && byId('panel-listados-pid-card').querySelector('.prefs-hint');
+  if(pidHint && !/Insigne/i.test(pidHint.textContent || '')) pidHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función disponible según tu plan; el acceso completo corresponde al plan Insigne.';
+  document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){ a.setAttribute('href','./soporte.html'); });
+}
+
+function run(){
+  setupThemeToggle();
+  publicCopy();
+  cleanupSummary();
+  cleanCanales();
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, {once:true}); else run();
+[300,800,1500,2500,4000,6000,9000,12000,16000].forEach(function(ms){setTimeout(run,ms);});
 })();
