@@ -221,6 +221,56 @@
  function loadUsefulPatches() {
   ensureScript('channel_persistence_hotfix.js?v=1', 'apd-channel-persistence-hotfix-loader');
 }
+
+function textOf(id){ return String(byId(id)?.textContent || ''); }
+function isInsigneUser(){
+  return /\bINSIGNE\b|Plan\s+Insigne|PLAN\s+INSIGNE/i.test([
+    textOf('panel-plan'),
+    textOf('panel-datos-docente'),
+    textOf('panel-preferencias-resumen'),
+    textOf('panel-canales')
+  ].join(' '));
+}
+function leafTextReplace(root, matcher, text){
+  if(!root) return;
+  root.querySelectorAll('*').forEach(el => {
+    if(el.children.length) return;
+    const current = String(el.textContent || '').trim();
+    if(current && matcher.test(current)) el.textContent = text;
+  });
+}
+function rewriteSummaryLine(root,label,value){
+  if(!root) return;
+  let found=false;
+  root.querySelectorAll('p,div,li').forEach(el=>{
+    if(el.children.length) return;
+    const current=String(el.textContent||'').trim();
+    if(new RegExp('^'+label+':','i').test(current)){
+      el.innerHTML='<strong>'+label+':</strong> '+value;
+      found=true;
+    }
+  });
+  if(!found) root.insertAdjacentHTML('beforeend','<p><strong>'+label+':</strong> '+value+'</p>');
+}
+function fixInicioChannelCopy(){
+  if(!isInsigneUser()) return;
+  const canales = byId('panel-canales');
+  const resumen = byId('panel-preferencias-resumen');
+  rewriteSummaryLine(resumen,'Telegram','Incluido en Insigne');
+  rewriteSummaryLine(resumen,'WhatsApp','Incluido en Insigne');
+  if(canales){
+    leafTextReplace(canales,/^No incluido$/i,'Incluido en Insigne');
+    leafTextReplace(canales,/^Solo disponible en Insigne$/i,'Incluido en Insigne');
+    leafTextReplace(canales,/^En preparación$/i,'Incluido en Insigne');
+    leafTextReplace(canales,/^Según plan$/i,'Incluido en Insigne');
+    leafTextReplace(canales,/Telegram aún no disponible en este plan\.?/i,'Telegram incluido en tu plan Insigne. Abrí el bot desde Preferencias para conectarlo.');
+    leafTextReplace(canales,/Telegram no está habilitado\.?/i,'Telegram incluido en tu plan Insigne. Abrí el bot desde Preferencias para conectarlo.');
+    leafTextReplace(canales,/WhatsApp en preparación\.?/i,'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.');
+    leafTextReplace(canales,/WhatsApp no está habilitado\.?/i,'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.');
+    leafTextReplace(canales,/WhatsApp queda reservado.*$/i,'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.');
+  }
+}
+
   function bindDynamicPanelEvents() {
     const g = globalThis;
     const form = byId('form-preferencias');
@@ -312,6 +362,7 @@
     trimLegacyUiNoise();
     loadUsefulPatches();
     bindDynamicPanelEvents();
+    fixInicioChannelCopy();
     refreshTabs();
   }
 
