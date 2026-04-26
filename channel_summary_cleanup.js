@@ -6,6 +6,10 @@ window.__apdChannelSummaryCleanupLoaded = true;
 function byId(id){return document.getElementById(id);}
 function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+let planExpirationFetching = false;
+let planExpirationLastFetch = 0;
+let planExpirationCache = null;
+
 function setupThemeToggle(){
   if(byId('apd-theme-toggle')) return;
   const saved = localStorage.getItem('apd_theme') || 'light';
@@ -98,11 +102,108 @@ function publicCopy(){
   document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){ a.setAttribute('href','./soporte.html'); });
 }
 
+function planNameFromInfo(info){
+  const plan = info && info.plan || {};
+  const sub = info && info.subscription || {};
+  return String(plan.display_name || plan.nombre || plan.name || sub.plan_code || plan.code || '').trim();
+}
+
+function expirationHtml(info){
+  const sub = info && info.subscription || {};
+  const rawDays = sub.days_remaining;
+  const days = rawDays === null || rawDays === undefined || rawDays === '' ? null : Number(rawDays);
+  const label = String(sub.ends_at_label || '').trim();
+  const expired = sub.is_expired === true;
+  const planName = planNameFromInfo(info);
+
+  if (!label && !Number.isFinite(days)) return '';
+
+  let statusText = '';
+  let toneBg = '#eef6ff';
+  let toneBorder = '#bfdcff';
+  let toneColor = '#0f3460';
+
+  if (expired) {
+    statusText = 'Plan vencido';
+    toneBg = '#fff1f2';
+    toneBorder = '#fecdd3';
+    toneColor = '#be123c';
+  } else if (Number.isFinite(days)) {
+    if (days <= 0) statusText = 'Vence hoy';
+    else if (days === 1) statusText = 'Vence mañana';
+    else statusText = 'Vence en ' + days + ' días';
+
+    if (days <= 3) {
+      toneBg = '#fff7ed';
+      toneBorder = '#fed7aa';
+      toneColor = '#9a3412';
+    } else if (days <= 7) {
+      toneBg = '#fefce8';
+      toneBorder = '#fde68a';
+      toneColor = '#854d0e';
+    }
+  } else {
+    statusText = 'Vencimiento informado';
+  }
+
+  return '<div id="apd-plan-expiration" class="plan-expiration-box" style="margin-top:12px;padding:12px;border:1px solid '+toneBorder+';border-radius:14px;background:'+toneBg+';color:'+toneColor+';">'
+    + '<div style="font-weight:800;margin-bottom:4px;">⏳ '+esc(statusText)+'</div>'
+    + (planName ? '<div style="font-size:13px;"><strong>Plan:</strong> '+esc(planName)+'</div>' : '')
+    + (label ? '<div style="font-size:13px;"><strong>Vencimiento:</strong> '+esc(label)+'</div>' : '')
+    + '</div>';
+}
+
+function paintPlanExpiration(info){
+  const box = byId('panel-plan');
+  if(!box || !info) return;
+  const html = expirationHtml(info);
+  byId('apd-plan-expiration')?.remove();
+  if(!html) return;
+  const anchor = byId('plan-summary-actions');
+  if(anchor) anchor.insertAdjacentHTML('beforebegin', html);
+  else box.insertAdjacentHTML('beforeend', html);
+}
+
+async function fetchPlanInfo(){
+  if(planExpirationFetching) return null;
+  const now = Date.now();
+  if(planExpirationCache && now - planExpirationLastFetch < 25000) return planExpirationCache;
+  const userId = typeof window.obtenerToken === 'function' ? String(window.obtenerToken() || '').trim() : '';
+  if(!userId) return null;
+  planExpirationFetching = true;
+  try{
+    let info = null;
+    if(typeof window.obtenerMiPlan === 'function') info = await window.obtenerMiPlan(userId);
+    else if(typeof window.workerFetchJson === 'function') info = await window.workerFetchJson('/api/mi-plan?user_id=' + encodeURIComponent(userId));
+    if(info && (info.plan || info.subscription)) {
+      planExpirationCache = info;
+      planExpirationLastFetch = Date.now();
+      window.planActual = info;
+    }
+    return info;
+  }catch(err){
+    console.warn('APD plan expiration fetch error:', err);
+    return null;
+  }finally{
+    planExpirationFetching = false;
+  }
+}
+
+function renderPlanExpiration(){
+  const box = byId('panel-plan');
+  if(!box) return;
+  if(window.planActual && (window.planActual.plan || window.planActual.subscription)) {
+    paintPlanExpiration(window.planActual);
+  }
+  fetchPlanInfo().then(function(info){ if(info) paintPlanExpiration(info); });
+}
+
 function run(){
   setupThemeToggle();
   publicCopy();
   cleanupSummary();
   cleanCanales();
+  renderPlanExpiration();
 }
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, {once:true}); else run();
