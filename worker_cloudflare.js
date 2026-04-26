@@ -1449,6 +1449,43 @@ function digestRow(label, value) {
 }
 
 __name(digestRow, "digestRow");
+function emailSchoolChip(row) {
+  const p = normalizeOfferPayload(row?.offer_payload || row || {});
+  const raw = p?.raw || row?.raw || {};
+
+  const escuela = String(
+    p.escuela ||
+    p.nombreestablecimiento ||
+    p.codigo_escuela ||
+    p.codigoescuela ||
+    p.establecimiento ||
+    raw.escuela ||
+    raw.nombreestablecimiento ||
+    raw.codigo_escuela ||
+    raw.codigoescuela ||
+    raw.establecimiento ||
+    ""
+  ).trim();
+
+  if (!escuela) return "";
+
+  return `
+    <span style="
+      display:inline-block;
+      background:#eaf2ff;
+      color:#0f3460;
+      border-radius:999px;
+      padding:6px 10px;
+      margin:4px 6px 4px 0;
+      font-family:Arial,Helvetica,sans-serif;
+      font-size:12px;
+      font-weight:800;
+      line-height:1.2;
+      white-space:nowrap;
+    ">🏫 ${escHtml(escuela)}</span>
+  `;
+}
+__name(emailSchoolChip, "emailSchoolChip");
 function parseMailNumber(value) {
   let raw = String(value || "").trim();
   if (!raw) return null;
@@ -1661,6 +1698,40 @@ function renderMailOfferCard(row) {
   const chance = buildMailChanceInfo(p);
 
   const titulo = p.cargo || p.materia || p.title || "Oferta APD";
+    const rawOferta = p?.raw || raw?.raw || {};
+
+  const escuela = String(
+    p.escuela ||
+    p.nombreestablecimiento ||
+    raw.escuela ||
+    raw.nombreestablecimiento ||
+    rawOferta.escuela ||
+    rawOferta.nombreestablecimiento ||
+    ""
+  ).trim();
+
+  const escuelaHtml = escuela
+    ? `
+      <div style="
+        margin:12px 0 0 0;
+        padding:10px 12px;
+        background:#eef6ff;
+        border:1px solid #cfe0f5;
+        border-radius:10px;
+        font-family:Arial,Helvetica,sans-serif;
+        font-size:13px;
+        line-height:1.4;
+        color:#0f3460;
+      ">
+        <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#5d7290;font-weight:800;margin-bottom:3px;">
+          Escuela
+        </div>
+        <div style="font-size:14px;font-weight:800;color:#0b1f3a;">
+          🏫 ${escHtml(escuela)}
+        </div>
+      </div>
+    `
+    : "";
 
   const puntajeBase = Number.isFinite(Number(p?.pid_puntaje_total_base))
     ? Number(p.pid_puntaje_total_base)
@@ -1753,7 +1824,18 @@ const panelBaseUrl = String(PANEL_URL || "").trim().replace(/\/+$/, "") || "http
 const panelUrl = offerKey
   ? `${panelBaseUrl}/?offer=${encodeURIComponent(offerKey)}`
   : panelBaseUrl;
+    const escuelaChip = String(
+    p.escuela ||
+    p.nombreestablecimiento ||
+    raw.escuela ||
+    raw.nombreestablecimiento ||
+    raw.raw?.escuela ||
+    raw.raw?.nombreestablecimiento ||
+    ""
+  ).trim();
+
   const chips = [
+    escuelaChip ? { text: `🏫 ${escuelaChip}`, bg: "#eaf2ff", color: "#0f3460" } : null,
     p.codigo ? { text: `🆔 ${p.codigo}`, bg: "#eef2ff", color: "#1e40af" } : null,
     p.distrito ? { text: `📍 ${p.distrito}`, bg: "#f3f4f6", color: "#374151" } : null,
     p.turno ? { text: `🕒 ${p.turno}`, bg: "#ecfdf5", color: "#166534" } : null,
