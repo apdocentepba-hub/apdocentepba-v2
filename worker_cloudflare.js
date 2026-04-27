@@ -4127,22 +4127,40 @@ function addDaysIso(baseIso, days) {
 }
 __name(addDaysIso, "addDaysIso");
 function isPlanActivo(resolved) {
-  const sub = resolved?.subscription;
-  const plan = resolved?.plan;
-  if (!plan) return false;
-  const planCode = String(plan.code || sub?.plan_code || "").trim().toUpperCase();
+  const sub = resolved?.subscription || resolved || {};
+  const planCode = canonicalPlanCode(
+    resolved?.plan?.code ||
+    resolved?.plan?.plan_code ||
+    sub?.plan_code ||
+    ""
+  );
+
   const status = String(sub?.status || "").trim().toUpperCase();
-  if (planCode === "INSIGNE") return true;
-  if (planCode === "TRIAL_7D") {
+
+  if (!planCode) return false;
+
+  if (["CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "INACTIVE"].includes(status)) {
+    return false;
+  }
+
+  if (planCode === "TRIAL_7D" || status === "TRIALING") {
     if (!sub?.trial_ends_at) return false;
-    const end = new Date(sub.trial_ends_at).getTime();
+
+    const end = parseFechaFlexible(sub.trial_ends_at)?.getTime();
     return Number.isFinite(end) && Date.now() <= end;
   }
-  if (status === "ACTIVE" || status === "AUTHORIZED") {
-    if (!sub?.current_period_ends_at) return true;
-    const end = new Date(sub.current_period_ends_at).getTime();
+
+  if (status === "BETA") {
+    return true;
+  }
+
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED"].includes(status)) {
+    if (!sub?.current_period_ends_at) return false;
+
+    const end = parseFechaFlexible(sub.current_period_ends_at)?.getTime();
     return Number.isFinite(end) && Date.now() <= end;
   }
+
   return false;
 }
 __name(isPlanActivo, "isPlanActivo");
@@ -5160,10 +5178,25 @@ async function runEmailAlertsSweep(env, options = {}) {
 
       continue;
     }
+const resolvedPlanForEmail = await resolverPlanUsuario(env, userId).catch(() => null);
 
-    const resolvedPlanForEmail = await resolverPlanUsuario(env, userId).catch(() => null);
-    const emailPlanCode = getPlanCodeValue(resolvedPlanForEmail) || "TRIAL_7D";
-    const emailCanShowPid = canShowPidForPlan(emailPlanCode);
+if (!resolvedPlanForEmail || !isPlanActivo(resolvedPlanForEmail)) {
+  skippedAlerts += 1;
+
+  pushDebug({
+    user_id: userId,
+    stage: "plan_check",
+    skipped: true,
+    reason: "plan_expired_or_inactive",
+    destination: user.email,
+    plan_code: getPlanCodeValue(resolvedPlanForEmail) || null
+  });
+
+  continue;
+}
+
+const emailPlanCode = getPlanCodeValue(resolvedPlanForEmail) || "TRIAL_7D";
+const emailCanShowPid = canShowPidForPlan(emailPlanCode);
 
     const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);
 
@@ -8150,17 +8183,38 @@ async function resolverPlanUsuario(env, userId) {
 }
 __name(resolverPlanUsuario, "resolverPlanUsuario");
 function elegirSuscripcionVigente(rows) {
-  const permitidos = /* @__PURE__ */ new Set(["ACTIVE", "TRIALING", "AUTHORIZED", "PENDING", "PAUSED", "BETA"]);
+  const permitidos = new Set(["ACTIVE", "TRIALING", "AUTHORIZED", "PENDING", "PAUSED", "BETA"]);
   const nowTs = Date.now();
+
   for (const row of Array.isArray(rows) ? rows : []) {
     const status = String(row?.status || "").trim().toUpperCase();
+    const planCode = canonicalPlanCode(row?.plan_code || "");
+
     if (!permitidos.has(status)) continue;
-    const trialEndsTs = parseFechaFlexible(row?.trial_ends_at)?.getTime() || 0;
-    const currentEndsTs = parseFechaFlexible(row?.current_period_ends_at)?.getTime() || 0;
-    if (status === "TRIALING" && trialEndsTs && trialEndsTs < nowTs) continue;
-    if (!["TRIALING", "BETA"].includes(status) && currentEndsTs && currentEndsTs < nowTs) continue;
+
+    if (["CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "INACTIVE"].includes(status)) {
+      continue;
+    }
+
+    if (status === "BETA") {
+      return row;
+    }
+
+    const trialEndsTs = parseFechaFlexible(row?.trial_ends_at)?.getTime();
+    const currentEndsTs = parseFechaFlexible(row?.current_period_ends_at)?.getTime();
+
+    if (planCode === "TRIAL_7D" || status === "TRIALING") {
+      if (!Number.isFinite(trialEndsTs)) continue;
+      if (trialEndsTs < nowTs) continue;
+      return row;
+    }
+
+    if (!Number.isFinite(currentEndsTs)) continue;
+    if (currentEndsTs < nowTs) continue;
+
     return row;
   }
+
   return null;
 }
 __name(elegirSuscripcionVigente, "elegirSuscripcionVigente");
