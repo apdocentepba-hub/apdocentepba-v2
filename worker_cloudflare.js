@@ -848,6 +848,118 @@ async function supabaseInsertReturning(env, table, data) {
   }
 }
 __name(supabaseInsertReturning, "supabaseInsertReturning");
+function isSupabaseDuplicateError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+
+  return (
+    msg.includes("23505") ||
+    msg.includes("duplicate key") ||
+    msg.includes("duplicate") ||
+    msg.includes("unique") ||
+    msg.includes("notification_delivery_logs_dedupe_key_uidx")
+  );
+}
+__name(isSupabaseDuplicateError, "isSupabaseDuplicateError");
+
+async function supabasePatchById(env, table, id, patch) {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(patch)
+    }
+  );
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(text || `Supabase PATCH ${res.status}`);
+  }
+
+  return true;
+}
+__name(supabasePatchById, "supabasePatchById");
+
+async function reserveEmailDigestDeliveryLog(env, { user, destination, payload, dedupeKey }) {
+  if (!dedupeKey) {
+    return {
+      ok: true,
+      reserved: false,
+      duplicate: false,
+      id: null,
+      dedupe_key: ""
+    };
+  }
+
+  try {
+    const inserted = await supabaseInsertReturning(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_email_alert_digest",
+      destination,
+      status: "sending_alert_digest",
+      provider_message_id: null,
+      dedupe_key: dedupeKey,
+      payload: {
+        ...payload,
+        dedupe_key: dedupeKey,
+        reservation_status: "reserved_before_brevo_send"
+      },
+      provider_response: {
+        message: "Reservado antes de enviar por Brevo para evitar doble envío concurrente"
+      }
+    });
+
+    const row = Array.isArray(inserted) ? inserted[0] : inserted;
+
+    return {
+      ok: true,
+      reserved: true,
+      duplicate: false,
+      id: row?.id || null,
+      dedupe_key: dedupeKey
+    };
+  } catch (err) {
+    if (isSupabaseDuplicateError(err)) {
+      return {
+        ok: false,
+        reserved: false,
+        duplicate: true,
+        id: null,
+        dedupe_key: dedupeKey,
+        error: err?.message || String(err || "duplicate")
+      };
+    }
+
+    return {
+      ok: false,
+      reserved: false,
+      duplicate: false,
+      id: null,
+      dedupe_key: dedupeKey,
+      error: err?.message || String(err || "reserve_failed")
+    };
+  }
+}
+__name(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
+
+async function finishEmailDigestDeliveryLog(env, reservation, send) {
+  if (!reservation?.id) return false;
+
+  await supabasePatchById(env, "notification_delivery_logs", reservation.id, {
+    status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+    provider_response: send || null
+  });
+
+  return true;
+}
+__name(finishEmailDigestDeliveryLog, "finishEmailDigestDeliveryLog");
 var API_VERSION = "2026-03-27";
 var API_URL_PREFIX2 = "/api";
 var HISTORICO_DAYS_DEFAULT = 30;
@@ -5321,6 +5433,11 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
       };
     });
 
+       const digestDedupeKey =
+      slotKey && !isManualRun
+        ? ["email_digest", slotKey, userId].join(":")
+        : "";
+
     const payload = {
       source: options.source || "cron",
       slot_key: slotKey || null,
@@ -5328,12 +5445,15 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
       shown_alerts: shownCount,
       visible_alert_keys: visibleAlertKeys,
       visible_offer_ids: visibleOfferIds,
-      cycle_mode: "batched_cursor_user_offer_state"
+      cycle_mode: "batched_cursor_user_offer_state",
+      dedupe_key: digestDedupeKey || null,
+      worker_version: typeof API_VERSION !== "undefined" ? API_VERSION : null,
+      generated_at: new Date().toISOString()
     };
 
     attemptedDigests += 1;
 
-        if (dryRun) {
+    if (dryRun) {
       pushDebug({
         user_id: userId,
         stage: "dry_run",
@@ -5344,7 +5464,7 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
         visible_alert_keys: visibleAlertKeys,
         visible_offer_ids: visibleOfferIds,
         sample_titles: sampleTitles,
-                plan_code: emailPlanCode,
+        plan_code: emailPlanCode,
         pid_visible: emailCanShowPid,
         enriched_postulantes: true,
         enriched_samples: enrichedSamples,
@@ -5352,37 +5472,126 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
         send_status: null,
         dry_run: true,
         source: "user_offer_state",
-        slot_key: slotKey || null
+        slot_key: slotKey || null,
+        dedupe_key: digestDedupeKey || null
       });
 
       continue;
     }
+
+    let reservation = null;
+
+    if (digestDedupeKey) {
+      reservation = await reserveEmailDigestDeliveryLog(env, {
+        user,
+        destination: user.email,
+        payload,
+        dedupeKey: digestDedupeKey
+      });
+
+      if (reservation?.duplicate) {
+        skippedAlerts += 1;
+
+        pushDebug({
+          user_id: userId,
+          stage: "dedupe_db",
+          skipped: true,
+          reason: "already_reserved_or_sent_for_user_in_slot",
+          destination: user.email,
+          slot_key: slotKey || null,
+          dedupe_key: digestDedupeKey
+        });
+
+        continue;
+      }
+
+      if (!reservation?.ok) {
+        failedDigests += 1;
+
+        if (failed_samples.length < 10) {
+          failed_samples.push({
+            user_id: userId,
+            destination: user.email || null,
+            total_alerts: totalAlerts,
+            shown_alerts: shownCount,
+            reason: "digest_reservation_failed",
+            dedupe_key: digestDedupeKey,
+            provider_response: reservation || null
+          });
+        }
+
+        pushDebug({
+          user_id: userId,
+          stage: "dedupe_db",
+          skipped: true,
+          reason: "reservation_failed",
+          destination: user.email,
+          slot_key: slotKey || null,
+          dedupe_key: digestDedupeKey,
+          error: reservation?.error || null
+        });
+
+        continue;
+      }
+
+      if (perUserSentKey) {
+        await kv.put(perUserSentKey, new Date().toISOString(), {
+          expirationTtl: 60 * 60 * 36
+        }).catch(() => null);
+      }
+    }
+
     const html = buildDigestHtml(visibleAlertsForRender, user, {
       total_alerts: totalAlerts,
       max_visible: MAX_VISIBLE_ALERTS_IN_EMAIL,
       panel_url: "https://alertasapd.com.ar"
     });
 
-    const send = await enviarMailBrevo(
-      user.email,
-      user.nombre || "",
-      subject,
-      html,
-      env
-    );
+    let send = null;
 
-    await supabaseInsert(env, "notification_delivery_logs", {
-      user_id: user.id,
-      channel: "email",
-      template_code: "apd_email_alert_digest",
-      destination: user.email,
-      status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-      provider_message_id: null,
-      payload,
-      provider_response: send || null
-    }).catch(() => null);
+    try {
+      send = await enviarMailBrevo(
+        user.email,
+        user.nombre || "",
+        subject,
+        html,
+        env
+      );
+    } catch (err) {
+      send = {
+        ok: false,
+        status: 0,
+        data: err?.message || String(err || "Error enviando mail por Brevo")
+      };
+    }
 
+    if (reservation?.id) {
+      await finishEmailDigestDeliveryLog(env, reservation, send).catch((err) => {
         pushDebug({
+          user_id: userId,
+          stage: "delivery_log_finish",
+          skipped: false,
+          reason: "finish_log_failed",
+          destination: user.email,
+          slot_key: slotKey || null,
+          dedupe_key: digestDedupeKey,
+          error: err?.message || String(err || "")
+        });
+      });
+    } else {
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_alert_digest",
+        destination: user.email,
+        status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+        provider_message_id: null,
+        payload,
+        provider_response: send || null
+      }).catch(() => null);
+    }
+
+    pushDebug({
       user_id: userId,
       stage: "send_attempt",
       destination: user.email,
@@ -5392,7 +5601,7 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
       visible_alert_keys: visibleAlertKeys,
       visible_offer_ids: visibleOfferIds,
       sample_titles: sampleTitles,
-            plan_code: emailPlanCode,
+      plan_code: emailPlanCode,
       pid_visible: emailCanShowPid,
       enriched_postulantes: true,
       enriched_samples: enrichedSamples,
@@ -5403,7 +5612,9 @@ const subject = `Resumen APD · ${subjectSlotLabel} · ${shownCount} de ${totalA
           ? send.data.slice(0, 500)
           : send?.data || null,
       source: "user_offer_state",
-      slot_key: slotKey || null
+      slot_key: slotKey || null,
+      dedupe_key: digestDedupeKey || null,
+      reservation_id: reservation?.id || null
     });
 
     if (send?.ok) {
@@ -7136,13 +7347,99 @@ async function obtenerUltimaPidGuardada(userId) {
   const docenteId = String(userId || "").trim();
   if (!docenteId) return null;
 
-  const data = await postPidStorageFromMainWorker({
-    action: "obtener_ultima_pid_consulta",
-    docente_id: docenteId
-  }).catch(() => null);
+  function parseJsonArray(value) {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(String(value || "[]"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
 
-  if (!data?.ok || !data?.found || !data?.result) return null;
-  return data;
+  function normalizePidStorageResponse(data) {
+    if (!data || data.ok !== true) return null;
+    if (data.found === false) return null;
+
+    const consulta =
+      data.consulta && typeof data.consulta === "object"
+        ? data.consulta
+        : data.pid && typeof data.pid === "object"
+          ? data.pid
+          : data.data && typeof data.data === "object"
+            ? data.data
+            : data;
+
+    const resultSource =
+      consulta.result && typeof consulta.result === "object"
+        ? consulta.result
+        : data.result && typeof data.result === "object"
+          ? data.result
+          : consulta;
+
+    const tableRows =
+      Array.isArray(resultSource.table_rows)
+        ? resultSource.table_rows
+        : Array.isArray(resultSource.section_rows)
+          ? resultSource.section_rows
+          : Array.isArray(resultSource.items)
+            ? resultSource.items
+            : Array.isArray(consulta.table_rows)
+              ? consulta.table_rows
+              : parseJsonArray(resultSource.table_rows_json || consulta.table_rows_json);
+
+    const hasPidData = !!(
+      resultSource.apellido_nombre ||
+      resultSource.oblea ||
+      consulta.apellido_nombre ||
+      consulta.oblea ||
+      consulta.dni ||
+      tableRows.length
+    );
+
+    if (!hasPidData) return null;
+
+    return {
+      ...data,
+      ok: true,
+      found: true,
+      result: {
+        apellido_nombre: String(resultSource.apellido_nombre || consulta.apellido_nombre || "").trim(),
+        distrito_residencia: String(resultSource.distrito_residencia || consulta.distrito_residencia || "").trim(),
+        distritos_solicitados: String(resultSource.distritos_solicitados || consulta.distritos_solicitados || "").trim(),
+        oblea: String(resultSource.oblea || consulta.oblea || "").trim(),
+        table_rows: tableRows,
+        dni: String(resultSource.dni || consulta.dni || "").trim(),
+        anio: String(resultSource.anio || consulta.anio || "").trim(),
+        listado: String(resultSource.listado || consulta.listado || "").trim(),
+        version_worker: String(resultSource.version_worker || consulta.version_worker || "").trim(),
+        fetched_at: String(resultSource.fetched_at || consulta.fetched_at || "").trim()
+      }
+    };
+  }
+
+  const actions = [
+    "obtener_ultima_pid_consulta",
+    "leer_pid_consulta",
+    "leer_pid_guardado",
+    "pid_guardado",
+    "get_pid_guardado",
+    "buscar_pid_consulta",
+    "buscar_pid"
+  ];
+
+  for (const action of actions) {
+    const data = await postPidStorageFromMainWorker({
+      action,
+      docente_id: docenteId
+    }).catch(() => null);
+
+    const normalized = normalizePidStorageResponse(data);
+    if (normalized) return normalized;
+  }
+
+  return null;
 }
 
 function normalizeDistrictForPid(value) {
