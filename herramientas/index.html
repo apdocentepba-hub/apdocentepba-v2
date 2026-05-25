@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Herramientas Docentes PBA | APDocentePBA Beta</title>
+  <meta name="description" content="Beta independiente de herramientas docentes para generar notas, actas, reclamos e ideas de funciones para docentes, secretarías y equipos directivos de PBA." />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://alertasapd.com.ar/herramientas/" />
+  <meta property="og:title" content="Herramientas Docentes PBA | APDocentePBA Beta" />
+  <meta property="og:description" content="Generador beta de notas, actas, reclamos y propuestas de herramientas para docentes PBA." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://alertasapd.com.ar/herramientas/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-grid">
+      <a class="brand" href="../" aria-label="Volver a APDocentePBA">
+        <span class="brand-mark">AP</span>
+        <span>
+          <strong>APDocentePBA</strong>
+          <small>Herramientas docentes · beta</small>
+        </span>
+      </a>
+      <nav class="top-actions" aria-label="Navegación principal">
+        <a href="#generador" class="nav-link">Generador</a>
+        <a href="#ideas" class="nav-link">Dejar idea</a>
+        <a href="../" class="btn btn-soft">Volver al sitio</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Beta separada · no toca el sistema APD actual</p>
+          <h1>Herramientas simples para facilitar la vida docente.</h1>
+          <p class="lead">Estamos probando una nueva caja de herramientas para docentes, secretarías, preceptorías y equipos directivos de la Provincia de Buenos Aires.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#generador">Probar generador</a>
+            <a class="btn btn-outline" href="#ideas">Contar qué necesitás</a>
+          </div>
+          <div class="trust-note">
+            <strong>Importante:</strong> esta beta no reemplaza normativa, comunicados oficiales ni criterios institucionales. Genera borradores editables para ahorrar tiempo.
+          </div>
+        </div>
+        <div class="hero-card" aria-label="Resumen de herramientas">
+          <div class="floating-badge">🧪 En prueba</div>
+          <h2>¿Qué se puede hacer?</h2>
+          <ul class="check-list">
+            <li>Generar borradores de notas y actas.</li>
+            <li>Ordenar reclamos administrativos.</li>
+            <li>Recolectar ideas de docentes y secretarías.</li>
+            <li>Validar funciones sin romper el Worker actual.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap cards-section" aria-label="Módulos propuestos">
+      <article class="mini-card">
+        <span class="icon">📝</span>
+        <h3>Redacción docente</h3>
+        <p>Notas, reclamos, descargos, comunicaciones e informes breves.</p>
+      </article>
+      <article class="mini-card">
+        <span class="icon">🏫</span>
+        <h3>Secretaría escolar</h3>
+        <p>Actas, legajos, altas, ceses, licencias, SUNA/PDD y controles.</p>
+      </article>
+      <article class="mini-card">
+        <span class="icon">💡</span>
+        <h3>Ideas reales</h3>
+        <p>Un espacio para que quienes trabajan en escuelas digan qué herramienta falta.</p>
+      </article>
+    </section>
+
+    <section id="generador" class="tool-section">
+      <div class="wrap section-title">
+        <p class="eyebrow">Primer MVP</p>
+        <h2>Generador beta de notas, actas y reclamos</h2>
+        <p>Completá los campos. El sistema arma un borrador formal, editable y listo para copiar.</p>
+      </div>
+
+      <div class="wrap app-grid">
+        <form id="docenteForm" class="tool-card" autocomplete="on">
+          <div class="field">
+            <label for="tipoDocumento">Tipo de documento</label>
+            <select id="tipoDocumento" required>
+              <option value="nota_directivo">Nota a directivo</option>
+              <option value="nota_sad">Nota a SAD</option>
+              <option value="reclamo_haberes">Reclamo por haberes</option>
+              <option value="reclamo_situacion_revista">Reclamo por situación de revista</option>
+              <option value="acta_recepcion_documentacion">Acta de recepción de documentación</option>
+              <option value="acta_devolucion">Acta de devolución</option>
+              <option value="descargo_docente">Descargo docente</option>
+              <option value="comunicacion_familia">Comunicación a familia</option>
+            </select>
+          </div>
+
+          <div class="two-cols">
+            <div class="field">
+              <label for="nombre">Nombre y apellido</label>
+              <input id="nombre" type="text" placeholder="Ej.: Martín Podubinio" />
+            </div>
+            <div class="field">
+              <label for="rol">Rol</label>
+              <select id="rol">
+                <option>Docente</option>
+                <option>Secretaría</option>
+                <option>Equipo directivo</option>
+                <option>Preceptoría</option>
+                <option>Otro</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="two-cols">
+            <div class="field">
+              <label for="escuela">Escuela / institución</label>
+              <input id="escuela" type="text" placeholder="Ej.: EES N° ..." />
+            </div>
+            <div class="field">
+              <label for="distrito">Distrito</label>
+              <input id="distrito" type="text" placeholder="Ej.: General San Martín" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="destinatario">Destinatario</label>
+            <input id="destinatario" type="text" placeholder="Ej.: Equipo de conducción / SAD / Familia" />
+          </div>
+
+          <div class="field">
+            <label for="motivo">Motivo principal</label>
+            <input id="motivo" type="text" placeholder="Ej.: solicitud de revisión de situación de revista" />
+          </div>
+
+          <div class="field">
+            <label for="detalle">Detalle de la situación</label>
+            <textarea id="detalle" rows="6" placeholder="Contá brevemente qué pasó, fechas relevantes, documentación disponible y qué necesitás solicitar."></textarea>
+          </div>
+
+          <div class="two-cols">
+            <div class="field">
+              <label for="tono">Tono</label>
+              <select id="tono">
+                <option value="formal">Formal y claro</option>
+                <option value="conciliador">Conciliador</option>
+                <option value="firme">Firme pero respetuoso</option>
+                <option value="breve">Breve y directo</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="localidadFecha">Lugar y fecha</label>
+              <input id="localidadFecha" type="text" placeholder="Ej.: Buenos Aires, 25 de mayo de 2026" />
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <button class="btn btn-primary" type="submit">Generar borrador</button>
+            <button class="btn btn-outline" type="button" id="btnLimpiar">Limpiar</button>
+          </div>
+        </form>
+
+        <aside class="result-card" aria-live="polite">
+          <div class="result-header">
+            <div>
+              <p class="eyebrow">Resultado</p>
+              <h3>Borrador generado</h3>
+            </div>
+            <span class="status-pill" id="estadoResultado">Listo para probar</span>
+          </div>
+          <textarea id="resultado" class="output" placeholder="Acá va a aparecer el texto generado. Podés editarlo antes de copiarlo."></textarea>
+          <div class="actions-row">
+            <button class="btn btn-primary" type="button" id="btnCopiar">Copiar</button>
+            <button class="btn btn-soft" type="button" id="btnImprimir">Imprimir</button>
+          </div>
+          <p class="small-note">Revisá siempre datos, fechas, cargos, normativa y destinatarios antes de enviar o imprimir.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="ideas" class="ideas-section">
+      <div class="wrap ideas-grid">
+        <div>
+          <p class="eyebrow">Construcción con docentes</p>
+          <h2>¿Qué herramienta necesitás?</h2>
+          <p>La idea es priorizar funciones según problemas reales: secretaría, aula, administración, legajos, licencias, notas, informes, planificaciones o comunicación institucional.</p>
+        </div>
+        <form id="ideasForm" class="tool-card compact">
+          <div class="field">
+            <label for="ideaRol">Tu rol</label>
+            <select id="ideaRol">
+              <option>Docente</option>
+              <option>Secretaría</option>
+              <option>Equipo directivo</option>
+              <option>Preceptoría</option>
+              <option>Estudiante de profesorado</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ideaTexto">Idea o problema a resolver</label>
+            <textarea id="ideaTexto" rows="5" placeholder="Ej.: necesito una herramienta que me ayude a controlar licencias y coberturas..."></textarea>
+          </div>
+          <div class="field">
+            <label for="ideaContacto">Contacto opcional</label>
+            <input id="ideaContacto" type="text" placeholder="Email, Instagram o WhatsApp" />
+          </div>
+          <div class="actions-row">
+            <button class="btn btn-primary" type="submit">Preparar idea</button>
+            <button class="btn btn-outline" type="button" id="btnCompartirIdea">Compartir por WhatsApp</button>
+          </div>
+          <p id="ideaMsg" class="small-note"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <p>APDocentePBA · Herramientas docentes beta</p>
+      <p>Proyecto independiente. No pertenece a ABC ni a la DGCyE.</p>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
