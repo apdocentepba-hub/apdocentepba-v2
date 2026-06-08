@@ -1,118 +1,79 @@
-(function () {
-  'use strict';
+(function(){
+'use strict';
+if(window.__apdToolsVisibleLoaded) return;
+window.__apdToolsVisibleLoaded = true;
 
-  if (window.__apdFrontendEasyFixesPatchLoaded) return;
-  window.__apdFrontendEasyFixesPatchLoaded = true;
+var links = [
+  ['./herramientas-docentes.html','🧰 Herramientas'],
+  ['./licencias-docentes.html','🧾 Licencias']
+];
 
-  const LINKS = [
-    { href: './herramientas-docentes.html', label: 'Herramientas docentes', icon: '🧰' },
-    { href: './licencias-docentes.html', label: 'Licencias docentes', icon: '🧾' }
-  ];
+function addStyle(){
+  if(document.getElementById('apd-tools-visible-style')) return;
+  var s = document.createElement('style');
+  s.id = 'apd-tools-visible-style';
+  s.textContent = '.apd-tools-visible-link{border:1px solid #0f3460;background:#0f3460;color:#fff!important;padding:10px 14px;border-radius:999px;font:inherit;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:7px}.apd-tools-visible-link.light{background:#fff;color:#0f3460!important;border-color:#dbe3f0}.apd-tools-row{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}.apd-tools-panel-card{grid-column:1/-1;background:#fff;border:1px solid #dbe3f0;border-radius:18px;padding:16px;box-shadow:0 8px 22px rgba(15,52,96,.06)}.apd-tools-panel-card p{margin:8px 0 12px;color:#607086}.apd-tools-panel-card div{display:flex;gap:10px;flex-wrap:wrap}';
+  document.head.appendChild(s);
+}
 
-  function byId(id) {
-    return document.getElementById(id);
-  }
+function makeLink(item,i){
+  var a = document.createElement('a');
+  a.href = item[0];
+  a.textContent = item[1];
+  a.className = 'apd-tools-visible-link' + (i ? ' light' : '');
+  return a;
+}
 
-  function injectStyles() {
-    if (byId('apd-tools-links-style')) return;
-    const style = document.createElement('style');
-    style.id = 'apd-tools-links-style';
-    style.textContent = `
-      .apd-tools-quicklinks{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:14px}
-      .apd-tools-quicklinks a{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid rgba(15,79,184,.18);border-radius:999px;background:#fff;text-decoration:none;font-weight:800;color:#0f4fb8;box-shadow:0 8px 20px rgba(15,79,184,.06)}
-      .apd-tools-quicklinks a:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(15,79,184,.12)}
-      #panel-herramientas-card .tools-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-      #panel-herramientas-card .tools-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
-      #panel-herramientas-card .tools-mini-box{border:1px solid #dbe7f5;background:#f8fbff;border-radius:14px;padding:12px;color:#475569;line-height:1.45}
-      #panel-herramientas-card .tools-mini-box b{display:block;color:#10243d;margin-bottom:3px}
-      @media(max-width:760px){#panel-herramientas-card .tools-mini{grid-template-columns:1fr}}
-    `;
-    document.head.appendChild(style);
-  }
+function addToHero(){
+  var hero = document.querySelector('.hero-card');
+  if(!hero || document.getElementById('apd-tools-hero-row')) return;
+  var row = document.createElement('div');
+  row.id = 'apd-tools-hero-row';
+  row.className = 'apd-tools-row';
+  links.forEach(function(x,i){ row.appendChild(makeLink(x,i)); });
+  hero.appendChild(row);
+}
 
-  function addHeroLinks() {
-    const hero = document.querySelector('.hero-card');
-    if (!hero || byId('apd-tools-hero-links')) return;
+function addToTabs(){
+  var nav = document.getElementById('panel-tabs-nav');
+  if(!nav) return;
+  links.forEach(function(x,i){
+    var id = 'apd-tools-tab-link-' + i;
+    if(document.getElementById(id)) return;
+    var a = makeLink(x,i);
+    a.id = id;
+    nav.appendChild(a);
+  });
+}
 
-    const existingLinkRow = Array.from(hero.querySelectorAll('div')).find(function (el) {
-      return el.querySelector && el.querySelector('a[href="./pid-docente.html"]');
-    });
+function addPanelCard(){
+  if(document.getElementById('apd-tools-panel-card')) return;
+  var grid = document.querySelector('#panel-tab-pane-inicio .panel-tab-grid') || document.getElementById('panel-content');
+  if(!grid) return;
+  var card = document.createElement('div');
+  card.id = 'apd-tools-panel-card';
+  card.className = 'apd-tools-panel-card';
+  card.innerHTML = '<strong>🧰 Herramientas docentes</strong><p>Funciones rápidas para docentes y secretarías escolares.</p><div><a class="btn btn-primary" href="./licencias-docentes.html">Asistente de Licencias</a><a class="btn btn-secondary" href="./herramientas-docentes.html">Ver herramientas</a></div>';
+  grid.appendChild(card);
+}
 
-    const row = existingLinkRow || document.createElement('div');
-    if (!existingLinkRow) {
-      row.className = 'apd-tools-quicklinks';
-      hero.appendChild(row);
-    }
+function addToFooter(){
+  var f = document.querySelector('.footer-inner');
+  if(!f || document.getElementById('apd-tools-footer-link')) return;
+  f.appendChild(document.createTextNode(' · '));
+  var a = document.createElement('a');
+  a.id = 'apd-tools-footer-link';
+  a.href = './herramientas-docentes.html';
+  a.textContent = 'Herramientas';
+  f.appendChild(a);
+  f.appendChild(document.createTextNode(' · '));
+  var b = document.createElement('a');
+  b.href = './licencias-docentes.html';
+  b.textContent = 'Licencias docentes';
+  f.appendChild(b);
+}
 
-    row.id = 'apd-tools-hero-links';
-    LINKS.forEach(function (item) {
-      if (row.querySelector('a[href="' + item.href + '"]')) return;
-      const a = document.createElement('a');
-      a.href = item.href;
-      a.textContent = item.icon + ' ' + item.label;
-      row.appendChild(a);
-    });
-  }
-
-  function addFooterLinks() {
-    const footer = document.querySelector('.footer-inner');
-    if (!footer) return;
-    LINKS.forEach(function (item) {
-      if (footer.querySelector('a[href="' + item.href + '"]')) return;
-      footer.appendChild(document.createTextNode(' · '));
-      const a = document.createElement('a');
-      a.href = item.href;
-      a.textContent = item.label;
-      footer.appendChild(a);
-    });
-  }
-
-  function addPanelCard() {
-    const panel = byId('panel-content');
-    if (!panel || byId('panel-herramientas-card')) return;
-
-    const card = document.createElement('div');
-    card.className = 'panel-card span-12';
-    card.id = 'panel-herramientas-card';
-    card.innerHTML = `
-      <div class="card-lbl-row">
-        <span class="card-lbl">🧰 Herramientas docentes</span>
-      </div>
-      <p class="prefs-hint">Accesos rápidos a funciones complementarias para facilitar tareas docentes y de secretaría, sin depender de que haya APD publicados.</p>
-      <div class="tools-actions">
-        <a class="btn btn-primary" href="./licencias-docentes.html">Abrir Asistente de Licencias</a>
-        <a class="btn btn-secondary" href="./herramientas-docentes.html">Ver herramientas docentes</a>
-      </div>
-      <div class="tools-mini">
-        <div class="tools-mini-box"><b>Licencias docentes</b>Días, artículo, notificación, documentación y validación.</div>
-        <div class="tools-mini-box"><b>Próximas funciones</b>Notas, biblioteca docente, haberes y recursos útiles.</div>
-      </div>
-    `;
-
-    const pidCard = byId('panel-listados-pid-card');
-    if (pidCard && pidCard.parentNode) {
-      pidCard.insertAdjacentElement('afterend', card);
-    } else {
-      panel.appendChild(card);
-    }
-
-    if (typeof window.APD_refreshPanelTabs === 'function') {
-      window.APD_refreshPanelTabs();
-    }
-  }
-
-  function boot() {
-    injectStyles();
-    addHeroLinks();
-    addFooterLinks();
-    addPanelCard();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-
-  window.APD_refreshHerramientasLinks = boot;
+function boot(){ addStyle(); addToHero(); addToTabs(); addPanelCard(); addToFooter(); }
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
+[500,1200,2500,5000,9000].forEach(function(ms){ setTimeout(boot, ms); });
 })();
