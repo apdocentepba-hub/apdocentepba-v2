@@ -36,6 +36,24 @@ function addStyles(){
   document.head.appendChild(s);
 }
 
+function stabilizeInitialScroll(){
+  try{ if('scrollRestoration' in history) history.scrollRestoration='manual'; }catch(e){}
+  var hasHash = !!location.hash;
+  var clickedOrTyped = false;
+  ['click','touchstart','wheel','keydown'].forEach(function(evt){
+    window.addEventListener(evt,function(){ clickedOrTyped=true; },{once:true,passive:true});
+  });
+  function shouldPinTop(){
+    if(hasHash || clickedOrTyped) return false;
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
+    return y > 0 && y < 260;
+  }
+  function pinTop(){
+    if(shouldPinTop()) window.scrollTo({top:0,left:0,behavior:'auto'});
+  }
+  [0,60,160,320,650,1200,2200,3800].forEach(function(ms){ setTimeout(pinTop,ms); });
+}
+
 function removeDuplicateToolLinks(){
   ['apd-tools-tab-link-0','apd-tools-tab-link-1','apd-tools-hero-row','apd-tools-panel-card'].forEach(function(id){
     var el=document.getElementById(id); if(el&&el.parentNode) el.parentNode.removeChild(el);
@@ -98,6 +116,7 @@ function makeCardsConsistent(){
 
 function boot(){
   addStyles();
+  stabilizeInitialScroll();
   removeDuplicateToolLinks();
   fixMainButtons();
   makeCardsConsistent();
