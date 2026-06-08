@@ -2,12 +2,15 @@
 'use strict';
 if(window.__apdVisualPolishLoaded) return;
 window.__apdVisualPolishLoaded = true;
+window.__apdInitialLoading = true;
+setTimeout(function(){ window.__apdInitialLoading = false; }, 2600);
 
 function addStyles(){
   if(document.getElementById('apd-final-polish-style')) return;
   var s=document.createElement('style');
   s.id='apd-final-polish-style';
   s.textContent=`
+    html,body{scroll-padding-top:92px!important}
     body{background:#f5f8ff!important}
     #panel-docente{background:linear-gradient(180deg,#f3f7ff 0%,#fff 36%,#f6f9ff 100%)!important}
     .apd-hero-main{border-radius:0!important}
@@ -40,18 +43,19 @@ function stabilizeInitialScroll(){
   try{ if('scrollRestoration' in history) history.scrollRestoration='manual'; }catch(e){}
   var hasHash = !!location.hash;
   var clickedOrTyped = false;
-  ['click','touchstart','wheel','keydown'].forEach(function(evt){
-    window.addEventListener(evt,function(){ clickedOrTyped=true; },{once:true,passive:true});
+  ['click','touchstart','wheel','keydown','mousedown'].forEach(function(evt){
+    window.addEventListener(evt,function(){ clickedOrTyped=true; window.__apdInitialLoading=false; },{once:true,passive:true});
   });
   function shouldPinTop(){
-    if(hasHash || clickedOrTyped) return false;
+    if(hasHash || clickedOrTyped || !window.__apdInitialLoading) return false;
     var y = window.scrollY || document.documentElement.scrollTop || 0;
-    return y > 0 && y < 260;
+    return y > 0 && y < 900;
   }
   function pinTop(){
-    if(shouldPinTop()) window.scrollTo({top:0,left:0,behavior:'auto'});
+    if(shouldPinTop()) window.scrollTo(0,0);
   }
-  [0,60,160,320,650,1200,2200,3800].forEach(function(ms){ setTimeout(pinTop,ms); });
+  window.scrollTo(0,0);
+  [0,30,80,150,260,420,650,900,1250,1700,2300].forEach(function(ms){ setTimeout(pinTop,ms); });
 }
 
 function removeDuplicateToolLinks(){
@@ -63,9 +67,10 @@ function removeDuplicateToolLinks(){
   });
 }
 
-function activateTab(key){
+function activateTab(key, userInitiated){
+  window.__apdInitialLoading = false;
   if(typeof window.APD_activatePanelTab==='function'){
-    window.APD_activatePanelTab(key);
+    window.APD_activatePanelTab(key, !!userInitiated);
   }
 }
 
@@ -79,11 +84,11 @@ function fixMainButtons(){
     var txt=(a.textContent||'').toLowerCase();
     if(txt.indexOf('ver mis alertas')>-1){
       a.href='#alertas';
-      a.onclick=function(ev){ ev.preventDefault(); activateTab('alertas'); setTimeout(function(){var x=document.getElementById('panel-alertas'); if(x) x.scrollIntoView({behavior:'smooth',block:'start'});},120); };
+      a.onclick=function(ev){ ev.preventDefault(); activateTab('alertas', true); setTimeout(function(){var x=document.getElementById('panel-alertas'); if(x) x.scrollIntoView({behavior:'smooth',block:'start'});},120); };
     }
     if(txt.indexOf('ir al panel')>-1){
       a.href='#panel';
-      a.onclick=function(ev){ ev.preventDefault(); activateTab('inicio'); setTimeout(scrollToPanelStart,160); };
+      a.onclick=function(ev){ ev.preventDefault(); activateTab('inicio', true); setTimeout(scrollToPanelStart,160); };
     }
   });
 
@@ -94,13 +99,15 @@ function fixMainButtons(){
       var t=(btn.textContent||'').toLowerCase();
       if(t.indexOf('ver mis alertas')>-1){
         btn.onclick=function(){
-          if(!document.getElementById('navPrivado')?.classList.contains('hidden')){ mostrarSeccion('panel-docente'); setTimeout(function(){activateTab('alertas');},200); }
+          window.__apdInitialLoading=false;
+          if(!document.getElementById('navPrivado')?.classList.contains('hidden')){ mostrarSeccion('panel-docente'); setTimeout(function(){activateTab('alertas', true);},200); }
           else { mostrarSeccion('login'); }
         };
       }
       if(t.indexOf('ir al panel')>-1){
         btn.onclick=function(){
-          if(!document.getElementById('navPrivado')?.classList.contains('hidden')){ mostrarSeccion('panel-docente'); setTimeout(function(){activateTab('inicio'); scrollToPanelStart();},250); }
+          window.__apdInitialLoading=false;
+          if(!document.getElementById('navPrivado')?.classList.contains('hidden')){ mostrarSeccion('panel-docente'); setTimeout(function(){activateTab('inicio', true); scrollToPanelStart();},250); }
           else { mostrarSeccion('login'); }
         };
       }
@@ -123,5 +130,5 @@ function boot(){
 }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
-[400,900,1600,2800,5000,9000].forEach(function(ms){setTimeout(boot,ms);});
+[400,900,1600,2800,5000,9000].forEach(function(ms){setTimeout(function(){ addStyles(); removeDuplicateToolLinks(); fixMainButtons(); makeCardsConsistent(); },ms);});
 })();
