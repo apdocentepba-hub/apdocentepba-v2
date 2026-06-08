@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asistente de Licencias Docentes PBA | APDocentePBA</title>
+  <meta name="description" content="Calculadora orientativa de licencias docentes PBA: días, artículo, documentación, notificación y validación según situación de revista." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    :root{--blue:#0f4fb8;--blue2:#0b3c8f;--dark:#10243d;--muted:#607086;--line:#dbe7f5;--bg:#f4f8fd;--card:#fff;--soft:#eaf3ff;--green:#e9f8ef;--orange:#fff6e3;--red:#fff1f1}
+    *{box-sizing:border-box} body{margin:0;font-family:'DM Sans',system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(180deg,#eef6ff,#fff 36%,#f7fbff);color:var(--dark)}
+    .wrap{max-width:1120px;margin:0 auto;padding:24px} a{color:inherit}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}.brand{display:flex;gap:12px;align-items:center;font-weight:900}.brand-badge{width:42px;height:42px;border-radius:14px;background:var(--blue);color:#fff;display:grid;place-items:center}.nav{display:flex;gap:10px;flex-wrap:wrap}.btn{border:0;border-radius:999px;padding:11px 15px;font-weight:900;text-decoration:none;display:inline-flex;gap:8px;align-items:center;justify-content:center;cursor:pointer;background:#fff;color:var(--dark);border:1px solid var(--line);font-family:inherit}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.secondary{background:#eef6ff;color:var(--blue);border-color:#cfe1fa}.hero{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:28px;padding:30px;box-shadow:0 18px 50px rgba(15,79,184,.08);position:relative;overflow:hidden}.hero:after{content:"";position:absolute;right:-80px;top:-90px;width:230px;height:230px;border-radius:50%;background:var(--soft)}.eyebrow{color:var(--blue);font-weight:900;text-transform:uppercase;letter-spacing:.08em;font-size:13px}.hero h1{margin:10px 0 12px;font-size:clamp(34px,6vw,58px);line-height:.95;letter-spacing:-.04em}.hero p{font-size:18px;line-height:1.55;color:#40536b;max-width:780px;margin:0}.badge{display:inline-flex;background:#eef6ff;border:1px solid #cfe1fa;border-radius:999px;padding:8px 12px;color:var(--blue);font-weight:900;margin-top:14px}.layout{display:grid;grid-template-columns:410px 1fr;gap:18px;margin-top:20px}.card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 10px 30px rgba(16,36,61,.05)}.card h2{margin:0 0 12px}.field{display:grid;gap:7px;margin-bottom:14px}.field label{font-weight:900}.field select,.field input{width:100%;border:1px solid #cbd8ea;border-radius:14px;padding:12px 13px;font:inherit;background:#fff;color:var(--dark)}.hint{font-size:13px;color:var(--muted);line-height:1.45}.result{display:grid;gap:14px}.result-head{display:flex;gap:12px;align-items:flex-start}.result-icon{width:54px;height:54px;border-radius:18px;background:var(--soft);display:grid;place-items:center;font-size:28px}.result-title{font-size:27px;margin:0;letter-spacing:-.03em}.pill{display:inline-flex;padding:5px 10px;border-radius:999px;background:#eef6ff;color:var(--blue);font-weight:900;font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info{border:1px solid var(--line);background:#fbfdff;border-radius:16px;padding:14px}.info b{display:block;color:var(--blue);margin-bottom:4px}.info span{color:#34465c;line-height:1.45}.warn{background:var(--orange);border:1px dashed #e6b54a;border-radius:16px;padding:14px;color:#604512}.copybox{width:100%;min-height:140px;border:1px solid #cbd8ea;border-radius:16px;padding:14px;font:inherit;line-height:1.5;color:var(--dark)}.mini{font-size:13px;color:#64748b;line-height:1.5}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.mini-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px}.mini-card strong{color:var(--blue)}.hidden{display:none!important}@media(max-width:920px){.top{flex-direction:column;align-items:flex-start}.layout{grid-template-columns:1fr}.grid,.cards{grid-template-columns:1fr}.hero{padding:24px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand"><span class="brand-badge">🧾</span><span>APDocentePBA</span></div>
+      <nav class="nav">
+        <a class="btn" href="./index.html">Inicio</a>
+        <a class="btn" href="./herramientas-docentes.html">Herramientas</a>
+        <a class="btn primary" href="./index.html#registro">Crear cuenta</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow">Nueva herramienta</div>
+      <h1>Asistente de Licencias Docentes PBA</h1>
+      <p>Elegí tu situación de revista y el motivo de licencia. El sistema te orienta con días, artículo/inciso, cómo notificarla, qué documentación presentar y cómo se valida.</p>
+      <span class="badge">Ley 10.579 · Art. 114 · Guía orientativa</span>
+    </section>
+
+    <section class="layout">
+      <aside class="card">
+        <h2>Consultar licencia</h2>
+        <div class="field">
+          <label for="situacion">Situación de revista</label>
+          <select id="situacion">
+            <option value="titular">Titular</option>
+            <option value="provisional">Provisional</option>
+            <option value="suplente">Suplente</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="motivo">Motivo de licencia</label>
+          <select id="motivo"></select>
+        </div>
+        <div id="extra-antiguedad" class="field hidden">
+          <label for="antiguedad">Antigüedad para largo tratamiento</label>
+          <select id="antiguedad">
+            <option value="menos5">Menos de 5 años</option>
+            <option value="mas5">5 años o más</option>
+          </select>
+        </div>
+        <div id="extra-meses" class="field hidden">
+          <label for="meses">Meses completos trabajados como suplente</label>
+          <input id="meses" type="number" min="0" max="12" value="1" />
+          <div class="hint">Solo orientativo para enfermedad ordinaria de suplente. Tope anual: 20 días.</div>
+        </div>
+        <button class="btn primary" style="width:100%" id="btn-calcular">Ver resultado</button>
+        <p class="mini">No reemplaza la validación oficial. Siempre confirmar con Secretaría, SAD, Consejo Escolar, Reconocimientos Médicos o autoridad competente.</p>
+      </aside>
+
+      <main class="card result" id="resultado"></main>
+    </section>
+
+    <section class="cards">
+      <div class="mini-card"><strong>Para docentes</strong><br>Resuelve dudas frecuentes antes de avisar una licencia.</div>
+      <div class="mini-card"><strong>Para secretarías</strong><br>Ayuda a encuadrar causal, documentación y validación.</div>
+      <div class="mini-card"><strong>Para estudiar</strong><br>Sirve como machete de art. 114 para pruebas de selección.</div>
+    </section>
+  </div>
+
+  <script>
+    const LICENCIAS = {
+      enfermedad: { icon:'🤒', nombre:'Enfermedad ordinaria', art:'Art. 114 inc. A.1', dias:{titular:'120 días corridos por año calendario. Tramos: 25 con goce íntegro + 35 al 50% + 60 sin goce.', provisional:'25 días corridos por año calendario. Si tiene 1 año mínimo de antigüedad docente, puede aplicar régimen similar al titular.', suplente:'3 días corridos por cada mes completo trabajado, hasta 20 días por año.'}, aviso:'Se comunica el mismo día, durante el horario de prestación de servicios.', doc:'Certificación médica y circuito de Reconocimientos Médicos/delegación correspondiente.', valida:'Superior jerárquico recibe la novedad; validación médica/administrativa según circuito vigente.', alerta:'Controlar situación de revista, días disponibles y documentación en término.'},
+      largo: { icon:'🏥', nombre:'Enfermedad extraordinaria / largo tratamiento', art:'Art. 114 inc. A.2', dias:{titular:'Depende de antigüedad: menos de 5 años = 725 días totales; 5 años o más = 1095 días totales.', provisional:'Régimen similar con límite proporcional según antigüedad registrada.', suplente:'En principio no corresponde, salvo excepciones reglamentarias.'}, aviso:'Se informa al superior y se inicia trámite médico.', doc:'Historia clínica, diagnóstico, certificados y documentación requerida por Junta Médica/Reconocimientos Médicos.', valida:'Junta Médica o Reconocimientos Médicos, con registro administrativo de Secretaría.', alerta:'No es por año calendario: es un bloque total continuo o alternado.'},
+      familiar: { icon:'👪', nombre:'Atención de familiar enfermo', art:'Art. 114 inc. F', dias:{titular:'20 días corridos por año con goce + 30 días corridos más sin goce.', provisional:'Similar al titular, con límite proporcional según servicios prestados en provisionalidad.', suplente:'2 días hábiles por año calendario.'}, aviso:'Se comunica el mismo día.', doc:'Declaración jurada del grupo familiar y certificación médica correspondiente.', valida:'Secretaría controla días y documentación; interviene Reconocimientos Médicos/delegación si corresponde.', alerta:'Debe justificarse que no hay otro familiar que pueda atender la situación, según el caso.'},
+      particular: { icon:'👤', nombre:'Motivo de índole particular', art:'Art. 114 inc. O.4', dias:{titular:'1 día por mes calendario, máximo 6 días por año, sin goce.', provisional:'1 día por mes calendario, máximo 6 días por año, sin goce.', suplente:'No corresponde según el régimen general.'}, aviso:'Se comunica el mismo día durante el horario de prestación de servicios. En la práctica conviene avisar antes del turno.', doc:'Solicitud/comunicación de motivo particular según uso institucional.', valida:'Secretaría verifica que no supere 1 día por mes ni 6 por año y que se cargue sin goce.', alerta:'No es con sueldo. No se puede usar ilimitadamente.'},
+      examen: { icon:'📚', nombre:'Pre-examen y examen', art:'Art. 114 inc. LL', dias:{titular:'Universitario/terciario/ISFD: hasta 12 días hábiles por año para preparar, máximo 3 por examen + día de examen. Secundario: hasta 6 días hábiles por año.', provisional:'Igual al titular, según encuadre y documentación.', suplente:'Día del examen o prueba, según reglamentación y condiciones de desempeño.'}, aviso:'Debe comunicarse con no menos de 2 días de anticipación.', doc:'Constancia de examen, inscripción o certificado de la institución. Puede requerirse constancia posterior de asistencia.', valida:'Secretaría controla tope anual y constancias. Autoridad escolar/Consejo Escolar según circuito.', alerta:'Si se pide preparación y luego no se presenta al examen, puede observarse la licencia.'},
+      duelo: { icon:'🖤', nombre:'Duelo familiar', art:'Art. 114 inc. J', dias:{titular:'5 días corridos para familiares directos. 3 días corridos para familiares ampliados. +2 si hay traslado mayor a 200 km.', provisional:'Igual.', suplente:'Igual.'}, aviso:'Se comunica el mismo día del fallecimiento o cuando se toma conocimiento.', doc:'Certificado/partida de defunción y acreditación de vínculo si corresponde.', valida:'Secretaría verifica vínculo, días y posible traslado.', alerta:'Diferenciar familiar directo de familiar ampliado.'},
+      matrimonio: { icon:'💍', nombre:'Matrimonio', art:'Art. 114 inc. C', dias:{titular:'12 días hábiles con goce.', provisional:'12 días hábiles con goce.', suplente:'6 días hábiles con goce.'}, aviso:'Debe comunicarse con no menos de 2 días de anticipación.', doc:'Acta, libreta o certificado de matrimonio.', valida:'Secretaría controla documentación y situación de revista.', alerta:'Se cuenta desde la fecha de celebración, según régimen aplicable.'},
+      maternidad: { icon:'🤰', nombre:'Maternidad', art:'Art. 114 inc. D.1', dias:{titular:'135 días corridos con goce íntegro. Casos especiales pueden extenderse.', provisional:'Igual.', suplente:'Igual mientras corresponda por situación de revista.'}, aviso:'Se solicita con certificado médico desde el séptimo mes y medio. Puede disponerse de oficio si corresponde.', doc:'Certificado médico y luego partida/certificado de nacimiento dentro del plazo indicado.', valida:'Autoridad médica/administrativa y Secretaría para registro.', alerta:'Revisar casos de nacimiento múltiple, prematuro o trastornos de embarazo.'},
+      nacimiento: { icon:'👶', nombre:'Nacimiento de hijo', art:'Art. 114 inc. E', dias:{titular:'5 días hábiles con goce.', provisional:'5 días hábiles con goce.', suplente:'5 días hábiles con goce.'}, aviso:'Se comunica el mismo día del nacimiento.', doc:'Certificado o partida de nacimiento.', valida:'Secretaría controla documentación y carga administrativa.', alerta:'Aplica al personal masculino según texto del régimen.'},
+      sangre: { icon:'🩸', nombre:'Donación de sangre', art:'Art. 114 inc. G', dias:{titular:'Día de la extracción, con goce.', provisional:'Día de la extracción, con goce.', suplente:'Día de la extracción, con goce.'}, aviso:'Se comunica el mismo día de la extracción.', doc:'Certificado o constancia de donación.', valida:'Secretaría valida constancia y carga.', alerta:'Debe existir constancia emitida por autoridad competente.'},
+      citacion: { icon:'📄', nombre:'Citación de autoridad competente', art:'Art. 114 inc. M', dias:{titular:'Tiempo necesario.', provisional:'Tiempo necesario.', suplente:'Tiempo necesario.'}, aviso:'Se comunica el mismo día o al recibir la citación, si fue previa.', doc:'Cédula, oficio, citación y/o constancia de asistencia.', valida:'Secretaría verifica coincidencia horaria y documentación.', alerta:'Debe ser autoridad competente y justificar la ausencia laboral.'}
+    };
+
+    const motivo = document.getElementById('motivo');
+    Object.entries(LICENCIAS).forEach(([key, val]) => {
+      const opt = document.createElement('option'); opt.value = key; opt.textContent = val.nombre; motivo.appendChild(opt);
+    });
+
+    function render(){
+      const sit = document.getElementById('situacion').value;
+      const key = motivo.value;
+      const lic = LICENCIAS[key];
+      document.getElementById('extra-antiguedad').classList.toggle('hidden', key !== 'largo' || sit !== 'titular');
+      document.getElementById('extra-meses').classList.toggle('hidden', key !== 'enfermedad' || sit !== 'suplente');
+      let dias = lic.dias[sit] || 'Verificar según situación de revista y reglamentación.';
+      if(key === 'largo' && sit === 'titular'){
+        dias = document.getElementById('antiguedad').value === 'menos5' ? '725 días corridos totales: 365 con goce íntegro + 180 al 50% + 180 sin goce.' : '1095 días corridos totales: 365 con goce íntegro + 365 al 50% + 365 sin goce.';
+      }
+      if(key === 'enfermedad' && sit === 'suplente'){
+        const meses = Math.max(0, Math.min(12, Number(document.getElementById('meses').value || 0)));
+        dias = `${Math.min(meses * 3, 20)} días corridos orientativos según ${meses} mes/es completo/s trabajado/s. Tope anual: 20 días.`;
+      }
+      const sitLabel = sit.charAt(0).toUpperCase()+sit.slice(1);
+      const texto = `Licencia: ${lic.nombre}\nSituación de revista: ${sitLabel}\nArtículo: Ley 10.579, ${lic.art}\nDías: ${dias}\nCómo avisar: ${lic.aviso}\nDocumentación: ${lic.doc}\nQuién valida: ${lic.valida}\nAtención: ${lic.alerta}`;
+      document.getElementById('resultado').innerHTML = `
+        <div class="result-head"><div class="result-icon">${lic.icon}</div><div><span class="pill">${lic.art}</span><h2 class="result-title">${lic.nombre}</h2></div></div>
+        <div class="grid">
+          <div class="info"><b>Días / tope</b><span>${dias}</span></div>
+          <div class="info"><b>Cómo se notifica</b><span>${lic.aviso}</span></div>
+          <div class="info"><b>Documentación</b><span>${lic.doc}</span></div>
+          <div class="info"><b>Cómo se valida</b><span>${lic.valida}</span></div>
+        </div>
+        <div class="warn"><strong>Atención:</strong> ${lic.alerta}</div>
+        <div><b>Texto para copiar</b><textarea id="texto-copiar" class="copybox" readonly>${texto}</textarea></div>
+        <button class="btn primary" id="copiar">Copiar resultado</button>
+      `;
+      document.getElementById('copiar').addEventListener('click', async()=>{
+        const t = document.getElementById('texto-copiar'); t.select();
+        try{ await navigator.clipboard.writeText(t.value); document.getElementById('copiar').textContent='Copiado ✅'; }
+        catch(e){ document.execCommand('copy'); document.getElementById('copiar').textContent='Copiado ✅'; }
+        setTimeout(()=>document.getElementById('copiar').textContent='Copiar resultado',1600);
+      });
+    }
+    document.getElementById('btn-calcular').addEventListener('click', render);
+    ['situacion','motivo','antiguedad','meses'].forEach(id=>document.getElementById(id).addEventListener('change', render));
+    render();
+  </script>
+</body>
+</html>
