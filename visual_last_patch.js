@@ -37,7 +37,8 @@ function install(){
     .panel-card:not(#apd-next-tools-card),
     .form-card,.hero-card,.apd-panel-showcase,.apd-panel-benefits,.apd-tab-intro,
     .prefs-card,.field-group,.prefs-block,.channel-pref-box,.stat-box,.alerta-floating,
-    .historico-box,.radar-box,.backfill-box,.alerta-row,.alerta-meta-item,.historico-offer,.plan-expiration-box{
+    .historico-box,.radar-box,.backfill-box,.alerta-row,.alerta-meta-item,.historico-offer,.plan-expiration-box,
+    .apd-panel-quick,.apd-panel-quick a,.apd-benefit{
       background:var(--apd-surface)!important;
       color:var(--apd-text)!important;
       border-color:var(--apd-border)!important;
@@ -54,11 +55,15 @@ function install(){
     .panel-card:not(#apd-next-tools-card) b,
     .panel-card:not(#apd-next-tools-card) strong,
     .card-lbl,.card-lbl-row .card-lbl,.plan-title,.alerta-title,.historico-title,
-    .apd-panel-showcase h2,.apd-tab-intro h2,.form-card-hdr h2{color:var(--apd-text)!important}
+    .apd-panel-showcase h2,.apd-tab-intro h2,.form-card-hdr h2,
+    .apd-panel-quick b,.apd-benefit b{color:var(--apd-text)!important}
     .prefs-hint,.ph,.panel-sub,
     .panel-card:not(#apd-next-tools-card) p,
     .panel-card:not(#apd-next-tools-card) small,
     .apd-panel-quick span,.apd-benefit span,.apd-tab-intro p,.form-card-hdr p{color:var(--apd-muted)!important}
+    .apd-panel-quick i,.apd-benefit i{background:var(--apd-chip-bg)!important;color:var(--apd-chip-text)!important}
+    .apd-panel-quick em{color:var(--apd-primary)!important}
+    .apd-panel-showcase-actions a:not(.primary),.apd-tab-side a:not(:first-child){background:var(--apd-surface)!important;color:var(--apd-text)!important;border-color:var(--apd-border)!important}
     .card-lbl,.card-lbl-row .card-lbl{background:transparent!important;border:0!important;box-shadow:none!important}
     input,select,textarea{background:var(--apd-surface-2)!important;color:var(--apd-text)!important;border-color:var(--apd-border)!important}
     input::placeholder,textarea::placeholder{color:var(--apd-muted)!important;opacity:1!important}
