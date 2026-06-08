@@ -20,8 +20,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=visual3">
-  <link rel="stylesheet" href="mobile_optimizations.css?v=visual3">
+  <link rel="stylesheet" href="mobile_optimizations.css?v=visual4">
   <link rel="stylesheet" href="mobile_overrides_v2.css?v=visual3">
+  <link rel="stylesheet" href="visual_contrast_patch.css?v=1">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -125,7 +126,7 @@
 <script src="app_v2.js?v=17"></script>
 <script src="cargo_autocomplete_catalog_patch.js?v=3"></script>
 <script src="app_v2_cargo_delegate_fix.js?v=2"></script>
-<script src="panel_tabs_patch.js?v=finalvisual1"></script>
+<script src="panel_tabs_patch.js?v=finalvisual2"></script>
 <script src="panel_listados_pid_patch.js?v=8"></script>
 <script src="plan_checkout_patch.js?v=2"></script>
 <script src="safe_dashboard_restore.js?v=4"></script>
@@ -138,8 +139,9 @@
 <script src="account_profile_patch.js?v=1"></script>
 <script src="account_profile_hotfix.js?v=1"></script>
 <script src="repositorio_patch.js?v=2"></script>
-<script src="frontend_easy_fixes_patch.js?v=finalvisual1"></script>
+<script src="frontend_easy_fixes_patch.js?v=finalvisual2"></script>
 <script src="channel_summary_cleanup.js?v=3"></script>
+<script src="mobile_visual_patch.js?v=1"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {const form=document.getElementById('form-registro');if(!form)return;form.addEventListener('submit',function(ev){const chk=document.getElementById('reg-acepta-legal');if(chk&&!chk.checked){ev.preventDefault();ev.stopImmediatePropagation();const msg=document.getElementById('registro-msg');if(msg){msg.textContent='Para crear la cuenta tenés que aceptar los Términos, la Política de Privacidad y la Política de Suscripciones.';msg.className='msg msg-error';}chk.focus();}},true);});
 </script>
