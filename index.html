@@ -142,6 +142,7 @@
 <script src="frontend_easy_fixes_patch.js?v=finalvisual2"></script>
 <script src="channel_summary_cleanup.js?v=3"></script>
 <script src="mobile_visual_patch.js?v=1"></script>
+<script src="dark_mode_final_patch.js?v=1"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {const form=document.getElementById('form-registro');if(!form)return;form.addEventListener('submit',function(ev){const chk=document.getElementById('reg-acepta-legal');if(chk&&!chk.checked){ev.preventDefault();ev.stopImmediatePropagation();const msg=document.getElementById('registro-msg');if(msg){msg.textContent='Para crear la cuenta tenés que aceptar los Términos, la Política de Privacidad y la Política de Suscripciones.';msg.className='msg msg-error';}chk.focus();}},true);});
 </script>
