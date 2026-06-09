@@ -41,3 +41,5 @@ jobs:
             git commit -m "Actualizar padron escuelas PBA"
             git push
           fi
+
+# reintento solicitado desde ChatGPT
