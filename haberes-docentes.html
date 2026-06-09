@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haberes docentes | APDocentePBA</title>
+<meta name="description" content="Herramienta orientativa para ordenar reclamos de haberes docentes: recibos, cargo, secuencia, período, descuento y nota base.">
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f5f9ff;color:#061a37}.wrap{max-width:1000px;margin:auto;padding:20px}.hero,.card{background:white;border:1px solid #dbe7f5;border-radius:22px;padding:20px;margin:14px 0}.hero h1{font-size:42px;margin:8px 0}.btn{display:inline-block;border:1px solid #dbe7f5;border-radius:999px;padding:10px 14px;background:white;color:#061a37;text-decoration:none;font-weight:bold;cursor:pointer}.btn.primary{background:#2454f5;color:white;border-color:#2454f5}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.field label{font-weight:bold}.field input,.field textarea,.field select{border:1px solid #cbd8ea;border-radius:12px;padding:10px;font:inherit}.field textarea{min-height:90px}.out{white-space:pre-wrap;background:#f8fbff;border:1px dashed #bfd3ef;border-radius:16px;padding:14px;line-height:1.5}.tag{display:inline-block;background:#eef6ff;color:#0f4fb8;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:bold}.note{background:#fff7df;border:1px dashed #e6b54a;border-radius:16px;padding:12px;color:#604512}.checks label{display:block;background:#fbfdff;border:1px solid #dbe7f5;border-radius:12px;padding:10px;margin:8px 0}@media(max-width:800px){.grid{grid-template-columns:1fr}.hero h1{font-size:32px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="hero"><span class="tag">Haberes docentes</span><h1>Ordená un reclamo de sueldo</h1><p>Herramienta orientativa para juntar datos antes de reclamar una liquidación: período, escuela, cargo, secuencia, recibos, descuentos y texto base.</p><a class="btn" href="./herramientas.html">Volver a herramientas</a></div>
+<div class="grid">
+<div class="card"><h2>Datos del reclamo</h2>
+<div class="field"><label>Nombre y apellido</label><input id="nom"></div>
+<div class="field"><label>DNI / CUIL / Legajo</label><input id="dni"></div>
+<div class="field"><label>Escuela / distrito</label><input id="esc"></div>
+<div class="field"><label>Cargo, módulos u horas</label><input id="cargo"></div>
+<div class="field"><label>Secuencia / código / alta</label><input id="sec"></div>
+<div class="field"><label>Período reclamado</label><input id="per" placeholder="Ej: mayo 2026"></div>
+<div class="field"><label>Tipo de problema</label><select id="tipo"><option>No cobré un cargo u horas</option><option>Descuento que no corresponde</option><option>Me pagaron menos de lo esperado</option><option>No liquidaron retroactivo</option><option>Anularon deuda pero no devolvieron descuento</option><option>Otro</option></select></div>
+<div class="field"><label>Detalle breve</label><textarea id="det"></textarea></div>
+<button class="btn primary" onclick="generar()">Generar nota</button></div>
+<div class="card"><h2>Checklist de respaldo</h2><div class="checks">
+<label><input type="checkbox"> Últimos recibos de sueldo</label>
+<label><input type="checkbox"> Recibo del mes reclamado</label>
+<label><input type="checkbox"> Toma de posesión / designación</label>
+<label><input type="checkbox"> Escuela, cargo y secuencia identificados</label>
+<label><input type="checkbox"> Captura o detalle del descuento/deuda</label>
+<label><input type="checkbox"> Nota clara con período y pedido concreto</label>
+</div><div class="note"><b>Importante:</b> no alcanza con decir “me pagaron mal”. Conviene indicar período, cargo, escuela, secuencia, qué se cobró y qué se solicita revisar.</div></div>
+</div>
+<div class="card"><h2>Nota base para copiar</h2><div class="out" id="out">Completá los datos y generá la nota.</div><p><button class="btn primary" onclick="copiar()">Copiar nota</button></p></div>
+<div class="card"><h2>Cómo usarlo</h2><ol><li>Completá los datos mínimos.</li><li>Generá la nota.</li><li>Adjuntá recibos y documentación.</li><li>Presentá por el circuito institucional que corresponda.</li><li>Guardá constancia de envío o recepción.</li></ol></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function generar(){const txt=`A quien corresponda:\n\nPor medio de la presente, solicito la revisión de mi liquidación de haberes.\n\nDatos del/de la docente:\nNombre y apellido: ${$('nom').value||'[completar]'}\nDNI/CUIL/Legajo: ${$('dni').value||'[completar]'}\nEscuela / distrito: ${$('esc').value||'[completar]'}\nCargo, módulos u horas: ${$('cargo').value||'[completar]'}\nSecuencia / código / alta: ${$('sec').value||'[completar]'}\nPeríodo reclamado: ${$('per').value||'[completar]'}\nTipo de problema: ${$('tipo').value}\n\nDetalle:\n${$('det').value||'[describir brevemente qué se cobró, qué no se cobró o qué descuento se observa]'}\n\nSolicito se informe el estado de la liquidación, el origen del problema detectado y los pasos a seguir para su corrección, de corresponder.\n\nAdjunto documentación respaldatoria disponible: recibos de haberes, constancias, toma de posesión, capturas o detalle del descuento/deuda.\n\nSin otro particular, saludo atentamente.\n\nFecha: ${new Date().toLocaleDateString('es-AR')}`;$('out').textContent=txt}
+async function copiar(){try{await navigator.clipboard.writeText($('out').innerText);alert('Copiado.')}catch(e){alert('No se pudo copiar automáticamente.')}}
+</script>
+</body>
+</html>
