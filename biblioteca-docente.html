@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Biblioteca Docente | APDocentePBA</title>
-<meta name="description" content="Biblioteca docente organizada por temas: APD, licencias, PID, secretaría, aula, normativa y modelos.">
+<meta name="description" content="Biblioteca docente organizada por temas: APD, licencias, PID, aula, secretaría, actas, normativa y modelos.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -13,30 +13,23 @@
 </head>
 <body>
 <div class="wrap">
-<header class="top"><div class="brand"><span class="logo">📚</span><span>APDocentePBA</span></div><nav class="nav"><a class="btn" href="./index.html">Inicio</a><a class="btn" href="./herramientas.html">Herramientas</a><a class="btn primary" href="./herramientas-docentes.html">APD</a></nav></header>
-<section class="hero"><span class="tag">Biblioteca docente</span><h1>Índice ordenado de recursos para no perderse entre enlaces.</h1><p>Un mapa de consulta para organizar normativa, guías, modelos y herramientas por tema. La biblioteca no reemplaza las fuentes oficiales: sirve para saber por dónde empezar y qué revisar.</p><div class="search"><input id="q" placeholder="Buscar: licencias, APD, PID, analítico, informes, secretaría, familias..." oninput="render()"><button class="btn primary" onclick="document.getElementById('q').value='';render()">Limpiar</button></div></section>
-
-<h2 class="section-title">Recursos organizados</h2>
-<div class="empty" id="empty">No encontré resultados con ese filtro.</div>
-<section class="grid" id="grid"></section>
-
-<div class="note"><b>Criterio:</b> la biblioteca ordena recursos propios de APDocentePBA y temas de consulta frecuente. Cuando incorporemos normativa o enlaces externos, conviene acompañar siempre con fecha, fuente y advertencia de vigencia.</div>
-</div>
-<footer class="foot">APDocentePBA · Biblioteca docente</footer>
+<header class="top"><div class="brand"><span class="logo">📚</span><span>APDocentePBA</span></div><nav class="nav"><a class="btn" href="./index.html">Inicio</a><a class="btn primary" href="./herramientas.html">Herramientas</a><a class="btn" href="./modelos-actas.html">Actas</a></nav></header>
+<section class="hero"><span class="tag">Biblioteca docente</span><h1>Índice general para encontrar cada recurso.</h1><p>La biblioteca no reemplaza las secciones: funciona como buscador. Si no sabés si algo está en APD, Aula, Secretaría, Actas, Licencias o PID, buscá acá.</p><div class="search"><input id="q" placeholder="Buscar: actas, toma de posesión, cese, licencias, APD, PID, analítico, informes..." oninput="render()"><button class="btn primary" onclick="document.getElementById('q').value='';render()">Limpiar</button></div></section>
+<h2 class="section-title">Recursos organizados</h2><div class="empty" id="empty">No encontré resultados con ese filtro.</div><section class="grid" id="grid"></section>
+<div class="note"><b>Criterio:</b> la biblioteca es índice y buscador. Las herramientas operativas quedan en sus páginas propias para evitar duplicados.</div>
+</div><footer class="foot">APDocentePBA · Biblioteca docente</footer>
 <script>
 const recursos=[
-{icon:'📌',titulo:'APD y postulaciones',desc:'Checklist, notas, documentación, seguimiento de ofertas y glosario APD.',tags:['APD','postulaciones','documentación'],estado:'Activo',url:'./herramientas-docentes.html',fund:'Sirve para revisar compatibilidad, guardar evidencia y no perder el estado de cada publicación.'},
-{icon:'🧾',titulo:'Licencias docentes',desc:'Cuadro y asistente para artículos, días, notificación, documentación y validación.',tags:['licencias','artículos','días'],estado:'Activo',url:'./licencias-docentes.html',fund:'Reduce errores frecuentes al pedir o informar una licencia: artículo, causal, días y respaldo.'},
+{icon:'📌',titulo:'APD y postulaciones',desc:'Checklist, notas, documentación, seguimiento de ofertas y glosario APD.',tags:['APD','postulaciones','documentación'],estado:'Activo',url:'./herramientas-docentes.html',fund:'Para revisar compatibilidad, guardar evidencia y no perder el estado de cada publicación.'},
+{icon:'🧾',titulo:'Licencias docentes',desc:'Cuadro y asistente para artículos, días, notificación, documentación y validación.',tags:['licencias','artículos','días'],estado:'Activo',url:'./licencias-docentes.html',fund:'Para no confundir artículo, causal, días y respaldo antes de informar una licencia.'},
 {icon:'🪪',titulo:'PID / Listados',desc:'Acceso al espacio de consulta PID y puntaje/listados.',tags:['PID','puntaje','listados'],estado:'Activo',url:'./pid.html',fund:'Antes de postular, conviene verificar listado, año, distrito y puntaje.'},
-{icon:'🏫',titulo:'Aula y evaluación',desc:'Planificador de clase, rúbrica, informe pedagógico, acta y comunicación a familias.',tags:['aula','rúbrica','informes','familias'],estado:'Activo',url:'./herramientas-aula.html',fund:'Ayuda a documentar la práctica docente, planificar y comunicar con criterio institucional.'},
-{icon:'🗂️',titulo:'Secretaría escolar',desc:'Analíticos parciales, pases, legajos, constancias, observaciones y seguimiento de trámites.',tags:['secretaría','analítico','pases','legajos'],estado:'Activo',url:'./herramientas-secretaria.html',fund:'Ordena documentación y trazabilidad administrativa en secundaria común.'},
-{icon:'📄',titulo:'Modelos imprimibles',desc:'Futuro espacio para plantillas listas para ventanilla, notas, constancias y checklist.',tags:['modelos','plantillas','imprimir'],estado:'Próximo',url:'./biblioteca-docente.html',fund:'Los modelos repetibles reducen errores y agilizan atención administrativa.'},
+{icon:'🏫',titulo:'Aula y evaluación',desc:'Planificador de clase, rúbrica, informe pedagógico, acta pedagógica y comunicación a familias.',tags:['aula','rúbrica','informes','familias'],estado:'Activo',url:'./herramientas-aula.html',fund:'Para documentar la práctica docente y comunicar con criterio institucional.'},
+{icon:'🗂️',titulo:'Secretaría escolar',desc:'Analíticos parciales, pases, legajos, constancias, observaciones y seguimiento de trámites.',tags:['secretaría','analítico','pases','legajos'],estado:'Activo',url:'./herramientas-secretaria.html',fund:'Para ordenar documentación y trazabilidad administrativa en secundaria común.'},
+{icon:'📝',titulo:'Actas y modelos administrativos',desc:'Actas completas: documentación, toma de posesión, cuaderno de actuación, continuidad, pases, reordenamiento y cese.',tags:['actas','toma de posesión','cese','pase de revista','CUPOF'],estado:'Activo',url:'./modelos-actas.html',fund:'Se separan de secretaría para que los modelos formales no se mezclen con checklist o constancias simples.'},
 {icon:'💰',titulo:'Haberes y reclamos',desc:'Futuro espacio para organizar recibos, secuencias, descuentos, deuda y notas de reclamo.',tags:['haberes','recibos','descuentos','reclamo'],estado:'Próximo',url:'./biblioteca-docente.html',fund:'Un reclamo de haberes necesita períodos, cargo, secuencia y evidencia ordenada.'},
 {icon:'🧭',titulo:'Ruta para cargos jerárquicos',desc:'Futuro mapa de estudio para secretaría, preceptoría, conducción y normativa escolar.',tags:['secretario','jerárquicos','estudio','normativa'],estado:'Próximo',url:'./biblioteca-docente.html',fund:'Quien estudia para cargos necesita un itinerario, no solo PDFs sueltos.'},
 {icon:'📚',titulo:'Normativa y fuentes',desc:'Futuro índice de normativa con fecha, tema, fuente y advertencia de vigencia.',tags:['normativa','estatuto','régimen académico'],estado:'Próximo',url:'./biblioteca-docente.html',fund:'La normativa cambia o se interpreta por circuito; hay que ordenar fuente, vigencia y uso.'}
 ];
 function render(){const f=(document.getElementById('q').value||'').toLowerCase();const data=recursos.filter(r=>(r.titulo+' '+r.desc+' '+r.tags.join(' ')+' '+r.fund).toLowerCase().includes(f));document.getElementById('empty').style.display=data.length?'none':'block';document.getElementById('grid').innerHTML=data.map(r=>`<article class="card"><div class="icon">${r.icon}</div><h2>${r.titulo}</h2><p>${r.desc}</p><div class="meta">${r.tags.map(t=>`<span class="pill">${t}</span>`).join('')}<span class="pill ${r.estado==='Activo'?'ok':'soon'}">${r.estado}</span></div><div class="why"><b>Fundamento</b><p>${r.fund}</p></div><a class="btn ${r.estado==='Activo'?'primary':''}" href="${r.url}">${r.estado==='Activo'?'Abrir recurso':'Ver estado'}</a></article>`).join('')}
 render();
-</script>
-</body>
-</html>
+</script></body></html>
