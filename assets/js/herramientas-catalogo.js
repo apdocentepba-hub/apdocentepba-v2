@@ -147,11 +147,22 @@ window.AP_DOCENTE_HERRAMIENTAS = [
     icono: "💰",
     categoria: "Haberes",
     titulo: "Haberes y reclamos",
-    descripcion: "Recibos, descuentos, períodos, secuencias, deudas y notas base de reclamo.",
+    descripcion: "Recibos, descuentos, períodos, secuencias, deudas y orientación general sobre reclamos.",
     url: "./haberes-docentes.html",
     estado: "Activo",
     destacado: true,
     tags: ["haberes", "sueldo", "recibo", "descuento", "reclamo", "secuencia", "cargo", "liquidacion", "liquidación", "deuda", "salario"]
+  },
+  {
+    id: "asistente-reclamo-haberes",
+    icono: "🧾",
+    categoria: "Haberes",
+    titulo: "Asistente para reclamo de haberes",
+    descripcion: "Ordena datos de escuela, cargo, secuencia, períodos y documentación para generar una nota base de reclamo salarial.",
+    url: "./asistente-reclamo-haberes.html",
+    estado: "Activo",
+    destacado: true,
+    tags: ["haberes", "reclamo", "sueldo", "nota", "recibos", "descuento", "deuda", "liquidacion", "liquidación", "secuencia", "cargo", "escuela", "periodo", "período"]
   },
   {
     id: "pid",
