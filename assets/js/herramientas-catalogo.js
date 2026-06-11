@@ -143,6 +143,17 @@ window.AP_DOCENTE_HERRAMIENTAS = [
     tags: ["licencia", "licencias", "articulo", "artículo", "dias", "días", "medico", "enfermedad", "familiar", "certificado", "115", "114"]
   },
   {
+    id: "asistente-licencias-docentes",
+    icono: "📄",
+    categoria: "Licencias",
+    titulo: "Asistente de licencias docentes",
+    descripcion: "Genera un mensaje breve o nota formal con artículo, fechas, días, cargo, escuela y documentación respaldatoria.",
+    url: "./asistente-licencias-docentes.html",
+    estado: "Activo",
+    destacado: true,
+    tags: ["licencia", "licencias", "aviso", "nota", "articulo", "artículo", "dias", "días", "certificado", "documentacion", "enfermedad", "familiar", "cargo", "escuela"]
+  },
+  {
     id: "haberes-docentes",
     icono: "💰",
     categoria: "Haberes",
