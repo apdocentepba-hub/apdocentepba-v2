@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asistente comunicado a familias | APDocentePBA</title>
+<meta name="description" content="Asistente estático para redactar comunicados escolares a familias o adultos responsables con tono institucional, claro y cuidadoso.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--b:#2454f5;--b2:#0f4fb8;--d:#061a37;--m:#607086;--l:#dbe7f5;--s:#eef6ff;--bg:#f5f9ff;--g:#e9f8ef;--ok:#176b3a;--y:#fff7df;--warn:#8a5a00;--r:#fff1f2;--red:#b42318}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--d);font-family:'DM Sans',system-ui,sans-serif}.wrap{max-width:1160px;margin:auto;padding:18px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.brand{display:flex;gap:10px;align-items:center;font-weight:900}.logo{width:42px;height:42px;border-radius:15px;background:var(--b);color:#fff;display:grid;place-items:center}.nav{display:flex;gap:8px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--l);border-radius:999px;padding:10px 14px;background:#fff;text-decoration:none;font-weight:900;color:var(--d);font-size:14px;cursor:pointer}.btn.primary{background:var(--b);color:#fff;border-color:var(--b)}.btn.warn{background:var(--y);color:var(--warn);border-color:#e6b54a}.hero{background:linear-gradient(135deg,#fff 0%,#f8fbff 55%,#eef5ff 100%);border:1px solid var(--l);border-radius:28px;padding:30px;box-shadow:0 16px 38px rgba(16,36,61,.07);position:relative;overflow:hidden}.hero:after{content:'📣';position:absolute;right:30px;top:25px;font-size:92px;opacity:.12}.tag{display:inline-flex;background:var(--s);color:var(--b2);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.hero h1{font-size:clamp(32px,5vw,56px);line-height:.98;margin:10px 0 10px;letter-spacing:-.06em;max-width:850px}.hero p{margin:0;color:#475569;line-height:1.52;max-width:880px;font-size:16px}.layout{display:grid;grid-template-columns:.95fr 1.05fr;gap:14px;margin-top:16px}.panel,.card{background:#fff;border:1px solid var(--l);border-radius:24px;padding:18px;box-shadow:0 10px 26px rgba(16,36,61,.05)}.panel h2{margin:0 0 12px;letter-spacing:-.035em}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:13px;font-weight:900;color:#0f3460}.field input,.field select,.field textarea{width:100%;border:1px solid #cbd8ea;border-radius:14px;padding:11px 12px;font:inherit;background:#fbfdff;color:var(--d)}textarea{min-height:92px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.output{background:#f8fbff;border:1px dashed #bfd3ef;border-radius:18px;padding:16px;white-space:pre-wrap;line-height:1.55;min-height:360px;color:#10243d}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tabs button{border:1px solid var(--l);border-radius:999px;background:#fff;padding:8px 12px;font-weight:900;cursor:pointer}.tabs button.active{background:var(--b);color:#fff;border-color:var(--b)}.notice{margin-top:14px;background:var(--y);border:1px dashed #e6b54a;border-radius:16px;padding:12px;color:#604512}.danger{background:var(--r);border:1px dashed #f0a5a5;color:var(--red)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}.mini h3{margin:4px 0 7px;letter-spacing:-.025em}.mini p{margin:0;color:var(--m);font-size:14px;line-height:1.45}.icon{font-size:28px}.foot{text-align:center;color:#64748b;font-size:13px;padding:26px}@media print{.top,.hero,.panel.form,.actions,.notice,.grid,.foot,.tabs{display:none}.wrap{max-width:100%;padding:0}.layout{display:block}.panel{border:0;box-shadow:none}.output{border:0;background:#fff;color:#000;font-size:12pt}}@media(max-width:900px){.layout,.form-grid,.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.hero:after{display:none}.wrap{padding:14px}.hero{padding:22px}.btn{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><div class="brand"><span class="logo">📣</span><span>APDocentePBA</span></div><nav class="nav"><a class="btn" href="./index.html">Inicio</a><a class="btn primary" href="./herramientas.html">Herramientas</a><a class="btn" href="./herramientas-aula.html">Aula</a><a class="btn" href="./modelos-imprimibles.html">Modelos</a></nav></header>
+<section class="hero"><span class="tag">Aula y comunicación</span><h1>Asistente para comunicado a familias.</h1><p>Generá un mensaje claro, formal y cuidadoso para familias o adultos responsables. Evita acusaciones, ordena hechos observables y deja una propuesta de acompañamiento.</p></section>
+<section class="layout">
+<div class="panel form">
+<h2>Datos del comunicado</h2>
+<div class="form-grid">
+<div class="field"><label>Estudiante</label><input id="estudiante" placeholder="Nombre del estudiante"></div>
+<div class="field"><label>Curso</label><input id="curso" placeholder="Ej: 2° 1°"></div>
+<div class="field"><label>Materia / espacio</label><input id="materia" placeholder="Ej: Matemática"></div>
+<div class="field"><label>Motivo</label><select id="motivo"><option>Inasistencias o llegadas tarde</option><option>Falta de entrega de actividades</option><option>Dificultades de convivencia</option><option>Dificultades de desempeño académico</option><option>Solicitud de entrevista</option><option>Reconocimiento por buen desempeño</option><option>Recordatorio de documentación o autorización</option><option>Otro motivo</option></select></div>
+<div class="field"><label>Tono</label><select id="tono"><option>Formal y neutral</option><option>Más cercano</option><option>Muy breve</option><option>Con pedido de entrevista</option></select></div>
+<div class="field"><label>Canal</label><select id="canal"><option>WhatsApp institucional</option><option>Cuaderno de comunicados</option><option>Correo electrónico</option><option>Acta / registro institucional</option></select></div>
+<div class="field full"><label>Hechos observados</label><textarea id="hechos" placeholder="Describir hechos concretos, sin etiquetas personales. Ej: no entregó las últimas dos actividades, registra 4 inasistencias, tuvo dificultades para respetar acuerdos..."></textarea></div>
+<div class="field full"><label>Pedido o propuesta</label><textarea id="pedido" placeholder="Ej: solicito acompañar la entrega de actividades, asistir a entrevista, revisar carpeta, justificar inasistencias..."></textarea></div>
+<div class="field full"><label>Observaciones</label><textarea id="obs" placeholder="Aclaraciones, fecha de entrevista, acuerdos previos, documentación, próxima evaluación..."></textarea></div>
+</div>
+<div class="actions"><button class="btn primary" onclick="generar()">Generar comunicado</button><button class="btn" onclick="copiar()">Copiar</button><button class="btn" onclick="window.print()">Imprimir</button><button class="btn warn" onclick="limpiar()">Limpiar</button></div>
+<div class="notice"><b>Consejo:</b> escribí hechos observables y una propuesta concreta. Evitá frases como “se porta mal” o “no quiere trabajar”.</div>
+<div class="notice danger"><b>Importante:</b> si la situación es grave, usá el circuito institucional correspondiente y dejá registro formal.</div>
+</div>
+<div class="panel">
+<h2>Texto generado</h2>
+<div class="tabs"><button id="tabMensaje" class="active" onclick="modo='mensaje';generar()">Mensaje</button><button id="tabRegistro" onclick="modo='registro';generar()">Registro interno</button></div>
+<div class="output" id="salida">El comunicado aparecerá acá.</div>
+</div>
+</section>
+<section class="grid">
+<article class="card mini"><div class="icon">✅</div><h3>Hechos, no etiquetas</h3><p>Describí qué pasó, cuándo y qué se necesita, sin juzgar a la persona.</p></article>
+<article class="card mini"><div class="icon">🧭</div><h3>Pedido claro</h3><p>Indicá la acción esperada: entrevista, entrega, justificación o acompañamiento.</p></article>
+<article class="card mini"><div class="icon">🗂️</div><h3>Registro</h3><p>Guardá copia cuando el tema requiera seguimiento institucional.</p></article>
+</section>
+</div><footer class="foot">APDocentePBA · Asistente comunicado a familias</footer>
+<script>
+let modo='mensaje';
+function $(id){return document.getElementById(id)}
+function v(id,def=''){return $(id).value.trim()||def}
+function fecha(){return new Date().toLocaleDateString('es-AR')}
+function generar(){ $('tabMensaje').classList.toggle('active',modo==='mensaje');$('tabRegistro').classList.toggle('active',modo==='registro');const estudiante=v('estudiante','[estudiante]'),curso=v('curso','[curso]'),materia=v('materia','[materia]'),motivo=v('motivo'),tono=v('tono'),canal=v('canal'),hechos=v('hechos','[describir hechos observados]'),pedido=v('pedido','[indicar pedido o propuesta]'),obs=v('obs','[sin observaciones adicionales]');let saludo='Estimadas familias / adulto responsable:';let cierre='Saludos cordiales.';if(tono==='Más cercano'){saludo='Hola, familia:';cierre='Gracias por acompañar. Saludos.'}if(tono==='Muy breve'){saludo='Buenas.';cierre='Saludos.'}let texto='';if(modo==='mensaje'){texto=`${saludo}\n\nMe comunico en relación con ${estudiante}, de ${curso}, en el espacio ${materia}.\n\nMotivo: ${motivo}.\n\nHechos observados:\n${hechos}\n\nSolicitud / propuesta de acompañamiento:\n${pedido}\n\nObservaciones:\n${obs}\n\nLa intención es acompañar la trayectoria escolar y acordar acciones que favorezcan la continuidad pedagógica.\n\n${cierre}`; if(tono==='Con pedido de entrevista'){texto+=`\n\nSolicito coordinar una entrevista o comunicación para conversar la situación y acordar pasos a seguir.`}}else{texto=`REGISTRO DE COMUNICACIÓN A FAMILIAS\n\nFecha: ${fecha()}\nCanal: ${canal}\nEstudiante: ${estudiante}\nCurso: ${curso}\nMateria / espacio: ${materia}\nMotivo: ${motivo}\n\nHechos comunicados:\n${hechos}\n\nPedido / propuesta realizada:\n${pedido}\n\nObservaciones:\n${obs}\n\nSe deja constancia de la comunicación realizada para seguimiento institucional.\n\nDocente / responsable: ______________________________`}$('salida').textContent=texto}
+async function copiar(){try{await navigator.clipboard.writeText($('salida').innerText);alert('Texto copiado.')}catch(e){alert('No se pudo copiar automáticamente. Seleccioná el texto y copialo manualmente.')}}
+function limpiar(){if(confirm('¿Borrar datos cargados?')){document.querySelectorAll('input,textarea').forEach(el=>el.value='');generar()}}
+generar();
+</script>
+</body>
+</html>
