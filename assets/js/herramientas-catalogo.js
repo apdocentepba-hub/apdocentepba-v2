@@ -187,6 +187,17 @@ window.AP_DOCENTE_HERRAMIENTAS = [
     tags: ["mapa", "escuelas", "padron", "padrón", "oficial", "pba", "csv", "xlsx", "zip", "geojson", "cors", "datos argentina"]
   },
   {
+    id: "orientador-docente",
+    icono: "🧭",
+    categoria: "Biblioteca docente",
+    titulo: "Orientador docente",
+    descripcion: "Elegí una situación docente o administrativa y la web te deriva a la herramienta correcta.",
+    url: "./orientador-docente.html",
+    estado: "Activo",
+    destacado: true,
+    tags: ["orientador", "orientacion", "qué herramienta usar", "que herramienta usar", "apd", "licencia", "haberes", "acta", "secretaria", "planificador", "mapa", "docente nuevo", "pid"]
+  },
+  {
     id: "biblioteca-docente",
     icono: "📚",
     categoria: "Biblioteca docente",
