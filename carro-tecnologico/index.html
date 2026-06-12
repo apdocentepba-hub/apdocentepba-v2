@@ -16,7 +16,7 @@
 <section id="loginCard" class="card loginBox">
   <div class="loginTitle">Acceso autorizado</div>
   <div class="loginNote">Ingresá con tu cuenta Google autorizada. Si usás cuenta ABC, puede redirigirte a abc.gob.ar y volver.</div>
-  <div id="g_id_onload" data-client_id="653971077474-ansgtj7gkjgh65amsq6m213jfn0m8brl.apps.googleusercontent.com" data-callback="onGoogleLogin" data-auto_prompt="false"></div>
+  <div id="g_id_onload" data-client_id="653971077474-ansgti7gkjgh65amsq6m213ifn0m8brl.apps.googleusercontent.com" data-callback="onGoogleLogin" data-auto_prompt="false"></div>
   <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="signin_with" data-shape="rectangular" data-logo_alignment="left"></div>
   <div id="loginMsg" class="mini" style="margin-top:12px">Sólo los correos cargados en la hoja Operadores_Google podrán registrar movimientos.</div>
 </section>
@@ -35,7 +35,7 @@
 <section class="card"><h3>Datos del lote</h3>
 <div id="bloqueSalida"><label>Profesor / responsable</label><input id="responsable" placeholder="Ejemplo: Prof. Pérez"><label>Rol</label><select id="rol"><option value="">Elegir</option><option>Docente</option><option>Alumno/a</option><option>Preceptor/a</option><option>EMATP</option><option>Directivo</option><option>Secretaría</option><option>Otro</option></select><label>Curso / área</label><input id="cursoArea" placeholder="Ejemplo: 2° 1° / Aula Informática"><label>Destino</label><select id="destino"><option value="">Elegir</option><option>Aula</option><option>Sadi Carro A</option><option>Secretaría</option><option>Oficina de Alumnos</option><option>Pañol</option><option>Uso personal autorizado</option><option>Reparación</option><option>Otro</option></select><label>Estado al entregar</label><select id="estadoEntrega"><option>OK</option><option>Con observación</option><option>Sólo con fuente</option><option>Problema teclado</option><option>No enciende</option><option>Fuera de servicio</option></select></div>
 <div id="bloqueDev" class="hide"><label>Recibe devolución</label><input id="recibe" placeholder="Ejemplo: Martín / Preceptoría / Secretaría"><label>Estado al devolver</label><select id="estadoDev"><option>OK</option><option>Con observación</option><option>Sólo con fuente</option><option>Problema teclado</option><option>Rota</option><option>No enciende</option><option>Fuera de servicio</option></select><div class="mini"><span class="pill">Nuevo</span> En devolución podés escanear una sola netbook y elegir “devolver todo lo pendiente relacionado”, o devolver sólo las escaneadas.</div></div>
-<label>Observaciones generales</label><textarea id="obs" placeholder="Ejemplo: se entregan para 2° 1°, vuelven sin cargador, etc."></textarea><button class="save" onclick="guardarLote()">GUARDAR LOTE</button><div class="mini" style="margin-top:10px">Al guardar, se abre la confirmación directa de Apps Script. El backend debe validar tu token Google.</div></section>
+<label>Observaciones generales</label><textarea id="obs" placeholder="Ejemplo: se entregan para 2° 1°, vuelven sin cargador, etc."></textarea><button class="save" onclick="guardarLote()">GUARDAR LOTE</button><div class="mini" style="margin-top:10px">Al guardar, se abre la confirmación directa de Apps Script. El backend valida tu token Google.</div></section>
 </div>
 </main>
 <script>
