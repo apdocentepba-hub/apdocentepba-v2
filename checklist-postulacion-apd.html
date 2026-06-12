@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="wrap">
-<header class="top"><div class="brand"><span class="logo">📌</span><span>APDocentePBA</span></div><nav class="nav"><a class="btn" href="./index.html">Inicio</a><a class="btn primary" href="./herramientas.html">Herramientas</a><a class="btn" href="./herramientas-docentes.html">APD</a><a class="btn" href="./docente-nuevo.html">Docente nuevo</a></nav></header>
+<header class="top"><div class="brand"><span class="logo">📌</span><span>APDocentePBA</span></div><nav class="nav"><a class="btn" href="./index.html">Inicio</a><a class="btn primary" href="./herramientas.html">Herramientas</a><a class="btn" href="./herramientas-docentes.html">APD</a><a class="btn" href="./docente-nuevo.html">Docente nuevo</a><a class="btn" href="./fuentes-oficiales.html">Fuentes</a><a class="btn" href="./uso-responsable.html">Uso responsable</a></nav></header>
 <section class="hero"><span class="tag">APD y postulaciones</span><h1>Checklist antes de postularse.</h1><p>Revisá los datos mínimos antes de postularte a una oferta por Acto Público Digital. La herramienta arma una constancia personal para copiar o imprimir.</p></section>
 <section class="layout">
 <div class="panel form">
@@ -32,8 +32,8 @@
 <h2 style="margin-top:18px">Checklist</h2>
 <div class="checklist" id="checks"></div>
 <div class="actions"><button class="btn primary" onclick="generar()">Generar constancia</button><button class="btn" onclick="copiar()">Copiar</button><button class="btn" onclick="window.print()">Imprimir</button><button class="btn warn" onclick="limpiar()">Limpiar</button></div>
-<div class="notice"><b>Consejo:</b> no alcanza con mirar el cargo. Antes de postular, revisá horario, distancia, compatibilidad, listado/PID, documentación y guardá captura.</div>
-<div class="notice danger"><b>Importante:</b> esta herramienta no decide si corresponde postular. Solo ordena la revisión previa.</div>
+<div class="notice"><b>Consejo:</b> no alcanza con mirar el cargo. Antes de postular, revisá horario, distancia, compatibilidad, listado/PID, documentación, fuente oficial y guardá captura.</div>
+<div class="notice danger"><b>Uso institucional:</b> esta herramienta no decide si corresponde postular ni valida la oferta. Solo ordena la revisión previa. Verificá publicación, listado/PID, condiciones, documentación y circuito indicado por APD/SAD antes de avanzar.</div>
 </div>
 <div class="panel">
 <h2>Resultado</h2>
@@ -44,7 +44,7 @@
 <section class="grid">
 <article class="card mini"><div class="icon">🕒</div><h3>Horario</h3><p>Verificá días, módulos, turno y si se superpone con otros cargos.</p></article>
 <article class="card mini"><div class="icon">📍</div><h3>Distancia</h3><p>Revisá domicilio de la escuela, traslado y tiempos reales.</p></article>
-<article class="card mini"><div class="icon">📸</div><h3>Captura</h3><p>Guardá evidencia de la oferta y de la postulación realizada.</p></article>
+<article class="card mini"><div class="icon">📸</div><h3>Captura</h3><p>Guardá evidencia de la oferta, de la postulación y de aclaraciones relevantes.</p></article>
 </section>
 </div><footer class="foot">APDocentePBA · Checklist de postulación APD</footer>
 <script>
@@ -56,13 +56,14 @@ const items=[
 ['situacion','Leí situación de revista','Miré si es suplente, provisional, titular interino u otra condición.'],
 ['documentacion','Tengo documentación respaldatoria','Tengo DNI, título, oblea/listado, constancias o documentación pedida.'],
 ['compatibilidad','Pensé incompatibilidades','Revisé superposición, carga horaria, traslado y otros cargos.'],
-['captura','Guardé captura o evidencia','Tengo captura de la oferta y/o postulación para dejar constancia.']
+['fuente','Verifiqué fuente oficial o publicación','Revisé que la información provenga de APD/SAD/publicación correspondiente.'],
+['captura','Guardé captura o evidencia','Tengo captura de la oferta, de la postulación y/o aclaraciones para dejar constancia.']
 ];
 function $(id){return document.getElementById(id)}
 function v(id,def=''){return $(id).value.trim()||def}
 function fechaAR(s){if(!s)return new Date().toLocaleDateString('es-AR');const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
 function init(){const hoy=new Date().toISOString().slice(0,10);$('fecha').value=hoy;$('checks').innerHTML=items.map(i=>`<label class="check"><input type="checkbox" id="ch_${i[0]}" onchange="generar()"><span><b>${i[1]}</b>${i[2]}</span></label>`).join('');generar()}
-function generar(){const total=items.length;const ok=items.filter(i=>$('ch_'+i[0])?.checked).length;const faltan=items.filter(i=>!$('ch_'+i[0])?.checked);$('puntaje').textContent=`${ok}/${total} revisado`;let estado='Pendiente',cls='badge danger';if(ok===total){estado='Listo para decidir con datos';cls='badge ok'}else if(ok>=5){estado='Revisión avanzada';cls='badge warn'}$('estado').textContent=estado;$('estado').className=cls;const texto=`CHECKLIST PERSONAL ANTES DE POSTULARSE POR APD\n\nFecha de revisión: ${fechaAR(v('fecha',''))}\nDistrito: ${v('distrito','[Distrito]')}\nEscuela: ${v('escuela','[Escuela]')}\nCargo / materia: ${v('cargo','[Cargo/materia]')}\nSituación de revista: ${v('situacion','[Situación]')}\nTurno / horario: ${v('horario','[Turno/horario]')}\nCUPOF / código / publicación: ${v('cupof','[Dato de publicación]')}\nFuente: ${v('fuente','[Fuente]')}\n\nRevisión realizada:\n${items.map(i=>`${$('ch_'+i[0])?.checked?'[x]':'[ ]'} ${i[1]} - ${i[2]}`).join('\n')}\n\nResultado: ${ok}/${total} puntos revisados. ${estado}.\n\nFalta revisar:\n${faltan.length?faltan.map(i=>'- '+i[1]).join('\n'):'No quedan puntos pendientes del checklist.'}\n\nObservaciones:\n${v('obs','[Sin observaciones cargadas]')}\n\nRecordatorio: guardar captura de la oferta, de la postulación y de cualquier aclaración relevante.`;$('salida').textContent=texto}
+function generar(){const total=items.length;const ok=items.filter(i=>$('ch_'+i[0])?.checked).length;const faltan=items.filter(i=>!$('ch_'+i[0])?.checked);$('puntaje').textContent=`${ok}/${total} revisado`;let estado='Pendiente',cls='badge danger';if(ok===total){estado='Listo para decidir con datos';cls='badge ok'}else if(ok>=6){estado='Revisión avanzada';cls='badge warn'}$('estado').textContent=estado;$('estado').className=cls;const texto=`CHECKLIST PERSONAL ANTES DE POSTULARSE POR APD\n\nFecha de revisión: ${fechaAR(v('fecha',''))}\nDistrito: ${v('distrito','[Distrito]')}\nEscuela: ${v('escuela','[Escuela]')}\nCargo / materia: ${v('cargo','[Cargo/materia]')}\nSituación de revista: ${v('situacion','[Situación]')}\nTurno / horario: ${v('horario','[Turno/horario]')}\nCUPOF / código / publicación: ${v('cupof','[Dato de publicación]')}\nFuente: ${v('fuente','[Fuente]')}\n\nRevisión realizada:\n${items.map(i=>`${$('ch_'+i[0])?.checked?'[x]':'[ ]'} ${i[1]} - ${i[2]}`).join('\n')}\n\nResultado: ${ok}/${total} puntos revisados. ${estado}.\n\nFalta revisar:\n${faltan.length?faltan.map(i=>'- '+i[1]).join('\n'):'No quedan puntos pendientes del checklist.'}\n\nObservaciones:\n${v('obs','[Sin observaciones cargadas]')}\n\nRecordatorio institucional:\n- Esta constancia no valida la oferta ni confirma que corresponda postular.\n- Verificar fuente oficial, listado/PID, condiciones de la publicación y documentación.\n- Guardar captura de la oferta, de la postulación y de cualquier aclaración relevante.`;$('salida').textContent=texto}
 async function copiar(){try{await navigator.clipboard.writeText($('salida').innerText);alert('Constancia copiada.')}catch(e){alert('No se pudo copiar automáticamente. Seleccioná el texto y copialo manualmente.')}}
 function limpiar(){if(confirm('¿Borrar datos y desmarcar checklist?')){document.querySelectorAll('input[type=text], textarea').forEach(el=>el.value='');document.querySelectorAll('input[type=checkbox]').forEach(el=>el.checked=false);init()}}
 init();
