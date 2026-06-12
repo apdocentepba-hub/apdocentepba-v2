@@ -1,0 +1,20 @@
+{
+  "name": "Carro Tecnológico",
+  "short_name": "Carro Tec",
+  "description": "Registro de retiro y devolución de netbooks del carro tecnológico escolar.",
+  "start_url": "./?v=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f6",
+  "theme_color": "#111827",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%23111827'/%3E%3Cpath d='M128 160h256a32 32 0 0 1 32 32v152a32 32 0 0 1-32 32H128a32 32 0 0 1-32-32V192a32 32 0 0 1 32-32Z' fill='%23ffffff'/%3E%3Cpath d='M144 208h224v96H144z' fill='%232563eb'/%3E%3Cpath d='M184 400h144' stroke='%23ffffff' stroke-width='28' stroke-linecap='round'/%3E%3Ccircle cx='376' cy='128' r='54' fill='%23f59e0b'/%3E%3Cpath d='M352 128h48M376 104v48' stroke='%23111827' stroke-width='18' stroke-linecap='round'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
