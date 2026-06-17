@@ -1,0 +1,11 @@
+{
+  "name": "APDocentePBA",
+  "short_name": "APDocentePBA",
+  "description": "Alertas APD y herramientas docentes para Provincia de Buenos Aires.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f9ff",
+  "theme_color": "#2454f5",
+  "lang": "es-AR"
+}
