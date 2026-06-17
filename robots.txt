@@ -1,5 +1,8 @@
 User-agent: *
 Disallow: /carro-tecnologico/
+Disallow: /estadisticas-sitio.html
+Disallow: /mapa-escuelas-pba.html
+Disallow: /planificador-auto-ia.html
 Allow: /
 
 Sitemap: https://alertasapd.com.ar/sitemap.xml
