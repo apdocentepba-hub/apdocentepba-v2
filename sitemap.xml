@@ -7,6 +7,9 @@
   <url><loc>https://alertasapd.com.ar/guia-rapida-docente.html</loc><priority>0.85</priority></url>
   <url><loc>https://alertasapd.com.ar/orientador-docente.html</loc><priority>0.85</priority></url>
   <url><loc>https://alertasapd.com.ar/ayuda.html</loc><priority>0.8</priority></url>
+  <url><loc>https://alertasapd.com.ar/contacto.html</loc><priority>0.65</priority></url>
+  <url><loc>https://alertasapd.com.ar/privacidad.html</loc><priority>0.55</priority></url>
+  <url><loc>https://alertasapd.com.ar/terminos.html</loc><priority>0.55</priority></url>
   <url><loc>https://alertasapd.com.ar/acerca.html</loc><priority>0.75</priority></url>
   <url><loc>https://alertasapd.com.ar/fuentes-oficiales.html</loc><priority>0.85</priority></url>
   <url><loc>https://alertasapd.com.ar/uso-responsable.html</loc><priority>0.8</priority></url>
@@ -18,7 +21,7 @@
   <url><loc>https://alertasapd.com.ar/asistente-licencias-docentes.html</loc><priority>0.8</priority></url>
   <url><loc>https://alertasapd.com.ar/haberes-docentes.html</loc><priority>0.85</priority></url>
   <url><loc>https://alertasapd.com.ar/control-recibo-haberes.html</loc><priority>0.8</priority></url>
-  <url><loc>https://alertasapd.com.ar/calculadora-haberes-docentes.html</loc><priority>0.75</priority></url>
+  <url><loc>https://alertasapd.com.ar/calculadora-haberes-docentes.html</loc><priority>0.65</priority></url>
   <url><loc>https://alertasapd.com.ar/asistente-reclamo-haberes.html</loc><priority>0.8</priority></url>
   <url><loc>https://alertasapd.com.ar/herramientas-secretaria.html</loc><priority>0.85</priority></url>
   <url><loc>https://alertasapd.com.ar/asistente-documentacion-analitico.html</loc><priority>0.8</priority></url>
@@ -34,8 +37,6 @@
   <url><loc>https://alertasapd.com.ar/planificador-tematico.html</loc><priority>0.65</priority></url>
   <url><loc>https://alertasapd.com.ar/pid.html</loc><priority>0.8</priority></url>
   <url><loc>https://alertasapd.com.ar/mapa-escuelas-osm.html</loc><priority>0.75</priority></url>
-  <url><loc>https://alertasapd.com.ar/mapa-escuelas-pba.html</loc><priority>0.65</priority></url>
   <url><loc>https://alertasapd.com.ar/historial-cambios.html</loc><priority>0.55</priority></url>
   <url><loc>https://alertasapd.com.ar/proximamente.html</loc><priority>0.45</priority></url>
-  <url><loc>https://alertasapd.com.ar/estadisticas-sitio.html</loc><priority>0.2</priority></url>
 </urlset>
