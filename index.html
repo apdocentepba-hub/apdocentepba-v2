@@ -3,19 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>APDocentePBA | Alertas APD y herramientas docentes PBA</title>
-  <meta name="description" content="Sistema independiente de alertas APD y herramientas docentes para Provincia de Buenos Aires: postulaciones, PID, licencias, haberes, actas, secretaría y fuentes oficiales.">
-  <meta name="theme-color" content="#2454f5">
-  <link rel="canonical" href="https://alertasapd.com.ar/">
-  <link rel="manifest" href="./site.webmanifest">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="APDocentePBA">
-  <meta property="og:title" content="APDocentePBA | Alertas APD y herramientas docentes PBA">
-  <meta property="og:description" content="Alertas APD, PID, haberes, licencias, actas, secretaría, fuentes oficiales y herramientas docentes para Provincia de Buenos Aires.">
-  <meta property="og:url" content="https://alertasapd.com.ar/">
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="APDocentePBA">
-  <meta name="twitter:description" content="Alertas APD y herramientas docentes para Provincia de Buenos Aires.">
+  <title>APDocentePBA | Alertas APD para docentes PBA</title>
+  <meta name="description" content="Sistema independiente de alertas APD y herramientas para docentes de Provincia de Buenos Aires.">
   <link rel="stylesheet" href="styles.css?v=visual3">
   <link rel="stylesheet" href="mobile_optimizations.css?v=visual4">
   <link rel="stylesheet" href="mobile_overrides_v2.css?v=visual3">
@@ -32,14 +21,14 @@
         <div class="brand-icon">🔔</div>
         <div>
           <h1 class="brand-title">APDocentePBA</h1>
-          <p class="brand-sub">Alertas APD · Herramientas docentes · Provincia de Buenos Aires</p>
+          <p class="brand-sub">Alertas de Actos Públicos Digitales · Provincia de Buenos Aires</p>
         </div>
       </div>
       <nav class="top-nav">
         <a class="btn btn-ghost" href="./herramientas.html">Herramientas</a>
         <a class="btn btn-ghost" href="./buscar-herramientas.html">Buscar</a>
-        <a class="btn btn-ghost" href="./guia-rapida-docente.html">Guía rápida</a>
-        <a class="btn btn-ghost" href="./ayuda.html">Ayuda</a>
+        <a class="btn btn-ghost" href="./proximamente.html">Próximamente</a>
+        <a class="btn btn-ghost" href="./licencias-docentes.html">Licencias</a>
         <div id="navPublico" class="nav-group">
           <button id="btnLogin" class="btn btn-ghost" type="button">Ingresar</button>
           <button id="btnRegistro" class="btn btn-primary-outline" type="button">Registrarse</button>
@@ -57,42 +46,137 @@
       <div class="container">
         <div class="hero-card">
           <div class="hero-eyebrow">🎯 Plataforma docente PBA</div>
-          <h2 class="hero-title">Alertas APD y herramientas docentes en un solo lugar</h2>
-          <p class="hero-desc">Recibí alertas de Actos Públicos Digitales y usá recursos para postularte mejor, revisar PID, ordenar haberes, preparar licencias, armar actas y consultar fuentes oficiales.</p>
+          <h2 class="hero-title">Tu acceso rápido a la información docente de PBA</h2>
+          <p class="hero-desc">Alertas de Actos Públicos Digitales, análisis de cargos, PID docente, herramientas y recursos útiles para organizar mejor tu trabajo.</p>
           <div class="hero-actions">
             <button class="btn btn-primary btn-lg" onclick="mostrarSeccion('panel-docente')">🔔 Ver mis alertas</button>
-            <a class="btn btn-outline btn-lg" href="./herramientas.html">🧰 Ver herramientas docentes</a>
+            <a class="btn btn-outline btn-lg" href="./herramientas.html">🧰 Ver herramientas gratis</a>
           </div>
         </div>
         <div class="apd-attraction">
           <article class="apd-banner">
-            <span class="apd-kicker">Herramientas docentes</span>
-            <h3>Entrá por problema: APD, haberes, licencias, actas, secretaría o aula.</h3>
-            <p>Además de alertas APD, tenés buscador, guía rápida, fuentes oficiales, modelos, asistentes y rutas para resolver consultas frecuentes con criterio institucional.</p>
+            <span class="apd-kicker">Nuevo en APDocentePBA</span>
+            <h3>Herramientas docentes para resolver rápido, no perderte y compartir.</h3>
+            <p>Además de alertas APD, ahora tenés asistentes, modelos, actas, buscador por intención, fuentes oficiales y una ruta para docentes nuevos.</p>
             <div class="apd-cards">
               <div class="apd-mini"><b>✅ Antes de postular</b><span>Checklist APD para revisar horario, escuela, PID, fuente y captura.</span></div>
-              <div class="apd-mini"><b>📝 Actas y modelos</b><span>Asistente, modelos y revisión de campos mínimos antes de firmar.</span></div>
-              <div class="apd-mini"><b>💰 Haberes y reclamos</b><span>Ordená recibos, descuentos, períodos, secuencias y documentación.</span></div>
+              <div class="apd-mini"><b>📝 Actas más prolijas</b><span>Generador y validador para revisar campos mínimos antes de firmar.</span></div>
+              <div class="apd-mini"><b>💰 Reclamos ordenados</b><span>Haberes, licencias y documentación con texto listo para copiar.</span></div>
             </div>
-            <div class="apd-actions"><a class="primary" href="./herramientas.html">Abrir centro de herramientas</a><a href="./buscar-herramientas.html">Buscar herramienta</a><a href="./fuentes-oficiales.html">Fuentes oficiales</a></div>
+            <div class="apd-actions"><a class="primary" href="./buscar-herramientas.html">Buscar qué necesito</a><a href="./historial-cambios.html">Ver novedades</a><a href="./fuentes-oficiales.html">Fuentes oficiales</a></div>
           </article>
           <aside class="apd-side">
-            <span class="apd-kicker">Rutas rápidas</span>
-            <h3>Para no perder tiempo buscando.</h3>
-            <p>Elegí una entrada según lo que necesitás resolver.</p>
+            <span class="apd-kicker">Próximamente</span>
+            <h3>Lo que puede venir si la comunidad lo usa.</h3>
+            <p>Ideas pensadas para que más docentes vuelvan y compartan la web.</p>
             <div class="apd-list">
-              <a href="./guia-rapida-docente.html">🧰 Guía rápida <small>Qué hacer si tenés un problema frecuente.</small></a>
-              <a href="./orientador-docente.html">🧭 Orientador docente <small>Te deriva a la herramienta correcta.</small></a>
-              <a href="./ayuda.html">❓ Ayuda <small>Cómo usar la web y sus límites.</small></a>
+              <a href="./proximamente.html">🧮 Simulador de compatibilidad <small>Horarios, cargos y superposiciones.</small></a>
+              <a href="./proximamente.html">🗓️ Agenda docente PBA <small>Recordatorios de trámites, APD y documentación.</small></a>
+              <a href="./proximamente.html">⚖️ Radar normativo <small>Normas y fuentes oficiales ordenadas por tema.</small></a>
             </div>
           </aside>
         </div>
       </div>
     </section>
+
+    <section id="registro" class="section hidden">
+      <div class="container form-wrap">
+        <div class="form-card">
+          <div class="form-card-hdr"><h2>Crear cuenta</h2><p>Completá tus datos para empezar a recibir alertas</p></div>
+          <form id="form-registro" novalidate>
+            <div class="grid-2">
+              <div class="field"><label for="reg-nombre">Nombre <span class="req">*</span></label><input type="text" id="reg-nombre" placeholder="Tu nombre" required autocomplete="given-name"></div>
+              <div class="field"><label for="reg-apellido">Apellido <span class="req">*</span></label><input type="text" id="reg-apellido" placeholder="Tu apellido" required autocomplete="family-name"></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label for="reg-email">Email <span class="req">*</span></label><input type="email" id="reg-email" placeholder="tu@email.com" required autocomplete="email"></div>
+              <div class="field"><label for="reg-celular">Celular</label><input type="text" id="reg-celular" placeholder="11 1234-5678" autocomplete="tel"></div>
+            </div>
+            <div class="field"><label for="reg-password">Contraseña <span class="req">*</span></label><div class="pw-wrap"><input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"><button type="button" class="pw-toggle" data-target="reg-password" tabindex="-1">👁</button></div></div>
+            <div class="field" style="margin-top:10px"><label style="display:flex;gap:10px;align-items:flex-start;line-height:1.45"><input type="checkbox" id="reg-acepta-legal" style="margin-top:4px"><span>Acepto los términos, privacidad y suscripciones de APDocentePBA.</span></label></div>
+            <div class="form-actions"><button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button></div>
+            <div class="form-foot">¿Ya tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button></div>
+            <span id="registro-msg" class="msg"></span>
+          </form>
+          <div class="separator"><span>o continuá con Google</span></div><div class="google-wrap"><div id="google-btn-registro"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="login" class="section hidden">
+      <div class="container form-wrap">
+        <div class="form-card">
+          <div class="form-card-hdr"><h2>Iniciar sesión</h2><p>Ingresá para ver tus alertas y preferencias</p></div>
+          <form id="form-login" novalidate>
+            <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"></div>
+            <div class="field"><label for="login-password">Contraseña</label><div class="pw-wrap"><input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"><button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button></div></div>
+            <div class="form-actions"><button type="submit" class="btn btn-primary btn-full">Ingresar</button></div>
+            <div class="form-foot">¿No tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate</button></div>
+            <span id="login-msg" class="msg"></span>
+          </form>
+          <div class="separator"><span>o continuá con Google</span></div><div class="google-wrap"><div id="google-btn-login"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-docente" class="section hidden">
+      <div class="container">
+        <div class="panel-header"><div><h2 id="panel-bienvenida">Bienvenido/a</h2><p id="panel-subtitulo" class="panel-sub">Cargando...</p></div><div class="panel-actions"><a class="btn btn-primary" href="./herramientas-docentes.html">🧰 Herramientas</a><a class="btn btn-secondary" href="./licencias-docentes.html">🧾 Licencias</a><button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button><button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button></div></div>
+        <div id="panel-loading" class="panel-loading hidden"><div class="spinner"></div><span>Cargando panel...</span></div>
+        <div id="panel-content" class="cards-grid">
+          <div class="panel-card span-4"><div class="card-lbl">👤 Mi cuenta</div><div id="panel-datos-docente"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">⚙️ Mis preferencias</div><div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">📊 Estadísticas</div><div id="panel-estadisticas"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-12"><div class="card-lbl-row"><span class="card-lbl">🧰 Herramientas docentes</span></div><p class="prefs-hint">Funciones rápidas para docentes PBA: licencias, PID, recursos y nuevas utilidades.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary" href="./licencias-docentes.html">Asistente de Licencias</a><a class="btn btn-secondary" href="./herramientas.html">Ver herramientas</a><a class="btn btn-secondary" href="./buscar-herramientas.html">Buscar herramienta</a></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">💳 Mi plan</div><div id="panel-plan"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">💬 Canales</div><div id="panel-canales"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-4"><div class="card-lbl-row"><span class="card-lbl">🛠️ Backfill provincial</span><div class="mini-group"><button id="btn-provincia-step" class="mini-btn" type="button">Procesar lote</button><button id="btn-provincia-reset" class="mini-btn" type="button">Reset</button></div></div><div id="panel-backfill-provincia"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-12"><div class="card-lbl-row"><span class="card-lbl">📍 Radar provincial</span><button id="btn-refresh-provincia" class="mini-btn" type="button">Refrescar radar</button></div><p class="prefs-hint">Este bloque resume movimiento provincial real para ayudarte a evaluar otros distritos, materias y estados.</p><div id="panel-radar-provincia"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-12" id="panel-listados-pid-card"><div class="card-lbl-row"><span class="card-lbl">🪪 Listados / PID</span></div><p class="prefs-hint">Consultá puntaje de ingreso a la docencia por DNI, listado y año desde una pantalla separada y estable.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><a class="btn btn-primary" href="./pid.html">Abrir consulta PID</a></div></div>
+          <div class="panel-card span-8"><div class="card-lbl-row"><span class="card-lbl">🔔 Alertas APD activas</span><span id="alertas-badge" class="badge-num hidden"></span></div><div id="panel-alertas"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">📋 Historial</div><div id="panel-historial"><p class="ph">Cargando...</p></div></div>
+        </div>
+      </div>
+    </section>
   </main>
 
-  <script src="app.js"></script>
-  <script src="visual_last_patch.js"></script>
-  <script src="telegram_feature_patch.js"></script>
+  <footer class="footer"><div class="footer-inner">APDocentePBA · Sistema de alertas para docentes PBA · 2026 · <a href="./herramientas.html">Herramientas</a> · <a href="./buscar-herramientas.html">Buscar</a> · <a href="./historial-cambios.html">Novedades</a> · <a href="./proximamente.html">Próximamente</a> · <a href="./soporte.html">Soporte</a></div></footer>
+
+<script src="app_v2.js?v=17"></script>
+<script src="cargo_autocomplete_catalog_patch.js?v=3"></script>
+<script src="app_v2_cargo_delegate_fix.js?v=2"></script>
+<script src="panel_tabs_patch.js?v=finalvisual2"></script>
+<script src="panel_listados_pid_patch.js?v=8"></script>
+<script src="plan_checkout_patch.js?v=2"></script>
+<script src="safe_dashboard_restore.js?v=4"></script>
+<script src="safe_dashboard_ui_patch.js?v=5"></script>
+<script src="telegram_feature_patch.js?v=4"></script>
+<script src="telegram_live_refresh_patch.js?v=1"></script>
+<script src="radar_provincia_patch_semaforo.js?v=2"></script>
+<script src="admin_preview_patch.js?v=2"></script>
+<script src="admin_payments_patch.js?v=3"></script>
+<script src="account_profile_patch.js?v=1"></script>
+<script src="account_profile_hotfix.js?v=1"></script>
+<script src="repositorio_patch.js?v=2"></script>
+<script src="frontend_easy_fixes_patch.js?v=finalvisual2"></script>
+<script src="channel_summary_cleanup.js?v=3"></script>
+<script src="mobile_visual_patch.js?v=1"></script>
+<script src="dark_mode_final_patch.js?v=1"></script>
+<script src="visual_last_patch.js?v=1"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form=document.getElementById('form-registro');
+  if(!form)return;
+  form.addEventListener('submit',function(ev){
+    const chk=document.getElementById('reg-acepta-legal');
+    if(chk&&!chk.checked){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      const msg=document.getElementById('registro-msg');
+      if(msg){msg.textContent='Para crear la cuenta tenés que aceptar los términos.';msg.className='msg msg-error';}
+      chk.focus();
+    }
+  },true);
+});
+</script>
 </body>
 </html>
