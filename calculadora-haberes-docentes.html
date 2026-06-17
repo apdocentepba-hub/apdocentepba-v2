@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Calculadora salarial docente PBA | APDocentePBA</title>
-  <meta name="description" content="Calculadora salarial docente PBA en desarrollo con selector real de cargos, buscador interno, clave de consulta y lectura de conceptos.">
+  <meta name="description" content="Calculadora salarial docente PBA en desarrollo con selector real de cargos, buscador interno, clave de consulta, lectura de conceptos y validación comparativa con FEB.">
   <style>
     :root{--b:#2454f5;--d:#061a37;--m:#607086;--l:#dbe7f5;--bg:#f5f9ff;--s:#eef6ff;--y:#fff7df;--w:#8a5a00;--g:#e9f8ef;--ok:#176b3a;--r:#fff1f2;--red:#b42318}
     *{box-sizing:border-box}
@@ -34,6 +34,7 @@
     .pill.warn{background:var(--y);color:var(--w)}
     .pill.bad{background:var(--r);color:var(--red)}
     .out{background:#f8fbff;border:1px dashed #bfd3ef;border-radius:18px;padding:14px;white-space:pre-wrap;line-height:1.5;min-height:95px}
+    .out.smallout{min-height:72px}
     .tablewrap{overflow:auto;border:1px solid var(--l);border-radius:18px;background:#fff;margin:10px 0}
     table{border-collapse:collapse;width:100%;font-size:14px}
     th,td{padding:9px 10px;border-bottom:1px solid #edf2f7;text-align:left}
@@ -64,12 +65,13 @@
     <section class="hero">
       <span class="pill">Prototipo avanzado</span>
       <h1>Calculadora salarial docente PBA.</h1>
-      <p>Primer motor propio con selector real de cargos extraído por nivel. Arma la clave de consulta, intenta leer conceptos y permite validar contra casos capturados. No reemplaza COULI, Mis Haberes ni liquidación oficial.</p>
+      <p>Primer motor propio con selector real de cargos extraído por nivel. Arma la clave de consulta, intenta leer conceptos y permite validar contra casos capturados y contra FEB como segunda referencia manual. No reemplaza COULI, Mis Haberes ni liquidación oficial.</p>
       <div class="actions">
         <button class="btn primary" onclick="calcular()">Calcular / consultar</button>
         <button class="btn" onclick="usarCaso(0)">Caso con SUTEBA</button>
         <button class="btn" onclick="usarCaso(1)">Caso sin SUTEBA</button>
         <button class="btn" onclick="usarCaso(2)">Caso antigüedad 6</button>
+        <button class="btn" onclick="abrirFeb()">Abrir FEB</button>
       </div>
     </section>
 
@@ -80,14 +82,14 @@
         <p>Elegí nivel y filtrá cargos por nombre, abreviatura o tipo. Sirve especialmente en primaria y secundaria, donde el listado es largo.</p>
       </article>
       <article class="card">
-        <span class="pill warn">Consulta externa</span>
-        <h2>Puede depender de CORS</h2>
-        <p>Si el navegador bloquea la consulta, se puede abrir el endpoint y pegar el JSON.</p>
+        <span class="pill warn">Doble control</span>
+        <h2>Comparación con FEB</h2>
+        <p>FEB queda como contraste manual: copiás el neto de FEB, lo pegás acá y la herramienta calcula diferencia.</p>
       </article>
       <article class="card">
         <span class="pill bad">No oficial</span>
         <h2>Uso prudente</h2>
-        <p>La fuente principal sigue siendo el recibo oficial y el circuito institucional.</p>
+        <p>La fuente principal sigue siendo el recibo oficial, COULI, Mis Haberes y el circuito institucional.</p>
       </article>
     </section>
 
@@ -221,11 +223,35 @@
           <div class="totalbox"><b>Descuentos</b><strong id="descuentos">-</strong></div>
           <div class="totalbox"><b>Neto</b><strong id="neto">-</strong></div>
         </div>
+
+        <h3>Validación con FEB</h3>
+        <p class="hint">Usá FEB como segunda referencia: abrí su calculadora, cargá datos equivalentes, copiá el sueldo líquido y pegalo acá. La diferencia puede aparecer por descuentos personales no contemplados, afiliaciones, préstamos, seguros u otros ítems.</p>
+        <div class="actions">
+          <button class="btn" onclick="abrirFeb()">Abrir calculadora FEB</button>
+          <button class="btn" onclick="copiarDatosFeb()">Copiar datos para cargar en FEB</button>
+        </div>
+        <div class="form" style="margin-top:10px">
+          <div class="field">
+            <label for="febNeto">Neto / sueldo líquido FEB</label>
+            <input id="febNeto" placeholder="Ej.: 812.842,49" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="febRef">Referencia</label>
+            <select id="febRef">
+              <option>FEB abril 2026</option>
+              <option>Otra captura FEB</option>
+              <option>FEB + ajuste manual</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="btn primary" onclick="compararFeb()">Comparar con FEB</button></div>
+        <div id="febOut" class="out smallout">Todavía no hay comparación FEB. Primero calculá o pegá un resultado y después ingresá el neto que muestra FEB.</div>
+
         <div id="tablas"></div>
       </div>
     </section>
 
-    <section class="note"><b>Estado del proyecto:</b> el selector de cargos ya está integrado para abril 2026 y ahora tiene búsqueda interna por nivel. Faltan más liquidaciones, validación con FEB y casos de prueba por cargo/antigüedad.</section>
+    <section class="note"><b>Estado del proyecto:</b> el selector de cargos ya está integrado para abril 2026, tiene búsqueda interna por nivel y suma comparación manual con FEB. Faltan más liquidaciones, validación con más casos reales y una prueba visual completa en celular.</section>
   </div>
   <footer class="foot">APDocentePBA · Calculadora salarial docente PBA</footer>
 
@@ -245,6 +271,7 @@
     function val(id){return $(id).value||''}
     function normalizar(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
     function escapeHtml(t){return String(t??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+    function parseMonto(v){let s=String(v||'').replace(/[^0-9,.-]/g,'').trim();if(!s)return 0;if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.')}return Number(s)||0}
 
     function init(){
       for(let i=0;i<=24;i++)$('ant').innerHTML+=`<option value="${i}">${i}</option>`;
@@ -253,6 +280,7 @@
       $('cargo').addEventListener('change',()=>{actualizarTipo();actualizarKey()});
       ['liq','emp','porc','ant','rur','cant','diasc','diast','hijos','hijosdif'].forEach(id=>$(id).addEventListener('input',actualizarKey));
       ['sem','mensual','vac','carcel','afiliado','jext','jcomp','zf'].forEach(id=>$(id).addEventListener('change',actualizarKey));
+      $('febNeto').addEventListener('input',()=>{if(parseMonto(val('febNeto'))>0)compararFeb(false)});
       cargarCargos();
       seleccionarPorId(77);
       actualizarKey();
@@ -335,6 +363,7 @@
       $('descuentos').textContent=money(data.totalDescuentos);
       $('neto').textContent=money(data.totalNeto);
       $('tablas').innerHTML=tabla('Conceptos',data.conceptos)+tabla('Descuentos',data.descuentos)+(data.totalRemunerativos!=null?`<div class="out">Remunerativos: ${money(data.totalRemunerativos)}\nNo remunerativos: ${money(data.totalNoRemunerativos)}</div>`:'');
+      if(parseMonto(val('febNeto'))>0)compararFeb(false);
     }
 
     function tabla(titulo,rows){
@@ -388,10 +417,29 @@
     }
 
     function abrirEndpoint(){window.open(endpoint(),'_blank')}
+    function abrirFeb(){window.open('https://calculadora.feb.org.ar/','_blank')}
 
     async function copiarKey(){
       await navigator.clipboard.writeText(endpoint());
       alert('Endpoint copiado.');
+    }
+
+    async function copiarDatosFeb(){
+      const txt=`DATOS PARA COMPARAR EN FEB\nLiquidación: ${val('liq')}\nNivel: ${val('niv')}\nCargo: ${cargoSel().nombre}\nTipo: ${cargoSel().tipo}\nCantidad: ${val('cant')}\nAntigüedad: ${val('ant')}\nRuralidad/desfavorabilidad: ${val('rur')}\nEmpleador: ${val('emp')}\nAfiliado SUTEBA: ${yn('afiliado')?'Sí':'No'}\nNeto APDocentePBA/SUTEBA: ${$('neto').textContent}`;
+      await navigator.clipboard.writeText(txt);
+      alert('Datos copiados para cargar o comparar en FEB.');
+    }
+
+    function compararFeb(mostrarAlerta=true){
+      const actual=parseMonto($('neto').textContent);
+      const feb=parseMonto(val('febNeto'));
+      if(!actual){$('febOut').textContent='Primero calculá un resultado o pegá el JSON de SUTEBA para tener un neto de referencia.';return}
+      if(!feb){$('febOut').textContent='Pegá el sueldo líquido/neto que muestra FEB para comparar.';return}
+      const dif=actual-feb;
+      const pct=feb?dif/feb*100:0;
+      const signo=dif>0?'APDocentePBA/SUTEBA da más':dif<0?'FEB da más':'Coinciden';
+      $('febOut').textContent=`Referencia: ${val('febRef')}\nNeto APDocentePBA/SUTEBA: ${money(actual)}\nNeto FEB ingresado: ${money(feb)}\nDiferencia: ${money(Math.abs(dif))} (${Math.abs(pct).toFixed(2)}%)\nLectura: ${signo}. Revisá afiliación, descuentos personales, cargo equivalente, módulos/horas, antigüedad y desfavorabilidad.`;
+      if(mostrarAlerta&&Math.abs(dif)>5000)alert('Hay una diferencia relevante. Conviene revisar si FEB y APDocentePBA tienen exactamente el mismo cargo, cantidad, antigüedad y descuentos.');
     }
 
     function mostrarModoPegar(){
@@ -409,7 +457,7 @@
     }
 
     async function copiarInforme(){
-      let txt=`CALCULADORA SALARIAL DOCENTE PBA\n\nCargo: ${cargoSel().nombre}\nTipo: ${cargoSel().tipo}\nClave: ${key()}\nEndpoint: ${endpoint()}\nBruto: ${$('bruto').textContent}\nDescuentos: ${$('descuentos').textContent}\nNeto: ${$('neto').textContent}\n\n${$('tablas').innerText}`;
+      let txt=`CALCULADORA SALARIAL DOCENTE PBA\n\nCargo: ${cargoSel().nombre}\nTipo: ${cargoSel().tipo}\nClave: ${key()}\nEndpoint: ${endpoint()}\nBruto: ${$('bruto').textContent}\nDescuentos: ${$('descuentos').textContent}\nNeto: ${$('neto').textContent}\n\nVALIDACIÓN FEB\n${$('febOut').innerText}\n\n${$('tablas').innerText}`;
       await navigator.clipboard.writeText(txt);
       alert('Informe copiado.');
     }
