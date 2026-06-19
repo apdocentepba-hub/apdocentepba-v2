@@ -3,50 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Calculadora salarial docente PBA | APDocentePBA</title>
-  <meta name="description" content="Calculadora salarial docente PBA en desarrollo con selector real de cargos, buscador interno, clave de consulta, lectura de conceptos y validación comparativa con FEB.">
+  <title>Calculadora de haberes docentes PBA | APDocentePBA</title>
+  <meta name="description" content="Calculadora orientativa de haberes docentes PBA de APDocentePBA, con selector de nivel, cargo, antigüedad, zona fría, ruralidad, cantidad de cargos, módulos u horas y detalle estimado de ingresos y descuentos.">
   <style>
     :root{--b:#2454f5;--d:#061a37;--m:#607086;--l:#dbe7f5;--bg:#f5f9ff;--s:#eef6ff;--y:#fff7df;--w:#8a5a00;--g:#e9f8ef;--ok:#176b3a;--r:#fff1f2;--red:#b42318}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--d);font-family:Arial,system-ui,sans-serif}
-    .wrap{max-width:1180px;margin:auto;padding:18px}
-    .top,.nav,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    .top{justify-content:space-between}
-    .btn{display:inline-flex;justify-content:center;align-items:center;border:1px solid var(--l);border-radius:999px;padding:10px 14px;background:#fff;color:var(--d);text-decoration:none;font-weight:900;cursor:pointer}
-    .btn.primary{background:var(--b);border-color:var(--b);color:#fff}
-    .btn.small{padding:8px 11px;font-size:13px}
-    .hero,.card,.panel,.note{background:#fff;border:1px solid var(--l);border-radius:24px;padding:20px;margin:14px 0;box-shadow:0 10px 26px rgba(16,36,61,.05)}
-    .hero{background:linear-gradient(135deg,#fff,#eef5ff)}
-    h1{font-size:clamp(34px,5vw,56px);line-height:1;margin:8px 0;letter-spacing:-.05em}
-    .hero p,.card p,.panel p,.note{color:var(--m);line-height:1.5}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .layout{display:grid;grid-template-columns:430px 1fr;gap:14px}
-    .form{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-    .field{display:flex;flex-direction:column;gap:6px}
-    .field.full{grid-column:1/-1}
-    .field label{font-size:13px;font-weight:900;color:#0f3460}
-    input,select,textarea{width:100%;border:1px solid #cbd8ea;border-radius:14px;padding:10px 12px;font:inherit;background:#fbfdff}
-    textarea{min-height:110px;resize:vertical}
-    .searchrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
-    .hint{font-size:12px;color:#64748b;line-height:1.4}
-    .pill{display:inline-block;background:var(--s);color:#0f4fb8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900}
-    .pill.ok{background:var(--g);color:var(--ok)}
-    .pill.warn{background:var(--y);color:var(--w)}
-    .pill.bad{background:var(--r);color:var(--red)}
-    .out{background:#f8fbff;border:1px dashed #bfd3ef;border-radius:18px;padding:14px;white-space:pre-wrap;line-height:1.5;min-height:95px}
-    .out.smallout{min-height:72px}
-    .tablewrap{overflow:auto;border:1px solid var(--l);border-radius:18px;background:#fff;margin:10px 0}
-    table{border-collapse:collapse;width:100%;font-size:14px}
-    th,td{padding:9px 10px;border-bottom:1px solid #edf2f7;text-align:left}
-    th{background:#f8fbff;color:#0f3460}
-    .num{text-align:right;font-variant-numeric:tabular-nums}
-    .tot{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-    .totalbox{background:#f8fbff;border:1px solid var(--l);border-radius:18px;padding:14px}
-    .totalbox b{display:block;color:#607086;font-size:13px}
-    .totalbox strong{font-size:22px}
-    .note{background:var(--y);border:1px dashed #e6b54a;color:#604512}
-    .foot{text-align:center;color:#64748b;font-size:13px;padding:26px}
-    @media(max-width:950px){.grid,.layout,.form,.tot,.searchrow{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.btn{width:100%;text-align:center}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--d);font-family:Arial,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:18px}.top,.nav,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.top{justify-content:space-between}.btn{display:inline-flex;justify-content:center;align-items:center;border:1px solid var(--l);border-radius:999px;padding:10px 14px;background:#fff;color:var(--d);text-decoration:none;font-weight:900;cursor:pointer}.btn.primary{background:var(--b);border-color:var(--b);color:#fff}.btn.small{padding:8px 11px;font-size:13px}.hero,.card,.panel,.note{background:#fff;border:1px solid var(--l);border-radius:24px;padding:20px;margin:14px 0;box-shadow:0 10px 26px rgba(16,36,61,.05)}.hero{background:linear-gradient(135deg,#fff,#eef5ff)}h1{font-size:clamp(34px,5vw,56px);line-height:1;margin:8px 0;letter-spacing:-.05em}.hero p,.card p,.panel p,.note{color:var(--m);line-height:1.5}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.layout{display:grid;grid-template-columns:430px 1fr;gap:14px}.form{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:13px;font-weight:900;color:#0f3460}input,select,textarea{width:100%;border:1px solid #cbd8ea;border-radius:14px;padding:10px 12px;font:inherit;background:#fbfdff}textarea{min-height:86px;resize:vertical}.searchrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.hint{font-size:12px;color:#64748b;line-height:1.4}.pill{display:inline-block;background:var(--s);color:#0f4fb8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900}.pill.ok{background:var(--g);color:var(--ok)}.pill.warn{background:var(--y);color:var(--w)}.pill.bad{background:var(--r);color:var(--red)}.out{background:#f8fbff;border:1px dashed #bfd3ef;border-radius:18px;padding:14px;white-space:pre-wrap;line-height:1.5;min-height:78px}.tablewrap{overflow:auto;border:1px solid var(--l);border-radius:18px;background:#fff;margin:10px 0}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:9px 10px;border-bottom:1px solid #edf2f7;text-align:left}th{background:#f8fbff;color:#0f3460}.num{text-align:right;font-variant-numeric:tabular-nums}.tot{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.totalbox{background:#f8fbff;border:1px solid var(--l);border-radius:18px;padding:14px}.totalbox b{display:block;color:#607086;font-size:13px}.totalbox strong{font-size:22px}.note{background:var(--y);border:1px dashed #e6b54a;color:#604512}.foot{text-align:center;color:#64748b;font-size:13px;padding:26px}@media(max-width:950px){.grid,.layout,.form,.tot,.searchrow{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.btn{width:100%;text-align:center}}
   </style>
 </head>
 <body>
@@ -63,33 +24,31 @@
     </header>
 
     <section class="hero">
-      <span class="pill">Prototipo avanzado</span>
-      <h1>Calculadora salarial docente PBA.</h1>
-      <p>Primer motor propio con selector real de cargos extraído por nivel. Arma la clave de consulta, intenta leer conceptos y permite validar contra casos capturados y contra FEB como segunda referencia manual. No reemplaza COULI, Mis Haberes ni liquidación oficial.</p>
+      <span class="pill">Herramienta propia · versión orientativa</span>
+      <h1>Calculadora de haberes docentes PBA.</h1>
+      <p>Estimá bruto, descuentos y neto con selector de nivel/modalidad, cargo, antigüedad, zona fría, ruralidad y cantidad de cargos, módulos u horas. El resultado es una simulación de trabajo para control rápido: puede diferir del recibo por descuentos personales, novedades, licencias, ajustes o liquidaciones complementarias.</p>
       <div class="actions">
-        <button class="btn primary" onclick="calcular()">Calcular / consultar</button>
-        <button class="btn" onclick="usarCaso(0)">Caso con SUTEBA</button>
-        <button class="btn" onclick="usarCaso(1)">Caso sin SUTEBA</button>
-        <button class="btn" onclick="usarCaso(2)">Caso antigüedad 6</button>
-        <button class="btn" onclick="abrirFeb()">Abrir FEB</button>
+        <button class="btn primary" id="btnCalcular">Calcular haber estimado</button>
+        <button class="btn" id="btnCopiar">Copiar informe</button>
+        <button class="btn" id="btnLimpiar">Limpiar</button>
       </div>
     </section>
 
     <section class="grid">
       <article class="card">
-        <span class="pill ok">Avance real</span>
-        <h2>Selector con buscador</h2>
-        <p>Elegí nivel y filtrá cargos por nombre, abreviatura o tipo. Sirve especialmente en primaria y secundaria, donde el listado es largo.</p>
+        <span class="pill ok">Unificada</span>
+        <h2>Cargos por nivel</h2>
+        <p>El selector usa la base local ya integrada en APDocentePBA y permite buscar por cargo, abreviatura, ID o tipo de bloque.</p>
       </article>
       <article class="card">
-        <span class="pill warn">Doble control</span>
-        <h2>Comparación con FEB</h2>
-        <p>FEB queda como contraste manual: copiás el neto de FEB, lo pegás acá y la herramienta calcula diferencia.</p>
+        <span class="pill warn">Orientativa</span>
+        <h2>Motor estimativo</h2>
+        <p>Calcula conceptos habituales, antigüedad, ruralidad, zona fría, aportes principales y descuentos opcionales. No reemplaza la liquidación oficial.</p>
       </article>
       <article class="card">
-        <span class="pill bad">No oficial</span>
-        <h2>Uso prudente</h2>
-        <p>La fuente principal sigue siendo el recibo oficial, COULI, Mis Haberes y el circuito institucional.</p>
+        <span class="pill bad">Control docente</span>
+        <h2>Lectura del recibo</h2>
+        <p>Sirve para tener una referencia rápida antes de revisar COULI, Mis Haberes, contralor, secuencias y novedades de cobro.</p>
       </article>
     </section>
 
@@ -98,68 +57,23 @@
         <h2>Parámetros</h2>
         <div class="form">
           <div class="field">
-            <label for="liq">Liquidación</label>
-            <select id="liq">
-              <option value="2026/4">Abril 2026</option>
-              <option value="2026/3">Marzo 2026</option>
-              <option value="2026/1">Enero 2026</option>
-              <option value="2025/12">Diciembre 2025</option>
-              <option value="2025/10">Octubre 2025</option>
-              <option value="2025/8">Agosto 2025</option>
-              <option value="2025/7">Julio 2025</option>
-              <option value="2025/5">Mayo 2025</option>
-              <option value="2025/3">Marzo 2025</option>
-              <option value="2025/2">Febrero 2025</option>
-            </select>
+            <label for="liq">Liquidación de referencia</label>
+            <select id="liq"><option value="2026-04">Abril 2026</option></select>
           </div>
           <div class="field">
-            <label for="emp">Empleador</label>
-            <select id="emp">
-              <option value="E">Estatal</option>
-              <option value="P">Privado</option>
-              <option value="J">Jubilado</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="porc">% jubilación si corresponde</label>
-            <select id="porc">
-              <option>85</option><option>80</option><option>75</option><option>70</option><option>65</option><option>60</option><option>55</option><option>50</option><option>45</option><option>40</option><option>35</option><option>30</option><option>25</option><option>20</option><option>15</option><option>10</option><option>9</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="ant">Antigüedad</label>
-            <select id="ant"></select>
-          </div>
-          <div class="field">
-            <label for="rur">Ruralidad</label>
-            <select id="rur">
-              <option value="1">Sin ruralidad - 0%</option>
-              <option value="2">I - 30%</option>
-              <option value="3">II - 60%</option>
-              <option value="4">III - 90%</option>
-              <option value="5">IV - 100%</option>
-              <option value="6">V - 120%</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="niv">Nivel</label>
-            <select id="niv">
-              <option value="SECUNDARIA">SECUNDARIA</option>
-              <option value="PRIMARIA">PRIMARIA</option>
-              <option value="INICIAL">INICIAL</option>
-              <option value="SUPERIOR">SUPERIOR</option>
-            </select>
+            <label for="nivel">Nivel/modalidad</label>
+            <select id="nivel"></select>
           </div>
           <div class="field full">
-            <label for="cargoSearch">Buscar cargo</label>
+            <label for="buscarCargo">Buscar cargo</label>
             <div class="searchrow">
-              <input id="cargoSearch" type="search" placeholder="Ej.: EMATP, preceptor, módulos, hora cátedra, director..." autocomplete="off">
-              <button class="btn small" type="button" onclick="limpiarBusquedaCargo()">Limpiar</button>
+              <input id="buscarCargo" type="search" placeholder="Ej.: EMATP, preceptor, módulos, hora cátedra, maestro, bibliotecario..." autocomplete="off">
+              <button class="btn small" type="button" id="btnBuscarLimpiar">Limpiar</button>
             </div>
             <div id="cargoInfo" class="hint" aria-live="polite"></div>
           </div>
           <div class="field full">
-            <label for="cargo">Cargo</label>
+            <label for="cargo">Cargo/escalafón</label>
             <select id="cargo"></select>
           </div>
           <div class="field">
@@ -167,302 +81,70 @@
             <input id="bloque" readonly>
           </div>
           <div class="field">
-            <label for="cant">Cantidad</label>
-            <input id="cant" value="1" inputmode="numeric">
+            <label for="cantidad">Cantidad</label>
+            <input id="cantidad" value="1" inputmode="decimal">
           </div>
           <div class="field">
-            <label for="diasc">Días contemplados</label>
-            <input id="diasc" value="13" inputmode="numeric">
+            <label for="ant">Antigüedad</label>
+            <select id="ant"></select>
           </div>
           <div class="field">
-            <label for="diast">Días trabajados vacaciones</label>
-            <select id="diast">
-              <option value="2">16 - 44</option><option value="5">45 - 74</option><option value="7">75 - 104</option><option value="10">105 - 134</option><option value="12">135 - 164</option><option value="15">165 - 194</option><option value="17">195 - 224</option><option value="20">225 - 254</option><option value="22">255 - 284</option><option value="25">285 - 314</option><option value="27">315 - 344</option><option value="30">345 - 365</option>
+            <label for="ruralidad">Ruralidad/desfavorabilidad</label>
+            <select id="ruralidad">
+              <option value="0">Sin ruralidad - 0%</option>
+              <option value="0.30">I - 30%</option>
+              <option value="0.60">II - 60%</option>
+              <option value="0.90">III - 90%</option>
+              <option value="1.00">IV - 100%</option>
+              <option value="1.20">V - 120%</option>
             </select>
           </div>
           <div class="field">
-            <label for="hijos">Hijos</label>
-            <input id="hijos" value="0" inputmode="numeric">
+            <label for="zonaFria">Zona fría</label>
+            <select id="zonaFria"><option value="0">No</option><option value="1">Sí</option></select>
           </div>
           <div class="field">
-            <label for="hijosdif">Hijos con discapacidad</label>
-            <input id="hijosdif" value="0" inputmode="numeric">
+            <label for="afiliacion">Descuento gremial/social</label>
+            <select id="afiliacion"><option value="0">No incluir</option><option value="1">Incluir estimado</option></select>
           </div>
-          <div class="field full">
-            <label>Opciones</label>
-            <label><input type="checkbox" id="sem" checked> Trabajó semestre anterior</label>
-            <label><input type="checkbox" id="mensual" checked> Mensual</label>
-            <label><input type="checkbox" id="vac"> Vacaciones</label>
-            <label><input type="checkbox" id="carcel"> Atención en cárcel</label>
-            <label><input type="checkbox" id="afiliado"> Afiliado a SUTEBA</label>
-            <label><input type="checkbox" id="jext"> Jornada extendida 6 horas</label>
-            <label><input type="checkbox" id="jcomp"> Jornada completa 8 horas</label>
-            <label><input type="checkbox" id="zf"> Zona fría</label>
+          <div class="field">
+            <label for="extra">Otros ingresos remunerativos</label>
+            <input id="extra" value="0" inputmode="decimal" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="descExtra">Otros descuentos</label>
+            <input id="descExtra" value="0" inputmode="decimal" placeholder="0">
           </div>
         </div>
         <div class="actions">
-          <button class="btn primary" onclick="calcular()">Calcular / consultar</button>
-          <button class="btn" onclick="copiarKey()">Copiar endpoint</button>
-          <button class="btn" onclick="abrirEndpoint()">Abrir endpoint</button>
+          <button class="btn primary" id="btnCalcular2">Calcular</button>
         </div>
       </div>
 
       <div class="panel">
-        <h2>Resultado</h2>
-        <div id="estado" class="out">Elegí nivel, cargo y parámetros. Si falla la consulta directa, abrí el endpoint y pegá la respuesta JSON.</div>
-        <div class="actions">
-          <button class="btn" onclick="mostrarModoPegar()">Pegar JSON</button>
-          <button class="btn" onclick="copiarInforme()">Copiar informe</button>
-        </div>
-        <textarea id="jsonManual" style="display:none;margin-top:10px" placeholder="Pegá acá el JSON del endpoint"></textarea>
-        <div id="jsonBtns" class="actions" style="display:none"><button class="btn primary" onclick="procesarManual()">Procesar JSON</button></div>
-        <h3>Clave / endpoint</h3>
-        <div id="keybox" class="out"></div>
+        <h2>Resultado estimado</h2>
+        <div id="estado" class="out">Cargá los parámetros y presioná calcular. La estimación queda dentro de la página y no abre servicios externos.</div>
         <div class="tot">
-          <div class="totalbox"><b>Bruto</b><strong id="bruto">-</strong></div>
+          <div class="totalbox"><b>Ingresos</b><strong id="bruto">-</strong></div>
           <div class="totalbox"><b>Descuentos</b><strong id="descuentos">-</strong></div>
           <div class="totalbox"><b>Neto</b><strong id="neto">-</strong></div>
         </div>
-
-        <h3>Validación con FEB</h3>
-        <p class="hint">Usá FEB como segunda referencia: abrí su calculadora, cargá datos equivalentes, copiá el sueldo líquido y pegalo acá. La diferencia puede aparecer por descuentos personales no contemplados, afiliaciones, préstamos, seguros u otros ítems.</p>
-        <div class="actions">
-          <button class="btn" onclick="abrirFeb()">Abrir calculadora FEB</button>
-          <button class="btn" onclick="copiarDatosFeb()">Copiar datos para cargar en FEB</button>
-        </div>
-        <div class="form" style="margin-top:10px">
-          <div class="field">
-            <label for="febNeto">Neto / sueldo líquido FEB</label>
-            <input id="febNeto" placeholder="Ej.: 812.842,49" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label for="febRef">Referencia</label>
-            <select id="febRef">
-              <option>FEB abril 2026</option>
-              <option>Otra captura FEB</option>
-              <option>FEB + ajuste manual</option>
-            </select>
-          </div>
-        </div>
-        <div class="actions"><button class="btn primary" onclick="compararFeb()">Comparar con FEB</button></div>
-        <div id="febOut" class="out smallout">Todavía no hay comparación FEB. Primero calculá o pegá un resultado y después ingresá el neto que muestra FEB.</div>
-
         <div id="tablas"></div>
+        <h3>Ajuste manual rápido</h3>
+        <p class="hint">Si tenés un recibo real, podés cargar el neto cobrado para ver la diferencia contra la estimación.</p>
+        <div class="form">
+          <div class="field"><label for="netoReal">Neto real cobrado</label><input id="netoReal" placeholder="Ej.: 812.842,49" inputmode="decimal"></div>
+          <div class="field"><label for="obs">Observaciones</label><input id="obs" placeholder="Ej.: préstamo, seguro, suplencia parcial, ajuste..."></div>
+        </div>
+        <div id="comparacion" class="out">Todavía no hay comparación con recibo real.</div>
       </div>
     </section>
 
-    <section class="note"><b>Estado del proyecto:</b> el selector de cargos ya está integrado para abril 2026, tiene búsqueda interna por nivel y suma comparación manual con FEB. Faltan más liquidaciones, validación con más casos reales y una prueba visual completa en celular.</section>
+    <section class="note"><b>Importante:</b> calculadora orientativa de APDocentePBA. Para reclamos o liquidaciones definitivas se debe contrastar con recibo oficial, COULI/Mis Haberes, contralor, altas, ceses, secuencias, módulos/horas liquidados y descuentos personales.</section>
   </div>
-  <footer class="foot">APDocentePBA · Calculadora salarial docente PBA</footer>
+  <footer class="foot">APDocentePBA · Calculadora de haberes docentes PBA</footer>
 
   <script src="./assets/js/haberes-cargos-suteba-2026-4.js"></script>
-  <script>
-    const samples=[
-      {key:'1.0.2026.4..E..0.1.77.1.1.1..0..0.0.1.0.0.0.0',data:{conceptos:[{codigo:'0110',descripcion:'Básico',importe:392179.2},{codigo:'0220',descripcion:'Antigüedad',importe:82357.63},{codigo:'0451',descripcion:'Suma Rem No Bonif Ind. 1,20 a 1,33',importe:243477.92},{codigo:'0455',descripcion:'Bonif. Docente Agosto 2008',importe:132599},{codigo:'0667',descripcion:'Bonificación Hs/Mod no jerárquicos ens. media',importe:138896.8},{codigo:'2761',descripcion:'Garantía sin aportes 930',importe:450.14},{codigo:'2999',descripcion:'Compensación FONID/Conectividad',importe:28700}],descuentos:[{codigo:'1060',descripcion:'IPS',importe:158321.69},{codigo:'1280',descripcion:'IOMA',importe:47496.51},{codigo:'1472',descripcion:'SUTEBA Cuota Sindical',importe:8987.44},{codigo:'1473',descripcion:'SUTEBA Cuota Social',importe:29685.32}],totalBruto:1018660.69,totalDescuentos:244490.96,totalNeto:774169.73,totalRemunerativos:989510.55,totalNoRemunerativos:29150.14}},
-      {key:'1.0.2026.4..E..0.1.77.1.1.1..0..0.0.0.0.0.0.0',data:{conceptos:[{codigo:'0110',descripcion:'Básico',importe:392179.2},{codigo:'0220',descripcion:'Antigüedad',importe:82357.63},{codigo:'0451',descripcion:'Suma Rem No Bonif Ind. 1,20 a 1,33',importe:243477.92},{codigo:'0455',descripcion:'Bonif. Docente Agosto 2008',importe:132599},{codigo:'0667',descripcion:'Bonificación Hs/Mod no jerárquicos ens. media',importe:138896.8},{codigo:'2761',descripcion:'Garantía sin aportes 930',importe:450.14},{codigo:'2999',descripcion:'Compensación FONID/Conectividad',importe:28700}],descuentos:[{codigo:'1060',descripcion:'IPS',importe:158321.69},{codigo:'1280',descripcion:'IOMA',importe:47496.51}],totalBruto:1018660.69,totalDescuentos:205818.2,totalNeto:812842.49,totalRemunerativos:989510.55,totalNoRemunerativos:29150.14}},
-      {key:'1.0.2026.4..E..6.1.77.1.1.1..0..0.0.0.0.0.0.0',data:{conceptos:[{codigo:'0110',descripcion:'Básico',importe:392179.2},{codigo:'0220',descripcion:'Antigüedad',importe:129419.14},{codigo:'0451',descripcion:'Suma Rem No Bonif Ind. 1,20 a 1,33',importe:243477.92},{codigo:'0455',descripcion:'Bonif. Docente Agosto 2008',importe:132599},{codigo:'0667',descripcion:'Bonificación Hs/Mod no jerárquicos ens. media',importe:138896.8},{codigo:'2761',descripcion:'Garantía sin aportes 930',importe:146.73},{codigo:'2999',descripcion:'Compensación FONID/Conectividad',importe:28700}],descuentos:[{codigo:'1060',descripcion:'IPS',importe:165851.53},{codigo:'1280',descripcion:'IOMA',importe:49755.46}],totalBruto:1065418.79,totalDescuentos:215606.99,totalNeto:849811.8,totalRemunerativos:1036572.06,totalNoRemunerativos:28846.73}}
-    ];
-
-    const $=id=>document.getElementById(id);
-    const C=()=>window.AP_DOCENTE_HABERES_CARGOS_SUTEBA_2026_4||{};
-
-    function money(x){return '$ '+Number(x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})}
-    function yn(id){return $(id).checked?1:0}
-    function val(id){return $(id).value||''}
-    function normalizar(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
-    function escapeHtml(t){return String(t??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
-    function parseMonto(v){let s=String(v||'').replace(/[^0-9,.-]/g,'').trim();if(!s)return 0;if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.')}return Number(s)||0}
-
-    function init(){
-      for(let i=0;i<=24;i++)$('ant').innerHTML+=`<option value="${i}">${i}</option>`;
-      $('niv').addEventListener('change',()=>{limpiarBusquedaCargo(false);cargarCargos();actualizarKey()});
-      $('cargoSearch').addEventListener('input',()=>{cargarCargos();actualizarKey()});
-      $('cargo').addEventListener('change',()=>{actualizarTipo();actualizarKey()});
-      ['liq','emp','porc','ant','rur','cant','diasc','diast','hijos','hijosdif'].forEach(id=>$(id).addEventListener('input',actualizarKey));
-      ['sem','mensual','vac','carcel','afiliado','jext','jcomp','zf'].forEach(id=>$(id).addEventListener('change',actualizarKey));
-      $('febNeto').addEventListener('input',()=>{if(parseMonto(val('febNeto'))>0)compararFeb(false)});
-      cargarCargos();
-      seleccionarPorId(77);
-      actualizarKey();
-    }
-
-    function listaCargosNivel(){return C()[val('niv')]||[]}
-
-    function cargarCargos(){
-      const cargoEl=$('cargo');
-      const previo=cargoEl.value;
-      const q=normalizar(val('cargoSearch'));
-      const todos=listaCargosNivel();
-      const filtrados=todos.filter(c=>!q||normalizar(`${c.nombre} ${c.id} ${c.tipoBloque}`).includes(q));
-
-      if(!filtrados.length){
-        cargoEl.innerHTML='<option value="" data-bloque="">Sin resultados para esa búsqueda</option>';
-        $('cargoInfo').textContent=`0 de ${todos.length} cargos encontrados. Probá con otro término o limpiá la búsqueda.`;
-        actualizarTipo();
-        return;
-      }
-
-      cargoEl.innerHTML=filtrados.map(c=>`<option value="${c.id}" data-bloque="${escapeHtml(c.tipoBloque)}">${escapeHtml(c.nombre)}</option>`).join('');
-      if(filtrados.some(c=>String(c.id)===String(previo))){cargoEl.value=previo}
-      $('cargoInfo').textContent=`${filtrados.length} de ${todos.length} cargos visibles para ${val('niv')}.`;
-      actualizarTipo();
-    }
-
-    function limpiarBusquedaCargo(actualizar=true){
-      $('cargoSearch').value='';
-      if(actualizar){cargarCargos();actualizarKey()}
-    }
-
-    function cargoSel(){
-      let o=$('cargo').selectedOptions[0];
-      return{ id:o?.value||'', nombre:o?.textContent||'Sin seleccionar', tipo:o?.dataset.bloque||'CARGO'}
-    }
-
-    function actualizarTipo(){
-      let c=cargoSel();
-      $('bloque').value=c.id?c.tipo:'';
-      if(!c.id)return;
-      if(c.tipo==='MODULOS'){$('cant').value=$('cant').value||10}
-      else if(c.tipo==='HORAS'){$('cant').value=$('cant').value||4}
-      else {$('cant').value=$('cant').value||1}
-    }
-
-    function key(){
-      let lm=val('liq').split('/'),anio=lm[0],mes=lm[1],emp=val('emp'),jub=emp==='J',mens=yn('mensual'),vac=yn('vac'),c=cargoSel();
-      let cantidad=(c.tipo==='MODULOS'||c.tipo==='HORAS')?(Number(val('cant')||1)||1):1;
-      return ['1','0',anio,mes,'',emp,jub?val('porc'):'',val('ant'),val('rur'),c.id,cantidad,yn('sem'),mens,mens?'':val('diasc'),vac,vac?val('diast'):'',yn('carcel'),yn('zf'),yn('afiliado'),yn('jext'),yn('jcomp'),val('hijos')||0,val('hijosdif')||0].join('.')
-    }
-
-    function endpoint(){return 'https://haberes.suteba.org.ar/app/request/data/'+key()}
-
-    function actualizarKey(){
-      $('keybox').textContent='Cargo: '+cargoSel().nombre+'\nTipo: '+cargoSel().tipo+'\nClave: '+key()+'\nEndpoint: '+endpoint();
-    }
-
-    async function calcular(){
-      const c=cargoSel();
-      if(!c.id){$('estado').textContent='No hay cargo seleccionado. Limpiá o cambiá la búsqueda de cargos.';return}
-      actualizarKey();
-      $('estado').textContent='Intentando consultar endpoint externo...';
-      let k=key(),s=samples.find(x=>x.key===k);
-      if(s){render(s.data,'Resultado desde caso capturado local.');return}
-      try{
-        let r=await fetch(endpoint());
-        let j=await r.json();
-        let d=j.results&&j.results.data;
-        if(!d)throw new Error('Respuesta sin data');
-        render(d,'Resultado obtenido por consulta directa.');
-      }catch(e){
-        $('estado').textContent='No pude consultar directamente desde este dominio. Puede ser bloqueo CORS. Abrí el endpoint, copiá el JSON y pegalo con “Pegar JSON”.\n\n'+endpoint();
-      }
-    }
-
-    function render(data,msg){
-      $('estado').textContent=msg;
-      $('bruto').textContent=money(data.totalBruto);
-      $('descuentos').textContent=money(data.totalDescuentos);
-      $('neto').textContent=money(data.totalNeto);
-      $('tablas').innerHTML=tabla('Conceptos',data.conceptos)+tabla('Descuentos',data.descuentos)+(data.totalRemunerativos!=null?`<div class="out">Remunerativos: ${money(data.totalRemunerativos)}\nNo remunerativos: ${money(data.totalNoRemunerativos)}</div>`:'');
-      if(parseMonto(val('febNeto'))>0)compararFeb(false);
-    }
-
-    function tabla(titulo,rows){
-      rows=rows||[];
-      return `<h3>${escapeHtml(titulo)}</h3><div class="tablewrap"><table><thead><tr><th>Código</th><th>Concepto</th><th class="num">Importe</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.codigo||'')}</td><td>${escapeHtml(r.descripcion||'')}</td><td class="num">${money(r.importe)}</td></tr>`).join('')}</tbody></table></div>`;
-    }
-
-    function usarCaso(i){
-      let s=samples[i];
-      setFromKey(s.key);
-      render(s.data,'Resultado desde caso capturado local.');
-    }
-
-    function seleccionarPorId(id){
-      for(const nivel of Object.keys(C())){
-        let list=C()[nivel]||[];
-        if(list.some(c=>String(c.id)===String(id))){
-          $('niv').value=nivel;
-          limpiarBusquedaCargo(false);
-          cargarCargos();
-          $('cargo').value=String(id);
-          actualizarTipo();
-          return true;
-        }
-      }
-      return false;
-    }
-
-    function setFromKey(k){
-      let p=k.split('.');
-      $('liq').value=p[2]+'/'+p[3];
-      $('emp').value=p[5];
-      $('porc').value=p[6]||'85';
-      $('ant').value=p[7];
-      $('rur').value=p[8];
-      seleccionarPorId(p[9]);
-      $('cant').value=p[10];
-      $('sem').checked=p[11]=='1';
-      $('mensual').checked=p[12]=='1';
-      $('diasc').value=p[13]||'13';
-      $('vac').checked=p[14]=='1';
-      $('diast').value=p[15]||'2';
-      $('carcel').checked=p[16]=='1';
-      $('zf').checked=p[17]=='1';
-      $('afiliado').checked=p[18]=='1';
-      $('jext').checked=p[19]=='1';
-      $('jcomp').checked=p[20]=='1';
-      $('hijos').value=p[21]||0;
-      $('hijosdif').value=p[22]||0;
-      actualizarKey();
-    }
-
-    function abrirEndpoint(){window.open(endpoint(),'_blank')}
-    function abrirFeb(){window.open('https://calculadora.feb.org.ar/','_blank')}
-
-    async function copiarKey(){
-      await navigator.clipboard.writeText(endpoint());
-      alert('Endpoint copiado.');
-    }
-
-    async function copiarDatosFeb(){
-      const txt=`DATOS PARA COMPARAR EN FEB\nLiquidación: ${val('liq')}\nNivel: ${val('niv')}\nCargo: ${cargoSel().nombre}\nTipo: ${cargoSel().tipo}\nCantidad: ${val('cant')}\nAntigüedad: ${val('ant')}\nRuralidad/desfavorabilidad: ${val('rur')}\nEmpleador: ${val('emp')}\nAfiliado SUTEBA: ${yn('afiliado')?'Sí':'No'}\nNeto APDocentePBA/SUTEBA: ${$('neto').textContent}`;
-      await navigator.clipboard.writeText(txt);
-      alert('Datos copiados para cargar o comparar en FEB.');
-    }
-
-    function compararFeb(mostrarAlerta=true){
-      const actual=parseMonto($('neto').textContent);
-      const feb=parseMonto(val('febNeto'));
-      if(!actual){$('febOut').textContent='Primero calculá un resultado o pegá el JSON de SUTEBA para tener un neto de referencia.';return}
-      if(!feb){$('febOut').textContent='Pegá el sueldo líquido/neto que muestra FEB para comparar.';return}
-      const dif=actual-feb;
-      const pct=feb?dif/feb*100:0;
-      const signo=dif>0?'APDocentePBA/SUTEBA da más':dif<0?'FEB da más':'Coinciden';
-      $('febOut').textContent=`Referencia: ${val('febRef')}\nNeto APDocentePBA/SUTEBA: ${money(actual)}\nNeto FEB ingresado: ${money(feb)}\nDiferencia: ${money(Math.abs(dif))} (${Math.abs(pct).toFixed(2)}%)\nLectura: ${signo}. Revisá afiliación, descuentos personales, cargo equivalente, módulos/horas, antigüedad y desfavorabilidad.`;
-      if(mostrarAlerta&&Math.abs(dif)>5000)alert('Hay una diferencia relevante. Conviene revisar si FEB y APDocentePBA tienen exactamente el mismo cargo, cantidad, antigüedad y descuentos.');
-    }
-
-    function mostrarModoPegar(){
-      $('jsonManual').style.display='block';
-      $('jsonBtns').style.display='flex';
-    }
-
-    function procesarManual(){
-      try{
-        let raw=$('jsonManual').value.trim(),j=JSON.parse(raw),d=j.results?.data||j.data||j;
-        render(d,'Resultado procesado desde JSON pegado.');
-      }catch(e){
-        alert('No pude leer ese JSON. Pegá la respuesta completa del endpoint.');
-      }
-    }
-
-    async function copiarInforme(){
-      let txt=`CALCULADORA SALARIAL DOCENTE PBA\n\nCargo: ${cargoSel().nombre}\nTipo: ${cargoSel().tipo}\nClave: ${key()}\nEndpoint: ${endpoint()}\nBruto: ${$('bruto').textContent}\nDescuentos: ${$('descuentos').textContent}\nNeto: ${$('neto').textContent}\n\nVALIDACIÓN FEB\n${$('febOut').innerText}\n\n${$('tablas').innerText}`;
-      await navigator.clipboard.writeText(txt);
-      alert('Informe copiado.');
-    }
-
-    init();
-  </script>
+  <script src="./assets/js/calculadora-haberes-pba.js"></script>
 </body>
 </html>
