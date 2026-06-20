@@ -4,10 +4,13 @@
     <application
         android:allowBackup="true"
         android:label="APDocentePBA"
+        android:resizeableActivity="true"
+        android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
