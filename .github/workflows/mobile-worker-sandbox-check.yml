@@ -1,0 +1,25 @@
+name: Check Mobile Worker Sandbox
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - mobile-worker-sandbox
+    paths:
+      - 'mobile-worker-sandbox/**'
+      - '.github/workflows/mobile-worker-sandbox-check.yml'
+
+jobs:
+  check-mobile-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Wrangler dry-run bundle check
+        run: npx --yes wrangler deploy --dry-run --config mobile-worker-sandbox/wrangler.mobile.example.toml
