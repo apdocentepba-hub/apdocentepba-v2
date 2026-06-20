@@ -6,8 +6,10 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -44,7 +46,10 @@ public class MainActivity extends Activity {
 
         Button reload = new Button(this);
         reload.setText("Recargar");
-        reload.setOnClickListener(v -> webView.reload());
+        reload.setOnClickListener(v -> {
+            status.setText("Recargando...");
+            webView.reload();
+        });
         bar.addView(reload);
 
         Button external = new Button(this);
@@ -60,22 +65,35 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setSupportZoom(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        cookieManager.setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return false;
+                return handleUrl(request.getUrl().toString());
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url == null) return false;
-                Uri uri = Uri.parse(url);
-                String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
-                if (host.endsWith("alertasapd.com.ar")) return false;
-                openExternal(url);
-                return true;
+                return handleUrl(url);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 status.setText("APDocentePBA");
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    status.setText("Sin conexión o error de carga");
+                }
             }
         });
 
@@ -84,6 +102,15 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         webView.loadUrl(HOME_URL);
+    }
+
+    private boolean handleUrl(String url) {
+        if (url == null) return false;
+        Uri uri = Uri.parse(url);
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
+        if (host.endsWith("alertasapd.com.ar")) return false;
+        openExternal(url);
+        return true;
     }
 
     private void openExternal(String url) {
