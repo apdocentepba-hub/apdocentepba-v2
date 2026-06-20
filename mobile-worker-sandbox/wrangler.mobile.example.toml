@@ -1,0 +1,15 @@
+# Ejemplo para pruebas manuales de Worker movil AISLADO.
+# No reemplaza el Worker actual.
+# No tiene routes a alertasapd.com.ar.
+# Usar solo si se crea un Worker nuevo separado en Cloudflare.
+
+name = "apdocentepba-mobile-alerts-sandbox"
+main = "mobile-worker-wrapper.js"
+compatibility_date = "2026-06-20"
+
+# Sin routes de produccion.
+# Sin workers_dev = false.
+# Probar solo con workers.dev propio del Worker nuevo.
+
+[vars]
+MOBILE_WORKER_MODE = "sandbox"
