@@ -6,21 +6,16 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.webkit.CookieManager;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
     private static final String HOME_URL = "https://alertasapd.com.ar/";
-    private WebView webView;
-    private TextView status;
+    private static final String HERRAMIENTAS_URL = "https://alertasapd.com.ar/herramientas.html";
+    private static final String BUSCAR_URL = "https://alertasapd.com.ar/buscar-herramientas.html";
+    private static final String LICENCIAS_URL = "https://alertasapd.com.ar/licencias-docentes.html";
+    private static final String HABERES_URL = "https://alertasapd.com.ar/calculadora-haberes-docentes.html";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,89 +23,58 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.WHITE);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(36, 48, 36, 36);
+        root.setBackgroundColor(Color.rgb(245, 248, 255));
 
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(18, 12, 18, 12);
-        bar.setBackgroundColor(Color.rgb(11, 45, 92));
+        TextView title = new TextView(this);
+        title.setText("APDocentePBA");
+        title.setTextSize(28);
+        title.setTextColor(Color.rgb(11, 45, 92));
+        title.setGravity(Gravity.CENTER);
+        root.addView(title, fullWidth());
 
-        status = new TextView(this);
-        status.setText("APDocentePBA");
-        status.setTextColor(Color.WHITE);
-        status.setTextSize(16);
-        status.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        bar.addView(status, titleParams);
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Acceso directo a la web oficial. El login y las alertas se abren en tu navegador para usar la misma sesion que en Chrome.");
+        subtitle.setTextSize(15);
+        subtitle.setTextColor(Color.rgb(55, 65, 81));
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 18, 0, 26);
+        root.addView(subtitle, fullWidth());
 
-        Button reload = new Button(this);
-        reload.setText("Recargar");
-        reload.setOnClickListener(v -> {
-            status.setText("Recargando...");
-            webView.reload();
-        });
-        bar.addView(reload);
+        addButton(root, "Abrir panel y alertas", HOME_URL);
+        addButton(root, "Herramientas docentes", HERRAMIENTAS_URL);
+        addButton(root, "Buscar herramientas", BUSCAR_URL);
+        addButton(root, "Licencias docentes", LICENCIAS_URL);
+        addButton(root, "Calculadora de haberes", HABERES_URL);
 
-        Button external = new Button(this);
-        external.setText("Navegador");
-        external.setOnClickListener(v -> openExternal(webView.getUrl() != null ? webView.getUrl() : HOME_URL));
-        bar.addView(external);
+        TextView note = new TextView(this);
+        note.setText("Esta APK no modifica Cloudflare, Worker ni Supabase. Solo abre secciones existentes de la web.");
+        note.setTextSize(13);
+        note.setTextColor(Color.rgb(75, 85, 99));
+        note.setGravity(Gravity.CENTER);
+        note.setPadding(0, 28, 0, 0);
+        root.addView(note, fullWidth());
 
-        webView = new WebView(this);
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        settings.setSupportZoom(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-
-        CookieManager cookieManager = CookieManager.getInstance();
-        cookieManager.setAcceptCookie(true);
-        cookieManager.setAcceptThirdPartyCookies(webView, true);
-
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if (request == null || request.getUrl() == null) return false;
-                return handleUrl(request.getUrl().toString());
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return handleUrl(url);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                status.setText("APDocentePBA");
-            }
-
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request != null && request.isForMainFrame()) {
-                    status.setText("Sin conexión o error de carga");
-                }
-            }
-        });
-
-        root.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(webView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
-
-        webView.loadUrl(HOME_URL);
     }
 
-    private boolean handleUrl(String url) {
-        if (url == null) return false;
-        Uri uri = Uri.parse(url);
-        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
-        if (host.endsWith("alertasapd.com.ar")) return false;
-        openExternal(url);
-        return true;
+    private void addButton(LinearLayout root, String text, String url) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setAllCaps(false);
+        button.setTextSize(16);
+        button.setOnClickListener(v -> openExternal(url));
+        LinearLayout.LayoutParams params = fullWidth();
+        params.setMargins(0, 10, 0, 10);
+        root.addView(button, params);
+    }
+
+    private LinearLayout.LayoutParams fullWidth() {
+        return new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
     }
 
     private void openExternal(String url) {
@@ -119,11 +83,5 @@ public class MainActivity extends Activity {
             startActivity(intent);
         } catch (Exception ignored) {
         }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
     }
 }
