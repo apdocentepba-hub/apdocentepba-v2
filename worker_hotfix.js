@@ -6,7 +6,7 @@ const API_URL_PREFIX = "/api";
 const HOTFIX_VERSION = "2026-04-12-repositorio-1";
 const LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const PBKDF2_ITERATIONS = 210000;
+const PBKDF2_ITERATIONS = 100000;
 
 function corsHeaders() {
   return {
@@ -61,8 +61,13 @@ async function verifyPasswordFlexible(storedPassword, plainPassword) {
     const saltHex = parts[2] || "";
     const expectedHex = parts[3] || "";
     if (!iterations || !saltHex || !expectedHex) return { ok: false, needsUpgrade: false };
-    const actualHex = await pbkdf2HashHex(plain, saltHex, iterations);
-    return { ok: actualHex === expectedHex, needsUpgrade: false };
+    if (iterations > PBKDF2_ITERATIONS) return { ok: false, needsUpgrade: false, unsupportedPbkdf2: true };
+    try {
+      const actualHex = await pbkdf2HashHex(plain, saltHex, iterations);
+      return { ok: actualHex === expectedHex, needsUpgrade: false };
+    } catch (err) {
+      return { ok: false, needsUpgrade: false, unsupportedPbkdf2: true, error: err?.message || String(err) };
+    }
   }
   if (stored === plain) return { ok: true, needsUpgrade: true };
   const legacySha = await sha256Hex(plain);
@@ -204,6 +209,7 @@ async function handleLoginSecure(request, env) {
     const legacyUser = legacy.data?.user || legacy.data?.data || {};
     user = await ensureLocalUser(env, { email, password, nombre: legacyUser?.nombre || legacyUser?.name || "", apellido: legacyUser?.apellido || legacyUser?.last_name || "", celular: legacyUser?.celular || legacyUser?.phone || "" });
     if (!user?.id) return json({ ok: false, message: "No se pudo migrar la cuenta existente" }, 500);
+    await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await hashPasswordSecure(password), activo: true }).catch(() => null);
     await ensureTrialIfNoSubscriptions(env, user.id, user.email, "trial_auto_login_legacy_secure");
     const session = await createSession(env, user.id, "password_legacy"); await touchUltimoLogin(env, user.id);
     return json({ ok: true, migrated_legacy: true, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
