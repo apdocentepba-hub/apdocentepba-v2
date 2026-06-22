@@ -2,6 +2,7 @@
 'use strict';
 if(window.__apdSecretariaPublicidadPatchLoaded) return;
 window.__apdSecretariaPublicidadPatchLoaded = true;
+import('./official_dgcye_patch.js?v=1').catch(function(){});
 
 const MANUAL_URL = 'https://articulo.mercadolibre.com.ar/MLA-1841742999-manual-operativo-de-secretaria-escolar-_JM';
 const GUIA_URL = 'https://articulo.mercadolibre.com.ar/MLA-1847963847-guia-pruebas-secretario-escolar-pba-practica-anexos-_JM';
