@@ -9,6 +9,33 @@
   <link rel="stylesheet" href="mobile_optimizations.css?v=visual4">
   <link rel="stylesheet" href="mobile_overrides_v2.css?v=visual3">
   <link rel="stylesheet" href="visual_contrast_patch.css?v=2">
+  <style>
+    #panel-docente{position:relative;}
+    .apd-safe-side-ad{display:none;position:absolute;top:112px;width:min(300px,calc((100vw - 1180px)/2 - 28px));z-index:1;border-radius:22px;padding:18px 16px;box-shadow:0 18px 44px rgba(16,36,61,.13);box-sizing:border-box;line-height:1.35;}
+    .apd-safe-side-ad *{box-sizing:border-box;}
+    .apd-safe-side-ad h3{margin:0 0 9px;font-size:21px;line-height:1.08;letter-spacing:-.03em;}
+    .apd-safe-side-ad p{margin:0 0 12px;font-size:13px;line-height:1.45;}
+    .apd-safe-side-kicker{display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;}
+    .apd-safe-side-box{border-radius:16px;padding:12px;margin-top:10px;}
+    .apd-safe-side-box strong{display:block;margin-bottom:6px;font-size:14px;line-height:1.2;}
+    .apd-safe-side-price{display:block;margin:6px 0 10px;font-size:22px;font-weight:900;}
+    .apd-safe-side-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:38px;padding:9px 10px;border-radius:12px;text-decoration:none;font-size:12px;font-weight:900;}
+    .apd-safe-side-note{margin-top:11px;padding-top:11px;border-top:1px solid rgba(95,113,139,.22);font-size:11px;line-height:1.4;}
+    .apd-safe-side-left{left:max(14px,calc((100vw - 1180px)/2 - min(300px,calc((100vw - 1180px)/2 - 28px)) - 18px));background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%);border:1px solid #dbe7f5;color:#061a37;}
+    .apd-safe-side-left .apd-safe-side-kicker{background:#edf4ff;color:#0f4fb8;border:1px solid #cfe1fa;}
+    .apd-safe-side-left .apd-safe-side-box{background:#fff;border:1px solid #dbe7f5;box-shadow:0 8px 22px rgba(16,36,61,.05);}
+    .apd-safe-side-left h3,.apd-safe-side-left strong,.apd-safe-side-left .apd-safe-side-price{color:#0f3460;}
+    .apd-safe-side-left p,.apd-safe-side-left .apd-safe-side-note{color:#5f718b;}
+    .apd-safe-side-left .apd-safe-side-btn{background:#2454f5;color:#fff!important;}
+    .apd-safe-side-right{right:max(14px,calc((100vw - 1180px)/2 - min(300px,calc((100vw - 1180px)/2 - 28px)) - 18px));background:linear-gradient(135deg,#061a37,#0b2d5f 58%,#153d78 100%);border:1px solid rgba(255,255,255,.16);color:#fff;}
+    .apd-safe-side-right .apd-safe-side-kicker{background:rgba(255,255,255,.12);color:#dbeafe;border:1px solid rgba(255,255,255,.16);}
+    .apd-safe-side-right .apd-safe-side-box{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);}
+    .apd-safe-side-right h3,.apd-safe-side-right strong{color:#fff;}
+    .apd-safe-side-right p,.apd-safe-side-right .apd-safe-side-note{color:#cfe0ff;}
+    .apd-safe-side-right .apd-safe-side-btn{background:#fff;color:#0f3460!important;}
+    @media(min-width:1720px){#panel-docente:not(.hidden) .apd-safe-side-ad{display:block;}}
+    @media(max-width:1719px){.apd-safe-side-ad{display:none!important;}}
+  </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -94,6 +121,42 @@
     </section>
 
     <section id="panel-docente" class="section hidden">
+      <aside class="apd-safe-side-ad apd-safe-side-left" aria-label="Recursos digitales Secretaría Escolar PBA">
+        <div class="apd-safe-side-kicker">📘 PDF digital</div>
+        <h3>Secretaría Escolar PBA</h3>
+        <p>Materiales prácticos para organización administrativa y preparación de pruebas de selección.</p>
+        <div class="apd-safe-side-box">
+          <strong>Manual Operativo de Secretaría Escolar PBA</strong>
+          <span class="apd-safe-side-price">$16.900</span>
+          <a class="apd-safe-side-btn" href="https://articulo.mercadolibre.com.ar/MLA-1841742999-manual-operativo-de-secretaria-escolar-_JM" target="_blank" rel="noopener sponsored">Ver manual</a>
+        </div>
+        <div class="apd-safe-side-box">
+          <strong>Guía Pruebas Secretario Escolar PBA</strong>
+          <span class="apd-safe-side-price">$12.999</span>
+          <a class="apd-safe-side-btn" href="https://articulo.mercadolibre.com.ar/MLA-1847963847-guia-pruebas-secretario-escolar-pba-practica-anexos-_JM" target="_blank" rel="noopener sponsored">Ver guía</a>
+        </div>
+        <div class="apd-safe-side-note">Entrega 100% digital. No se envía libro físico. Material didáctico no oficial.</div>
+      </aside>
+
+      <aside class="apd-safe-side-ad apd-safe-side-right" aria-label="Accesos oficiales ABC DGCyE">
+        <div class="apd-safe-side-kicker">🏛️ ABC / DGCyE</div>
+        <h3>Novedades oficiales</h3>
+        <p>Accesos rápidos para consultar información docente desde fuentes oficiales.</p>
+        <div class="apd-safe-side-box">
+          <strong>Noticias y comunicados ABC</strong>
+          <a class="apd-safe-side-btn" href="https://abc.gob.ar/mas-noticias" target="_blank" rel="noopener">Ver noticias ABC</a>
+        </div>
+        <div class="apd-safe-side-box">
+          <strong>Calendario docente</strong>
+          <a class="apd-safe-side-btn" href="https://abc.gob.ar/calendario-docente" target="_blank" rel="noopener">Abrir calendario</a>
+        </div>
+        <div class="apd-safe-side-box">
+          <strong>APD oficial y SAD</strong>
+          <a class="apd-safe-side-btn" href="https://misservicios.abc.gob.ar/actos.publicos.digitales/" target="_blank" rel="noopener">APD oficial</a>
+        </div>
+        <div class="apd-safe-side-note">APDocentePBA organiza accesos útiles, pero no reemplaza comunicaciones oficiales.</div>
+      </aside>
+
       <div class="container">
         <div class="panel-header"><div><h2 id="panel-bienvenida">Bienvenido/a</h2><p id="panel-subtitulo" class="panel-sub">Cargando...</p></div><div class="panel-actions"><a class="btn btn-primary" href="./herramientas-docentes.html">🧰 Herramientas</a><a class="btn btn-secondary" href="./licencias-docentes.html">🧾 Licencias</a><button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button><button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button></div></div>
         <div id="panel-loading" class="panel-loading hidden"><div class="spinner"></div><span>Cargando panel...</span></div>
