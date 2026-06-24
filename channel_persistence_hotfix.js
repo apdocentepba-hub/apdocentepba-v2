@@ -18,8 +18,9 @@
     document.body.appendChild(s);
   }
 
-  function loadAutoRenewPatch() {
+  function loadBillingPatches() {
     ensureScript('plan_autorenew_patch.js?v=1', 'apd-plan-autorenew-loader');
+    ensureScript('plan_annual_policy_patch.js?v=1', 'apd-plan-annual-policy-loader');
   }
 
   function patchAdaptarPreferencias() {
@@ -76,7 +77,7 @@
   }
 
   function boot() {
-    loadAutoRenewPatch();
+    loadBillingPatches();
 
     let tries = 0;
     const tick = () => {
