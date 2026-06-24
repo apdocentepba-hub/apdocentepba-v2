@@ -19,8 +19,9 @@
   }
 
   function loadAnnualVisualPatch() {
-    ensureScript('plan_annual_visual_patch.js?v=1', 'apd-plan-annual-visual-loader');
-  }
+  ensureScript('plan_annual_visual_patch.js?v=1', 'apd-plan-annual-visual-loader');
+  ensureScript('plan_annual_checkout_enable_patch.js?v=1', 'apd-plan-annual-checkout-enable-loader');
+}
 
   function patchAdaptarPreferencias() {
     if (typeof window.adaptarPreferencias !== 'function' || window.adaptarPreferencias.__apdChannelPersistenceHotfix) return;
