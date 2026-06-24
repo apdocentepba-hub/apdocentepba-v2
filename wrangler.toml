@@ -1,5 +1,5 @@
 name = "ancient-wildflower-cd37"
-main = "worker_email_queue_hotfix.js"
+main = "worker_annual_plan_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true
@@ -16,3 +16,11 @@ crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
 # Para dejar el deploy 100% reproducible desde GitHub falta agregar el id real
 # del namespace en un bloque kv_namespaces. Eso todavia no se cargo aca porque
 # en el dashboard vimos el nombre del binding pero no el namespace id.
+#
+# Rama feature-billing-autorenew-safe:
+# esta rama apunta a worker_annual_plan_hotfix.js para habilitar:
+# - debito automatico mensual opt-in;
+# - planes anuales de pago unico;
+# - credito proporcional mensual -> anual;
+# - politica de no reembolso en dinero;
+# - cancelacion del preapproval mensual al acreditarse un anual.
