@@ -8,6 +8,20 @@
     return document.getElementById(id);
   }
 
+  function ensureScript(src, markerId) {
+    if (markerId && byId(markerId)) return;
+    if ([...document.scripts].some(s => s.src && s.src.includes(src))) return;
+    const s = document.createElement('script');
+    s.src = src;
+    s.defer = true;
+    if (markerId) s.id = markerId;
+    document.body.appendChild(s);
+  }
+
+  function loadAnnualVisualPatch() {
+    ensureScript('plan_annual_visual_patch.js?v=1', 'apd-plan-annual-visual-loader');
+  }
+
   function patchAdaptarPreferencias() {
     if (typeof window.adaptarPreferencias !== 'function' || window.adaptarPreferencias.__apdChannelPersistenceHotfix) return;
 
@@ -62,6 +76,8 @@
   }
 
   function boot() {
+    loadAnnualVisualPatch();
+
     let tries = 0;
     const tick = () => {
       tries += 1;
