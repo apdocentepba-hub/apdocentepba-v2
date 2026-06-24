@@ -21,6 +21,7 @@
   function loadAnnualVisualPatch() {
   ensureScript('plan_annual_visual_patch.js?v=1', 'apd-plan-annual-visual-loader');
   ensureScript('plan_annual_checkout_enable_patch.js?v=1', 'apd-plan-annual-checkout-enable-loader');
+  ensureScript('plan_autorenew_patch.js?v=1', 'apd-plan-autorenew-loader');
 }
 
   function patchAdaptarPreferencias() {
