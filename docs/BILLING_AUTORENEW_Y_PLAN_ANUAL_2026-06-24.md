@@ -9,15 +9,13 @@ Esta rama prepara el frente de pagos sin tocar producción:
 - No modifica Cloudflare Worker productivo.
 - No modifica `wrangler.toml`.
 - No ejecuta deploy.
-- No modifica Supabase.
-- No modifica MercadoPago.
+- No aplica cambios en Supabase.
+- No modifica configuración real de MercadoPago.
 - No crea usuario de prueba.
 
 ## Renovación automática mensual
 
-### Estado funcional esperado
-
-La renovación automática debe estar **desactivada por defecto**.
+La renovación automática mensual queda **desactivada por defecto**.
 
 El usuario sólo queda con renovación automática si:
 
@@ -27,7 +25,7 @@ El usuario sólo queda con renovación automática si:
 4. completa la configuración de la suscripción/preapproval en MercadoPago;
 5. el backend guarda el `mercadopago_preapproval_id` en `user_subscriptions`.
 
-Si el usuario no toca el botón, el sistema debe seguir en modalidad manual.
+Si el usuario no toca el botón, el sistema sigue en modalidad manual.
 
 ### Frontend preparado
 
@@ -58,45 +56,9 @@ plan_autorenew_patch.js?v=1
 
 sin editar `index.html`.
 
-## Endpoints esperados
+## Plan anual aprobado comercialmente
 
-El archivo `worker_autorenew_optin_hotfix.js` ya contiene lógica esperada para:
-
-```text
-GET  /api/mi-plan
-POST /api/subscription/enable-auto-renew
-POST /api/subscription/cancel
-```
-
-Pero antes de desplegar hay que confirmar si ese hotfix está efectivamente integrado en el Worker productivo o sólo existe como archivo suelto en GitHub.
-
-## Seguridad
-
-Antes de publicar:
-
-1. confirmar qué archivo exacto corre hoy en Cloudflare;
-2. confirmar si `/api/subscription/enable-auto-renew` responde;
-3. confirmar que `/api/mi-plan` devuelve `actions.can_enable_auto_renew`;
-4. confirmar que el botón sólo aparece en planes pagos activos;
-5. confirmar que usuarios en prueba gratis no ven activación real;
-6. confirmar que MercadoPago abre una preapproval y no un checkout simple;
-7. confirmar que cancelar renovación no cancela el acceso ya pagado, sólo el próximo cobro.
-
-## Plan anual
-
-Una persona pidió poder pagar todo el año de una vez.
-
-### Recomendación comercial inicial
-
-Como los planes mensuales actuales referidos son:
-
-```text
-PLUS:     $1.000 / mes
-PREMIUM:  $2.000 / mes
-INSIGNE:  $3.000 / mes
-```
-
-conviene ofrecer anual con 2 meses bonificados:
+Precios aceptados:
 
 ```text
 PLUS_ANUAL:     $10.000 / año
@@ -104,37 +66,104 @@ PREMIUM_ANUAL:  $20.000 / año
 INSIGNE_ANUAL:  $30.000 / año
 ```
 
-Eso equivale a pagar 10 meses y usar 12.
-
-### Alternativa conservadora
-
-Si se quiere menos descuento:
-
-```text
-PLUS_ANUAL:     $11.000 / año
-PREMIUM_ANUAL:  $22.000 / año
-INSIGNE_ANUAL:  $33.000 / año
-```
-
-Equivale a 1 mes bonificado.
-
-### Recomendación práctica
-
-Para vender más fácil, usar 2 meses bonificados:
+Política comercial:
 
 ```text
 Plan anual = pagás 10 meses y usás 12.
 ```
 
-## Implementación técnica del plan anual
+El plan anual es **pago único anual**, no débito mensual automático.
 
-No conviene mezclar el plan anual con renovación automática mensual.
+## Política mensual activo → anual
 
-El plan anual debería ser un **pago único**, no una preapproval mensual.
+Si una persona tiene un plan mensual activo y pasa a un plan anual:
 
-### Opción de datos
+1. Se calcula cuánto tiempo no usado queda del mes actual.
+2. Ese tiempo se convierte en crédito proporcional.
+3. Ese crédito se descuenta del valor anual.
+4. La persona paga sólo la diferencia.
+5. No se devuelve dinero en efectivo.
+6. El plan anual arranca cuando MercadoPago acredita el pago.
+7. El vencimiento anual queda a 365 días desde la acreditación.
 
-Agregar filas nuevas en `subscription_plans`:
+Ejemplo conceptual:
+
+```text
+Plan anual elegido: $20.000
+Crédito proporcional mensual no usado: $600
+Monto a pagar ahora: $19.400
+```
+
+El crédito es comercial y técnico: sólo se usa como descuento para pasar al anual.
+
+## Política de no reembolso
+
+Leyenda obligatoria:
+
+```text
+No se realizan reembolsos en dinero una vez acreditado el pago. Si pasás de un plan mensual activo a un plan anual, el tiempo no usado del ciclo mensual vigente se aplica como crédito proporcional sobre el valor del plan anual.
+```
+
+Esta leyenda debe mostrarse en:
+
+- tarjeta del plan anual;
+- mensaje previo a abrir MercadoPago;
+- respuesta del checkout anual;
+- términos/política de pagos si existe una página legal separada.
+
+## Si tenía débito automático mensual
+
+Si el usuario tiene mensual con renovación automática activa y compra anual:
+
+1. Se permite comprar anual.
+2. El checkout anual se genera como pago único.
+3. Al acreditarse el pago anual, el Worker debe intentar cancelar el preapproval mensual de MercadoPago.
+4. En Supabase, la suscripción debe quedar con:
+
+```text
+mercadopago_preapproval_id = null
+billing_mode = one_time_yearly
+plan_code = PLUS_ANUAL / PREMIUM_ANUAL / INSIGNE_ANUAL
+current_period_ends_at = fecha_pago + 365 días
+```
+
+Si MercadoPago no permite cancelar el preapproval automáticamente, debe quedar registrado en `provider_payload.preapproval_cancelled = false` para revisión manual.
+
+## Archivos preparados en esta rama
+
+### Worker anual
+
+```text
+worker_annual_plan_hotfix.js
+```
+
+Agrega:
+
+```text
+GET  /api/planes
+GET  /api/mi-plan
+POST /api/mercadopago/create-checkout-link
+POST /api/mercadopago/webhook
+```
+
+Funciones principales:
+
+- agrega los planes anuales al catálogo;
+- genera checkout MercadoPago de pago único anual;
+- calcula crédito proporcional si el usuario tenía mensual activo;
+- bloquea downgrade desde anual activo a anual menor;
+- procesa webhook de pago anual;
+- activa `current_period_ends_at = fecha_pago + 365 días`;
+- no activa débito mensual automático;
+- intenta cancelar preapproval mensual anterior si existía.
+
+### Migración SQL preparada
+
+```text
+supabase/migrations/20260624000000_add_annual_one_time_plans.sql
+```
+
+Agrega o actualiza las filas:
 
 ```text
 PLUS_ANUAL
@@ -142,55 +171,39 @@ PREMIUM_ANUAL
 INSIGNE_ANUAL
 ```
 
-con:
+Usa sólo columnas ya vistas en el código actual:
 
 ```text
-billing_interval = yearly
-billing_months = 12
-price_ars = 10000 / 20000 / 30000
-public_visible = true
+code
+nombre
+descripcion
+price_ars
+trial_days
+max_distritos
+max_cargos
+is_active
+public_visible
+sort_order
+mercadopago_plan_id
+feature_flags
 ```
 
-Si la tabla no tiene esas columnas, se puede empezar usando código de plan y `price_ars`, y que el Worker detecte `_ANUAL` para calcular vencimiento a 365 días.
+No se aplica automáticamente.
 
-### Cambio de Worker necesario
+## Validaciones antes de producción
 
-Cuando MercadoPago confirme pago anual:
+Antes de tocar producción hay que confirmar por chat:
 
-```text
-current_period_ends_at = fecha_pago + 365 días
-billing_mode = one_time_yearly
-status = active
-plan_code = PLUS_ANUAL / PREMIUM_ANUAL / INSIGNE_ANUAL
-```
+1. qué archivo exacto corre hoy en Cloudflare;
+2. si se integrará `worker_annual_plan_hotfix.js` como capa final o si se copiará la lógica al Worker grande;
+3. que `mercadopago_checkout_sessions.provider_payload` acepta JSON;
+4. que `subscription_plans.code` tiene restricción única para `ON CONFLICT (code)`;
+5. que `user_subscriptions` tiene las columnas usadas por el hotfix;
+6. que el webhook real de MercadoPago apunta al Worker correcto;
+7. que el texto legal de no reembolso queda visible en la página o panel.
 
-### UI esperada
-
-En `Opciones de plan` mostrar:
-
-```text
-Mensual
-Anual — 2 meses bonificados
-```
-
-El anual debería decir:
+## Copy sugerido para responder a interesados
 
 ```text
-Pago único anual. No se renueva automáticamente salvo que más adelante se active una opción anual recurrente.
-```
-
-## Decisión pendiente antes de tocar producción
-
-Antes de implementar el plan anual real hay que decidir:
-
-1. precios finales;
-2. si se muestran 3 planes anuales o sólo uno;
-3. si el anual será pago único o renovación anual automática;
-4. si se crean códigos nuevos (`PLUS_ANUAL`) o se usa el mismo plan con `billing_interval`;
-5. si se actualiza Supabase manualmente o mediante migración SQL versionada.
-
-## Copy sugerido para responder al usuario
-
-```text
-Sí, estamos habilitando planes anuales. La idea es que puedas pagar todo el año de una vez con descuento, sin depender del pago mensual. El plan anual tendría 12 meses de acceso y la opción recomendada es pagar 10 meses y usar 12.
+Sí, tenemos plan anual. Es pago único, sin débito mensual automático. La opción anual tiene 2 meses bonificados: pagás 10 meses y usás 12. Si ya tenés un plan mensual activo, el tiempo no usado de ese mes se descuenta proporcionalmente del anual. No se realizan reembolsos en dinero una vez acreditado el pago.
 ```
