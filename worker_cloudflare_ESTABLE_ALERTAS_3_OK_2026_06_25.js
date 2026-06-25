@@ -1,0 +1,12570 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// profile_listados_api.js
+var API_URL_PREFIX = "/api";
+var PD_ABC_SYNC_SOURCE = "abc_public";
+function pdCorsHeaders() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(pdCorsHeaders, "pdCorsHeaders");
+function pdJson(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: pdCorsHeaders() });
+}
+__name(pdJson, "pdJson");
+function pdNorm(v) {
+  return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+}
+__name(pdNorm, "pdNorm");
+function pdTokens(v) {
+  const stop = /* @__PURE__ */ new Set(["DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A"]);
+  return [...new Set(
+    pdNorm(v).split(" ").map((x) => x.trim()).filter((x) => x.length > 1 && !stop.has(x))
+  )];
+}
+__name(pdTokens, "pdTokens");
+function pdGetBearerToken(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? String(auth.slice(7) || "").trim() : "";
+}
+__name(pdGetBearerToken, "pdGetBearerToken");
+function pdGetAuthedUserId(request, body = null, url = null) {
+  const bearer = pdGetBearerToken(request);
+  const hinted = String(body?.user_id || url?.searchParams?.get("user_id") || "").trim();
+  if (bearer && hinted && bearer !== hinted) {
+    throw new Error("La sesi\xF3n no coincide con el user_id enviado");
+  }
+  return bearer || hinted;
+}
+__name(pdGetAuthedUserId, "pdGetAuthedUserId");
+async function pdSupabaseRequest(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  }
+  return data;
+}
+__name(pdSupabaseRequest, "pdSupabaseRequest");
+async function pdSupabaseSelect(env, query) {
+  return await pdSupabaseRequest(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(pdSupabaseSelect, "pdSupabaseSelect");
+async function pdSupabaseInsertReturning(env, table, data) {
+  const rows = await pdSupabaseRequest(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(data)
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+__name(pdSupabaseInsertReturning, "pdSupabaseInsertReturning");
+async function pdSupabaseUpsert(env, table, rows, conflict) {
+  return await pdSupabaseRequest(env, `${table}?on_conflict=${encodeURIComponent(conflict)}`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(rows)
+  });
+}
+__name(pdSupabaseUpsert, "pdSupabaseUpsert");
+async function pdGetUserById(env, userId) {
+  const rows = await pdSupabaseSelect(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,activo&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(pdGetUserById, "pdGetUserById");
+function pdNormalizeDni(raw) {
+  return String(raw || "").replace(/\D/g, "");
+}
+__name(pdNormalizeDni, "pdNormalizeDni");
+async function pdSha256Hex(text) {
+  const data = new TextEncoder().encode(String(text || ""));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+__name(pdSha256Hex, "pdSha256Hex");
+function pdNormalizeListadoType(raw) {
+  const value = pdNorm(raw);
+  if (!value) return "OFICIAL";
+  if (value.includes("108A")) return "108A";
+  if (value.includes("108B") && value.includes("FINES")) return "108B_FINES";
+  if (value.includes("108B") && value.includes("EMERGEN")) return "108B_EMERGENCIA";
+  if (value.includes("108B")) return "108B";
+  if (value.includes("FINES")) return "FINES";
+  if (value.includes("EMERGEN")) return "EMERGENCIA";
+  if (value.includes("OFICIAL")) return "OFICIAL";
+  return value || "OTRO";
+}
+__name(pdNormalizeListadoType, "pdNormalizeListadoType");
+function pdParsePuntaje(raw) {
+  const text = String(raw || "").trim();
+  const normalized = text.includes(",") ? text.replace(/\./g, "").replace(/,/g, ".") : text;
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+}
+__name(pdParsePuntaje, "pdParsePuntaje");
+function pdNormalizeListadoRow(row, fallback = {}) {
+  const cargo = String(row?.cargo || fallback.cargo || "").trim();
+  const materia = String(row?.materia || fallback.materia || "").trim();
+  const joined = [cargo, materia].filter(Boolean).join(" ").trim();
+  return {
+    anio: Number(row?.anio || fallback.anio || (/* @__PURE__ */ new Date()).getFullYear()),
+    tipo_listado: pdNormalizeListadoType(row?.tipo_listado || fallback.tipo_listado),
+    distrito: pdNorm(row?.distrito || fallback.distrito || ""),
+    cargo,
+    materia,
+    cargo_materia_normalizado: pdNorm(
+      row?.cargo_materia_normalizado || joined || row?.texto || fallback.texto || ""
+    ),
+    puntaje: row?.puntaje != null ? pdParsePuntaje(row.puntaje) : pdParsePuntaje(fallback.puntaje),
+    fuente: String(row?.fuente || fallback.fuente || "manual").trim() || "manual",
+    raw_text: String(row?.raw_text || fallback.raw_text || "").trim(),
+    confidence: row?.confidence != null ? Number(row.confidence) : 1,
+    validado: row?.validado === true || fallback.validado === true
+  };
+}
+__name(pdNormalizeListadoRow, "pdNormalizeListadoRow");
+function pdParseListadoText(rawText, fallback = {}) {
+  const lines = String(rawText || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines) {
+    const chunks = line.split("|").map((x) => x.trim()).filter(Boolean);
+    if (chunks.length >= 4) {
+      rows.push(
+        pdNormalizeListadoRow(
+          {
+            tipo_listado: chunks[0],
+            cargo: chunks[1],
+            materia: chunks[1],
+            puntaje: chunks[2],
+            distrito: chunks[3],
+            raw_text: line,
+            confidence: 0.95,
+            fuente: "paste"
+          },
+          fallback
+        )
+      );
+      continue;
+    }
+    const puntajeMatch = line.match(/(\d{1,3}[.,]\d{1,2}|\d{1,3})\s*$/);
+    const puntaje = puntajeMatch ? pdParsePuntaje(puntajeMatch[1]) : null;
+    const textWithoutScore = puntajeMatch ? line.slice(0, puntajeMatch.index).trim() : line;
+    if (!textWithoutScore) continue;
+    rows.push(
+      pdNormalizeListadoRow(
+        {
+          cargo: textWithoutScore,
+          puntaje,
+          distrito: fallback.distrito || "",
+          tipo_listado: fallback.tipo_listado || "OFICIAL",
+          raw_text: line,
+          confidence: puntaje != null ? 0.75 : 0.55,
+          fuente: "paste"
+        },
+        fallback
+      )
+    );
+  }
+  return rows.filter((row) => row.cargo_materia_normalizado);
+}
+__name(pdParseListadoText, "pdParseListadoText");
+function pdSafeOfferId(offer) {
+  return String(offer?.offer_id || offer?.source_offer_key || offer?.idoferta || offer?.iddetalle || offer?.id || "").trim();
+}
+__name(pdSafeOfferId, "pdSafeOfferId");
+function pdNormalizeOfferText(offer) {
+  const fields = [
+    offer?.cargo,
+    offer?.materia,
+    offer?.area,
+    offer?.title,
+    offer?.descripcioncargo,
+    offer?.descripcionarea
+  ].map((x) => pdNorm(x)).filter(Boolean);
+  return [...new Set(fields)].join(" ");
+}
+__name(pdNormalizeOfferText, "pdNormalizeOfferText");
+function pdComputeEligibilityForOffer(offer, listados) {
+  const offerId = pdSafeOfferId(offer);
+  const offerText = pdNormalizeOfferText(offer);
+  const offerDistrito = pdNorm(offer?.distrito || offer?.descdistrito || "");
+  let best = null;
+  const offerTokens = pdTokens(offerText);
+  if (!offerTokens.length) {
+    return {
+      offer_id: offerId,
+      compatible: false,
+      match_type: "sin_match",
+      puntaje_usuario: null,
+      tipo_listado_detectado: null,
+      score_competitividad: 0,
+      confidence_level: "sin_datos",
+      strategic_message: "La oferta no trae texto suficiente para comparar."
+    };
+  }
+  for (const row of Array.isArray(listados) ? listados : []) {
+    const base = pdNorm(
+      row?.cargo_materia_normalizado || [row?.cargo, row?.materia].filter(Boolean).join(" ")
+    );
+    if (!base) continue;
+    const rowTokens = pdTokens(base);
+    if (!rowTokens.length) continue;
+    const overlap = rowTokens.filter((token) => offerTokens.includes(token));
+    const overlapCount = overlap.length;
+    const coverageRow = overlapCount / Math.max(rowTokens.length, 1);
+    const coverageOffer = overlapCount / Math.max(offerTokens.length, 1);
+    const dice = 2 * overlapCount / Math.max(rowTokens.length + offerTokens.length, 1);
+    let score = Math.max(coverageRow, coverageOffer, dice);
+    if (offerDistrito && row?.distrito && pdNorm(row.distrito) === offerDistrito) {
+      score += 0.05;
+    }
+    if (score < 0.45) continue;
+    const puntajeUsuario = row?.puntaje != null ? Number(row.puntaje) : null;
+    const puntajePrimero = offer?.puntaje_primero != null ? Number(offer.puntaje_primero) : null;
+    let competitiveness = score;
+    let confidenceLevel = score >= 0.85 ? "alta" : score >= 0.65 ? "media" : "baja";
+    let strategicMessage = puntajeUsuario != null ? `Puntaje detectado: ${puntajeUsuario.toFixed(2)}` : "Compatible, pero sin puntaje usable detectado";
+    if (puntajeUsuario != null && Number.isFinite(puntajePrimero)) {
+      const delta = puntajeUsuario - puntajePrimero;
+      competitiveness = Math.max(0, Math.min(1.2, 0.65 + delta / 20));
+      if (delta >= 0.25) {
+        confidenceLevel = "muy_alta";
+        strategicMessage = `Alta oportunidad: tu puntaje (${puntajeUsuario.toFixed(2)}) supera al primero visible (${puntajePrimero.toFixed(2)}).`;
+      } else if (delta >= -0.5) {
+        confidenceLevel = "alta";
+        strategicMessage = `Buena oportunidad: tu puntaje (${puntajeUsuario.toFixed(2)}) est\xE1 muy cerca del primero visible (${puntajePrimero.toFixed(2)}).`;
+      } else if (delta >= -2) {
+        confidenceLevel = "media";
+        strategicMessage = `Compatible, pero hoy el primero visible marca ${puntajePrimero.toFixed(2)}.`;
+      } else {
+        confidenceLevel = "baja";
+        strategicMessage = `Compatible, aunque la competencia visible hoy parece alta (${puntajePrimero.toFixed(2)}).`;
+      }
+    }
+    const candidate = {
+      offer_id: offerId,
+      compatible: true,
+      match_type: score >= 0.85 ? "exacto" : score >= 0.65 ? "fuerte" : "parcial",
+      puntaje_usuario: puntajeUsuario,
+      tipo_listado_detectado: row?.tipo_listado || null,
+      score_competitividad: Math.round(competitiveness * 100) / 100,
+      confidence_level: confidenceLevel,
+      strategic_message: strategicMessage
+    };
+    if (!best || (candidate.score_competitividad || 0) > (best.score_competitividad || 0)) {
+      best = candidate;
+    }
+  }
+  return best || {
+    offer_id: offerId,
+    compatible: false,
+    match_type: "sin_match",
+    puntaje_usuario: null,
+    tipo_listado_detectado: null,
+    score_competitividad: 0,
+    confidence_level: "sin_datos",
+    strategic_message: "No encontramos habilitaci\xF3n compatible en tus listados cargados."
+  };
+}
+__name(pdComputeEligibilityForOffer, "pdComputeEligibilityForOffer");
+async function pdFetchAbcListadoPublic(dni) {
+  const normalizedDni = pdNormalizeDni(dni);
+  if (normalizedDni.length < 7 || normalizedDni.length > 9) {
+    throw new Error("Ingres\xE1 un DNI v\xE1lido antes de sincronizar");
+  }
+  const pageSize = 200;
+  const maxPages = 6;
+  const baseUrls = [
+    "https://abc.gob.ar/select/",
+    "https://abc.gob.ar/select",
+    "https://abc.gob.ar/listado-oficial/select/",
+    "https://abc.gob.ar/listado-oficial/select"
+  ];
+  const errors = [];
+  for (const baseUrl of baseUrls) {
+    try {
+      const docsTemp = [];
+      let facetsTemp = null;
+      for (let page = 0; page < maxPages; page += 1) {
+        const start = page * pageSize;
+        const params = new URLSearchParams();
+        params.set("q", `busqueda=${normalizedDni}`);
+        params.set("wt", "json");
+        params.set("rows", String(pageSize));
+        params.set("start", String(start));
+        params.set("sort", "orden asc");
+        params.set("facet", "true");
+        params.set("facet.mincount", "1");
+        params.set("json.nl", "map");
+        params.append("facet.field", "distrito");
+        params.append("facet.field", "rama");
+        params.append("facet.field", "cargo_area");
+        params.append("facet.field", "aniolistado");
+        const url = `${baseUrl}?${params.toString()}`;
+        const res = await fetch(url, {
+          method: "GET",
+          redirect: "follow",
+          headers: {
+            "Accept": "application/json, text/plain, */*",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://abc.gob.ar/listado-oficial",
+            "Origin": "https://abc.gob.ar",
+            "User-Agent": "Mozilla/5.0"
+          }
+        });
+        const text = await res.text();
+        const trimmed = String(text || "").trim();
+        const contentType = res.headers.get("content-type") || "";
+        if (!trimmed) {
+          throw new Error(`Respuesta vac\xEDa | status=${res.status} | url=${url}`);
+        }
+        if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html") || trimmed.startsWith("<!doctype")) {
+          throw new Error(
+            `ABC devolvi\xF3 HTML | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 180)}`
+          );
+        }
+        let data = null;
+        try {
+          data = JSON.parse(trimmed);
+        } catch {
+          throw new Error(
+            `ABC devolvi\xF3 algo no JSON | status=${res.status} | content-type=${contentType} | url=${url} | snippet=${trimmed.slice(0, 180)}`
+          );
+        }
+        if (!res.ok || Number(data?.responseHeader?.status ?? 1) !== 0) {
+          throw new Error(
+            `ABC respondi\xF3 error JSON | status=${res.status} | url=${url} | body=${trimmed.slice(0, 180)}`
+          );
+        }
+        const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+        if (!facetsTemp && data?.facet_counts) facetsTemp = data.facet_counts;
+        docsTemp.push(...docs);
+        const numFound = Number(data?.response?.numFound || 0);
+        if (!docs.length || docsTemp.length >= numFound) {
+          return { dni: normalizedDni, docs: docsTemp, facets: facetsTemp };
+        }
+      }
+      return { dni: normalizedDni, docs: docsTemp, facets: facetsTemp };
+    } catch (err) {
+      errors.push(String(err?.message || err));
+    }
+  }
+  throw new Error(errors.join(" || "));
+}
+__name(pdFetchAbcListadoPublic, "pdFetchAbcListadoPublic");
+function pdBuildListadoSummary(rows) {
+  const distritos = [...new Set(rows.map((row) => pdNorm(row?.distrito || "")).filter(Boolean))].sort();
+  const anios = [...new Set(rows.map((row) => Number(row?.anio || 0)).filter(Boolean))].sort((a, b) => b - a);
+  const tipos = [...new Set(rows.map((row) => String(row?.tipo_listado || "").trim()).filter(Boolean))].sort();
+  return {
+    total_rows: rows.length,
+    distritos,
+    anios,
+    tipos
+  };
+}
+__name(pdBuildListadoSummary, "pdBuildListadoSummary");
+function pdMapAbcDocToListadoRow(doc, dni) {
+  const cargoArea = String(doc?.cargo_area || "").trim();
+  const rama = String(doc?.rama || "").trim();
+  const tipoListado = pdNormalizeListadoType(doc?.tipo_listado || doc?.listado || "OFICIAL");
+  const anio = Number(doc?.aniolistado || (/* @__PURE__ */ new Date()).getFullYear()) || (/* @__PURE__ */ new Date()).getFullYear();
+  const distrito = pdNorm(doc?.distrito || "");
+  const rawPayload = {
+    source: "abc_public",
+    dni,
+    documento: String(doc?.documento || ""),
+    nombre: String(doc?.nombre || ""),
+    apellido: String(doc?.apellido || ""),
+    distrito: String(doc?.distrito || ""),
+    rama,
+    cargo_area: cargoArea,
+    puntaje: String(doc?.puntaje || ""),
+    orden: doc?.orden ?? null,
+    aniolistado: String(doc?.aniolistado || ""),
+    apto_fisico: String(doc?.apto_fisico || ""),
+    recalificacionlaboral: String(doc?.recalificacionlaboral || ""),
+    source_id: String(doc?.id || ""),
+    source_timestamp: String(doc?.timestamp || "")
+  };
+  return pdNormalizeListadoRow(
+    {
+      anio,
+      tipo_listado: tipoListado,
+      distrito,
+      cargo: cargoArea,
+      materia: rama,
+      cargo_materia_normalizado: cargoArea,
+      puntaje: doc?.puntaje,
+      fuente: PD_ABC_SYNC_SOURCE,
+      raw_text: JSON.stringify(rawPayload),
+      confidence: 1,
+      validado: true
+    },
+    { distrito, tipo_listado: tipoListado, anio }
+  );
+}
+__name(pdMapAbcDocToListadoRow, "pdMapAbcDocToListadoRow");
+async function pdDeleteUserAutoSyncedListados(env, userId) {
+  await pdSupabaseRequest(
+    env,
+    `user_listados?user_id=eq.${encodeURIComponent(userId)}&fuente=eq.${encodeURIComponent(PD_ABC_SYNC_SOURCE)}`,
+    { method: "DELETE", headers: { Prefer: "return=minimal" } }
+  );
+}
+__name(pdDeleteUserAutoSyncedListados, "pdDeleteUserAutoSyncedListados");
+async function pdUpdateIdentityProfileSync(env, userId, patch = {}) {
+  const profileRows = await pdSupabaseSelect(
+    env,
+    `user_identity_profile?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,dni,dni_hash,consentimiento_datos&limit=1`
+  ).catch(() => []);
+  const profile = Array.isArray(profileRows) ? profileRows[0] || null : null;
+  if (!profile) return null;
+  const rows = await pdSupabaseUpsert(
+    env,
+    "user_identity_profile",
+    [{
+      user_id: userId,
+      dni: profile.dni,
+      dni_hash: profile.dni_hash,
+      consentimiento_datos: profile.consentimiento_datos === true,
+      ...patch,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }],
+    "user_id"
+  ).catch(() => null);
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(pdUpdateIdentityProfileSync, "pdUpdateIdentityProfileSync");
+async function handleProfileMe(request, env, url) {
+  const userId = pdGetAuthedUserId(request, null, url);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const user = await pdGetUserById(env, userId);
+  if (!user) return pdJson({ ok: false, message: "Usuario no encontrado" }, 404);
+  const profileRows = await pdSupabaseSelect(
+    env,
+    `user_identity_profile?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,dni,consentimiento_datos,last_sync_at,sync_status,created_at,updated_at&limit=1`
+  ).catch(() => []);
+  const listadosRows = await pdSupabaseSelect(
+    env,
+    `user_listados?user_id=eq.${encodeURIComponent(userId)}&select=id,cargo,materia,puntaje,tipo_listado,validado,fuente,distrito,anio&order=updated_at.desc`
+  ).catch(() => []);
+  const items = Array.isArray(listadosRows) ? listadosRows : [];
+  const autoRows = items.filter((x) => String(x?.fuente || "").trim() === PD_ABC_SYNC_SOURCE);
+  const manualRows = items.filter((x) => String(x?.fuente || "").trim() !== PD_ABC_SYNC_SOURCE);
+  const syncSummary = pdBuildListadoSummary(autoRows);
+  return pdJson({
+    ok: true,
+    profile: Array.isArray(profileRows) ? profileRows[0] || null : null,
+    stats: {
+      listados_total: items.length,
+      listados_validados: items.filter((x) => x.validado === true).length,
+      listados_sync_abc: autoRows.length,
+      listados_manual: manualRows.length
+    },
+    sync_summary: syncSummary
+  });
+}
+__name(handleProfileMe, "handleProfileMe");
+async function handleSaveDni(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const user = await pdGetUserById(env, userId);
+  if (!user) return pdJson({ ok: false, message: "Usuario no encontrado" }, 404);
+  const dni = pdNormalizeDni(body?.dni);
+  const consentimiento = body?.consentimiento_datos === true;
+  if (dni.length < 7 || dni.length > 9) return pdJson({ ok: false, message: "Ingres\xE1 un DNI v\xE1lido" }, 400);
+  if (!consentimiento) return pdJson({ ok: false, message: "Necesitamos tu consentimiento para usar estos datos" }, 400);
+  const dniHash = await pdSha256Hex(dni);
+  const rows = await pdSupabaseUpsert(
+    env,
+    "user_identity_profile",
+    [{
+      user_id: userId,
+      dni,
+      dni_hash: dniHash,
+      consentimiento_datos: true,
+      sync_status: "ready",
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }],
+    "user_id"
+  );
+  return pdJson({ ok: true, message: "DNI guardado", profile: Array.isArray(rows) ? rows[0] || null : null });
+}
+__name(handleSaveDni, "handleSaveDni");
+async function handleMisListados(request, env, url) {
+  const userId = pdGetAuthedUserId(request, null, url);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const rows = await pdSupabaseSelect(
+    env,
+    `user_listados?user_id=eq.${encodeURIComponent(userId)}&select=*&order=updated_at.desc`
+  ).catch((err) => {
+    throw new Error(`No se pudieron leer tus listados: ${err?.message || err}`);
+  });
+  const items = Array.isArray(rows) ? rows : [];
+  return pdJson({
+    ok: true,
+    items,
+    summary: {
+      total: items.length,
+      sync_abc: items.filter((row) => String(row?.fuente || "").trim() === PD_ABC_SYNC_SOURCE).length,
+      manual: items.filter((row) => String(row?.fuente || "").trim() !== PD_ABC_SYNC_SOURCE).length
+    }
+  });
+}
+__name(handleMisListados, "handleMisListados");
+async function handleImportManual(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const sourceRows = Array.isArray(body?.rows) ? body.rows : [body];
+  const rows = sourceRows.map((row) => pdNormalizeListadoRow(row, { fuente: "manual" })).filter((row) => row.cargo_materia_normalizado);
+  if (!rows.length) return pdJson({ ok: false, message: "No hay filas v\xE1lidas para guardar" }, 400);
+  const payload = rows.map((row) => ({ ...row, user_id: userId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
+  const inserted = await pdSupabaseRequest(env, "user_listados", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  await pdSupabaseInsertReturning(env, "user_listados_imports", {
+    user_id: userId,
+    source_type: "manual",
+    source_name: "Carga manual",
+    raw_content: JSON.stringify(sourceRows),
+    parse_status: "ok",
+    parse_message: "Filas cargadas manualmente",
+    imported_rows: payload.length
+  }).catch(() => null);
+  return pdJson({
+    ok: true,
+    message: "Listados guardados",
+    imported: Array.isArray(inserted) ? inserted.length : payload.length,
+    items: Array.isArray(inserted) ? inserted : []
+  });
+}
+__name(handleImportManual, "handleImportManual");
+async function handleImportPaste(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const rawText = String(body?.raw_text || "").trim();
+  if (!rawText) return pdJson({ ok: false, message: "Peg\xE1 alg\xFAn texto del listado" }, 400);
+  const parsedRows = pdParseListadoText(rawText, {
+    anio: body?.anio,
+    tipo_listado: body?.tipo_listado,
+    distrito: body?.distrito,
+    fuente: "paste",
+    raw_text: rawText
+  });
+  if (!parsedRows.length) {
+    return pdJson({ ok: false, message: "No pudimos interpretar filas v\xE1lidas desde el texto pegado" }, 400);
+  }
+  const payload = parsedRows.map((row) => ({ ...row, user_id: userId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
+  const inserted = await pdSupabaseRequest(env, "user_listados", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  await pdSupabaseInsertReturning(env, "user_listados_imports", {
+    user_id: userId,
+    source_type: "paste",
+    source_name: "Pegado manual",
+    raw_content: rawText,
+    parse_status: "ok",
+    parse_message: `Filas detectadas: ${payload.length}`,
+    imported_rows: payload.length
+  }).catch(() => null);
+  return pdJson({
+    ok: true,
+    message: `Texto interpretado. Filas cargadas: ${payload.length}`,
+    imported: payload.length,
+    items: Array.isArray(inserted) ? inserted : []
+  });
+}
+__name(handleImportPaste, "handleImportPaste");
+async function handleSyncPublicAbc(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const user = await pdGetUserById(env, userId);
+  if (!user) return pdJson({ ok: false, message: "Usuario no encontrado" }, 404);
+  const profileRows = await pdSupabaseSelect(
+    env,
+    `user_identity_profile?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,dni,consentimiento_datos&limit=1`
+  ).catch(() => []);
+  const profile = Array.isArray(profileRows) ? profileRows[0] || null : null;
+  if (!profile?.dni) {
+    return pdJson({ ok: false, message: "Primero guard\xE1 tu DNI en el perfil docente" }, 400);
+  }
+  if (profile?.consentimiento_datos !== true) {
+    return pdJson({ ok: false, message: "Primero acept\xE1 el consentimiento de datos" }, 400);
+  }
+  await pdUpdateIdentityProfileSync(env, userId, { sync_status: "running" }).catch(() => null);
+  try {
+    const fetched = await pdFetchAbcListadoPublic(profile.dni);
+    const normalizedRows = fetched.docs.map((doc) => pdMapAbcDocToListadoRow(doc, fetched.dni)).filter((row) => row.cargo_materia_normalizado);
+    await pdDeleteUserAutoSyncedListados(env, userId);
+    let inserted = [];
+    if (normalizedRows.length) {
+      const payload = normalizedRows.map((row) => ({
+        ...row,
+        user_id: userId,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }));
+      inserted = await pdSupabaseRequest(env, "user_listados", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(payload)
+      });
+    }
+    const summary = pdBuildListadoSummary(normalizedRows);
+    await pdSupabaseInsertReturning(env, "user_listados_imports", {
+      user_id: userId,
+      source_type: "abc_public",
+      source_name: "ABC p\xFAblico por DNI",
+      raw_content: JSON.stringify({
+        dni: fetched.dni,
+        total_docs: fetched.docs.length,
+        facets: fetched.facets || null
+      }),
+      parse_status: "ok",
+      parse_message: `ABC p\xFAblico sincronizado. Registros: ${normalizedRows.length}`,
+      imported_rows: normalizedRows.length
+    }).catch(() => null);
+    await pdUpdateIdentityProfileSync(env, userId, {
+      last_sync_at: (/* @__PURE__ */ new Date()).toISOString(),
+      sync_status: normalizedRows.length ? "ok" : "empty"
+    }).catch(() => null);
+    return pdJson({
+      ok: true,
+      message: normalizedRows.length ? `Sincronizaci\xF3n completada. Registros tra\xEDdos: ${normalizedRows.length}` : "La consulta a ABC no devolvi\xF3 registros para ese DNI",
+      imported: normalizedRows.length,
+      items: Array.isArray(inserted) ? inserted : [],
+      summary,
+      facets: fetched.facets || null
+    });
+  } catch (err) {
+    await pdSupabaseInsertReturning(env, "user_listados_imports", {
+      user_id: userId,
+      source_type: "abc_public",
+      source_name: "ABC p\xFAblico por DNI",
+      raw_content: JSON.stringify({ dni: profile.dni }),
+      parse_status: "error",
+      parse_message: String(err?.message || "No se pudo sincronizar con ABC"),
+      imported_rows: 0
+    }).catch(() => null);
+    await pdUpdateIdentityProfileSync(env, userId, {
+      sync_status: "error"
+    }).catch(() => null);
+    return pdJson({ ok: false, message: err?.message || "No se pudo sincronizar con ABC" }, 502);
+  }
+}
+__name(handleSyncPublicAbc, "handleSyncPublicAbc");
+async function handleDeleteListado(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const id = String(body?.id || "").trim();
+  if (!id) return pdJson({ ok: false, message: "Falta el id del listado" }, 400);
+  await pdSupabaseRequest(
+    env,
+    `user_listados?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`,
+    { method: "DELETE", headers: { Prefer: "return=minimal" } }
+  );
+  return pdJson({ ok: true, message: "Listado eliminado" });
+}
+__name(handleDeleteListado, "handleDeleteListado");
+async function fetchStoredOffers(env, userId) {
+  const rows = await pdSupabaseSelect(
+    env,
+    `user_offer_state?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=offer_id,offer_payload&order=last_seen_at.desc&limit=200`
+  ).catch(() => []);
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    ...row.offer_payload || {},
+    offer_id: row.offer_id || row.offer_payload?.offer_id || ""
+  }));
+}
+__name(fetchStoredOffers, "fetchStoredOffers");
+async function handleEligibilityRecompute(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = pdGetAuthedUserId(request, body, null);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const listados = await pdSupabaseSelect(
+    env,
+    `user_listados?user_id=eq.${encodeURIComponent(userId)}&select=id,tipo_listado,distrito,cargo,materia,cargo_materia_normalizado,puntaje,validado&order=updated_at.desc`
+  ).catch((err) => {
+    throw new Error(`No se pudieron leer tus listados: ${err?.message || err}`);
+  });
+  if (!Array.isArray(listados) || !listados.length) {
+    return pdJson({ ok: true, items: [], summary: { compatibles: 0, total: 0 }, message: "Todav\xEDa no cargaste listados." });
+  }
+  const sourceOffers = Array.isArray(body?.offers) && body.offers.length ? body.offers : await fetchStoredOffers(env, userId);
+  const offers = sourceOffers.filter((item) => pdSafeOfferId(item));
+  const computed = offers.map((offer) => ({
+    user_id: userId,
+    ...pdComputeEligibilityForOffer(offer, listados),
+    computed_at: (/* @__PURE__ */ new Date()).toISOString()
+  }));
+  if (computed.length) {
+    await pdSupabaseUpsert(
+      env,
+      "offer_eligibility",
+      computed.map((item) => ({
+        user_id: item.user_id,
+        offer_id: item.offer_id,
+        compatible: item.compatible,
+        match_type: item.match_type,
+        puntaje_usuario: item.puntaje_usuario,
+        tipo_listado_detectado: item.tipo_listado_detectado,
+        score_competitividad: item.score_competitividad,
+        confidence_level: item.confidence_level,
+        strategic_message: item.strategic_message,
+        computed_at: item.computed_at
+      })),
+      "user_id,offer_id"
+    ).catch(() => null);
+  }
+  return pdJson({
+    ok: true,
+    items: computed,
+    summary: {
+      total: computed.length,
+      compatibles: computed.filter((item) => item.compatible).length,
+      muy_altas: computed.filter((item) => item.confidence_level === "muy_alta").length,
+      altas: computed.filter((item) => item.confidence_level === "alta").length
+    }
+  });
+}
+__name(handleEligibilityRecompute, "handleEligibilityRecompute");
+async function handleEligibilityList(request, env, url) {
+  const userId = pdGetAuthedUserId(request, null, url);
+  if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
+  const rows = await pdSupabaseSelect(
+    env,
+    `offer_eligibility?user_id=eq.${encodeURIComponent(userId)}&select=*&order=computed_at.desc&limit=200`
+  ).catch(() => []);
+  return pdJson({ ok: true, items: Array.isArray(rows) ? rows : [] });
+}
+__name(handleEligibilityList, "handleEligibilityList");
+async function handleProfileListadosRoute(request, env) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  if (path === `${API_URL_PREFIX}/profile/me` && request.method === "GET") {
+    return await handleProfileMe(request, env, url);
+  }
+  if (path === `${API_URL_PREFIX}/profile/save-dni` && request.method === "POST") {
+    return await handleSaveDni(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/listados/mis-listados` && request.method === "GET") {
+    return await handleMisListados(request, env, url);
+  }
+  if (path === `${API_URL_PREFIX}/listados/import-manual` && request.method === "POST") {
+    return await handleImportManual(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/listados/import-paste` && request.method === "POST") {
+    return await handleImportPaste(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/listados/sync-public-abc` && request.method === "POST") {
+    return await handleSyncPublicAbc(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/listados/delete` && request.method === "POST") {
+    return await handleDeleteListado(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/eligibility/recompute` && request.method === "POST") {
+    return await handleEligibilityRecompute(request, env);
+  }
+  if (path === `${API_URL_PREFIX}/eligibility/mis-alertas` && request.method === "GET") {
+    return await handleEligibilityList(request, env, url);
+  }
+  return null;
+}
+__name(handleProfileListadosRoute, "handleProfileListadosRoute");
+
+// repositorio_api.js
+var API_PREFIX = "/api/repositorio";
+var BUCKET_ID = "repositorio-docs";
+var MANIFEST_PATH = "_meta/manifest.json";
+var MAX_FILE_SIZE = 25 * 1024 * 1024;
+function corsHeaders(contentType = "application/json; charset=utf-8") {
+  return {
+    "Content-Type": contentType,
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders, "corsHeaders");
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: corsHeaders()
+  });
+}
+__name(json, "json");
+function getBearerToken(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken, "getBearerToken");
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+__name(normalizeText, "normalizeText");
+function encodeStoragePath(path) {
+  return String(path || "").split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+__name(encodeStoragePath, "encodeStoragePath");
+function publicObjectUrl(env, path) {
+  return `${env.SUPABASE_URL}/storage/v1/object/public/${BUCKET_ID}/${encodeStoragePath(path)}`;
+}
+__name(publicObjectUrl, "publicObjectUrl");
+function slugify(value) {
+  return String(value || "archivo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "archivo";
+}
+__name(slugify, "slugify");
+function fileParts(filename) {
+  const raw = normalizeText(filename) || "archivo";
+  const lastDot = raw.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === raw.length - 1) return { base: raw, ext: "" };
+  return { base: raw.slice(0, lastDot), ext: raw.slice(lastDot + 1) };
+}
+__name(fileParts, "fileParts");
+function previewKind(contentType, filename) {
+  const type = String(contentType || "").toLowerCase();
+  const name = String(filename || "").toLowerCase();
+  if (type.startsWith("image/")) return "image";
+  if (type === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md")) return "text";
+  return "none";
+}
+__name(previewKind, "previewKind");
+function nowIso() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+__name(nowIso, "nowIso");
+function randomId() {
+  return crypto.randomUUID();
+}
+__name(randomId, "randomId");
+function serviceHeaders(env, extra) {
+  const key = env["SUPABASE_SERVICE_ROLE_KEY"];
+  return {
+    apikey: key,
+    Authorization: "Bearer " + key,
+    ...extra || {}
+  };
+}
+__name(serviceHeaders, "serviceHeaders");
+async function storageRequest(env, path, init = {}) {
+  return await fetch(`${env.SUPABASE_URL}${path}`, {
+    ...init,
+    headers: serviceHeaders(env, init.headers || {})
+  });
+}
+__name(storageRequest, "storageRequest");
+async function supabaseSelect(env, query) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${query}`, {
+    method: "GET",
+    headers: serviceHeaders(env, {
+      "Content-Type": "application/json",
+      Prefer: "return=representation"
+    })
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseSelect, "supabaseSelect");
+async function getUserById(env, userId) {
+  const rows = await supabaseSelect(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,activo,es_admin&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById, "getUserById");
+async function resolveAuthUser(env, request) {
+  const bearer = getBearerToken(request);
+  if (!bearer) return null;
+  const sessions = await supabaseSelect(env, `sessions?token=eq.${encodeURIComponent(bearer)}&activo=eq.true&select=token,user_id,expires_at&limit=1`).catch(() => []);
+  const session = Array.isArray(sessions) ? sessions[0] || null : null;
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    const user = await getUserById(env, session.user_id).catch(() => null);
+    if (user?.id && user?.activo !== false) return user;
+  }
+  const legacyUser = await getUserById(env, bearer).catch(() => null);
+  if (legacyUser?.id && legacyUser?.activo !== false) return legacyUser;
+  return null;
+}
+__name(resolveAuthUser, "resolveAuthUser");
+async function ensureBucket(env) {
+  const res = await storageRequest(env, "/storage/v1/bucket", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: BUCKET_ID, name: BUCKET_ID, public: true, file_size_limit: MAX_FILE_SIZE })
+  });
+  if (res.ok || res.status === 400 || res.status === 409) return true;
+  const text = await res.text();
+  throw new Error(text || "No se pudo asegurar el bucket del repositorio");
+}
+__name(ensureBucket, "ensureBucket");
+async function readManifest(env) {
+  const res = await fetch(`${publicObjectUrl(env, MANIFEST_PATH)}?v=${Date.now()}`);
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => ({ items: [] }));
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+__name(readManifest, "readManifest");
+async function writeManifest(env, items) {
+  const res = await storageRequest(env, `/storage/v1/object/${BUCKET_ID}/${encodeStoragePath(MANIFEST_PATH)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-upsert": "true" },
+    body: JSON.stringify({ items, updated_at: nowIso() })
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "No se pudo actualizar el manifiesto del repositorio");
+  }
+}
+__name(writeManifest, "writeManifest");
+async function uploadObject(env, path, body, contentType) {
+  const res = await storageRequest(env, `/storage/v1/object/${BUCKET_ID}/${encodeStoragePath(path)}`, {
+    method: "POST",
+    headers: { "Content-Type": contentType || "application/octet-stream", "x-upsert": "true" },
+    body
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "No se pudo subir el archivo al bucket");
+  }
+}
+__name(uploadObject, "uploadObject");
+function sanitizeManifestItem(item) {
+  return {
+    id: String(item?.id || randomId()),
+    title: normalizeText(item?.title || "Documento"),
+    description: normalizeText(item?.description || ""),
+    category: normalizeText(item?.category || "General"),
+    audience: normalizeText(item?.audience || "Todos"),
+    filename: normalizeText(item?.filename || "archivo"),
+    stored_path: normalizeText(item?.stored_path || ""),
+    public_url: normalizeText(item?.public_url || ""),
+    content_type: normalizeText(item?.content_type || "application/octet-stream"),
+    size_bytes: Number(item?.size_bytes || 0),
+    preview_kind: normalizeText(item?.preview_kind || "none"),
+    created_at: normalizeText(item?.created_at || nowIso()),
+    uploaded_by_user_id: normalizeText(item?.uploaded_by_user_id || ""),
+    uploaded_by_name: normalizeText(item?.uploaded_by_name || "")
+  };
+}
+__name(sanitizeManifestItem, "sanitizeManifestItem");
+async function handleList(request, env) {
+  await ensureBucket(env);
+  const authUser = await resolveAuthUser(env, request).catch(() => null);
+  const items = (await readManifest(env)).map(sanitizeManifestItem).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  return json({ ok: true, items, is_admin: !!authUser?.es_admin, total: items.length, bucket: BUCKET_ID });
+}
+__name(handleList, "handleList");
+async function handleUpload(request, env) {
+  const authUser = await resolveAuthUser(env, request);
+  if (!authUser?.id) return json({ ok: false, error: "No autenticado" }, 401);
+  if (!authUser?.es_admin) return json({ ok: false, error: "Solo admins pueden subir archivos al repositorio" }, 403);
+  await ensureBucket(env);
+  const form = await request.formData().catch(() => null);
+  if (!form) return json({ ok: false, error: "Formulario inv\xE1lido" }, 400);
+  const title = normalizeText(form.get("title") || "");
+  const category = normalizeText(form.get("category") || "General");
+  const audience = normalizeText(form.get("audience") || "Todos");
+  const description = normalizeText(form.get("description") || "");
+  const file = form.get("file");
+  if (!(file instanceof File)) return json({ ok: false, error: "Falta el archivo" }, 400);
+  if (!title) return json({ ok: false, error: "Falta el t\xEDtulo" }, 400);
+  if (!file.size || file.size <= 0) return json({ ok: false, error: "El archivo est\xE1 vac\xEDo" }, 400);
+  if (file.size > MAX_FILE_SIZE) return json({ ok: false, error: "El archivo supera el tama\xF1o m\xE1ximo permitido de 25 MB" }, 400);
+  const createdAt = nowIso();
+  const fileInfo = fileParts(file.name);
+  const safeBase = slugify(fileInfo.base || title || "archivo");
+  const safeExt = slugify(fileInfo.ext || "");
+  const fileName = safeExt ? `${safeBase}.${safeExt}` : safeBase;
+  const yyyy = createdAt.slice(0, 4);
+  const mm = createdAt.slice(5, 7);
+  const storedPath = `${yyyy}/${mm}/${Date.now()}-${fileName}`;
+  const contentType = normalizeText(file.type || "application/octet-stream");
+  const body = await file.arrayBuffer();
+  await uploadObject(env, storedPath, body, contentType);
+  const item = sanitizeManifestItem({
+    id: randomId(),
+    title,
+    description,
+    category,
+    audience,
+    filename: file.name,
+    stored_path: storedPath,
+    public_url: publicObjectUrl(env, storedPath),
+    content_type: contentType,
+    size_bytes: file.size,
+    preview_kind: previewKind(contentType, file.name),
+    created_at: createdAt,
+    uploaded_by_user_id: authUser.id,
+    uploaded_by_name: `${normalizeText(authUser.nombre)} ${normalizeText(authUser.apellido)}`.trim() || normalizeText(authUser.email)
+  });
+  const currentItems = (await readManifest(env)).map(sanitizeManifestItem);
+  const nextItems = [item, ...currentItems].slice(0, 1e3);
+  await writeManifest(env, nextItems);
+  return json({ ok: true, item, total: nextItems.length });
+}
+__name(handleUpload, "handleUpload");
+async function handleRepositoryRoute(request, env) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  if (path === `${API_PREFIX}/list` && request.method === "GET") return await handleList(request, env);
+  if (path === `${API_PREFIX}/upload` && request.method === "POST") return await handleUpload(request, env);
+  return null;
+}
+__name(handleRepositoryRoute, "handleRepositoryRoute");
+
+// worker.js
+async function supabaseInsert(env, table, data) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text);
+  }
+  return true;
+}
+__name(supabaseInsert, "supabaseInsert");
+async function supabaseInsertReturning(env, table, data) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(data)
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(text);
+  }
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Respuesta inv\xE1lida de Supabase insert returning: ${text}`);
+  }
+}
+__name(supabaseInsertReturning, "supabaseInsertReturning");
+var API_VERSION = "2026-03-27";
+var API_URL_PREFIX2 = "/api";
+var HISTORICO_DAYS_DEFAULT = 30;
+var HISTORICO_INSERT_BATCH = 150;
+var HISTORICO_POSTULANTES_LIMIT = 8;
+var USER_CAPTURE_ROWS_PER_PAGE = 150;
+var USER_CAPTURE_MAX_PAGES = 25;
+var PROVINCIA_SCOPE = "PROVINCIA_FULL";
+var PROVINCIA_CAPTURE_ROWS_PER_PAGE = 150;
+var PROVINCIA_STEP_PAGES = 4;
+var PROVINCIA_SUMMARY_LIMIT = 2e4;
+var PROVINCIA_DAYS_DEFAULT = 30;
+var PROVINCIA_RUNNING_STALE_MS = 10 * 60 * 1e3;
+var WHATSAPP_ALERT_SWEEP_MAX_USERS = 20;
+var WHATSAPP_ALERTS_PER_USER_MAX = 3;
+var WHATSAPP_ALERT_LOG_LOOKBACK = 200;
+function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    }
+  });
+}
+__name(jsonResponse, "jsonResponse");
+function corsHeaders2() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders2, "corsHeaders");
+function normalizeEmail(v) {
+  return String(v || "").trim().toLowerCase();
+}
+__name(normalizeEmail, "normalizeEmail");
+function normalizeText2(v) {
+  return String(v || "").trim();
+}
+__name(normalizeText2, "normalizeText");
+async function ensureTrialIfNoSubscriptions(env, userId, email, source = "trial_auto") {
+  const existing = await supabaseSelect2(
+    env,
+    `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status&limit=1`
+  ).catch(() => []);
+  if (Array.isArray(existing) && existing.length > 0) {
+    return {
+      ok: true,
+      created: false,
+      subscription: existing[0]
+    };
+  }
+  const row = await supabaseInsert(env, "user_subscriptions", {
+    user_id: userId,
+    plan_code: "TRIAL_7D",
+    status: "ACTIVE",
+    source,
+    started_at: (/* @__PURE__ */ new Date()).toISOString(),
+    trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3).toISOString(),
+    current_period_ends_at: null,
+    mercadopago_preapproval_id: null,
+    mercadopago_payer_email: email || null,
+    external_reference: `${userId}:TRIAL_7D:${Date.now()}`
+  });
+  return {
+    ok: true,
+    created: true,
+    subscription: Array.isArray(row) ? row[0] : row
+  };
+}
+__name(ensureTrialIfNoSubscriptions, "ensureTrialIfNoSubscriptions");
+async function handleRegister(body, env) {
+  try {
+    const nombre = normalizeText2(body?.nombre);
+    const apellido = normalizeText2(body?.apellido);
+    const email = normalizeEmail(body?.email);
+    const password = normalizeText2(body?.password);
+    const celular = normalizeText2(body?.celular);
+    if (!nombre) return jsonResponse({ ok: false, error: "Falta nombre" }, 400);
+    if (!apellido) return jsonResponse({ ok: false, error: "Falta apellido" }, 400);
+    if (!email) return jsonResponse({ ok: false, error: "Falta email" }, 400);
+    if (!password || password.length < 6) {
+      return jsonResponse({ ok: false, error: "La contrase\xF1a debe tener al menos 6 caracteres" }, 400);
+    }
+    const existingUser = await findUserByEmail(env, email);
+    if (existingUser?.id) {
+      return jsonResponse({ ok: false, error: "Ese email ya est\xE1 registrado" }, 409);
+    }
+    const nuevoUsuarioRaw = await supabaseInsertReturning(env, "users", {
+      nombre,
+      apellido,
+      email,
+      celular,
+      password_hash: password,
+      activo: true
+    });
+    const nuevoUsuario = Array.isArray(nuevoUsuarioRaw) ? nuevoUsuarioRaw[0] : nuevoUsuarioRaw;
+    if (!nuevoUsuario?.id) {
+      return jsonResponse({ ok: false, error: "No se pudo obtener el ID del usuario creado" }, 500);
+    }
+    await ensureTrialIfNoSubscriptions(env, nuevoUsuario.id, email, "trial_auto_register");
+    return jsonResponse({
+      ok: true,
+      message: "Usuario registrado correctamente",
+      data: nuevoUsuario
+    });
+  } catch (err) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: err?.message || "Error interno en registro"
+      },
+      500
+    );
+  }
+}
+__name(handleRegister, "handleRegister");
+function adminJson(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+    }
+  });
+}
+__name(adminJson, "adminJson");
+function getBearerToken2(request) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  return auth.slice(7).trim();
+}
+__name(getBearerToken2, "getBearerToken");
+function startOfTodayISO() {
+  const now = /* @__PURE__ */ new Date();
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}T00:00:00.000Z`;
+}
+__name(startOfTodayISO, "startOfTodayISO");
+function sevenDaysAgoISO() {
+  const dt = /* @__PURE__ */ new Date();
+  dt.setUTCDate(dt.getUTCDate() - 6);
+  dt.setUTCHours(0, 0, 0, 0);
+  return dt.toISOString();
+}
+__name(sevenDaysAgoISO, "sevenDaysAgoISO");
+async function getSessionUserByBearer(env, request) {
+  const token = getBearerToken2(request);
+  if (!token) return null;
+  const sessions = await supabaseSelect2(
+    env,
+    `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`
+  ).catch(() => []);
+  const session = Array.isArray(sessions) ? sessions[0] : null;
+  let userId = null;
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {
+      return null;
+    }
+    userId = session.user_id;
+  } else {
+    userId = token;
+  }
+  const users = await supabaseSelect2(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin,created_at,ultimo_login&limit=1`
+  ).catch(() => []);
+  const user = Array.isArray(users) ? users[0] : null;
+  if (!user) return null;
+  if (user.activo === false) return null;
+  return user;
+}
+__name(getSessionUserByBearer, "getSessionUserByBearer");
+async function requireAdmin(env, request) {
+  const user = await getSessionUserByBearer(env, request);
+  if (!user) {
+    return {
+      ok: false,
+      response: adminJson({ ok: false, error: "No autenticado" }, 401)
+    };
+  }
+  if (!user.es_admin) {
+    return {
+      ok: false,
+      response: adminJson({ ok: false, error: "No autorizado" }, 403)
+    };
+  }
+  return { ok: true, user };
+}
+__name(requireAdmin, "requireAdmin");
+async function handleAdminMe(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+  return adminJson({
+    ok: true,
+    user: auth.user
+  });
+}
+__name(handleAdminMe, "handleAdminMe");
+async function handleAdminResumen(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+  const hoy = startOfTodayISO();
+  const [
+    usuariosTotalRes,
+    usuariosActivosRes,
+    adminsRes,
+    sesionesActivasRes,
+    alertasHoyRes,
+    workerRunsRows,
+    erroresHoyRes
+  ] = await Promise.all([
+    supabaseSelect2(env, "users?select=id").catch(() => []),
+    supabaseSelect2(env, "users?activo=eq.true&select=id").catch(() => []),
+    supabaseSelect2(env, "users?es_admin=eq.true&select=id").catch(() => []),
+    supabaseSelect2(env, "sessions?activo=eq.true&select=token").catch(() => []),
+    supabaseSelect2(
+      env,
+      `notification_delivery_logs?created_at=gte.${encodeURIComponent(hoy)}&select=id`
+    ).catch(() => []),
+    supabaseSelect2(
+      env,
+      "worker_runs?select=*&order=created_at.desc&limit=1"
+    ).catch(() => []),
+    supabaseSelect2(
+      env,
+      `errores_sistema?created_at=gte.${encodeURIComponent(hoy)}&select=id`
+    ).catch(() => [])
+  ]);
+  return adminJson({
+    ok: true,
+    resumen: {
+      usuarios_total: usuariosTotalRes.length || 0,
+      usuarios_activos: usuariosActivosRes.length || 0,
+      admins_total: adminsRes.length || 0,
+      sesiones_activas: sesionesActivasRes.length || 0,
+      alertas_hoy: alertasHoyRes.length || 0,
+      errores_hoy: erroresHoyRes.length || 0,
+      ultima_ejecucion: workerRunsRows[0] || null
+    }
+  });
+}
+__name(handleAdminResumen, "handleAdminResumen");
+async function handleAdminUsuarios(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+  const rows = await supabaseSelect2(
+    env,
+    "users?select=id,nombre,apellido,email,celular,activo,es_admin,created_at,ultimo_login&order=created_at.desc&limit=1000"
+  ).catch((err) => {
+    throw new Error(err?.message || "No se pudieron leer usuarios");
+  });
+  const total = rows?.length || 0;
+  const activos = (rows || []).filter((x) => x.activo === true).length;
+  const admins = (rows || []).filter((x) => x.es_admin === true).length;
+  return adminJson({
+    ok: true,
+    total,
+    activos,
+    admins,
+    items: rows || []
+  });
+}
+__name(handleAdminUsuarios, "handleAdminUsuarios");
+async function handleAdminSesiones(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+  const rows = await supabaseSelect2(
+    env,
+    "sessions?select=token,user_id,metodo,created_at,expires_at,activo&order=created_at.desc&limit=300"
+  ).catch((err) => {
+    throw new Error(err?.message || "No se pudieron leer sesiones");
+  });
+  const activas = (rows || []).filter((x) => x.activo === true).length;
+  const vencidas = (rows || []).filter(
+    (x) => x.expires_at && new Date(x.expires_at).getTime() < Date.now()
+  ).length;
+  const porMetodo = {};
+  for (const s of rows || []) {
+    const k = s.metodo || "sin_metodo";
+    porMetodo[k] = (porMetodo[k] || 0) + 1;
+  }
+  return adminJson({
+    ok: true,
+    total: rows?.length || 0,
+    activas,
+    vencidas,
+    por_metodo: Object.entries(porMetodo).map(([metodo, total]) => ({ metodo, total })).sort((a, b) => b.total - a.total),
+    items: rows || []
+  });
+}
+__name(handleAdminSesiones, "handleAdminSesiones");
+async function handleAdminAlertas(request, env) {
+  const auth = await requireAdmin(env, request);
+  if (!auth.ok) return auth.response;
+  const desde = sevenDaysAgoISO();
+  const rows = await supabaseSelect2(
+    env,
+    `notification_delivery_logs?created_at=gte.${encodeURIComponent(desde)}&select=id,user_id,channel,template_code,destination,status,provider_message_id,payload,provider_response,created_at&order=created_at.desc&limit=1000`
+  ).catch((err) => {
+    throw new Error(err?.message || "No se pudieron leer alertas");
+  });
+  const porDia = {};
+  const porEstado = {};
+  const porCanal = {};
+  for (const row of rows || []) {
+    const dia = row.created_at ? row.created_at.slice(0, 10) : "sin_fecha";
+    porDia[dia] = (porDia[dia] || 0) + 1;
+    const estado = row.status || "sin_status";
+    porEstado[estado] = (porEstado[estado] || 0) + 1;
+    const canal = row.channel || "sin_canal";
+    porCanal[canal] = (porCanal[canal] || 0) + 1;
+  }
+  return adminJson({
+    ok: true,
+    ultimos_7_dias_total: rows?.length || 0,
+    por_dia: Object.entries(porDia).map(([fecha, total]) => ({ fecha, total })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    por_estado: Object.entries(porEstado).map(([estado, total]) => ({ estado, total })).sort((a, b) => b.total - a.total),
+    por_canal: Object.entries(porCanal).map(([canal, total]) => ({ canal, total })).sort((a, b) => b.total - a.total),
+    items: rows || []
+  });
+}
+__name(handleAdminAlertas, "handleAdminAlertas");
+async function enviarMailBrevo(destinatario, nombre, asunto, html, env) {
+  const API_KEY = env.BREVO_API_KEY;
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": API_KEY,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({
+      sender: {
+        email: "apdocentepba@gmail.com",
+        name: "APDocentePBA"
+      },
+      to: [
+        {
+          email: destinatario,
+          name: nombre || ""
+        }
+      ],
+      subject: asunto,
+      htmlContent: html
+    })
+  });
+  const data = await response.text();
+  return {
+    ok: response.ok,
+    status: response.status,
+    data
+  };
+}
+__name(enviarMailBrevo, "enviarMailBrevo");
+function getOfferId(offer) {
+  return String(
+    offer.offer_id || offer.id || offer.codigo || offer.identity_key || ""
+  ).trim();
+}
+__name(getOfferId, "getOfferId");
+function normalizeOfferPayload(offer) {
+  return {
+    raw: offer,
+    offer_id: String(
+      offer.offer_id || offer.idoferta || offer.id || offer.identity_key || offer.codigo || ""
+    ).trim(),
+    source_offer_key: offer.source_offer_key || "",
+    idoferta: offer.idoferta || offer.raw?.idoferta || null,
+    iddetalle: offer.iddetalle || offer.id || offer.raw?.iddetalle || offer.raw?.id || null,
+    title: offer.title || offer.cargo || offer.materia || offer.descripcioncargo || offer.descripcionarea || "Oferta APD",
+    cargo: offer.cargo || offer.descripcioncargo || "",
+    materia: offer.materia || offer.area || offer.descripcionarea || "",
+    nivel: offer.nivel || offer.nivel_modalidad || offer.descnivelmodalidad || "",
+    distrito: offer.distrito || offer.descdistrito || "",
+    escuela: offer.escuela || offer.nombreestablecimiento || "",
+    turno: offer.turno || "",
+    jornada: offer.jornada || "",
+    modulos: offer.modulos || offer.hsmodulos || "",
+    dias_horarios: offer.dias_horarios || [offer.lunes, offer.martes, offer.miercoles, offer.jueves, offer.viernes, offer.sabado].filter(Boolean).join(" ") || "",
+    desde: offer.desde || offer.supl_desde_label || offer.supl_desde || "",
+    hasta: offer.hasta || offer.supl_hasta_label || offer.supl_hasta || "",
+    tipo_cargo: offer.tipo_cargo || offer.tipooferta || "",
+    tipo_situacion: [
+      offer.tipooferta,
+      offer.suplencia,
+      offer.provisional,
+      offer.revista || offer.supl_revista
+    ].filter(Boolean).join(" / "),
+    revista: offer.revista || offer.supl_revista || "",
+    curso_division: offer.curso_division || offer.cursodivision || "",
+    observaciones: offer.observaciones || "",
+    fecha_cierre: offer.fecha_cierre || offer.fecha_cierre_fmt || offer.finoferta_label || offer.finoferta || "",
+    link: offer.link_postular || offer.link || "",
+    total_postulantes: offer.total_postulantes ?? null,
+    puntaje_primero: offer.puntaje_primero ?? null,
+    listado_origen_primero: offer.listado_origen_primero || ""
+  };
+}
+__name(normalizeOfferPayload, "normalizeOfferPayload");
+function escHtml(v) {
+  return String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+__name(escHtml, "escHtml");
+function digestRow(label, value) {
+  if (!value && value !== 0) return "";
+  return `
+    <div style="margin:2px 0;">
+      <b>${escHtml(label)}:</b> ${escHtml(value)}
+    </div>
+  `;
+}
+__name(digestRow, "digestRow");
+async function syncUserOfferState(env, userId, offers) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const safeUserId = encodeURIComponent(String(userId || "").trim());
+  if (!safeUserId) {
+    throw new Error("syncUserOfferState: falta userId");
+  }
+  const existingResp = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/user_offer_state?user_id=eq.${safeUserId}&select=id,offer_id`,
+    {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+      }
+    }
+  );
+  if (!existingResp.ok) {
+    const text = await existingResp.text().catch(() => "");
+    throw new Error(`No se pudo leer user_offer_state: ${existingResp.status} ${text}`);
+  }
+  const existing = await existingResp.json().catch(() => []);
+  const existingRows = Array.isArray(existing) ? existing : [];
+  const map = new Map(existingRows.map((x) => [String(x.offer_id || ""), x]));
+  const activeIds = [];
+  const offersList = Array.isArray(offers) ? offers : [];
+  for (const offer of offersList) {
+    const id = String(getOfferId(offer) || "").trim();
+    if (!id) continue;
+    activeIds.push(id);
+    const payload = {
+      user_id: userId,
+      offer_id: id,
+      last_seen_at: now,
+      is_active: true,
+      offer_payload: normalizeOfferPayload(offer)
+    };
+    if (!map.has(id)) {
+      payload.first_seen_at = now;
+    }
+    const upsertResp = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_offer_state?on_conflict=user_id,offer_id`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          Prefer: "resolution=merge-duplicates"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+    if (!upsertResp.ok) {
+      const text = await upsertResp.text().catch(() => "");
+      throw new Error(`No se pudo upsert user_offer_state para ${id}: ${upsertResp.status} ${text}`);
+    }
+  }
+  const uniqueActiveIds = [...new Set(activeIds)];
+  const toDisable = existingRows.filter((x) => !uniqueActiveIds.includes(String(x.offer_id || ""))).map((x) => x.id).filter(Boolean);
+  if (toDisable.length) {
+    const disableResp = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_offer_state?id=in.(${toDisable.join(",")})`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+        },
+        body: JSON.stringify({
+          is_active: false,
+          last_seen_at: now
+        })
+      }
+    );
+    if (!disableResp.ok) {
+      const text = await disableResp.text().catch(() => "");
+      throw new Error(`No se pudo desactivar user_offer_state: ${disableResp.status} ${text}`);
+    }
+  }
+  return {
+    ok: true,
+    total_received: offersList.length,
+    total_active: uniqueActiveIds.length,
+    total_disabled: toDisable.length
+  };
+}
+__name(syncUserOfferState, "syncUserOfferState");
+var worker_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders2() });
+    }
+    try {
+      const url = new URL(request.url);
+      const path = url.pathname;
+      if (path === "/test-mail" && request.method === "GET") {
+        const r = await enviarMailBrevo(
+          "martin.nicolas.podubinio@gmail.com",
+          "Martin",
+          "PRUEBA APDocentePBA \u{1F680}",
+          "<h1>Funciona desde Worker</h1>",
+          env
+        );
+        return new Response(JSON.stringify(r, null, 2), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        });
+      }
+      if (path === "/test-email-sweep" && request.method === "GET") {
+        const r = await runEmailAlertsSweep(env, { source: "manual_test" });
+        return new Response(JSON.stringify(r, null, 2), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        });
+      }
+      if (path === "/test-digest" && request.method === "GET") {
+        const r = await sendPendingEmailDigests(env);
+        return new Response(JSON.stringify(r, null, 2), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        });
+      }
+      if (path === `${API_URL_PREFIX2}/test-db` && request.method === "GET") {
+        return json2({ ok: true, version: API_VERSION });
+      }
+      if (path === `${API_URL_PREFIX2}/login` && request.method === "POST") {
+        return await handleLogin(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/register` && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        return await handleRegister(body, env);
+      }
+      if (path === `${API_URL_PREFIX2}/google-auth` && request.method === "POST") {
+        return await handleGoogleAuth(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/planes` && request.method === "GET") {
+        return await handlePlanes(env);
+      }
+      if (path === `${API_URL_PREFIX2}/mi-plan` && request.method === "GET") {
+        return await handleMiPlan(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/guardar-preferencias` && request.method === "POST") {
+        return await handleGuardarPreferencias(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/mis-alertas` && request.method === "GET") {
+        return await handleMisAlertas(url, env);
+      }
+      if (path === "/api/sync-offers" && request.method === "POST") {
+        const user = await getSessionUserByBearer(env, request);
+        if (!user) {
+          return jsonResponse({ ok: false, error: "No autenticado" }, 401);
+        }
+        const body = await request.json().catch(() => ({}));
+        const offers = Array.isArray(body?.offers) ? body.offers : [];
+        const syncResult = await syncUserOfferState(env, user.id, offers);
+        return jsonResponse({
+          ok: true,
+          synced: offers.length,
+          sync_result: syncResult
+        });
+      }
+      if (path === `${API_URL_PREFIX2}/postulantes-resumen` && request.method === "GET") {
+        return await handlePostulantesResumen(url);
+      }
+      if (path === `${API_URL_PREFIX2}/capturar-historico-apd` && request.method === "POST") {
+        return await handleCapturarHistoricoAPD(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/historico-resumen` && request.method === "GET") {
+        return await handleHistoricoResumen(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/historico-radar-personal` && request.method === "GET") {
+        return await handleHistoricoRadarPersonal(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/backfill-status` && request.method === "GET") {
+        return await handleProvinciaBackfillStatus(env);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/backfill-step` && request.method === "POST") {
+        return await handleProvinciaBackfillStep(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/backfill-reset` && request.method === "POST") {
+        return await handleProvinciaBackfillReset(env);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/backfill-kick` && request.method === "POST") {
+        return await handleProvinciaBackfillKick(request, env, ctx);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/resumen` && request.method === "GET") {
+        return await handleProvinciaResumen(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/provincia/insights` && request.method === "GET") {
+        return await handleProvinciaInsights(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/mercadopago/create-checkout-link` && request.method === "POST") {
+        return await handleMercadoPagoCreateCheckoutLink(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/mercadopago/webhook` && request.method === "POST") {
+        return await handleMercadoPagoWebhook(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/whatsapp/health` && request.method === "GET") {
+        return await handleWhatsAppHealth(env);
+      }
+      if (path === `${API_URL_PREFIX2}/whatsapp/test-send` && request.method === "POST") {
+        return await handleWhatsAppTestSend(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/importar-catalogo-cargos` && request.method === "GET") {
+        return await handleImportarCatalogoCargos(url, env);
+      }
+      if (path === `${API_URL_PREFIX2}/admin/me` && request.method === "GET") {
+        return await handleAdminMe(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/admin/resumen` && request.method === "GET") {
+        return await handleAdminResumen(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/admin/usuarios` && request.method === "GET") {
+        return await handleAdminUsuarios(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/admin/sesiones` && request.method === "GET") {
+        return await handleAdminSesiones(request, env);
+      }
+      if (path === `${API_URL_PREFIX2}/admin/alertas` && request.method === "GET") {
+        return await handleAdminAlertas(request, env);
+      }
+      return json2({ ok: false, error: "Ruta no encontrada" }, 404);
+    } catch (err) {
+      return json2({ ok: false, error: err?.message || "Error interno" }, 500);
+    }
+  },
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(
+      runProvinciaBackfillStep(env, { source: "cron", force: false }).catch((err) => {
+        console.error("PROVINCIA BACKFILL CRON STEP ERROR:", err);
+      })
+    );
+    ctx.waitUntil(runWhatsAppAlertsSweep(env, { source: "cron" }));
+    ctx.waitUntil(runEmailAlertsSweep(env, { source: "cron" }));
+    ctx.waitUntil(sendPendingEmailDigests(env));
+  }
+};
+async function handleLogin(request, env) {
+  const body = await request.json();
+  const email = String(body?.email || "").trim().toLowerCase();
+  const password = String(body?.password || "");
+  if (!email || !password) {
+    return json2({ ok: false, message: "Faltan datos" }, 400);
+  }
+  const user = await findUserByEmail(env, email);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 401);
+  }
+  if (user.activo === false) {
+    return json2({ ok: false, message: "Usuario inactivo" }, 403);
+  }
+  const okPassword = await passwordMatches(user.password_hash, password);
+  if (!okPassword) {
+    return json2({ ok: false, message: "Password incorrecto" }, 401);
+  }
+  await ensureTrialIfNoSubscriptions(env, user.id, user.email, "trial_auto_login");
+  await touchUltimoLogin(env, user.id);
+  return json2({
+    ok: true,
+    token: String(user.id),
+    user: {
+      id: user.id,
+      nombre: user.nombre || "",
+      apellido: user.apellido || "",
+      email: user.email || ""
+    }
+  });
+}
+__name(handleLogin, "handleLogin");
+async function handleGoogleAuth(request, env) {
+  const body = await request.json();
+  const credential = String(body?.credential || "").trim();
+  if (!credential) {
+    return json2({ ok: false, message: "Falta credential de Google" }, 400);
+  }
+  const googleUser = await verifyGoogleCredential(credential, env.GOOGLE_CLIENT_ID);
+  let user = await findUserByGoogleSub(env, googleUser.sub);
+  let mode = "login";
+  if (!user) {
+    user = await findUserByEmail(env, googleUser.email);
+    if (user) {
+      const patch = {};
+      if (!user.google_sub) patch.google_sub = googleUser.sub;
+      if (!user.nombre && googleUser.nombre) patch.nombre = googleUser.nombre;
+      if (!user.apellido && googleUser.apellido) patch.apellido = googleUser.apellido;
+      if (user.activo === false) patch.activo = true;
+      if (Object.keys(patch).length > 0) {
+        await supabasePatch(
+          env,
+          "users",
+          `id=eq.${encodeURIComponent(user.id)}`,
+          patch
+        );
+        user = { ...user, ...patch };
+      }
+    } else {
+      mode = "register";
+      user = await createUserFromGoogle(env, googleUser);
+      if (!user?.id) {
+        return json2({ ok: false, message: "No se pudo crear el usuario con Google" }, 500);
+      }
+    }
+  }
+  if (user.activo === false) {
+    return json2({ ok: false, message: "Usuario inactivo" }, 403);
+  }
+  await ensureTrialIfNoSubscriptions(env, user.id, googleUser.email, "trial_auto_google");
+  await touchUltimoLogin(env, user.id);
+  return json2({
+    ok: true,
+    mode,
+    token: String(user.id),
+    user: {
+      id: user.id,
+      nombre: user.nombre || "",
+      apellido: user.apellido || "",
+      email: user.email || ""
+    }
+  });
+}
+__name(handleGoogleAuth, "handleGoogleAuth");
+async function handlePlanes(env) {
+  let rows = [];
+  try {
+    rows = await supabaseSelect2(
+      env,
+      "subscription_plans?is_active=eq.true&order=sort_order.asc&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags"
+    );
+  } catch {
+    rows = defaultPlansCatalog();
+  }
+  return json2({
+    ok: true,
+    planes: (Array.isArray(rows) ? rows : []).map(normalizePlanOut)
+  });
+}
+__name(handlePlanes, "handlePlanes");
+async function handleMiPlan(url, env) {
+  const userId = String(url.searchParams.get("user_id") || "").trim();
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  const resolved = await resolverPlanUsuario(env, userId);
+  return json2({
+    ok: true,
+    user_id: userId,
+    plan: resolved.plan,
+    subscription: resolved.subscription
+  });
+}
+__name(handleMiPlan, "handleMiPlan");
+async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options = {}) {
+  if (!user?.id || !user?.email) {
+    return { ok: false, skipped: true, reason: "missing_user_or_email" };
+  }
+  if (!preferencias?.alertas_activas || !preferencias?.alertas_email) {
+    return { ok: true, skipped: true, reason: "email_alerts_disabled" };
+  }
+  const existing = await supabaseSelect2(
+    env,
+    `notification_delivery_logs?user_id=eq.${encodeURIComponent(user.id)}&channel=eq.email&template_code=eq.apd_initial_digest&select=id&limit=1`
+  ).catch(() => []);
+  if (Array.isArray(existing) && existing.length > 0) {
+    return { ok: true, skipped: true, reason: "already_sent" };
+  }
+  const alertData = await construirAlertasParaUsuario(env, user.id).catch((err) => ({
+    ok: false,
+    message: err?.message || "No se pudieron construir alertas"
+  }));
+  if (!alertData?.ok) {
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_initial_digest",
+      destination: user.email,
+      status: "failed_build",
+      provider_message_id: null,
+      payload: {
+        source: options.source || "first_preferences_save"
+      },
+      provider_response: {
+        message: alertData?.message || "No se pudieron construir alertas iniciales"
+      }
+    }).catch(() => null);
+    return { ok: false, skipped: true, reason: "build_failed" };
+  }
+  const items = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];
+  if (!items.length) {
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_initial_digest",
+      destination: user.email,
+      status: "skipped_no_alerts",
+      provider_message_id: null,
+      payload: {
+        source: options.source || "first_preferences_save"
+      },
+      provider_response: {
+        message: "No hab\xEDa alertas compatibles al momento del primer guardado"
+      }
+    }).catch(() => null);
+    return { ok: true, skipped: true, reason: "no_alerts" };
+  }
+  const alerts = await Promise.all(
+    items.map(async (item) => {
+      const merged = { ...item || {} };
+      const ofertaId = String(item?.idoferta || "").trim();
+      const detalleId = String(item?.iddetalle || "").trim();
+      if (ofertaId || detalleId) {
+        try {
+          const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+          merged.total_postulantes = resumen.total_postulantes ?? item?.total_postulantes ?? null;
+          merged.puntaje_primero = resumen.puntaje_primero ?? item?.puntaje_primero ?? null;
+          merged.listado_origen_primero = resumen.listado_origen_primero || item?.listado_origen_primero || "";
+        } catch (_) {
+          merged.total_postulantes = item?.total_postulantes ?? null;
+          merged.puntaje_primero = item?.puntaje_primero ?? null;
+          merged.listado_origen_primero = item?.listado_origen_primero || "";
+        }
+      }
+      return {
+        offer_payload: normalizeOfferPayload(merged)
+      };
+    })
+  );
+  const html = buildDigestHtml(alerts, user);
+  const asunto = `APDocentePBA: ${alerts.length} alerta${alerts.length === 1 ? "" : "s"} inicial${alerts.length === 1 ? "" : "es"} para vos`;
+  const send = await enviarMailBrevo(
+    user.email,
+    user.nombre || "",
+    asunto,
+    html,
+    env
+  );
+  await supabaseInsert(env, "notification_delivery_logs", {
+    user_id: user.id,
+    channel: "email",
+    template_code: "apd_initial_digest",
+    destination: user.email,
+    status: send?.ok ? "sent_initial" : "failed_initial",
+    provider_message_id: null,
+    payload: {
+      source: options.source || "first_preferences_save",
+      total_alerts: alerts.length
+    },
+    provider_response: send || null
+  }).catch(() => null);
+  return {
+    ok: !!send?.ok,
+    skipped: false,
+    total_alerts: alerts.length
+  };
+}
+__name(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
+async function handleGuardarPreferencias(request, env) {
+  const body = await request.json();
+  const userId = String(body?.user_id || "").trim();
+  const preferencias = body?.preferencias || {};
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  const prevPrefs = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+  let resolved = await resolverPlanUsuario(env, userId);
+  if (!isPlanActivo(resolved)) {
+    await ensureTrialIfNoSubscriptions(env, userId, user.email, "trial_auto_preferences");
+    resolved = await resolverPlanUsuario(env, userId);
+  }
+  if (!isPlanActivo(resolved)) {
+    return json2({
+      ok: false,
+      message: "Tu plan est\xE1 vencido. Suscribite para seguir usando el servicio.",
+      plan: resolved.plan,
+      subscription: resolved.subscription
+    }, 403);
+  }
+  const limpias = sanitizarPreferenciasEntrada(preferencias, resolved.plan);
+  const ajustesPlan = limpias._plan_ajuste || { distritos_recortados: 0, cargos_recortados: 0 };
+  const rows = await supabaseUpsertReturning(
+    env,
+    "user_preferences",
+    [
+      {
+        user_id: userId,
+        distrito_principal: limpias.distrito_principal,
+        otros_distritos: limpias.otros_distritos,
+        cargos: limpias.cargos,
+        materias: limpias.materias,
+        niveles: limpias.niveles,
+        turnos: limpias.turnos,
+        alertas_activas: limpias.alertas_activas,
+        alertas_email: limpias.alertas_email,
+        alertas_whatsapp: limpias.alertas_whatsapp,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }
+    ],
+    "user_id"
+  );
+  const savedPrefs = Array.isArray(rows) ? rows[0] : rows;
+  const firstMeaningfulSave = !prevPrefs || !prevPrefs.distrito_principal && (!Array.isArray(prevPrefs.otros_distritos) || prevPrefs.otros_distritos.length === 0) && (!Array.isArray(prevPrefs.cargos) || prevPrefs.cargos.length === 0) && (!Array.isArray(prevPrefs.materias) || prevPrefs.materias.length === 0) && (!Array.isArray(prevPrefs.niveles) || prevPrefs.niveles.length === 0) && (!Array.isArray(prevPrefs.turnos) || prevPrefs.turnos.length === 0);
+  let initialEmail = null;
+  if (firstMeaningfulSave && limpias.alertas_activas && limpias.alertas_email) {
+    initialEmail = await sendInitialAlertsDigestIfNeeded(env, user, savedPrefs, {
+      source: "first_preferences_save"
+    }).catch((err) => ({
+      ok: false,
+      skipped: true,
+      reason: "send_failed",
+      message: err?.message || "No se pudo enviar el digest inicial"
+    }));
+  }
+  return json2({
+    ok: true,
+    message: ajustesPlan.distritos_recortados || ajustesPlan.cargos_recortados ? `Preferencias guardadas. Se ajustaron filtros al limite de tu plan (${resolved.plan?.max_distritos || 0} distrito(s) y ${resolved.plan?.max_cargos || 0} cargo(s) o materia(s)).` : "Preferencias guardadas",
+    preferencias: savedPrefs,
+    plan: resolved.plan,
+    subscription: resolved.subscription,
+    initial_email: initialEmail
+  });
+}
+__name(handleGuardarPreferencias, "handleGuardarPreferencias");
+async function handleMisAlertas(url, env) {
+  const userId = String(url.searchParams.get("user_id") || "").trim();
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  let resolved = await resolverPlanUsuario(env, userId);
+  if (!isPlanActivo(resolved)) {
+    await ensureTrialIfNoSubscriptions(env, userId, user.email, "trial_auto_mis_alertas");
+    resolved = await resolverPlanUsuario(env, userId);
+  }
+  if (!isPlanActivo(resolved)) {
+    return json2({
+      ok: true,
+      items: [],
+      message: "Tu plan est\xE1 vencido. Activ\xE1 una suscripci\xF3n para volver a ver alertas.",
+      plan: resolved.plan,
+      subscription: resolved.subscription
+    });
+  }
+  const data = await construirAlertasParaUsuario(env, userId);
+  if (!data.ok) {
+    return json2(data, 400);
+  }
+  return json2({
+    ...data,
+    plan: resolved.plan,
+    subscription: resolved.subscription
+  });
+}
+__name(handleMisAlertas, "handleMisAlertas");
+async function handlePostulantesResumen(url) {
+  const ofertaId = String(url.searchParams.get("oferta") || "").trim();
+  const detalleId = String(url.searchParams.get("detalle") || "").trim();
+  if (!ofertaId && !detalleId) {
+    return json2({ ok: false, message: "Falta oferta o detalle" }, 400);
+  }
+  const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+  return json2({
+    ok: true,
+    oferta: ofertaId || null,
+    detalle: detalleId || null,
+    abc_postulantes_url: buildAbcPostulantesUrl(ofertaId, detalleId),
+    ...resumen
+  });
+}
+__name(handlePostulantesResumen, "handlePostulantesResumen");
+async function handleCapturarHistoricoAPD(request, env) {
+  const body = await request.json();
+  const userId = String(body?.user_id || "").trim();
+  const includePostulantes = body?.include_postulantes === true;
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs) {
+    return json2({ ok: false, message: "Primero guarda tus preferencias." }, 400);
+  }
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const distritos = distritosPrefsAPD(prefsCanon);
+  if (!distritos.length) {
+    return json2({ ok: false, message: "Configura al menos un distrito." }, 400);
+  }
+  const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
+  const capturable = ofertas.filter(ofertaEsVisibleParaHistoricoUsuario);
+  const capturedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const rowsOfertas = [];
+  const rowsPostulantes = [];
+  let erroresPostulantes = 0;
+  for (let i = 0; i < capturable.length; i += 5) {
+    const chunk = capturable.slice(i, i + 5);
+    const results = await Promise.all(
+      chunk.map(
+        (oferta, offset) => buildHistoricoCaptureRows(
+          oferta,
+          capturedAt,
+          includePostulantes && i + offset < HISTORICO_POSTULANTES_LIMIT
+        )
+      )
+    );
+    for (const result of results) {
+      if (result.ofertaRow) rowsOfertas.push(result.ofertaRow);
+      if (result.postRow) rowsPostulantes.push(result.postRow);
+      if (result.errorPostulantes) erroresPostulantes += 1;
+    }
+  }
+  for (let i = 0; i < rowsOfertas.length; i += HISTORICO_INSERT_BATCH) {
+    await supabaseInsertMany(
+      env,
+      "apd_ofertas_historial",
+      rowsOfertas.slice(i, i + HISTORICO_INSERT_BATCH)
+    );
+  }
+  for (let i = 0; i < rowsPostulantes.length; i += HISTORICO_INSERT_BATCH) {
+    await supabaseInsertMany(
+      env,
+      "apd_postulantes_historial",
+      rowsPostulantes.slice(i, i + HISTORICO_INSERT_BATCH)
+    );
+  }
+  return json2({
+    ok: true,
+    message: "Historico del usuario actualizado",
+    captured_at: capturedAt,
+    distritos,
+    total_fuente: ofertas.length,
+    total_insertadas: rowsOfertas.length,
+    total_postulantes_insertados: rowsPostulantes.length,
+    errores_postulantes: erroresPostulantes,
+    include_postulantes: includePostulantes,
+    debug_distritos: debugDistritos
+  });
+}
+__name(handleCapturarHistoricoAPD, "handleCapturarHistoricoAPD");
+async function handleHistoricoResumen(url, env) {
+  const userId = String(url.searchParams.get("user_id") || "").trim();
+  const days = clampInt(url.searchParams.get("days"), 7, 120, HISTORICO_DAYS_DEFAULT);
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs || !prefs.alertas_activas) {
+    return json2(emptyHistoricoPayload(days, "Activa alertas y guarda tus preferencias."));
+  }
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const distritos = distritosPrefsAPD(prefsCanon);
+  if (!distritos.length) {
+    return json2(emptyHistoricoPayload(days, "Configura al menos un distrito."));
+  }
+  const globalRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_global_snapshots", distritos, days, 8e3);
+  const localRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_historial", distritos, days, 8e3);
+  const rawRows = globalRows.length ? globalRows : localRows;
+  if (!rawRows.length) {
+    return json2(emptyHistoricoPayload(days, "Todavia no hay historico suficiente."));
+  }
+  const matchedRows = rawRows.filter(
+    (row) => coincideOfertaConPreferencias(historicoRowToOferta(row), prefsCanon).match
+  );
+  if (!matchedRows.length) {
+    return json2(emptyHistoricoPayload(days, "Todavia no hay historico compatible con tus filtros."));
+  }
+  return json2(buildHistoricoResumenPayload(matchedRows, days));
+}
+__name(handleHistoricoResumen, "handleHistoricoResumen");
+async function handleHistoricoRadarPersonal(url, env) {
+  const userId = String(url.searchParams.get("user_id") || "").trim();
+  const days = clampInt(url.searchParams.get("days"), 7, 120, HISTORICO_DAYS_DEFAULT);
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs || !prefs.alertas_activas) {
+    return json2(emptyHistoricoRadarPersonalPayload(days, "Activa alertas y guarda tus preferencias."));
+  }
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const distritos = distritosPrefsAPD(prefsCanon);
+  if (!distritos.length) {
+    return json2(emptyHistoricoRadarPersonalPayload(days, "Configura al menos un distrito."));
+  }
+  const globalRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_global_snapshots", distritos, days, 8e3);
+  const localRows = await fetchHistoricoRowsByDistritos(env, "apd_ofertas_historial", distritos, days, 8e3);
+  const rawRows = globalRows.length ? globalRows : localRows;
+  if (!rawRows.length) {
+    return json2(emptyHistoricoRadarPersonalPayload(days, "Todavia no hay historico suficiente."));
+  }
+  const matchedRows = rawRows.filter(
+    (row) => coincideOfertaConPreferencias(historicoRowToOferta(row), prefsCanon).match
+  );
+  if (!matchedRows.length) {
+    return json2(emptyHistoricoRadarPersonalPayload(days, "Todavia no hay historico compatible con tus filtros."));
+  }
+  const provinciaRows = await fetchProvinciaCurrentRows(env, days).catch(() => []);
+  return json2(buildHistoricoRadarPersonalPayload(matchedRows, provinciaRows, prefsCanon, days));
+}
+__name(handleHistoricoRadarPersonal, "handleHistoricoRadarPersonal");
+function buildHistoricoRadarPersonalPayload(rows, provinciaRows, prefsCanon, days) {
+  const groupedRows = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key = historicoRowKey(row);
+    if (!key) continue;
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
+  }
+  const latestRows = [];
+  const firstSeenRows = [];
+  const cambios = [];
+  for (const series of groupedRows.values()) {
+    series.sort(sortHistoricoDesc);
+    const latest = series[0];
+    const previous = series[1] || null;
+    const first = series[series.length - 1];
+    latestRows.push(latest);
+    firstSeenRows.push(first);
+    if (previous && estadoHistoricoKey(latest) !== estadoHistoricoKey(previous)) {
+      cambios.push({
+        iddetalle: latest.iddetalle || null,
+        idoferta: latest.idoferta || null,
+        distrito: latest.distrito || "",
+        cargo: latest.cargo || "",
+        area: latest.area || "",
+        escuela: latest.escuela || "",
+        turno: mapTurnoAPD(latest.turno || ""),
+        finoferta: latest.finoferta || "",
+        estado_anterior: estadoHistoricoLabel(previous),
+        estado_actual: estadoHistoricoLabel(latest),
+        captured_at: latest.captured_at || null
+      });
+    }
+  }
+  latestRows.sort(sortHistoricoDesc);
+  cambios.sort(sortHistoricoDesc);
+  const activeRows = latestRows.filter(ofertaHistoricaActiva);
+  const nowTs = Date.now();
+  const nuevas7d = firstSeenRows.filter((row) => {
+    const ts = parseFechaFlexible(row.captured_at)?.getTime() || 0;
+    return ts >= nowTs - 7 * 24 * 60 * 60 * 1e3;
+  }).length;
+  const provinciaActivas = Array.isArray(provinciaRows) ? provinciaRows.filter(ofertaHistoricaActiva) : [];
+  const shareVsProvincia = provinciaActivas.length ? Math.round(activeRows.length / provinciaActivas.length * 1e3) / 10 : null;
+  const indiceMovimiento = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (latestRows.length >= 20 ? 35 : latestRows.length >= 8 ? 20 : latestRows.length * 2) + (activeRows.length >= 5 ? 30 : activeRows.length >= 2 ? 18 : activeRows.length * 5) + (nuevas7d >= 4 ? 25 : nuevas7d >= 1 ? 12 : nuevas7d * 4) + (cambios.length >= 4 ? 10 : cambios.length >= 1 ? 5 : 0)
+      )
+    )
+  );
+  return {
+    ok: true,
+    empty: false,
+    personal: true,
+    ventana_dias: days,
+    ultima_captura: latestRows[0]?.captured_at || null,
+    filtros_aplicados: {
+      distritos: unique([prefsCanon?.distrito_principal, ...prefsCanon?.otros_distritos || []].filter(Boolean)),
+      cargos: unique([...prefsCanon?.cargos || [], ...prefsCanon?.materias || []].filter(Boolean)),
+      turnos: unique((prefsCanon?.turnos || []).filter(Boolean)),
+      niveles: unique((prefsCanon?.niveles || []).filter(Boolean))
+    },
+    capturas_filtradas: rows.length,
+    ofertas_unicas: latestRows.length,
+    activas_estimadas: activeRows.length,
+    designadas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "DESIGNADA").length,
+    anuladas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "ANULADA").length,
+    desiertas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "DESIERTA").length,
+    nuevas_7d: nuevas7d,
+    cambios_estado_recientes: cambios.length,
+    promedio_postulantes: promedioNumerico(latestRows.map((row) => row.total_postulantes), 1),
+    promedio_puntaje_primero: promedioNumerico(latestRows.map((row) => row.puntaje_primero), 2),
+    top_distritos: topCountItems(latestRows.map((row) => row.distrito), 4),
+    top_cargos: topCountItems(latestRows.map(tituloHistoricoRow), 5),
+    top_turnos: topCountItems(activeRows.map((row) => mapTurnoAPD(row.turno || "")), 4),
+    top_niveles: topCountItems(latestRows.map((row) => row.nivel_modalidad), 4),
+    ultimos_cambios: cambios.slice(0, 6),
+    ultimas_ofertas: latestRows.slice(0, 6).map((row) => ({
+      iddetalle: row.iddetalle || null,
+      idoferta: row.idoferta || null,
+      distrito: row.distrito || "",
+      cargo: row.cargo || "",
+      area: row.area || "",
+      escuela: row.escuela || "",
+      turno: mapTurnoAPD(row.turno || ""),
+      finoferta: row.finoferta || "",
+      estado: estadoHistoricoLabel(row),
+      total_postulantes: row.total_postulantes != null ? Number(row.total_postulantes) : null,
+      puntaje_primero: row.puntaje_primero != null ? Number(row.puntaje_primero) : null,
+      captured_at: row.captured_at || null
+    })),
+    comparativa: {
+      activas_provincia: provinciaActivas.length,
+      share_vs_provincia_pct: shareVsProvincia,
+      indice_movimiento: indiceMovimiento
+    }
+  };
+}
+__name(buildHistoricoRadarPersonalPayload, "buildHistoricoRadarPersonalPayload");
+function emptyHistoricoRadarPersonalPayload(days, message) {
+  return {
+    ok: true,
+    empty: true,
+    personal: true,
+    message,
+    ventana_dias: days,
+    ultima_captura: null,
+    filtros_aplicados: {
+      distritos: [],
+      cargos: [],
+      turnos: [],
+      niveles: []
+    },
+    capturas_filtradas: 0,
+    ofertas_unicas: 0,
+    activas_estimadas: 0,
+    designadas_estimadas: 0,
+    anuladas_estimadas: 0,
+    desiertas_estimadas: 0,
+    nuevas_7d: 0,
+    cambios_estado_recientes: 0,
+    promedio_postulantes: null,
+    promedio_puntaje_primero: null,
+    top_distritos: [],
+    top_cargos: [],
+    top_turnos: [],
+    top_niveles: [],
+    ultimos_cambios: [],
+    ultimas_ofertas: [],
+    comparativa: {
+      activas_provincia: 0,
+      share_vs_provincia_pct: null,
+      indice_movimiento: 0
+    }
+  };
+}
+__name(emptyHistoricoRadarPersonalPayload, "emptyHistoricoRadarPersonalPayload");
+async function handleProvinciaBackfillStatus(env) {
+  const state = await obtenerScanState(env);
+  const staleRunning = isStaleProvinciaBackfill(state);
+  const catalogRows = await obtenerDistritosProvincia(env);
+  const districtName = catalogRows[state.district_index]?.apd_nombre || catalogRows[state.district_index]?.nombre || null;
+  const totalDistricts = catalogRows.length;
+  const lastError = state?.notes?.last_error || (staleRunning ? "El proceso provincial quedo trabado en segundo plano. Podes relanzarlo desde el mismo punto." : null);
+  return json2({
+    ok: true,
+    scope: PROVINCIA_SCOPE,
+    status: staleRunning ? "error" : state.status || "idle",
+    district_index: state.district_index || 0,
+    district_name: districtName,
+    next_page: state.next_page || 0,
+    pages_processed: state.pages_processed || 0,
+    districts_completed: state.districts_completed || 0,
+    offers_processed: Number(state.offers_processed || 0),
+    last_batch_count: Number(state.last_batch_count || 0),
+    total_districts: totalDistricts,
+    progress_pct: totalDistricts ? Math.round((state.districts_completed || 0) / totalDistricts * 1e3) / 10 : 0,
+    started_at: state.started_at || null,
+    finished_at: state.finished_at || null,
+    last_run_at: state.last_run_at || null,
+    updated_at: state.updated_at || null,
+    last_error: lastError,
+    retryable: staleRunning || state?.notes?.retryable === true,
+    stale_running: staleRunning,
+    failed_page: Number(state?.notes?.failed_page || 0)
+  });
+}
+__name(handleProvinciaBackfillStatus, "handleProvinciaBackfillStatus");
+async function handleProvinciaBackfillKick(request, env, ctx) {
+  const state = await obtenerScanState(env);
+  const staleRunning = isStaleProvinciaBackfill(state);
+  const force = staleRunning || state.status === "error";
+  if (state.status === "running" && !staleRunning) {
+    return json2({
+      ok: true,
+      skipped: true,
+      reason: "already_running",
+      message: "El backfill provincial ya se esta procesando."
+    });
+  }
+  ctx.waitUntil(
+    runProvinciaBackfillStep(env, {
+      source: staleRunning ? "manual_recover_stale" : "manual_fire_and_forget",
+      force
+    }).catch((err) => {
+      console.error("PROVINCIA BACKFILL KICK STEP ERROR:", err);
+    })
+  );
+  return json2({
+    ok: true,
+    forced: force,
+    stale_recovered: staleRunning,
+    message: staleRunning ? "Se relanzo un lote provincial desde el punto que habia quedado trabado." : state.status === "error" ? "Se relanzo un lote provincial desde el ultimo punto con error." : "Lote provincial lanzado en segundo plano"
+  });
+}
+__name(handleProvinciaBackfillKick, "handleProvinciaBackfillKick");
+async function handleProvinciaBackfillReset(env) {
+  await saveScanState(env, {
+    scope: PROVINCIA_SCOPE,
+    status: "idle",
+    mode: "backfill",
+    district_index: 0,
+    district_name: null,
+    next_page: 0,
+    pages_processed: 0,
+    districts_completed: 0,
+    offers_processed: 0,
+    last_batch_count: 0,
+    total_districts: 0,
+    started_at: null,
+    finished_at: null,
+    last_run_at: null,
+    notes: {}
+  });
+  return json2({ ok: true, message: "Cursor provincial reiniciado" });
+}
+__name(handleProvinciaBackfillReset, "handleProvinciaBackfillReset");
+async function handleProvinciaBackfillStep(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const force = body?.force === true;
+  const result = await runProvinciaBackfillStep(env, { source: "manual", force });
+  return json2({ ok: true, ...result });
+}
+__name(handleProvinciaBackfillStep, "handleProvinciaBackfillStep");
+async function handleProvinciaResumen(url, env) {
+  const days = clampInt(url.searchParams.get("days"), 7, 120, PROVINCIA_DAYS_DEFAULT);
+  const rows = await fetchProvinciaCurrentRows(env, days);
+  const state = await obtenerScanState(env);
+  return json2(buildProvinciaResumenPayload(rows, days, state));
+}
+__name(handleProvinciaResumen, "handleProvinciaResumen");
+async function handleProvinciaInsights(url, env) {
+  const days = clampInt(url.searchParams.get("days"), 7, 120, PROVINCIA_DAYS_DEFAULT);
+  const rows = await fetchProvinciaCurrentRows(env, days);
+  const payload = buildProvinciaResumenPayload(rows, days, null);
+  return json2({
+    ok: true,
+    days,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+    items: payload.banner_items || []
+  });
+}
+__name(handleProvinciaInsights, "handleProvinciaInsights");
+async function handleMercadoPagoCreateCheckoutLink(request, env) {
+  const body = await request.json();
+  const userId = String(body?.user_id || "").trim();
+  const planCode = String(body?.plan_code || "").trim().toUpperCase();
+  if (!userId || !planCode) {
+    return json2({ ok: false, message: "Faltan user_id o plan_code" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  const plan = await obtenerPlanPorCode(env, planCode);
+  if (!plan) {
+    return json2({ ok: false, message: "Plan no encontrado" }, 404);
+  }
+  const externalReference = `${userId}:${planCode}:${Date.now()}`;
+  const webhookUrl = env.MERCADOPAGO_WEBHOOK_URL || new URL(`${API_URL_PREFIX2}/mercadopago/webhook`, request.url).toString();
+  const mpPreference = await createMercadoPagoCheckoutPreference(env, {
+    user,
+    plan,
+    externalReference,
+    webhookUrl
+  }).catch((err) => {
+    console.warn("Mercado Pago checkout fallback:", err?.message || err);
+    return null;
+  });
+  const checkoutUrl = mpPreference?.checkout_url || (env.MERCADOPAGO_CHECKOUT_FALLBACK_URL ? `${env.MERCADOPAGO_CHECKOUT_FALLBACK_URL}?plan=${encodeURIComponent(planCode)}&ref=${encodeURIComponent(externalReference)}` : null);
+  const checkoutConfigured = !!checkoutUrl;
+  const sessionRows = await supabaseInsert(env, "mercadopago_checkout_sessions", {
+    user_id: userId,
+    plan_code: planCode,
+    status: checkoutConfigured ? "ready" : "pending_config",
+    provider: "mercadopago",
+    checkout_url: checkoutUrl,
+    external_reference: externalReference,
+    provider_payload: {
+      configured: checkoutConfigured,
+      plan_code: planCode,
+      mercadopago_plan_id: plan.mercadopago_plan_id || null,
+      price_ars: plan?.price_ars != null ? Number(plan.price_ars) : null,
+      provider_mode: mpPreference?.mode || "fallback",
+      preference_id: mpPreference?.preference_id || null,
+      sandbox_init_point: mpPreference?.sandbox_init_point || null
+    }
+  });
+  const session = Array.isArray(sessionRows) ? sessionRows[0] : sessionRows;
+  return json2({
+    ok: true,
+    configured: checkoutConfigured,
+    provider_mode: mpPreference?.mode || "fallback",
+    message: checkoutConfigured ? mpPreference?.mode === "mercadopago_preference" ? "Checkout real de Mercado Pago preparado" : "Checkout preparado" : "Se registro la sesion, pero todavia falta configurar el checkout real de Mercado Pago.",
+    session_id: session?.id || null,
+    checkout_url: checkoutUrl,
+    sandbox_init_point: mpPreference?.sandbox_init_point || null,
+    preference_id: mpPreference?.preference_id || null,
+    external_reference: externalReference,
+    plan: normalizePlanOut(plan)
+  });
+}
+__name(handleMercadoPagoCreateCheckoutLink, "handleMercadoPagoCreateCheckoutLink");
+async function handleMercadoPagoWebhook(request, env) {
+  const raw = await request.text();
+  let payload = null;
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    payload = { raw_text: raw };
+  }
+  const topic = String(payload?.type || payload?.topic || payload?.action || "").trim() || null;
+  const action = String(payload?.action || "").trim() || null;
+  const resourceId = String(payload?.data?.id || payload?.id || "").trim() || null;
+  await supabaseInsert(env, "mercadopago_webhook_events", {
+    topic,
+    action,
+    resource_id: resourceId,
+    payload,
+    received_at: (/* @__PURE__ */ new Date()).toISOString()
+  }).catch((err) => {
+    console.warn("No se pudo guardar el webhook de Mercado Pago:", err?.message || err);
+  });
+  const sync = await syncMercadoPagoWebhook(env, { topic, action, resourceId, payload }).catch((err) => {
+    console.warn("No se pudo sincronizar el pago de Mercado Pago:", err?.message || err);
+    return {
+      processed: false,
+      reason: "sync_error",
+      message: err?.message || "Error sincronizando Mercado Pago"
+    };
+  });
+  return json2({ ok: true, sync });
+}
+__name(handleMercadoPagoWebhook, "handleMercadoPagoWebhook");
+async function syncMercadoPagoWebhook(env, event) {
+  const topic = String(event?.topic || event?.action || "").trim().toLowerCase();
+  const resourceId = String(event?.resourceId || "").trim();
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!accessToken) {
+    return { processed: false, reason: "missing_access_token" };
+  }
+  if (!resourceId) {
+    return { processed: false, reason: "missing_resource_id" };
+  }
+  if (!topic.includes("payment")) {
+    return { processed: false, reason: "unsupported_topic", topic };
+  }
+  const payment = await fetchMercadoPagoPayment(env, resourceId);
+  return await applyMercadoPagoPayment(env, payment);
+}
+__name(syncMercadoPagoWebhook, "syncMercadoPagoWebhook");
+async function fetchMercadoPagoPayment(env, paymentId) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!accessToken) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  const rawText = await res.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { raw_text: rawText };
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || "Mercado Pago no devolvio el pago");
+  }
+  return data;
+}
+__name(fetchMercadoPagoPayment, "fetchMercadoPagoPayment");
+async function applyMercadoPagoPayment(env, payment) {
+  const externalReference = String(payment?.external_reference || "").trim();
+  if (!externalReference) {
+    return { processed: false, reason: "missing_external_reference" };
+  }
+  const parsedRef = parseMercadoPagoExternalReference(externalReference);
+  const session = await findCheckoutSessionByExternalReference(env, externalReference);
+  const userId = String(session?.user_id || parsedRef.user_id || "").trim();
+  const planCode = String(session?.plan_code || parsedRef.plan_code || "").trim().toUpperCase();
+  if (!userId || !planCode) {
+    return { processed: false, reason: "missing_user_or_plan", external_reference: externalReference };
+  }
+  const paymentStatus = String(payment?.status || "").trim().toUpperCase();
+  const subscriptionStatus = mapMercadoPagoSubscriptionStatus(paymentStatus);
+  const sessionStatus = mapMercadoPagoCheckoutStatus(paymentStatus);
+  const paymentDate = payment?.date_approved || payment?.date_last_updated || payment?.date_created || (/* @__PURE__ */ new Date()).toISOString();
+  const currentPeriodEndsAt = subscriptionStatus === "ACTIVE" || subscriptionStatus === "AUTHORIZED" ? addDaysIso(paymentDate, clampInt(env.MERCADOPAGO_SUBSCRIPTION_PERIOD_DAYS, 1, 365, 30)) : null;
+  if (session) {
+    await supabasePatch(
+      env,
+      "mercadopago_checkout_sessions",
+      `id=eq.${encodeURIComponent(session.id)}`,
+      {
+        status: sessionStatus,
+        provider_payload: {
+          ...typeof session.provider_payload === "object" && session.provider_payload ? session.provider_payload : {},
+          payment_id: payment?.id || null,
+          payment_status: payment?.status || null,
+          payment_status_detail: payment?.status_detail || null,
+          payment_type_id: payment?.payment_type_id || null,
+          payer_email: payment?.payer?.email || null,
+          processed_at: (/* @__PURE__ */ new Date()).toISOString()
+        },
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }
+    ).catch((err) => {
+      console.warn("No se pudo actualizar la sesion de checkout:", err?.message || err);
+    });
+  }
+  const existingSubscription = await findSubscriptionByExternalReference(env, externalReference);
+  const subscriptionPayload = {
+    user_id: userId,
+    plan_code: planCode,
+    status: subscriptionStatus,
+    source: "mercadopago_checkout",
+    started_at: paymentDate,
+    trial_ends_at: null,
+    current_period_ends_at: currentPeriodEndsAt,
+    mercadopago_preapproval_id: null,
+    mercadopago_payer_email: payment?.payer?.email || null,
+    external_reference: externalReference,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (existingSubscription?.id) {
+    await supabasePatch(
+      env,
+      "user_subscriptions",
+      `id=eq.${encodeURIComponent(existingSubscription.id)}`,
+      subscriptionPayload
+    );
+  } else {
+    await supabaseInsert(env, "user_subscriptions", subscriptionPayload);
+  }
+  return {
+    processed: true,
+    external_reference: externalReference,
+    payment_id: payment?.id || null,
+    payment_status: paymentStatus,
+    subscription_status: subscriptionStatus,
+    user_id: userId,
+    plan_code: planCode
+  };
+}
+__name(applyMercadoPagoPayment, "applyMercadoPagoPayment");
+async function findCheckoutSessionByExternalReference(env, externalReference) {
+  const rows = await supabaseSelect2(
+    env,
+    `mercadopago_checkout_sessions?external_reference=eq.${encodeURIComponent(externalReference)}&select=id,user_id,plan_code,status,provider_payload&order=created_at.desc&limit=1`
+  ).catch(() => []);
+  return rows?.[0] || null;
+}
+__name(findCheckoutSessionByExternalReference, "findCheckoutSessionByExternalReference");
+async function findSubscriptionByExternalReference(env, externalReference) {
+  const rows = await supabaseSelect2(
+    env,
+    `user_subscriptions?external_reference=eq.${encodeURIComponent(externalReference)}&select=id,status,external_reference&order=created_at.desc&limit=1`
+  ).catch(() => []);
+  return rows?.[0] || null;
+}
+__name(findSubscriptionByExternalReference, "findSubscriptionByExternalReference");
+function parseMercadoPagoExternalReference(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { user_id: "", plan_code: "" };
+  const [userId = "", planCode = ""] = raw.split(":");
+  return {
+    user_id: String(userId || "").trim(),
+    plan_code: String(planCode || "").trim().toUpperCase()
+  };
+}
+__name(parseMercadoPagoExternalReference, "parseMercadoPagoExternalReference");
+function mapMercadoPagoSubscriptionStatus(status) {
+  const key = String(status || "").trim().toUpperCase();
+  if (key === "APPROVED") return "ACTIVE";
+  if (key === "AUTHORIZED") return "AUTHORIZED";
+  if (key === "PENDING" || key === "IN_PROCESS" || key === "PENDING_CONTINGENCY") return "PENDING";
+  if (key === "IN_MEDIATION") return "PAUSED";
+  if (key === "REFUNDED" || key === "CHARGED_BACK" || key === "CANCELLED" || key === "REJECTED") return "CANCELLED";
+  return key || "PENDING";
+}
+__name(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
+function mapMercadoPagoCheckoutStatus(status) {
+  const key = String(status || "").trim().toUpperCase();
+  if (key === "APPROVED") return "approved";
+  if (key === "AUTHORIZED") return "authorized";
+  if (key === "PENDING" || key === "IN_PROCESS" || key === "PENDING_CONTINGENCY") return "pending";
+  if (key === "REJECTED" || key === "CANCELLED") return "rejected";
+  if (key === "REFUNDED" || key === "CHARGED_BACK") return "refunded";
+  return key.toLowerCase() || "pending";
+}
+__name(mapMercadoPagoCheckoutStatus, "mapMercadoPagoCheckoutStatus");
+function addDaysIso(baseIso, days) {
+  const baseDate = parseFechaFlexible(baseIso) || /* @__PURE__ */ new Date();
+  const next = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1e3);
+  return next.toISOString();
+}
+__name(addDaysIso, "addDaysIso");
+function isPlanActivo(resolved) {
+  const sub = resolved?.subscription;
+  const plan = resolved?.plan;
+  if (!plan) return false;
+  const planCode = String(plan.code || sub?.plan_code || "").trim().toUpperCase();
+  const status = String(sub?.status || "").trim().toUpperCase();
+  if (planCode === "INSIGNE") return true;
+  if (planCode === "TRIAL_7D") {
+    if (!sub?.trial_ends_at) return false;
+    const end = new Date(sub.trial_ends_at).getTime();
+    return Number.isFinite(end) && Date.now() <= end;
+  }
+  if (status === "ACTIVE" || status === "AUTHORIZED") {
+    if (!sub?.current_period_ends_at) return true;
+    const end = new Date(sub.current_period_ends_at).getTime();
+    return Number.isFinite(end) && Date.now() <= end;
+  }
+  return false;
+}
+__name(isPlanActivo, "isPlanActivo");
+async function handleWhatsAppHealth(env) {
+  const templateName = String(env.WHATSAPP_TEMPLATE_ALERTA || "hello_world").trim();
+  const templateLang = String(env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
+  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID && !!env.WHATSAPP_ACCESS_TOKEN && !!env.WHATSAPP_TEMPLATE_ALERTA;
+  return json2({
+    ok: true,
+    configured,
+    graph_version: env.WHATSAPP_GRAPH_VERSION || "v23.0",
+    phone_number_id_ready: !!env.WHATSAPP_PHONE_NUMBER_ID,
+    access_token_ready: !!env.WHATSAPP_ACCESS_TOKEN,
+    template_ready: !!env.WHATSAPP_TEMPLATE_ALERTA,
+    template_name: templateName,
+    template_lang: templateLang,
+    template_supports_alert_dispatch: !isHelloWorldTemplate(templateName),
+    note: configured ? isHelloWorldTemplate(templateName) ? "WhatsApp listo para pruebas controladas. Para alertas reales conviene una plantilla propia." : "WhatsApp listo para pruebas controladas y despachos programados." : "Todavia faltan variables para habilitar envios reales por WhatsApp."
+  });
+}
+__name(handleWhatsAppHealth, "handleWhatsAppHealth");
+async function handleWhatsAppTestSend(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  if (!userId) {
+    return json2({ ok: false, message: "Falta user_id" }, 400);
+  }
+  const user = await obtenerUsuario(env, userId);
+  if (!user) {
+    return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  }
+  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID && !!env.WHATSAPP_ACCESS_TOKEN && !!env.WHATSAPP_TEMPLATE_ALERTA;
+  if (!configured) {
+    return json2({ ok: false, message: "WhatsApp todavia no esta configurado en el worker." }, 400);
+  }
+  const destinations = whatsappTestDestinations(body?.phone || user?.celular || "");
+  if (!destinations.length) {
+    return json2({
+      ok: false,
+      message: "No hay un celular valido para la prueba. Guarda un movil en formato internacional o local."
+    }, 400);
+  }
+  const templateName = String(env.WHATSAPP_TEMPLATE_ALERTA || "hello_world").trim();
+  const templateLang = String(env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
+  const bodyParameters = parseWhatsAppBodyParameters(env.WHATSAPP_TEMPLATE_BODY_PARAMS_JSON);
+  let destination = destinations[0];
+  let payload = null;
+  let response = null;
+  let data = null;
+  for (const candidate of destinations) {
+    destination = candidate;
+    payload = buildWhatsAppTemplatePayload(candidate, templateName, templateLang, bodyParameters);
+    const result = await sendWhatsAppTemplate(env, payload);
+    response = result.response;
+    data = result.data;
+    if (response.ok || !isMetaAllowedListError(data)) {
+      break;
+    }
+  }
+  const providerMessageId = data?.messages?.[0]?.id || null;
+  await supabaseInsert(env, "notification_delivery_logs", {
+    user_id: user.id,
+    channel: "whatsapp",
+    template_code: templateName,
+    destination,
+    status: response.ok ? "sent_test" : "failed_test",
+    provider_message_id: providerMessageId,
+    payload,
+    provider_response: data
+  }).catch((err) => {
+    console.warn("No se pudo registrar el log de WhatsApp:", err?.message || err);
+  });
+  if (!response.ok) {
+    const providerMessage = data?.error?.message || data?.message || "Meta no acepto la prueba de WhatsApp.";
+    return json2({ ok: false, message: providerMessage, provider_response: data }, 400);
+  }
+  return json2({
+    ok: true,
+    message: "Prueba de WhatsApp enviada",
+    destination,
+    template_name: templateName,
+    provider_message_id: providerMessageId,
+    provider_response: data
+  });
+}
+__name(handleWhatsAppTestSend, "handleWhatsAppTestSend");
+async function createMercadoPagoCheckoutPreference(env, context) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  const amount = Number(context?.plan?.price_ars);
+  if (!accessToken) {
+    throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("El plan no tiene price_ars valido para crear un checkout real");
+  }
+  const payload = {
+    items: [
+      {
+        id: String(context?.plan?.code || "PLAN").trim().toUpperCase(),
+        title: String(context?.plan?.nombre || "Suscripcion APDocentePBA").trim(),
+        description: String(context?.plan?.descripcion || "").trim() || void 0,
+        quantity: 1,
+        currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS",
+        unit_price: amount
+      }
+    ],
+    payer: {
+      email: String(context?.user?.email || "").trim().toLowerCase() || void 0,
+      name: String(context?.user?.nombre || "").trim() || void 0,
+      surname: String(context?.user?.apellido || "").trim() || void 0
+    },
+    external_reference: context.externalReference,
+    notification_url: context.webhookUrl,
+    statement_descriptor: String(env.MERCADOPAGO_STATEMENT_DESCRIPTOR || "APDOCENTEPBA").slice(0, 13)
+  };
+  const successUrl = String(env.MERCADOPAGO_SUCCESS_URL || "").trim();
+  const pendingUrl = String(env.MERCADOPAGO_PENDING_URL || "").trim();
+  const failureUrl = String(env.MERCADOPAGO_FAILURE_URL || "").trim();
+  if (successUrl || pendingUrl || failureUrl) {
+    payload.back_urls = {};
+    if (successUrl) payload.back_urls.success = successUrl;
+    if (pendingUrl) payload.back_urls.pending = pendingUrl;
+    if (failureUrl) payload.back_urls.failure = failureUrl;
+  }
+  if (successUrl) {
+    payload.auto_return = "approved";
+  }
+  const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  const rawText = await res.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { raw_text: rawText };
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || data?.cause?.[0]?.description || "Mercado Pago no pudo crear la preferencia");
+  }
+  return {
+    mode: "mercadopago_preference",
+    preference_id: data?.id || null,
+    checkout_url: data?.init_point || null,
+    sandbox_init_point: data?.sandbox_init_point || null,
+    raw: data
+  };
+}
+__name(createMercadoPagoCheckoutPreference, "createMercadoPagoCheckoutPreference");
+function normalizeWhatsappDestination(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("549")) return digits;
+  if (digits.startsWith("54")) return `549${digits.slice(2)}`;
+  if (digits.startsWith("9") && digits.length >= 11) return `54${digits}`;
+  if (digits.startsWith("15") && digits.length > 8) digits = digits.slice(2);
+  return `549${digits}`;
+}
+__name(normalizeWhatsappDestination, "normalizeWhatsappDestination");
+function whatsappTestDestinations(value) {
+  const primary = normalizeWhatsappDestination(value);
+  if (!primary) return [];
+  const variants = unique([
+    primary,
+    whatsappAllowedListVariant(primary)
+  ]);
+  return variants.filter(Boolean);
+}
+__name(whatsappTestDestinations, "whatsappTestDestinations");
+function whatsappAllowedListVariant(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("549")) return `54${digits.slice(3)}`;
+  if (digits.startsWith("54")) return `549${digits.slice(2)}`;
+  return "";
+}
+__name(whatsappAllowedListVariant, "whatsappAllowedListVariant");
+function isHelloWorldTemplate(templateName) {
+  return String(templateName || "").trim().toLowerCase() === "hello_world";
+}
+__name(isHelloWorldTemplate, "isHelloWorldTemplate");
+function buildWhatsAppTemplatePayload(destination, templateName, templateLang, bodyParameters = []) {
+  const payload = {
+    messaging_product: "whatsapp",
+    to: destination,
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: templateLang }
+    }
+  };
+  if (Array.isArray(bodyParameters) && bodyParameters.length) {
+    payload.template.components = [
+      {
+        type: "body",
+        parameters: bodyParameters
+      }
+    ];
+  }
+  return payload;
+}
+__name(buildWhatsAppTemplatePayload, "buildWhatsAppTemplatePayload");
+async function sendWhatsAppTemplate(env, payload) {
+  const response = await fetch(
+    `https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+  const rawText = await response.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { raw_text: rawText };
+  }
+  return { response, data };
+}
+__name(sendWhatsAppTemplate, "sendWhatsAppTemplate");
+function isMetaAllowedListError(data) {
+  const message = String(data?.error?.message || data?.message || "").toLowerCase();
+  const code = Number(data?.error?.error_subcode || data?.error?.code || 0);
+  return code === 131030 || message.includes("allowed list");
+}
+__name(isMetaAllowedListError, "isMetaAllowedListError");
+async function getRecentSentEmailAlertKeysForUser(env, userId) {
+  const limit = 200;
+  const rows = await supabaseSelect2(
+    env,
+    `notification_delivery_logs?user_id=eq.${encodeURIComponent(userId)}&channel=eq.email&select=payload,status,created_at&order=created_at.desc&limit=${limit}`
+  ).catch(() => []);
+  const keys = /* @__PURE__ */ new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const status = String(row?.status || "").trim().toLowerCase();
+    if (!status.startsWith("sent")) continue;
+    const key = String(row?.payload?.alert_key || "").trim();
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+__name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
+function buildEmailAlertKey(userId, alertItem) {
+  const key = String(
+    alertItem?.source_offer_key || alertItem?.iddetalle || alertItem?.idoferta || alertItem?.codigo || JSON.stringify(alertItem)
+  ).trim();
+  return key ? `${userId}:${key}` : "";
+}
+__name(buildEmailAlertKey, "buildEmailAlertKey");
+async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
+  const alertKey = buildEmailAlertKey(user?.id, alertItem);
+  const payload = {
+    alert_key: alertKey || null,
+    source: options.source || "cron",
+    alert: {
+      source_offer_key: alertItem?.source_offer_key || null,
+      iddetalle: alertItem?.iddetalle || null,
+      idoferta: alertItem?.idoferta || null,
+      distrito: alertItem?.distrito || "",
+      cargo: alertItem?.cargo || "",
+      escuela: alertItem?.escuela || "",
+      turno: alertItem?.turno || "",
+      modulos: alertItem?.modulos || "",
+      desde: alertItem?.desde || "",
+      hasta: alertItem?.hasta || "",
+      nivel: alertItem?.nivel || alertItem?.modalidad || "",
+      finoferta_label: alertItem?.finoferta_label || "",
+      cierre: alertItem?.cierre || "",
+      postulados: alertItem?.postulados || "",
+      primero_puntaje: alertItem?.primero_puntaje || "",
+      abc_url: alertItem?.abc_url || null
+    }
+  };
+  if (!user?.email) {
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user?.id || null,
+      channel: "email",
+      template_code: "apd_email_alert",
+      destination: null,
+      status: "failed_enqueue",
+      provider_message_id: null,
+      payload,
+      provider_response: { message: "Usuario sin email v\xE1lido" }
+    }).catch(() => null);
+    return { ok: false, reason: "missing_email", alert_key: alertKey };
+  }
+  try {
+    await supabaseInsert(env, "pending_notifications", {
+      user_id: user.id,
+      channel: "email",
+      kind: "apd_alert",
+      alert_key: alertKey,
+      payload,
+      status: "pending"
+    });
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_email_alert",
+      destination: user.email,
+      status: "queued",
+      provider_message_id: null,
+      payload,
+      provider_response: { message: "Alerta encolada para env\xEDo consolidado" }
+    }).catch(() => null);
+    return { ok: true, queued: true, alert_key: alertKey };
+  } catch (err) {
+    const msg = String(err?.message || "");
+    if (msg.includes("23505") || msg.toLowerCase().includes("duplicate key") || msg.toLowerCase().includes("unique_alert_user") || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
+      await supabaseInsert(env, "notification_delivery_logs", {
+        user_id: user.id,
+        channel: "email",
+        template_code: "apd_email_alert",
+        destination: user.email,
+        status: "skipped_duplicate",
+        provider_message_id: null,
+        payload,
+        provider_response: { message: "Alerta duplicada ignorada por constraint unique_alert_user" }
+      }).catch(() => null);
+      return { ok: true, skipped: true, reason: "duplicate", alert_key: alertKey };
+    }
+    await supabaseInsert(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_email_alert",
+      destination: user.email,
+      status: "failed_enqueue",
+      provider_message_id: null,
+      payload,
+      provider_response: { message: msg || "Error al encolar alerta" }
+    }).catch(() => null);
+    return { ok: false, reason: "enqueue_error", alert_key: alertKey };
+  }
+}
+__name(sendEmailAlertForUser, "sendEmailAlertForUser");
+async function runEmailAlertsSweep(env, options = {}) {
+  const BATCH_SIZE = 2;
+  let cursorRaw = await env.EMAIL_SWEEP_STATE.get("cursor");
+  let cursor = Number.parseInt(String(cursorRaw || "0"), 10);
+  if (!Number.isFinite(cursor) || cursor < 0) cursor = 0;
+  const prefRows = await supabaseSelect2(
+    env,
+    `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`
+  ).catch(() => []);
+  const total = Array.isArray(prefRows) ? prefRows.length : 0;
+  if (!total) {
+    return {
+      ok: true,
+      processed_users: 0,
+      sent_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      cursor_from: 0,
+      cursor_to: 0,
+      total_users: 0,
+      message: "No hay usuarios con alertas por email activas"
+    };
+  }
+  const rowsToProcess = options?.target_user_id ? prefRows.filter((r) => String(r?.user_id || "").trim() === String(options.target_user_id).trim()) : prefRows.slice(cursor, cursor + BATCH_SIZE);
+  let processedUsers = 0;
+  let sentCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  for (const row of rowsToProcess) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    processedUsers += 1;
+    const user = await obtenerUsuario(env, userId).catch(() => null);
+    if (!user?.activo) continue;
+    if (!String(user?.email || "").trim()) continue;
+    const alertData = await construirAlertasParaUsuario(env, userId).catch(() => null);
+    if (!alertData?.ok) continue;
+    const items = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];
+    if (!items.length) continue;
+    const sentKeys = await getRecentSentEmailAlertKeysForUser(env, userId);
+    for (const alertItem of items) {
+      const alertKey = buildEmailAlertKey(userId, alertItem);
+      if (alertKey && sentKeys.has(alertKey)) {
+        skippedCount += 1;
+        continue;
+      }
+      const result = await sendEmailAlertForUser(env, user, alertItem, {
+        source: options.source || "cron"
+      });
+      if (result.ok) {
+        sentCount += 1;
+        if (alertKey) sentKeys.add(alertKey);
+      } else {
+        failedCount += 1;
+      }
+    }
+  }
+  let newCursor = cursor;
+  if (!options?.target_user_id) {
+    newCursor = cursor + BATCH_SIZE;
+    if (newCursor >= total) newCursor = 0;
+    await env.EMAIL_SWEEP_STATE.put("cursor", String(newCursor));
+  }
+  return {
+    ok: true,
+    processed_users: processedUsers,
+    sent_count: sentCount,
+    skipped_count: skippedCount,
+    failed_count: failedCount,
+    cursor_from: cursor,
+    cursor_to: newCursor,
+    total_users: total
+  };
+}
+__name(runEmailAlertsSweep, "runEmailAlertsSweep");
+function parseWhatsAppBodyParameters(raw) {
+  if (!raw) return [];
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.map((item) => ({ type: "text", text: String(item ?? "").trim() })).filter((item) => item.text);
+  } catch {
+    return [];
+  }
+}
+__name(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
+async function runWhatsAppAlertsSweep(env, options = {}) {
+  const templateName = String(env.WHATSAPP_TEMPLATE_ALERTA || "").trim();
+  const templateLang = String(env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
+  const configured = !!env.WHATSAPP_PHONE_NUMBER_ID && !!env.WHATSAPP_ACCESS_TOKEN && !!templateName;
+  if (!configured) {
+    return { ok: true, skipped: true, reason: "missing_config" };
+  }
+  if (isHelloWorldTemplate(templateName)) {
+    return { ok: true, skipped: true, reason: "hello_world_template" };
+  }
+  const maxUsers = clampInt(
+    env.WHATSAPP_ALERT_SWEEP_MAX_USERS,
+    1,
+    200,
+    WHATSAPP_ALERT_SWEEP_MAX_USERS
+  );
+  const maxAlertsPerUser = clampInt(
+    env.WHATSAPP_ALERTS_PER_USER_MAX,
+    1,
+    10,
+    WHATSAPP_ALERTS_PER_USER_MAX
+  );
+  const prefRows = await supabaseSelect2(
+    env,
+    `user_preferences?alertas_activas=is.true&alertas_whatsapp=is.true&select=user_id&limit=${maxUsers}`
+  ).catch(() => []);
+  let usersVisited = 0;
+  let usersEligible = 0;
+  let alertsSent = 0;
+  let alertsFailed = 0;
+  for (const row of Array.isArray(prefRows) ? prefRows : []) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    usersVisited += 1;
+    const resolved = await resolverPlanUsuario(env, userId).catch(() => null);
+    if (!resolved?.plan?.feature_flags?.whatsapp) continue;
+    const user = await obtenerUsuario(env, userId).catch(() => null);
+    if (!user?.activo || !String(user?.celular || "").trim()) continue;
+    const alertData = await construirAlertasParaUsuario(env, userId).catch((err) => ({
+      ok: false,
+      message: err?.message || "No se pudieron construir alertas"
+    }));
+    if (!alertData?.ok || !Array.isArray(alertData?.resultados) || !alertData.resultados.length) continue;
+    const recentKeys = await loadRecentSentWhatsAppAlertKeys(env, userId);
+    const pendingAlerts = alertData.resultados.filter((item) => {
+      const key = buildWhatsAppAlertKey(userId, item);
+      return key && !recentKeys.has(key);
+    });
+    if (!pendingAlerts.length) continue;
+    usersEligible += 1;
+    for (const alertItem of pendingAlerts.slice(0, maxAlertsPerUser)) {
+      const result = await sendWhatsAppAlertForUser(env, user, alertItem, {
+        templateName,
+        templateLang,
+        source: options.source || "cron"
+      });
+      if (result.ok) {
+        alertsSent += 1;
+        if (result.alert_key) recentKeys.add(result.alert_key);
+      } else {
+        alertsFailed += 1;
+      }
+    }
+  }
+  return {
+    ok: true,
+    users_visited: usersVisited,
+    users_eligible: usersEligible,
+    alerts_sent: alertsSent,
+    alerts_failed: alertsFailed
+  };
+}
+__name(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
+async function loadRecentSentWhatsAppAlertKeys(env, userId) {
+  const limit = clampInt(
+    env.WHATSAPP_ALERT_LOG_LOOKBACK,
+    20,
+    1e3,
+    WHATSAPP_ALERT_LOG_LOOKBACK
+  );
+  const rows = await supabaseSelect2(
+    env,
+    `notification_delivery_logs?user_id=eq.${encodeURIComponent(userId)}&channel=eq.whatsapp&select=payload,status,created_at&order=created_at.desc&limit=${limit}`
+  ).catch(() => []);
+  const keys = /* @__PURE__ */ new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const status = String(row?.status || "").trim().toLowerCase();
+    if (!status.startsWith("sent_")) continue;
+    const key = String(row?.payload?.alert_key || "").trim();
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+__name(loadRecentSentWhatsAppAlertKeys, "loadRecentSentWhatsAppAlertKeys");
+function buildWhatsAppAlertKey(userId, alertItem) {
+  const sourceKey = String(
+    alertItem?.source_offer_key || alertItem?.iddetalle || alertItem?.idoferta || ""
+  ).trim();
+  return sourceKey ? `${String(userId || "").trim()}:${sourceKey}` : "";
+}
+__name(buildWhatsAppAlertKey, "buildWhatsAppAlertKey");
+function buildWhatsAppAlertBodyParameters(alertItem) {
+  const values = [
+    alertItem?.cargo || alertItem?.area || "Oferta APD",
+    alertItem?.distrito || "-",
+    alertItem?.escuela || "Sin escuela",
+    alertItem?.finoferta_label || formatearFechaAbc(alertItem?.finoferta || "", "datetime") || "-"
+  ];
+  return values.map((value) => ({
+    type: "text",
+    text: String(value || "").trim() || "-"
+  }));
+}
+__name(buildWhatsAppAlertBodyParameters, "buildWhatsAppAlertBodyParameters");
+async function sendWhatsAppAlertForUser(env, user, alertItem, options = {}) {
+  const templateName = String(options.templateName || env.WHATSAPP_TEMPLATE_ALERTA || "").trim();
+  const templateLang = String(options.templateLang || env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
+  const alertKey = buildWhatsAppAlertKey(user?.id, alertItem);
+  const destinations = whatsappTestDestinations(user?.celular || "");
+  const logBase = {
+    user_id: user?.id || null,
+    channel: "whatsapp",
+    template_code: templateName,
+    destination: destinations[0] || null,
+    provider_message_id: null,
+    payload: {
+      alert_key: alertKey || null,
+      source: options.source || "cron",
+      alert: {
+        source_offer_key: alertItem?.source_offer_key || null,
+        iddetalle: alertItem?.iddetalle || null,
+        idoferta: alertItem?.idoferta || null,
+        distrito: alertItem?.distrito || "",
+        cargo: alertItem?.cargo || "",
+        escuela: alertItem?.escuela || "",
+        finoferta_label: alertItem?.finoferta_label || ""
+      }
+    }
+  };
+  if (!destinations.length || !templateName) {
+    await supabaseInsert(env, "notification_delivery_logs", {
+      ...logBase,
+      status: "failed_alert",
+      provider_response: { message: "No hay destino o plantilla valida para despachar la alerta" }
+    }).catch(() => null);
+    return { ok: false, reason: "missing_destination_or_template", alert_key: alertKey };
+  }
+  const bodyParameters = buildWhatsAppAlertBodyParameters(alertItem);
+  let destination = destinations[0];
+  let payload = null;
+  let response = null;
+  let data = null;
+  for (const candidate of destinations) {
+    destination = candidate;
+    payload = buildWhatsAppTemplatePayload(candidate, templateName, templateLang, bodyParameters);
+    const result = await sendWhatsAppTemplate(env, payload);
+    response = result.response;
+    data = result.data;
+    if (response.ok || !isMetaAllowedListError(data)) {
+      break;
+    }
+  }
+  await supabaseInsert(env, "notification_delivery_logs", {
+    ...logBase,
+    destination,
+    status: response?.ok ? "sent_alert" : "failed_alert",
+    provider_message_id: data?.messages?.[0]?.id || null,
+    payload: {
+      ...logBase.payload,
+      request: payload
+    },
+    provider_response: data
+  }).catch(() => null);
+  return {
+    ok: !!response?.ok,
+    alert_key: alertKey,
+    destination,
+    provider_response: data
+  };
+}
+__name(sendWhatsAppAlertForUser, "sendWhatsAppAlertForUser");
+async function handleImportarCatalogoCargos(url, env) {
+  const totalPaginas = 232;
+  const desde = clampInt(url.searchParams.get("desde"), 1, totalPaginas, 1);
+  const hasta = clampInt(url.searchParams.get("hasta"), desde, totalPaginas, Math.min(desde + 9, totalPaginas));
+  let totalInsertados = 0;
+  const debug = [];
+  for (let pagina = desde; pagina <= hasta; pagina += 1) {
+    const paginaUrl = `https://servicios.abc.gov.ar/servaddo/cargos.areas/?page=${pagina}`;
+    const res = await fetch(paginaUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`ABC pagina ${pagina} respondio ${res.status}: ${txt.slice(0, 300)}`);
+    }
+    const html = await res.text();
+    const items = parsearCargosDesdeHTML(html);
+    debug.push({ pagina, encontrados: items.length });
+    if (!items.length) {
+      await sleep(100);
+      continue;
+    }
+    for (let i = 0; i < items.length; i += 100) {
+      await supabaseUpsert(env, "catalogo_cargos_areas", items.slice(i, i + 100), "nombre_norm");
+    }
+    totalInsertados += items.length;
+    await sleep(100);
+  }
+  return json2({
+    ok: true,
+    rango: { desde, hasta },
+    total_insertados: totalInsertados,
+    debug
+  });
+}
+__name(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
+async function runProvinciaBackfillStep(env, options = {}) {
+  const state = await obtenerScanState(env);
+  const staleRunning = isStaleProvinciaBackfill(state);
+  if (state.status === "running" && options.force !== true && !staleRunning) {
+    return { ok: true, skipped: true, reason: "already_running" };
+  }
+  const catalogRows = await obtenerDistritosProvincia(env);
+  const distritos = unique(
+    catalogRows.map((row) => norm(row.apd_nombre || row.nombre || "")).filter(Boolean)
+  );
+  if (!distritos.length) {
+    throw new Error("No hay catalogo de distritos para el backfill provincial");
+  }
+  let districtIndex = clampInt(state.district_index, 0, Math.max(distritos.length - 1, 0), 0);
+  let nextPage = clampInt(state.next_page, 0, 999999, 0);
+  let pagesProcessed = Number(state.pages_processed || 0);
+  let districtsCompleted = Number(state.districts_completed || 0);
+  let offersProcessed = Number(state.offers_processed || 0);
+  const startedAt = state.started_at || (/* @__PURE__ */ new Date()).toISOString();
+  const districtName = distritos[districtIndex];
+  await saveScanState(env, {
+    ...state,
+    scope: PROVINCIA_SCOPE,
+    status: "running",
+    district_index: districtIndex,
+    district_name: districtName,
+    next_page: nextPage,
+    total_districts: distritos.length,
+    started_at: startedAt,
+    finished_at: null,
+    last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
+    notes: {
+      ...state.notes || {},
+      retryable: false,
+      last_error: null,
+      failed_page: 0
+    }
+  });
+  try {
+    const batchInfo = await fetchAPDDistrictBatch(
+      districtName,
+      nextPage,
+      PROVINCIA_STEP_PAGES,
+      PROVINCIA_CAPTURE_ROWS_PER_PAGE
+    );
+    const capturedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const rows = batchInfo.docs.map((doc) => buildGlobalSnapshotRow(doc, capturedAt));
+    const currentMap = await loadCurrentRowsMap(env, rows.map((row) => row.source_offer_key));
+    const currentRows = rows.map((row) => buildGlobalCurrentRow(row, currentMap.get(row.source_offer_key), capturedAt));
+    if (rows.length) {
+      for (let i = 0; i < rows.length; i += HISTORICO_INSERT_BATCH) {
+        await supabaseInsertMany(
+          env,
+          "apd_ofertas_global_snapshots",
+          rows.slice(i, i + HISTORICO_INSERT_BATCH)
+        );
+      }
+      for (let i = 0; i < currentRows.length; i += HISTORICO_INSERT_BATCH) {
+        await supabaseUpsert(
+          env,
+          "apd_ofertas_global_current",
+          currentRows.slice(i, i + HISTORICO_INSERT_BATCH),
+          "source_offer_key"
+        );
+      }
+    }
+    pagesProcessed += batchInfo.pagesRead;
+    offersProcessed += rows.length;
+    if (batchInfo.hasMore) {
+      nextPage += batchInfo.pagesRead;
+    } else {
+      districtIndex += 1;
+      districtsCompleted += 1;
+      nextPage = 0;
+    }
+    const finished = districtIndex >= distritos.length;
+    await saveScanState(env, {
+      ...state,
+      scope: PROVINCIA_SCOPE,
+      status: finished ? "finished" : "idle",
+      district_index: finished ? distritos.length : districtIndex,
+      district_name: finished ? null : distritos[districtIndex] || null,
+      next_page: nextPage,
+      pages_processed: pagesProcessed,
+      districts_completed: districtsCompleted,
+      offers_processed: offersProcessed,
+      last_batch_count: rows.length,
+      total_districts: distritos.length,
+      started_at: startedAt,
+      finished_at: finished ? (/* @__PURE__ */ new Date()).toISOString() : null,
+      last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
+      notes: {
+        ...state.notes || {},
+        retryable: false,
+        last_error: null,
+        failed_page: 0,
+        initial_backfill_completed: finished
+      }
+    });
+    return {
+      ok: true,
+      finished,
+      district_name: districtName,
+      next_district_name: finished ? null : distritos[districtIndex] || null,
+      next_page: nextPage,
+      pages_processed: pagesProcessed,
+      districts_completed: districtsCompleted,
+      offers_processed: offersProcessed,
+      last_batch_count: rows.length,
+      total_districts: distritos.length
+    };
+  } catch (err) {
+    await saveScanState(env, {
+      ...state,
+      scope: PROVINCIA_SCOPE,
+      status: "error",
+      district_index: districtIndex,
+      district_name: districtName,
+      next_page: nextPage,
+      pages_processed: pagesProcessed,
+      districts_completed: districtsCompleted,
+      offers_processed: offersProcessed,
+      last_batch_count: 0,
+      total_districts: distritos.length,
+      started_at: startedAt,
+      finished_at: null,
+      last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
+      notes: {
+        ...state.notes || {},
+        retryable: false,
+        last_error: err?.message || "Error en backfill provincial",
+        failed_page: nextPage
+      }
+    });
+    throw err;
+  }
+}
+__name(runProvinciaBackfillStep, "runProvinciaBackfillStep");
+async function fetchHistoricoRowsByDistritos(env, table, distritos, days, limit = 8e3) {
+  const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1e3).toISOString();
+  const filters = distritos.map((item) => `distrito.eq.${encodeURIComponent(item)}`).join(",");
+  const rows = await supabaseSelect2(
+    env,
+    `${table}?captured_at=gte.${encodeURIComponent(sinceIso)}&select=iddetalle,idoferta,source_offer_key,estado,distrito,escuela,cargo,area,nivel_modalidad,turno,jornada,hsmodulos,cursodivision,finoferta,total_postulantes,puntaje_primero,listado_origen_primero,captured_at&or=(${filters})&order=captured_at.desc&limit=${limit}`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(fetchHistoricoRowsByDistritos, "fetchHistoricoRowsByDistritos");
+function buildHistoricoResumenPayload(rows, days) {
+  const groupedRows = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key = historicoRowKey(row);
+    if (!key) continue;
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
+  }
+  const latestRows = [];
+  const firstSeenRows = [];
+  const cambios = [];
+  for (const series of groupedRows.values()) {
+    series.sort(sortHistoricoDesc);
+    const latest = series[0];
+    const previous = series[1] || null;
+    const first = series[series.length - 1];
+    latestRows.push(latest);
+    firstSeenRows.push(first);
+    if (previous && estadoHistoricoKey(latest) !== estadoHistoricoKey(previous)) {
+      cambios.push({
+        iddetalle: latest.iddetalle || null,
+        idoferta: latest.idoferta || null,
+        distrito: latest.distrito || "",
+        cargo: latest.cargo || "",
+        area: latest.area || "",
+        escuela: latest.escuela || "",
+        turno: mapTurnoAPD(latest.turno || ""),
+        finoferta: latest.finoferta || "",
+        estado_anterior: estadoHistoricoLabel(previous),
+        estado_actual: estadoHistoricoLabel(latest),
+        captured_at: latest.captured_at || null
+      });
+    }
+  }
+  latestRows.sort(sortHistoricoDesc);
+  cambios.sort(sortHistoricoDesc);
+  const activeRows = latestRows.filter(ofertaHistoricaActiva);
+  const nowTs = Date.now();
+  const nuevas7d = firstSeenRows.filter((row) => {
+    const ts = parseFechaFlexible(row.captured_at)?.getTime() || 0;
+    return ts >= nowTs - 7 * 24 * 60 * 60 * 1e3;
+  }).length;
+  const cierran72h = activeRows.filter((row) => {
+    const fin = parseFechaFlexible(row.finoferta)?.getTime() || 0;
+    return fin && fin >= nowTs && fin <= nowTs + 72 * 60 * 60 * 1e3;
+  }).length;
+  return {
+    ok: true,
+    empty: false,
+    ventana_dias: days,
+    ultima_captura: latestRows[0]?.captured_at || null,
+    capturas_filtradas: rows.length,
+    ofertas_unicas: latestRows.length,
+    activas_estimadas: activeRows.length,
+    designadas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "DESIGNADA").length,
+    anuladas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "ANULADA").length,
+    desiertas_estimadas: latestRows.filter((row) => estadoHistoricoKey(row) === "DESIERTA").length,
+    nuevas_7d: nuevas7d,
+    cierran_72h: cierran72h,
+    cambios_estado_recientes: cambios.length,
+    promedio_postulantes: promedioNumerico(latestRows.map((row) => row.total_postulantes), 1),
+    promedio_puntaje_primero: promedioNumerico(latestRows.map((row) => row.puntaje_primero), 2),
+    top_distritos: topCountItems(latestRows.map((row) => row.distrito), 4),
+    top_cargos: topCountItems(latestRows.map(tituloHistoricoRow), 5),
+    top_turnos: topCountItems(activeRows.map((row) => mapTurnoAPD(row.turno || "")), 4),
+    top_escuelas: topCountItems(latestRows.map((row) => row.escuela), 5),
+    ultimos_cambios: cambios.slice(0, 6),
+    ultimas_ofertas: latestRows.slice(0, 6).map((row) => ({
+      iddetalle: row.iddetalle || null,
+      idoferta: row.idoferta || null,
+      distrito: row.distrito || "",
+      cargo: row.cargo || "",
+      area: row.area || "",
+      escuela: row.escuela || "",
+      turno: mapTurnoAPD(row.turno || ""),
+      finoferta: row.finoferta || "",
+      estado: estadoHistoricoLabel(row),
+      total_postulantes: row.total_postulantes != null ? Number(row.total_postulantes) : null,
+      puntaje_primero: row.puntaje_primero != null ? Number(row.puntaje_primero) : null,
+      captured_at: row.captured_at || null
+    }))
+  };
+}
+__name(buildHistoricoResumenPayload, "buildHistoricoResumenPayload");
+function emptyHistoricoPayload(days, message) {
+  return {
+    ok: true,
+    empty: true,
+    message,
+    ventana_dias: days,
+    ultima_captura: null,
+    capturas_filtradas: 0,
+    ofertas_unicas: 0,
+    activas_estimadas: 0,
+    designadas_estimadas: 0,
+    anuladas_estimadas: 0,
+    desiertas_estimadas: 0,
+    nuevas_7d: 0,
+    cierran_72h: 0,
+    cambios_estado_recientes: 0,
+    promedio_postulantes: null,
+    promedio_puntaje_primero: null,
+    top_distritos: [],
+    top_cargos: [],
+    top_turnos: [],
+    top_escuelas: [],
+    ultimos_cambios: [],
+    ultimas_ofertas: []
+  };
+}
+__name(emptyHistoricoPayload, "emptyHistoricoPayload");
+async function fetchProvinciaCurrentRows(env, days) {
+  const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1e3).toISOString();
+  const rows = await supabaseSelect2(
+    env,
+    `apd_ofertas_global_current?last_seen_at=gte.${encodeURIComponent(sinceIso)}&select=source_offer_key,idoferta,iddetalle,estado,distrito,escuela,cargo,area,nivel_modalidad,turno,jornada,hsmodulos,cursodivision,supl_desde,supl_hasta,finoferta,ult_movimiento,first_seen_at,last_seen_at,last_state_change_at,times_seen,state_changes&order=last_seen_at.desc&limit=${PROVINCIA_SUMMARY_LIMIT}`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(fetchProvinciaCurrentRows, "fetchProvinciaCurrentRows");
+function buildProvinciaResumenPayload(rows, days, state) {
+  const activeRows = rows.filter(ofertaHistoricaActiva);
+  const closedRows = rows.filter((row) => !ofertaHistoricaActiva(row));
+  const nowTs = Date.now();
+  const districtsWithActivity = unique(activeRows.map((row) => row.distrito).filter(Boolean)).length;
+  const coverageHint = buildProvinciaCoverageHint(state, districtsWithActivity, activeRows);
+  return {
+    ok: true,
+    empty: rows.length === 0,
+    ventana_dias: days,
+    total_ofertas: rows.length,
+    activas_estimadas: activeRows.length,
+    cerradas_estimadas: closedRows.length,
+    districts_with_activity: districtsWithActivity,
+    coverage_hint: coverageHint,
+    nuevas_7d: rows.filter((row) => {
+      const ts = parseFechaFlexible(row.first_seen_at)?.getTime() || 0;
+      return ts >= nowTs - 7 * 24 * 60 * 60 * 1e3;
+    }).length,
+    top_distritos: topCountItems(activeRows.map((row) => row.distrito), 8),
+    top_cargos: topCountItems(activeRows.map(tituloHistoricoRow), 8),
+    top_turnos: topCountItems(activeRows.map((row) => mapTurnoAPD(row.turno || "")), 5),
+    top_escuelas: topCountItems(activeRows.map((row) => row.escuela), 6),
+    state_breakdown: {
+      activas: activeRows.length,
+      designadas: rows.filter((row) => estadoHistoricoKey(row) === "DESIGNADA").length,
+      anuladas: rows.filter((row) => estadoHistoricoKey(row) === "ANULADA").length,
+      desiertas: rows.filter((row) => estadoHistoricoKey(row) === "DESIERTA").length,
+      cerradas: rows.filter((row) => estadoHistoricoKey(row) === "CERRADA").length
+    },
+    leaders: {
+      matematica: findSubjectLeader(activeRows, ["MATEMATICA"]),
+      ingles: findSubjectLeader(activeRows, ["INGLES"])
+    },
+    latest_rows: rows.slice(0, 8).map((row) => ({
+      distrito: row.distrito || "",
+      cargo: row.cargo || "",
+      area: row.area || "",
+      escuela: row.escuela || "",
+      estado: estadoHistoricoLabel(row),
+      turno: mapTurnoAPD(row.turno || ""),
+      last_seen_at: row.last_seen_at || null
+    })),
+    banner_items: buildProvincialInsightCards(rows, activeRows, closedRows, state),
+    scan_state: state ? {
+      status: state.status || "idle",
+      district_index: state.district_index || 0,
+      districts_completed: state.districts_completed || 0,
+      total_districts: state.total_districts || 0,
+      offers_processed: Number(state.offers_processed || 0),
+      last_run_at: state.last_run_at || null
+    } : null
+  };
+}
+__name(buildProvinciaResumenPayload, "buildProvinciaResumenPayload");
+function buildProvincialInsightCards(rows, activeRows, closedRows, state) {
+  const items = [];
+  const seenTexts = /* @__PURE__ */ new Set();
+  const rankedDistricts = topCountItems(activeRows.map((row) => row.distrito), 5);
+  const rankedCargos = topCountItems(activeRows.map(tituloHistoricoRow), 4);
+  const rankedTurnos = topCountItems(activeRows.map((row) => mapTurnoAPD(row.turno || "")), 3);
+  const rankedSchools = topCountItems(activeRows.map((row) => row.escuela), 3);
+  const matem = findSubjectLeader(activeRows, ["MATEMATICA"]);
+  const ingles = findSubjectLeader(activeRows, ["INGLES"]);
+  function pushCard(title, text, tone) {
+    const cleanText2 = String(text || "").trim();
+    if (!cleanText2 || seenTexts.has(cleanText2)) return;
+    seenTexts.add(cleanText2);
+    items.push({ title, text: cleanText2, tone });
+  }
+  __name(pushCard, "pushCard");
+  if (rankedDistricts[0]) {
+    pushCard(
+      "Distrito con mas movimiento",
+      `${rankedDistricts[0].label} lidera el corte provincial con ${rankedDistricts[0].value} ofertas activas.`,
+      "blue"
+    );
+  }
+  if (rankedDistricts[1]) {
+    pushCard(
+      "Segundo foco distrital",
+      `${rankedDistricts[1].label} ya aparece como otro foco fuerte con ${rankedDistricts[1].value} publicaciones activas.`,
+      "green"
+    );
+  }
+  if (rankedDistricts[2]) {
+    pushCard(
+      "Tercer distrito en radar",
+      `${rankedDistricts[2].label} tambien empieza a asomar en el historico provincial reciente.`,
+      "neutral"
+    );
+  }
+  if (matem) {
+    pushCard(
+      "Radar de Matematica",
+      `Matematica se mueve mas en ${matem.label} con ${matem.value} publicaciones activas.`,
+      "green"
+    );
+  }
+  if (ingles) {
+    pushCard(
+      "Radar de Ingles",
+      `Ingles aparece con mas fuerza en ${ingles.label} dentro del historial provincial disponible.`,
+      "blue"
+    );
+  }
+  if (rankedCargos[0]) {
+    pushCard(
+      "Cargo o area dominante",
+      `${rankedCargos[0].label} es lo mas repetido dentro de las ofertas activas actuales.`,
+      "neutral"
+    );
+  }
+  if (rankedSchools[0]) {
+    pushCard(
+      "Escuela que mas aparece",
+      `${rankedSchools[0].label} es la institucion mas repetida en el radar activo de este corte.`,
+      "blue"
+    );
+  }
+  if (rankedTurnos[0]) {
+    pushCard(
+      "Turno dominante",
+      `${rankedTurnos[0].label} es el turno con mas actividad dentro del radar provincial.`,
+      "blue"
+    );
+  }
+  if (closedRows.length) {
+    pushCard(
+      "Cierres observados",
+      `${closedRows.length} ofertas ya no estan activas en el ultimo estado conocido.`,
+      "red"
+    );
+  }
+  if (rankedDistricts.length <= 1) {
+    const partialDistricts = Math.max(0, Number(state?.districts_completed || 0));
+    const totalDistricts = Math.max(0, Number(state?.total_districts || 0));
+    if (rankedDistricts[0] && totalDistricts && partialDistricts < totalDistricts) {
+      pushCard(
+        "Cobertura del backfill",
+        `Por ahora el radar visible esta muy dominado por ${rankedDistricts[0].label} porque el backfill provincial todavia sigue recorriendo otros distritos.`,
+        "neutral"
+      );
+    }
+  }
+  if (!items.length) {
+    pushCard(
+      "Radar provincial",
+      "Todavia no hay suficiente historial provincial para construir insights serios.",
+      "neutral"
+    );
+  }
+  return items.slice(0, 8);
+}
+__name(buildProvincialInsightCards, "buildProvincialInsightCards");
+function findSubjectLeader(rows, keywords) {
+  const subset = rows.filter((row) => {
+    const title = norm(`${row.cargo || ""} ${row.area || ""}`);
+    return keywords.some((keyword) => title.includes(norm(keyword)));
+  });
+  return topCountItems(subset.map((row) => row.distrito), 1)[0] || null;
+}
+__name(findSubjectLeader, "findSubjectLeader");
+function buildProvinciaCoverageHint(state, districtsWithActivity, activeRows) {
+  const rankedDistricts = topCountItems(activeRows.map((row) => row.distrito), 2);
+  const topDistrict = rankedDistricts[0]?.label || null;
+  const completed = Number(state?.districts_completed || 0);
+  const total = Number(state?.total_districts || 0);
+  if (districtsWithActivity <= 1 && topDistrict && total && completed < total) {
+    return `Hoy el radar visible esta muy concentrado en ${topDistrict} porque el backfill provincial todavia no termino de cubrir el resto de los distritos.`;
+  }
+  if (districtsWithActivity >= 3) {
+    return `El radar ya tiene actividad visible en ${districtsWithActivity} distritos, asi que la rotacion va a mostrar comparaciones mas variadas.`;
+  }
+  return null;
+}
+__name(buildProvinciaCoverageHint, "buildProvinciaCoverageHint");
+async function obtenerScanState(env) {
+  const rows = await supabaseSelect2(
+    env,
+    `apd_global_scan_state?scope=eq.${encodeURIComponent(PROVINCIA_SCOPE)}&select=*`
+  ).catch(() => []);
+  return rows?.[0] || {
+    scope: PROVINCIA_SCOPE,
+    status: "idle",
+    mode: "backfill",
+    district_index: 0,
+    next_page: 0,
+    pages_processed: 0,
+    districts_completed: 0,
+    offers_processed: 0,
+    last_batch_count: 0,
+    total_districts: 0
+  };
+}
+__name(obtenerScanState, "obtenerScanState");
+async function saveScanState(env, state) {
+  await supabaseUpsert(
+    env,
+    "apd_global_scan_state",
+    [
+      {
+        scope: PROVINCIA_SCOPE,
+        status: state.status || "idle",
+        mode: state.mode || "backfill",
+        district_index: Number(state.district_index || 0),
+        district_name: state.district_name || null,
+        next_page: Number(state.next_page || 0),
+        pages_processed: Number(state.pages_processed || 0),
+        districts_completed: Number(state.districts_completed || 0),
+        offers_processed: Number(state.offers_processed || 0),
+        last_batch_count: Number(state.last_batch_count || 0),
+        total_districts: Number(state.total_districts || 0),
+        started_at: state.started_at || null,
+        finished_at: state.finished_at || null,
+        last_run_at: state.last_run_at || null,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString(),
+        notes: state.notes || {}
+      }
+    ],
+    "scope"
+  );
+}
+__name(saveScanState, "saveScanState");
+function isStaleProvinciaBackfill(state) {
+  if (String(state?.status || "").trim().toLowerCase() !== "running") return false;
+  const ts = parseFechaFlexible(state?.updated_at || state?.last_run_at)?.getTime() || 0;
+  if (!ts) return false;
+  return Date.now() - ts > PROVINCIA_RUNNING_STALE_MS;
+}
+__name(isStaleProvinciaBackfill, "isStaleProvinciaBackfill");
+async function obtenerDistritosProvincia(env) {
+  const rows = await supabaseSelect2(
+    env,
+    "catalogo_distritos?select=nombre,apd_nombre&order=nombre.asc"
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+__name(obtenerDistritosProvincia, "obtenerDistritosProvincia");
+async function fetchAPDDistrictBatch(distritoAPD, startPage, pagesToRead, rowsPerPage) {
+  const docs = [];
+  let pagesRead = 0;
+  let hasMore = false;
+  for (let offset = 0; offset < pagesToRead; offset += 1) {
+    const pageIndex = startPage + offset;
+    const start = pageIndex * rowsPerPage;
+    const q = `descdistrito:"${escaparSolr(distritoAPD)}"`;
+    const url = `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${rowsPerPage}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`APD respondio ${res.status}: ${txt}`);
+    }
+    const data = await res.json();
+    const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+    const filtered = pageDocs.filter((doc) => norm(doc?.descdistrito || "") === norm(distritoAPD));
+    docs.push(...filtered);
+    pagesRead += 1;
+    if (pageDocs.length < rowsPerPage) {
+      hasMore = false;
+      break;
+    }
+    hasMore = true;
+  }
+  return { docs, pagesRead, hasMore };
+}
+__name(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
+function buildGlobalSnapshotRow(oferta, capturedAt) {
+  return {
+    source_offer_key: buildSourceOfferKeyFromOferta(oferta),
+    idoferta: oferta.idoferta || null,
+    iddetalle: oferta.iddetalle || oferta.id || null,
+    estado: oferta.estado || "",
+    distrito: norm(oferta.descdistrito || ""),
+    escuela: oferta.escuela || oferta.nombreestablecimiento || "",
+    cargo: oferta.descripcioncargo || oferta.cargo || "",
+    area: oferta.descripcionarea || "",
+    nivel_modalidad: oferta.descnivelmodalidad || "",
+    turno: mapTurnoAPD(oferta.turno || ""),
+    jornada: oferta.jornada || "",
+    hsmodulos: oferta.hsmodulos || oferta.modulos || "",
+    cursodivision: normalizarCursoDivisionServidor(oferta.cursodivision || ""),
+    supl_desde: oferta.supl_desde || "",
+    supl_hasta: oferta.supl_hasta || "",
+    finoferta: oferta.finoferta || "",
+    ult_movimiento: oferta.ult_movimiento || "",
+    raw: oferta,
+    captured_at: capturedAt
+  };
+}
+__name(buildGlobalSnapshotRow, "buildGlobalSnapshotRow");
+async function loadCurrentRowsMap(env, keys) {
+  const map = /* @__PURE__ */ new Map();
+  const uniqueKeys = unique(keys).filter(Boolean);
+  for (let i = 0; i < uniqueKeys.length; i += 70) {
+    const slice = uniqueKeys.slice(i, i + 70);
+    const filters = slice.map((key) => `source_offer_key.eq.${encodeURIComponent(key)}`).join(",");
+    const rows = await supabaseSelect2(
+      env,
+      `apd_ofertas_global_current?select=source_offer_key,estado,first_seen_at,last_seen_at,last_state_change_at,times_seen,state_changes&or=(${filters})`
+    ).catch(() => []);
+    for (const row of Array.isArray(rows) ? rows : []) {
+      map.set(row.source_offer_key, row);
+    }
+  }
+  return map;
+}
+__name(loadCurrentRowsMap, "loadCurrentRowsMap");
+function buildGlobalCurrentRow(snapshotRow, prevRow, capturedAt) {
+  const prevState = prevRow ? estadoHistoricoKey(prevRow.estado) : estadoHistoricoKey(snapshotRow.estado);
+  const nextState = estadoHistoricoKey(snapshotRow.estado);
+  const stateChanged = !!prevRow && prevState !== nextState;
+  return {
+    source_offer_key: snapshotRow.source_offer_key,
+    idoferta: snapshotRow.idoferta,
+    iddetalle: snapshotRow.iddetalle,
+    estado: snapshotRow.estado,
+    distrito: snapshotRow.distrito,
+    escuela: snapshotRow.escuela,
+    cargo: snapshotRow.cargo,
+    area: snapshotRow.area,
+    nivel_modalidad: snapshotRow.nivel_modalidad,
+    turno: snapshotRow.turno,
+    jornada: snapshotRow.jornada,
+    hsmodulos: snapshotRow.hsmodulos,
+    cursodivision: snapshotRow.cursodivision,
+    supl_desde: snapshotRow.supl_desde,
+    supl_hasta: snapshotRow.supl_hasta,
+    finoferta: snapshotRow.finoferta,
+    ult_movimiento: snapshotRow.ult_movimiento,
+    first_seen_at: prevRow?.first_seen_at || capturedAt,
+    last_seen_at: capturedAt,
+    last_state_change_at: stateChanged ? capturedAt : prevRow?.last_state_change_at || prevRow?.last_seen_at || capturedAt,
+    times_seen: prevRow ? Number(prevRow.times_seen || 0) + 1 : 1,
+    state_changes: prevRow ? Number(prevRow.state_changes || 0) + (stateChanged ? 1 : 0) : 0,
+    raw: snapshotRow.raw,
+    updated_at: capturedAt
+  };
+}
+__name(buildGlobalCurrentRow, "buildGlobalCurrentRow");
+async function buildHistoricoCaptureRows(oferta, capturedAt, includePostulantes) {
+  const item = buildAlertItem(oferta, { detalle: {} });
+  let resumen = {
+    total_postulantes: null,
+    puntaje_primero: null,
+    listado_origen_primero: ""
+  };
+  let postRow = null;
+  let errorPostulantes = false;
+  if (includePostulantes && (item.idoferta || item.iddetalle)) {
+    try {
+      resumen = await obtenerResumenPostulantesABC(item.idoferta, item.iddetalle);
+      postRow = {
+        idoferta: item.idoferta || null,
+        iddetalle: item.iddetalle || null,
+        source_offer_key: buildSourceOfferKeyFromOferta(oferta),
+        total_postulantes: resumen.total_postulantes ?? null,
+        puntaje_primero: resumen.puntaje_primero ?? null,
+        listado_origen_primero: resumen.listado_origen_primero || "",
+        raw: {
+          distrito: item.distrito || "",
+          cargo: item.cargo || "",
+          area: item.area || "",
+          escuela: item.escuela || ""
+        },
+        captured_at: capturedAt
+      };
+    } catch {
+      errorPostulantes = true;
+    }
+  }
+  return {
+    ofertaRow: {
+      idoferta: item.idoferta || null,
+      iddetalle: item.iddetalle || null,
+      source_offer_key: buildSourceOfferKeyFromOferta(oferta),
+      estado: oferta.estado || "",
+      distrito: item.distrito || "",
+      escuela: item.escuela || "",
+      cargo: item.cargo || "",
+      area: item.area || "",
+      nivel_modalidad: item.nivel_modalidad || "",
+      turno: item.turno || "",
+      jornada: item.jornada || "",
+      hsmodulos: item.hsmodulos || "",
+      cursodivision: item.cursodivision || "",
+      supl_desde: item.supl_desde || "",
+      supl_hasta: item.supl_hasta || "",
+      finoferta: item.finoferta || "",
+      total_postulantes: resumen.total_postulantes ?? null,
+      puntaje_primero: resumen.puntaje_primero ?? null,
+      listado_origen_primero: resumen.listado_origen_primero || "",
+      raw: oferta,
+      captured_at: capturedAt
+    },
+    postRow,
+    errorPostulantes
+  };
+}
+__name(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
+async function construirAlertasParaUsuario(env, userId) {
+  const user = await obtenerUsuario(env, userId);
+  if (!user) return { ok: false, message: "Usuario no encontrado" };
+  if (!user.activo) return { ok: false, message: "Usuario inactivo" };
+  const prefs = await obtenerPreferenciasUsuario(env, userId);
+  if (!prefs || !prefs.alertas_activas) {
+    return {
+      ok: true,
+      user,
+      preferencias_originales: prefs,
+      preferencias_canonizadas: prefs,
+      total_fuente: 0,
+      total: 0,
+      descartadas_total: 0,
+      descartadas_preview: [],
+      debug_distritos: [],
+      resultados: []
+    };
+  }
+  const catalogos = await cargarCatalogos(env);
+  const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
+  const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
+  const resultados = [];
+  const descartadas = [];
+  const vistos = /* @__PURE__ */ new Set();
+  for (const oferta of ofertas) {
+    if (!ofertaEsVisibleParaAlerta(oferta)) {
+      descartadas.push({ iddetalle: oferta.iddetalle || oferta.id || null, motivo: "oferta_no_usable" });
+      continue;
+    }
+    const estado = String(
+      oferta?.estado || oferta?.estado_oferta || oferta?.estado_actual || ""
+    ).trim().toUpperCase();
+    if ([
+      "CERRADA",
+      "FINALIZADA",
+      "FINALIZADO",
+      "VENCIDA",
+      "VENCIDO",
+      "ANULADA",
+      "ANULADO",
+      "DESIERTA",
+      "DESIERTO",
+      "DESIGNADA",
+      "DESIGNADO",
+      "NO VIGENTE"
+    ].includes(estado)) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "estado_no_vigente",
+        estado
+      });
+      continue;
+    }
+    const cierre = parseFechaFlexible(
+      oferta?.finoferta || oferta?.fecha_cierre || oferta?.fecha_cierre_raw || oferta?.cierre || ""
+    );
+    if (cierre && cierre.getTime() < Date.now()) {
+      descartadas.push({
+        iddetalle: oferta.iddetalle || oferta.id || null,
+        motivo: "fecha_vencida",
+        cierre: oferta?.finoferta || oferta?.fecha_cierre || oferta?.cierre || null
+      });
+      continue;
+    }
+    const clave = [
+      buildSourceOfferKeyFromOferta(oferta),
+      String(oferta?.cargo || "").trim().toUpperCase(),
+      String(oferta?.escuela || "").trim().toUpperCase(),
+      String(oferta?.cursodivision || oferta?.curso_division || "").trim().toUpperCase(),
+      String(oferta?.turno || "").trim().toUpperCase()
+    ].join("|");
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    const evaluacion = coincideOfertaConPreferenciasAPD(oferta, prefsCanon);
+    const item = buildAlertItem(oferta, evaluacion);
+    if (evaluacion.match) resultados.push(item);
+    else descartadas.push({ ...item, motivo: "no_coincide_preferencias" });
+  }
+  resultados.sort((a, b) => {
+    const ta = parseFechaFlexible(a.finoferta)?.getTime() || 0;
+    const tb = parseFechaFlexible(b.finoferta)?.getTime() || 0;
+    return tb - ta;
+  });
+  return {
+    ok: true,
+    user,
+    preferencias_originales: prefs,
+    preferencias_canonizadas: prefsCanon,
+    total_fuente: ofertas.length,
+    total: resultados.length,
+    descartadas_total: descartadas.length,
+    descartadas_preview: descartadas.slice(0, 20),
+    debug_distritos: debugDistritos,
+    resultados
+  };
+}
+__name(construirAlertasParaUsuario, "construirAlertasParaUsuario");
+function formatearDiasHorariosOferta(oferta) {
+  const directo = String(
+    oferta?.dias_horarios || oferta?.diashorarios || oferta?.horario || ""
+  ).trim();
+  if (directo) return directo;
+  const dias = [
+    ["Lunes", oferta?.lunes],
+    ["Martes", oferta?.martes],
+    ["Mi\xE9rcoles", oferta?.miercoles],
+    ["Jueves", oferta?.jueves],
+    ["Viernes", oferta?.viernes],
+    ["S\xE1bado", oferta?.sabado]
+  ].map(([dia, valor]) => [dia, String(valor || "").trim()]).filter(([, valor]) => !!valor);
+  if (!dias.length) return "";
+  const valoresUnicos = [...new Set(dias.map(([, valor]) => valor))];
+  if (valoresUnicos.length === 1) {
+    const mismoHorario = valoresUnicos[0];
+    const nombres = dias.map(([dia]) => dia);
+    const esLunAVie = nombres.length === 5 && nombres.join("|") === "Lunes|Martes|Mi\xE9rcoles|Jueves|Viernes";
+    if (esLunAVie) {
+      return `Lunes a Viernes: ${mismoHorario}`;
+    }
+    return `${nombres.join(", ")}: ${mismoHorario}`;
+  }
+  return dias.map(([dia, valor]) => `${dia}: ${valor}`).join(" \xB7 ");
+}
+__name(formatearDiasHorariosOferta, "formatearDiasHorariosOferta");
+function resolverTipoRevistaOferta(oferta) {
+  const revistaRaw = norm(
+    oferta?.supl_revista || oferta?.revista || oferta?.situacion_revista || ""
+  );
+  if (revistaRaw === "S" || revistaRaw.includes("SUPLENCIA") || revistaRaw.includes("SUPL")) {
+    return {
+      codigo: "S",
+      label: "Suplencia"
+    };
+  }
+  if (revistaRaw === "P" || revistaRaw.includes("PROVISIONAL") || revistaRaw.includes("PROVIS")) {
+    return {
+      codigo: "P",
+      label: "Provisional"
+    };
+  }
+  const desde = String(oferta?.supl_desde || "").trim();
+  const hasta = String(oferta?.supl_hasta || "").trim();
+  const desdeReal = !!desde && !desde.includes("9999");
+  const hastaReal = !!hasta && !hasta.includes("9999");
+  return {
+    codigo: "",
+    label: desdeReal && hastaReal ? "Suplencia" : "Provisional"
+  };
+}
+__name(resolverTipoRevistaOferta, "resolverTipoRevistaOferta");
+function buildAlertItem(oferta, evaluacion) {
+  const suplDesde = oferta.supl_desde || "";
+  const suplHasta = oferta.supl_hasta || "";
+  const finOferta = oferta.finoferta || "";
+  const cargo = oferta.descripcioncargo || oferta.cargo || "";
+  const materia = oferta.descripcionarea || oferta.area || "";
+  const nivel = oferta.descnivelmodalidad || oferta.nivel || oferta.nivel_modalidad || "";
+  const modulos = oferta.hsmodulos || oferta.modulos || "";
+  const diasHorarios = formatearDiasHorariosOferta(oferta);
+  const tipoRevista = resolverTipoRevistaOferta(oferta);
+  const desdeLabel = formatearFechaAbc(suplDesde, "date") || suplDesde;
+  const hastaLabel = formatearFechaAbc(suplHasta, "date") || suplHasta;
+  const cierreLabel = formatearFechaAbc(finOferta, "datetime") || finOferta;
+  const abcUrl = buildAbcPostulantesUrl(
+    oferta.idoferta || "",
+    oferta.iddetalle || oferta.id || ""
+  );
+  return {
+    source_offer_key: buildSourceOfferKeyFromOferta(oferta),
+    iddetalle: oferta.iddetalle || oferta.id || null,
+    idoferta: oferta.idoferta || null,
+    distrito: norm(oferta.descdistrito || ""),
+    cargo,
+    materia,
+    area: materia,
+    turno: mapTurnoAPD(oferta.turno || ""),
+    nivel_modalidad: nivel,
+    nivel,
+    modalidad: nivel,
+    escuela: oferta.escuela || oferta.nombreestablecimiento || "",
+    cursodivision: normalizarCursoDivisionServidor(oferta.cursodivision || ""),
+    curso_division: normalizarCursoDivisionServidor(
+      oferta.cursodivision || oferta.curso_division || ""
+    ),
+    jornada: oferta.jornada || "",
+    hsmodulos: modulos,
+    modulos,
+    supl_desde: suplDesde,
+    supl_hasta: suplHasta,
+    desde: desdeLabel,
+    hasta: hastaLabel,
+    revista: tipoRevista.label,
+    situacion_revista: tipoRevista.label,
+    revista_codigo: tipoRevista.codigo,
+    finoferta: finOferta,
+    finoferta_label: cierreLabel,
+    fecha_cierre: cierreLabel,
+    cierre: cierreLabel,
+    dias_horarios: diasHorarios,
+    horario: diasHorarios,
+    observaciones: oferta.observaciones || "",
+    detalle_match: evaluacion.detalle,
+    abc_postulantes_url: abcUrl,
+    abc_url: abcUrl,
+    link: oferta.link_postular || oferta.link || abcUrl,
+    raw: oferta
+  };
+}
+__name(buildAlertItem, "buildAlertItem");
+async function obtenerResumenPostulantesABC(ofertaId, detalleId) {
+  const ofertaSafe = sanitizeSolrNumber(ofertaId);
+  const detalleSafe = sanitizeSolrNumber(detalleId);
+  const filters = [];
+  const queryParts = [];
+  if (ofertaSafe) {
+    filters.push(`idoferta:${ofertaSafe}`);
+    queryParts.push(`idoferta:${ofertaSafe}`);
+  }
+  if (detalleSafe) {
+    filters.push(`iddetalle:${detalleSafe}`);
+    queryParts.push(`iddetalle:${detalleSafe}`);
+  }
+  if (!queryParts.length) {
+    return { total_postulantes: 0, puntaje_primero: null, listado_origen_primero: "" };
+  }
+  const qs = new URLSearchParams();
+  qs.set("q", queryParts.join(" OR "));
+  filters.forEach((fq) => qs.append("fq", fq));
+  qs.set("rows", "1");
+  qs.set("wt", "json");
+  qs.set("sort", "estadopostulacion asc, orden asc, puntaje desc");
+  const res = await fetch(
+    `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.postulante/select?${qs.toString()}`
+  );
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`ABC postulantes respondio ${res.status}: ${txt}`);
+  }
+  const data = await res.json();
+  const total = Number(data?.response?.numFound || 0);
+  const first = data?.response?.docs?.[0] || null;
+  return {
+    total_postulantes: total,
+    puntaje_primero: first?.puntaje != null ? Number(first.puntaje) : null,
+    listado_origen_primero: first?.listadoorigen || ""
+  };
+}
+__name(obtenerResumenPostulantesABC, "obtenerResumenPostulantesABC");
+function buildAbcPostulantesUrl(ofertaId, detalleId) {
+  const params = new URLSearchParams();
+  const ofertaSafe = sanitizeSolrNumber(ofertaId);
+  const detalleSafe = sanitizeSolrNumber(detalleId);
+  if (ofertaSafe) params.set("oferta", ofertaSafe);
+  if (detalleSafe) params.set("detalle", detalleSafe);
+  return `http://servicios.abc.gov.ar/actos.publicos.digitales/postulantes/?${params.toString()}`;
+}
+__name(buildAbcPostulantesUrl, "buildAbcPostulantesUrl");
+async function obtenerPlanPorCode(env, planCode) {
+  const candidates = uniqueUpper([planCode, canonicalPlanCode(planCode)]);
+  for (const code of candidates) {
+    const rows = await supabaseSelect2(
+      env,
+      `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags&limit=1`
+    ).catch(() => []);
+    if (rows?.[0]) return rows[0];
+  }
+  return defaultPlansCatalog().find(
+    (plan) => canonicalPlanCode(plan.code) === canonicalPlanCode(planCode)
+  ) || null;
+}
+__name(obtenerPlanPorCode, "obtenerPlanPorCode");
+async function findUserByEmail(env, email) {
+  const rows = await supabaseSelect2(
+    env,
+    `users?email=ilike.${encodeURIComponent(email)}&select=id,nombre,apellido,email,password_hash,google_sub,activo&limit=1`
+  );
+  return rows?.[0] || null;
+}
+__name(findUserByEmail, "findUserByEmail");
+async function findUserByGoogleSub(env, sub) {
+  const rows = await supabaseSelect2(
+    env,
+    `users?google_sub=eq.${encodeURIComponent(sub)}&select=id,nombre,apellido,email,password_hash,google_sub,activo&limit=1`
+  );
+  return rows?.[0] || null;
+}
+__name(findUserByGoogleSub, "findUserByGoogleSub");
+async function createUserFromGoogle(env, googleUser) {
+  const row = await supabaseInsertReturning(env, "users", {
+    nombre: googleUser.nombre || "Docente",
+    apellido: googleUser.apellido || "-",
+    email: googleUser.email,
+    google_sub: googleUser.sub,
+    activo: true
+  });
+  return Array.isArray(row) ? row[0] : row;
+}
+__name(createUserFromGoogle, "createUserFromGoogle");
+async function obtenerUsuario(env, userId) {
+  const rows = await supabaseSelect2(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,activo,celular,ultimo_login&limit=1`
+  );
+  return rows?.[0] || null;
+}
+__name(obtenerUsuario, "obtenerUsuario");
+async function touchUltimoLogin(env, userId) {
+  await supabasePatch(env, "users", `id=eq.${encodeURIComponent(userId)}`, {
+    ultimo_login: (/* @__PURE__ */ new Date()).toISOString()
+  });
+}
+__name(touchUltimoLogin, "touchUltimoLogin");
+async function verifyGoogleCredential(idToken, expectedAud) {
+  if (!expectedAud) throw new Error("Falta GOOGLE_CLIENT_ID en Cloudflare");
+  const res = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+  );
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Google no valido el token: ${txt}`);
+  }
+  const data = await res.json();
+  if (String(data.aud || "") !== String(expectedAud)) {
+    throw new Error("Google Client ID no coincide");
+  }
+  if (!(data.email_verified === true || data.email_verified === "true")) {
+    throw new Error("El email de Google no esta verificado");
+  }
+  const split = splitGoogleName(data.name || "");
+  return {
+    sub: String(data.sub || ""),
+    email: String(data.email || "").trim().toLowerCase(),
+    nombre: String(data.given_name || split.nombre || "").trim() || "Docente",
+    apellido: String(data.family_name || split.apellido || "").trim() || "-"
+  };
+}
+__name(verifyGoogleCredential, "verifyGoogleCredential");
+function splitGoogleName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const nombre = parts.shift() || "Docente";
+  const apellido = parts.join(" ") || "-";
+  return { nombre, apellido };
+}
+__name(splitGoogleName, "splitGoogleName");
+async function passwordMatches(storedPassword, plainPassword) {
+  const stored = String(storedPassword || "");
+  const plain = String(plainPassword || "");
+  if (!stored || !plain) return false;
+  if (stored === plain) return true;
+  const hashed = await sha256Hex(plain);
+  return stored === hashed;
+}
+__name(passwordMatches, "passwordMatches");
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(String(text || ""));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+__name(sha256Hex, "sha256Hex");
+async function supabaseSelect2(env, query) {
+  const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${query}`, {
+    method: "GET",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+  const txt = await res.text();
+  let data = null;
+  try {
+    data = txt ? JSON.parse(txt) : null;
+  } catch {
+    throw new Error(`Respuesta invalida de Supabase: ${txt}`);
+  }
+  if (!res.ok) {
+    throw new Error(`Supabase ${res.status}: ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+__name(supabaseSelect2, "supabaseSelect");
+async function supabaseInsertMany(env, tabla, rows) {
+  if (!rows.length) return;
+  const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${tabla}`, {
+    method: "POST",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Supabase insert many error: ${txt}`);
+  }
+}
+__name(supabaseInsertMany, "supabaseInsertMany");
+async function supabaseUpsert(env, tabla, rows, conflict) {
+  if (!rows.length) return;
+  const res = await supabaseFetchWithRetry(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/${tabla}?on_conflict=${encodeURIComponent(conflict)}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates"
+      },
+      body: JSON.stringify(rows)
+    }
+  );
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Supabase upsert error: ${txt}`);
+  }
+}
+__name(supabaseUpsert, "supabaseUpsert");
+async function supabaseUpsertReturning(env, tabla, rows, conflict) {
+  const res = await supabaseFetchWithRetry(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/${tabla}?on_conflict=${encodeURIComponent(conflict)}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
+      body: JSON.stringify(rows)
+    }
+  );
+  const txt = await res.text();
+  const data = txt ? safeJson(txt) : null;
+  if (!res.ok) throw new Error(`Supabase upsert returning error: ${JSON.stringify(data)}`);
+  return data;
+}
+__name(supabaseUpsertReturning, "supabaseUpsertReturning");
+async function supabasePatch(env, tabla, filtro, row) {
+  const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${tabla}?${filtro}`, {
+    method: "PATCH",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(row)
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Supabase patch error: ${txt}`);
+  }
+}
+__name(supabasePatch, "supabasePatch");
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+__name(safeJson, "safeJson");
+async function supabaseFetchWithRetry(env, url, init) {
+  const maxAttempts = 4;
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok || !shouldRetrySupabaseStatus(res.status)) {
+        return res;
+      }
+      const body = await res.text();
+      lastError = new Error(`Supabase ${res.status}: ${body}`);
+      if (attempt >= maxAttempts) {
+        throw lastError;
+      }
+    } catch (err) {
+      lastError = err;
+      if (attempt >= maxAttempts || !shouldRetrySupabaseErrorMessage(err?.message || "")) {
+        throw err;
+      }
+    }
+    await sleep(250 * attempt);
+  }
+  throw lastError || new Error("Supabase fetch failed");
+}
+__name(supabaseFetchWithRetry, "supabaseFetchWithRetry");
+function shouldRetrySupabaseStatus(status) {
+  return [408, 429, 500, 502, 503, 504].includes(Number(status));
+}
+__name(shouldRetrySupabaseStatus, "shouldRetrySupabaseStatus");
+function shouldRetrySupabaseErrorMessage(message) {
+  const text = String(message || "").toUpperCase();
+  return text.includes("SUPABASE 429") || text.includes("SUPABASE 500") || text.includes("SUPABASE 502") || text.includes("SUPABASE 503") || text.includes("SUPABASE 504") || text.includes("BAD GATEWAY") || text.includes("TIMEOUT") || text.includes("ECONNRESET") || text.includes("FETCH") || text.includes("NETWORK");
+}
+__name(shouldRetrySupabaseErrorMessage, "shouldRetrySupabaseErrorMessage");
+async function obtenerPreferenciasUsuario(env, userId) {
+  const rows = await supabaseSelect2(
+    env,
+    `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=*`
+  ).catch(() => []);
+  const row = rows?.[0];
+  return row ? adaptarPreferenciasRow(row) : null;
+}
+__name(obtenerPreferenciasUsuario, "obtenerPreferenciasUsuario");
+async function cargarCatalogos(env) {
+  const [distritos, cargos] = await Promise.all([
+    supabaseSelect2(
+      env,
+      "catalogo_distritos?select=codigo,nombre,nombre_norm,apd_nombre,apd_nombre_norm"
+    ).catch(() => []),
+    supabaseSelect2(
+      env,
+      "catalogo_cargos_areas?select=codigo,nombre,nombre_norm,apd_nombre,apd_nombre_norm"
+    ).catch(() => [])
+  ]);
+  return {
+    distritos: Array.isArray(distritos) ? distritos : [],
+    cargos: Array.isArray(cargos) ? cargos : []
+  };
+}
+__name(cargarCatalogos, "cargarCatalogos");
+function canonicalPlanCode(code) {
+  const key = String(code || "").trim().toUpperCase();
+  if (!key) return "PLUS";
+  if (key === "PRO") return "PREMIUM";
+  return key;
+}
+__name(canonicalPlanCode, "canonicalPlanCode");
+function getPlanPreset(code) {
+  const key = canonicalPlanCode(code);
+  const presets = {
+    TRIAL_7D: {
+      code: "TRIAL_7D",
+      nombre: "Prueba gratis 7 d\xEDas",
+      descripcion: "Prob\xE1 APDocentePBA durante 7 d\xEDas con 1 distrito, hasta 2 materias/cargos y todos los filtros esenciales. Todos los avisos llegan por email.",
+      price_ars: 0,
+      trial_days: 7,
+      max_distritos: 1,
+      max_distritos_normales: 1,
+      max_distritos_emergencia: 0,
+      max_cargos: 2,
+      is_active: true,
+      public_visible: true,
+      sort_order: 1,
+      mercadopago_plan_id: null,
+      feature_flags: {
+        email: true,
+        whatsapp: false,
+        telegram: false,
+        telegram_coming_soon: false,
+        whatsapp_coming_soon: false,
+        provincia: false,
+        insights_plus: false
+      }
+    },
+    PLUS: {
+      code: "PLUS",
+      nombre: "Plan Plus",
+      descripcion: "M\xE1s alcance sin irte de presupuesto: 2 distritos, hasta 4 materias/cargos, filtros completos y alertas por email. Pr\xF3ximamente Telegram.",
+      price_ars: 2990,
+      trial_days: 0,
+      max_distritos: 2,
+      max_distritos_normales: 2,
+      max_distritos_emergencia: 0,
+      max_cargos: 4,
+      is_active: true,
+      public_visible: true,
+      sort_order: 2,
+      mercadopago_plan_id: null,
+      feature_flags: {
+        email: true,
+        whatsapp: false,
+        telegram: false,
+        telegram_coming_soon: true,
+        whatsapp_coming_soon: false,
+        provincia: true,
+        insights_plus: false
+      }
+    },
+    PREMIUM: {
+      code: "PREMIUM",
+      nombre: "Plan Pro",
+      descripcion: "Cobertura fuerte para multiplicar oportunidades: 3 distritos, hasta 6 materias/cargos, filtros completos y alertas por email. Pr\xF3ximamente Telegram.",
+      price_ars: 4990,
+      trial_days: 0,
+      max_distritos: 3,
+      max_distritos_normales: 3,
+      max_distritos_emergencia: 0,
+      max_cargos: 6,
+      is_active: true,
+      public_visible: true,
+      sort_order: 3,
+      mercadopago_plan_id: null,
+      feature_flags: {
+        email: true,
+        whatsapp: false,
+        telegram: false,
+        telegram_coming_soon: true,
+        whatsapp_coming_soon: false,
+        provincia: true,
+        insights_plus: true
+      }
+    },
+    INSIGNE: {
+      code: "INSIGNE",
+      nombre: "Plan Insigne",
+      descripcion: "Cobertura m\xE1xima para no perder actos clave: 3 distritos principales + 2 distritos de emergencia/chusmeo, hasta 10 materias/cargos y alertas por email. Pr\xF3ximamente WhatsApp.",
+      price_ars: 7990,
+      trial_days: 0,
+      max_distritos: 5,
+      max_distritos_normales: 3,
+      max_distritos_emergencia: 2,
+      max_cargos: 10,
+      is_active: true,
+      public_visible: true,
+      sort_order: 4,
+      mercadopago_plan_id: null,
+      feature_flags: {
+        email: true,
+        whatsapp: false,
+        telegram: false,
+        telegram_coming_soon: false,
+        whatsapp_coming_soon: true,
+        provincia: true,
+        insights_plus: true,
+        emergency_districts: true
+      }
+    }
+  };
+  return presets[key] || presets.PLUS;
+}
+__name(getPlanPreset, "getPlanPreset");
+function buildPlanDistrictSlots(plan) {
+  const normales = clampPlanLimit(plan?.max_distritos_normales, 1, 5, 1);
+  const emergencia = clampPlanLimit(plan?.max_distritos_emergencia, 0, 2, 0);
+  const slots = [
+    {
+      index: 1,
+      key: "distrito_principal",
+      kind: "principal",
+      label: "Distrito principal"
+    }
+  ];
+  for (let i = 2; i <= normales; i++) {
+    slots.push({
+      index: i,
+      key: `otros_distritos_${i - 1}`,
+      kind: "normal",
+      label: `Distrito adicional ${i - 1}`
+    });
+  }
+  for (let i = 1; i <= emergencia; i++) {
+    const idx = normales + i;
+    slots.push({
+      index: idx,
+      key: `otros_distritos_${idx - 1}`,
+      kind: "emergencia",
+      label: `Distrito de emergencia ${i}`
+    });
+  }
+  return slots;
+}
+__name(buildPlanDistrictSlots, "buildPlanDistrictSlots");
+function buildPlanCargoSlots(maxCargos) {
+  const total = clampPlanLimit(maxCargos, 1, 10, 2);
+  const slots = [];
+  for (let i = 1; i <= total; i++) {
+    slots.push({
+      index: i,
+      key: `cargo_${i}`,
+      label: `Cargo o materia ${i}`
+    });
+  }
+  return slots;
+}
+__name(buildPlanCargoSlots, "buildPlanCargoSlots");
+async function resolverPlanUsuario(env, userId) {
+  const catalogo = await cargarPlanesCatalogo(env);
+  const planMap = new Map(
+    catalogo.map((plan) => {
+      const normalized = normalizePlanOut(plan);
+      return [canonicalPlanCode(normalized.code), normalized];
+    })
+  );
+  let suscripciones = [];
+  try {
+    suscripciones = await supabaseSelect2(
+      env,
+      `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id`
+    );
+  } catch {
+    suscripciones = [];
+  }
+  const vigente = elegirSuscripcionVigente(suscripciones);
+  if (vigente) {
+    const planCode = canonicalPlanCode(vigente.plan_code || "PLUS");
+    return {
+      plan: planMap.get(planCode) || normalizePlanOut(planPorCode(planCode)),
+      subscription: normalizeSubscriptionOut({
+        ...vigente,
+        plan_code: planCode
+      })
+    };
+  }
+  const trialPlan = planMap.get("TRIAL_7D") || normalizePlanOut(planPorCode("TRIAL_7D"));
+  return {
+    plan: trialPlan,
+    subscription: {
+      id: null,
+      user_id: userId,
+      plan_code: "TRIAL_7D",
+      status: "available",
+      source: "catalogo_default",
+      started_at: (/* @__PURE__ */ new Date()).toISOString(),
+      trial_ends_at: null,
+      current_period_ends_at: null,
+      mercadopago_preapproval_id: null
+    }
+  };
+}
+__name(resolverPlanUsuario, "resolverPlanUsuario");
+function elegirSuscripcionVigente(rows) {
+  const permitidos = /* @__PURE__ */ new Set(["ACTIVE", "TRIALING", "AUTHORIZED", "PENDING", "PAUSED", "BETA"]);
+  const nowTs = Date.now();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const status = String(row?.status || "").trim().toUpperCase();
+    if (!permitidos.has(status)) continue;
+    const trialEndsTs = parseFechaFlexible(row?.trial_ends_at)?.getTime() || 0;
+    const currentEndsTs = parseFechaFlexible(row?.current_period_ends_at)?.getTime() || 0;
+    if (status === "TRIALING" && trialEndsTs && trialEndsTs < nowTs) continue;
+    if (!["TRIALING", "BETA"].includes(status) && currentEndsTs && currentEndsTs < nowTs) continue;
+    return row;
+  }
+  return null;
+}
+__name(elegirSuscripcionVigente, "elegirSuscripcionVigente");
+async function cargarPlanesCatalogo(env) {
+  try {
+    const rows = await supabaseSelect2(
+      env,
+      "subscription_plans?select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,is_active,public_visible,sort_order,mercadopago_plan_id,feature_flags"
+    );
+    if (Array.isArray(rows) && rows.length) return rows;
+  } catch {
+  }
+  return defaultPlansCatalog();
+}
+__name(cargarPlanesCatalogo, "cargarPlanesCatalogo");
+function defaultPlansCatalog() {
+  return ["TRIAL_7D", "PLUS", "PREMIUM", "INSIGNE"].map((code) => {
+    const preset = getPlanPreset(code);
+    return {
+      ...preset,
+      code: preset.code,
+      is_active: true,
+      public_visible: true,
+      mercadopago_plan_id: null
+    };
+  });
+}
+__name(defaultPlansCatalog, "defaultPlansCatalog");
+function planPorCode(code) {
+  const key = canonicalPlanCode(code);
+  return defaultPlansCatalog().find((plan) => canonicalPlanCode(plan.code) === key) || defaultPlansCatalog().find((plan) => plan.code === "PLUS") || defaultPlansCatalog()[0];
+}
+__name(planPorCode, "planPorCode");
+function normalizePlanOut(plan) {
+  const originalCode = String(plan?.code || "PLUS").trim().toUpperCase();
+  const internalCode = canonicalPlanCode(originalCode);
+  const preset = getPlanPreset(internalCode);
+  const rawFlags = typeof plan?.feature_flags === "object" && plan?.feature_flags ? plan.feature_flags : {};
+  const featureFlags = {
+    ...rawFlags,
+    ...preset.feature_flags || {}
+  };
+  const maxDistritosNormales = clampPlanLimit(
+    preset.max_distritos_normales ?? plan?.max_distritos_normales ?? plan?.max_distritos_base ?? plan?.max_distritos,
+    1,
+    5,
+    1
+  );
+  const maxDistritosEmergencia = clampPlanLimit(
+    preset.max_distritos_emergencia ?? plan?.max_distritos_emergencia,
+    0,
+    2,
+    0
+  );
+  const maxDistritosTotal = clampPlanLimit(
+    preset.max_distritos ?? plan?.max_distritos_total ?? plan?.max_distritos ?? maxDistritosNormales + maxDistritosEmergencia,
+    1,
+    10,
+    maxDistritosNormales + maxDistritosEmergencia || 1
+  );
+  const maxCargosTotal = clampPlanLimit(
+    preset.max_cargos ?? plan?.max_cargos_total ?? plan?.max_cargos,
+    1,
+    10,
+    2
+  );
+  const normalized = {
+    code: internalCode,
+    nombre: String(preset.nombre || plan?.nombre || "Plan").trim(),
+    descripcion: String(preset.descripcion || plan?.descripcion || "").trim(),
+    price_ars: plan?.price_ars != null ? Number(plan.price_ars) : preset?.price_ars != null ? Number(preset.price_ars) : null,
+    trial_days: clampPlanLimit(plan?.trial_days ?? preset.trial_days, 0, 365, 0),
+    max_distritos: maxDistritosTotal,
+    max_distritos_total: maxDistritosTotal,
+    max_distritos_normales: maxDistritosNormales,
+    max_distritos_emergencia: maxDistritosEmergencia,
+    max_cargos: maxCargosTotal,
+    max_cargos_total: maxCargosTotal,
+    public_visible: plan?.public_visible != null ? !!plan.public_visible : !!preset.public_visible,
+    mercadopago_plan_id: plan?.mercadopago_plan_id || preset.mercadopago_plan_id || null,
+    feature_flags: featureFlags
+  };
+  return {
+    ...normalized,
+    display_code: internalCode === "PREMIUM" ? "PRO" : internalCode,
+    display_name: normalized.nombre,
+    district_slots: buildPlanDistrictSlots(normalized),
+    cargo_slots: buildPlanCargoSlots(maxCargosTotal),
+    features: buildPlanFeatures(normalized)
+  };
+}
+__name(normalizePlanOut, "normalizePlanOut");
+function buildPlanFeatures(plan) {
+  const flags = typeof plan?.feature_flags === "object" && plan?.feature_flags ? plan.feature_flags : {};
+  const normales = clampPlanLimit(plan?.max_distritos_normales, 1, 5, 1);
+  const emergencia = clampPlanLimit(plan?.max_distritos_emergencia, 0, 2, 0);
+  const totalDistritos = clampPlanLimit(
+    plan?.max_distritos_total ?? plan?.max_distritos,
+    1,
+    10,
+    normales + emergencia || 1
+  );
+  const totalCargos = clampPlanLimit(
+    plan?.max_cargos_total ?? plan?.max_cargos,
+    1,
+    10,
+    2
+  );
+  const items = [];
+  if (emergencia > 0) {
+    items.push(`${normales} distritos principales + ${emergencia} de emergencia`);
+  } else {
+    items.push(`${totalDistritos} distrito${totalDistritos === 1 ? "" : "s"}`);
+  }
+  items.push(`${totalCargos} materias/cargos`);
+  items.push("Alertas por email");
+  items.push("Turno, nivel y modalidad");
+  if (plan?.trial_days) {
+    items.push(`${plan.trial_days} d\xEDas de prueba`);
+  }
+  if (flags.telegram_coming_soon) {
+    items.push("Telegram pr\xF3ximamente");
+  }
+  if (flags.whatsapp_coming_soon) {
+    items.push("WhatsApp pr\xF3ximamente");
+  }
+  return items;
+}
+__name(buildPlanFeatures, "buildPlanFeatures");
+function normalizeSubscriptionOut(row) {
+  return {
+    id: row?.id || null,
+    user_id: row?.user_id || null,
+    plan_code: String(row?.plan_code || "PLUS").trim().toUpperCase(),
+    status: String(row?.status || "active").trim().toLowerCase(),
+    source: row?.source || null,
+    started_at: row?.started_at || null,
+    trial_ends_at: row?.trial_ends_at || null,
+    current_period_ends_at: row?.current_period_ends_at || null,
+    mercadopago_preapproval_id: row?.mercadopago_preapproval_id || null
+  };
+}
+__name(normalizeSubscriptionOut, "normalizeSubscriptionOut");
+function sanitizarPreferenciasEntrada(raw, plan) {
+  const distritos = uniqueUpper([
+    raw?.distrito_principal,
+    ...Array.isArray(raw?.otros_distritos) ? raw.otros_distritos : []
+  ]);
+  const cargos = uniqueUpper([
+    ...Array.isArray(raw?.cargos) ? raw.cargos : [],
+    ...Array.isArray(raw?.materias) ? raw.materias : []
+  ]);
+  const niveles = uniqueUpper(
+    (Array.isArray(raw?.niveles) ? raw.niveles : []).map(canonicalizarNivelPreferencia)
+  );
+  const turnos = uniqueUpper(
+    (Array.isArray(raw?.turnos) ? raw.turnos : []).map(canonicalizarTurnoPreferencia).filter(Boolean)
+  ).slice(0, 1);
+  const maxDistritos = clampPlanLimit(
+    plan?.max_distritos_total ?? plan?.max_distritos,
+    1,
+    10,
+    5
+  );
+  const maxCargos = clampPlanLimit(
+    plan?.max_cargos_total ?? plan?.max_cargos,
+    1,
+    10,
+    5
+  );
+  const distritosAjustados = distritos.slice(0, maxDistritos);
+  const cargosAjustados = cargos.slice(0, maxCargos);
+  const distritosRecortados = Math.max(0, distritos.length - distritosAjustados.length);
+  const cargosRecortados = Math.max(0, cargos.length - cargosAjustados.length);
+  return {
+    distrito_principal: distritosAjustados[0] || null,
+    otros_distritos: distritosAjustados.slice(1),
+    cargos: cargosAjustados,
+    materias: [],
+    niveles,
+    turnos,
+    alertas_activas: !!raw?.alertas_activas,
+    alertas_email: !!raw?.alertas_email,
+    alertas_whatsapp: !!raw?.alertas_whatsapp,
+    _plan_ajuste: {
+      distritos_recortados: distritosRecortados,
+      cargos_recortados: cargosRecortados,
+      max_distritos: maxDistritos,
+      max_cargos: maxCargos
+    }
+  };
+}
+__name(sanitizarPreferenciasEntrada, "sanitizarPreferenciasEntrada");
+function canonicalizarNivelPreferencia(value) {
+  const s = norm(value);
+  if (!s) return "";
+  if (s.includes("SUPERIOR") || s.includes("FORMACION DOCENTE") || s.includes("DOCENTE")) return "SUPERIOR";
+  if (s.includes("INICIAL")) return "INICIAL";
+  if (s.includes("PRIMARIA") || s.includes("PRIMARIO")) return "PRIMARIO";
+  if (s.includes("SECUNDARIA") || s.includes("SECUNDARIO")) return "SECUNDARIO";
+  if (s.includes("ESPECIAL")) return "EDUCACION ESPECIAL";
+  if (s.includes("JOVENES") || s.includes("ADULTOS") || s.includes("CENS")) return "ADULTOS";
+  if (s.includes("FISICA")) return "EDUCACION FISICA";
+  if (s.includes("PSICOLOGIA") || s.includes("COMUNITARIA")) return "PSICOLOGIA";
+  if (s.includes("ARTISTICA") || s.includes("ARTE")) return "EDUCACION ARTISTICA";
+  if (s.includes("TECNICO")) return "TECNICO PROFESIONAL";
+  return s;
+}
+__name(canonicalizarNivelPreferencia, "canonicalizarNivelPreferencia");
+function canonicalizarTurnoPreferencia(value) {
+  const x = norm(value);
+  if (!x) return "";
+  if (x === "M" || x === "MANANA") return "M";
+  if (x === "T" || x === "TARDE") return "T";
+  if (x === "V" || x === "VESPERTINO") return "V";
+  if (x === "N" || x === "NOCHE") return "N";
+  if (x === "A" || x === "ALTERNADO") return "ALTERNADO";
+  return x;
+}
+__name(canonicalizarTurnoPreferencia, "canonicalizarTurnoPreferencia");
+function uniqueUpper(items) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of Array.isArray(items) ? items : []) {
+    const value = String(item || "").trim().toUpperCase();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+__name(uniqueUpper, "uniqueUpper");
+function clampPlanLimit(raw, min, max, fallback) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+__name(clampPlanLimit, "clampPlanLimit");
+function parsearCargosDesdeHTML(html) {
+  const limpio = String(html || "").replace(/<[^>]+>/g, "\n");
+  const lineas = limpio.split("\n").map((item) => item.trim()).filter((item) => item.length > 10 && item.includes(","));
+  const items = [];
+  const vistos = /* @__PURE__ */ new Set();
+  for (const linea of lineas) {
+    const partes = linea.split(",");
+    if (partes.length < 2) continue;
+    const codigo = String(partes[0] || "").replace("*", "").trim();
+    const nombre = String(partes[1] || "").trim();
+    if (!nombre) continue;
+    const nombreNorm = norm(nombre);
+    if (!nombreNorm || vistos.has(nombreNorm)) continue;
+    vistos.add(nombreNorm);
+    items.push({ codigo: codigo || null, nombre, nombre_norm: nombreNorm, apd_nombre: nombre, apd_nombre_norm: nombreNorm, fuente: "abc" });
+  }
+  return items;
+}
+__name(parsearCargosDesdeHTML, "parsearCargosDesdeHTML");
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+__name(sleep, "sleep");
+function clampInt(raw, min, max, fallback) {
+  const n = Number.parseInt(String(raw || ""), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+__name(clampInt, "clampInt");
+function buscarEnCatalogo(lista, valor) {
+  const v = norm(valor);
+  if (!v) return null;
+  const exacto = lista.find((item) => norm(item.nombre_norm || item.nombre || "") === v || norm(item.apd_nombre_norm || item.apd_nombre || "") === v);
+  if (exacto) return exacto;
+  return lista.find((item) => {
+    const n1 = norm(item.nombre_norm || item.nombre || "");
+    const n2 = norm(item.apd_nombre_norm || item.apd_nombre || "");
+    return n1 === v || n2 === v || v.includes(n1) || n1.includes(v) || v.includes(n2) || n2.includes(v);
+  }) || null;
+}
+__name(buscarEnCatalogo, "buscarEnCatalogo");
+function canonizarListaDistritos(lista, catalogo) {
+  const humanos = [];
+  const apd = [];
+  for (const item of lista || []) {
+    const hit = buscarEnCatalogo(catalogo, item);
+    if (hit) {
+      humanos.push(norm(hit.nombre || item));
+      apd.push(norm(hit.apd_nombre || hit.nombre || item));
+    } else {
+      const value = norm(item);
+      if (value) {
+        humanos.push(value);
+        apd.push(value);
+      }
+    }
+  }
+  return { humanos: unique(humanos), apd: unique(apd) };
+}
+__name(canonizarListaDistritos, "canonizarListaDistritos");
+function canonizarListaCargosOMaterias(lista, catalogo) {
+  const humanos = [];
+  const apd = [];
+  for (const item of lista || []) {
+    const hit = buscarEnCatalogo(catalogo, item);
+    if (hit) {
+      humanos.push(norm(hit.nombre || item));
+      apd.push(norm(hit.apd_nombre || hit.nombre || item));
+    } else {
+      const value = norm(item);
+      if (value) {
+        humanos.push(value);
+        apd.push(value);
+      }
+    }
+  }
+  return { humanos: unique(humanos), apd: unique(apd) };
+}
+__name(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
+function canonizarPreferenciasConCatalogo(prefs, catalogos) {
+  const principal = canonizarListaDistritos([prefs.distrito_principal || ""], catalogos.distritos);
+  const otros = canonizarListaDistritos(prefs.otros_distritos || [], catalogos.distritos);
+  const cargosCanon = canonizarListaCargosOMaterias(prefs.cargos || [], catalogos.cargos);
+  const materiasCanon = canonizarListaCargosOMaterias(prefs.materias || [], catalogos.cargos);
+  return { ...prefs, distrito_principal: principal.humanos[0] || norm(prefs.distrito_principal || ""), distrito_principal_apd: principal.apd[0] || norm(prefs.distrito_principal || ""), otros_distritos: otros.humanos, otros_distritos_apd: otros.apd, cargos: cargosCanon.humanos, cargos_apd: cargosCanon.apd, materias: materiasCanon.humanos, materias_apd: materiasCanon.apd };
+}
+__name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
+async function traerOfertasAPDPorDistritos(prefs) {
+  const distritos = distritosPrefsAPD(prefs);
+  const cargos = cargosMateriasPrefsAPD(prefs);
+  const todas = [];
+  const vistos = /* @__PURE__ */ new Set();
+  const debugDistritos = [];
+  for (const distritoAPD of distritos) {
+    let docsDistrito = [];
+    if (Array.isArray(cargos) && cargos.length) {
+      for (const cargo of cargos) {
+        const info = await traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargo);
+        debugDistritos.push({
+          distrito_apd: distritoAPD,
+          cargo_query: cargo,
+          query_usada: info.query,
+          total_apd_bruto: info.totalBruto,
+          total_apd_filtrado: info.totalFiltrado
+        });
+        for (const doc of info.docs) {
+          const clave = buildSourceOfferKeyFromOferta(doc);
+          if (vistos.has(clave)) continue;
+          vistos.add(clave);
+          docsDistrito.push(doc);
+        }
+      }
+    } else {
+      const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+      debugDistritos.push({
+        distrito_apd: distritoAPD,
+        query_usada: info.query,
+        total_apd_bruto: info.totalBruto,
+        total_apd_filtrado: info.totalFiltrado
+      });
+      for (const doc of info.docs) {
+        const clave = buildSourceOfferKeyFromOferta(doc);
+        if (vistos.has(clave)) continue;
+        vistos.add(clave);
+        docsDistrito.push(doc);
+      }
+    }
+    todas.push(...docsDistrito);
+  }
+  return { ofertas: todas, debugDistritos };
+}
+__name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
+async function traerOfertasAPDDeUnDistrito(distritoAPD) {
+  const distritoNorm = norm(distritoAPD);
+  const docsTotales = [];
+  for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
+    const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+    const q = `descdistrito:"${escaparSolr(distritoAPD)}"`;
+    const consultaUrl = `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+    const res = await fetch(consultaUrl);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`APD respondio ${res.status}: ${txt}`);
+    }
+    const data = await res.json();
+    const docs = data?.response?.docs || [];
+    if (!docs.length) break;
+    docsTotales.push(...docs);
+    if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
+  }
+  const docsFiltrados = docsTotales.filter((doc) => norm(doc?.descdistrito || "") === distritoNorm);
+  return { docs: docsFiltrados, query: `descdistrito:"${distritoAPD}"`, totalBruto: docsTotales.length, totalFiltrado: docsFiltrados.length };
+}
+__name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
+async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
+  const distritoNorm = norm(distritoAPD);
+  const cargoNorm = norm(cargoMateria);
+
+  const docsTotales = [];
+  const vistos = new Set();
+
+  function addDoc(doc) {
+    const clave = buildSourceOfferKeyFromOferta(doc);
+    if (vistos.has(clave)) return;
+    vistos.add(clave);
+    docsTotales.push(doc);
+  }
+
+  function buildCargoVariants(raw) {
+    const base = norm(raw);
+    const out = new Set();
+
+    function add(v) {
+      const x = norm(v);
+      if (x && x.length >= 2) out.add(x);
+    }
+
+    add(base);
+
+    const rawText = String(raw || "");
+
+    const parens = [...rawText.matchAll(/\(([^)]+)\)/g)]
+      .map(m => norm(m[1]))
+      .filter(Boolean);
+
+    for (const p of parens) add(p);
+
+    const sinParentesis = norm(rawText.replace(/\([^)]*\)/g, " "));
+    add(sinParentesis);
+
+    const tokens = norm(rawText)
+      .replace(/[()]/g, " ")
+      .split(/[^A-Z0-9/]+/)
+      .map(x => norm(x.replace(/^\/+/, "")))
+      .filter(x => x && x.length >= 2);
+
+    for (const t of tokens) add(t);
+
+    if (base.includes("NTICX") || base.includes("NTI")) {
+      add("NTICX");
+      add("NTI");
+    }
+
+    if (base.includes("PRECEPTOR") || base.includes("/PR") || base.includes(" PR")) {
+      add("PRECEPTOR");
+      add("/PR");
+      add("PR");
+    }
+
+    if (base.includes("ELI") || base.includes("ENCARGADO MEDIOS")) {
+      add("ELI");
+      add("ENCARGADO MEDIOS");
+      add("INFORMATICA");
+      add("COMPUTACION");
+    }
+
+    return [...out];
+  }
+
+  function textoCargoOferta(doc) {
+    return norm([
+      doc?.descripcioncargo,
+      doc?.descripcionarea,
+      doc?.cargo,
+      doc?.materia,
+      doc?.asignatura,
+      doc?.areaincumbencia,
+      doc?.area
+    ].filter(Boolean).join(" "));
+  }
+
+  function cargoCompatible(doc) {
+    const texto = textoCargoOferta(doc);
+    if (!texto) return false;
+
+    const variantes = buildCargoVariants(cargoMateria);
+
+    for (const variante of variantes) {
+      const v = norm(variante);
+      if (!v) continue;
+
+      const plain = norm(v.replace(/[^A-Z0-9]+/g, " "));
+      const tokensTexto = new Set(
+        texto
+          .replace(/[^A-Z0-9]+/g, " ")
+          .split(/\s+/)
+          .map(x => x.trim())
+          .filter(Boolean)
+      );
+
+      if (plain.length <= 3) {
+        if (tokensTexto.has(plain)) return true;
+        continue;
+      }
+
+      if (texto.includes(v) || texto.includes(plain)) return true;
+    }
+
+    if (cargoNorm && texto.includes(cargoNorm)) return true;
+    if (cargoNorm && cargoNorm.includes(texto)) return true;
+
+    return false;
+  }
+
+  // 1) Búsqueda original exacta: NO la rompemos.
+  for (let i = 0; i < USER_CAPTURE_MAX_PAGES; i += 1) {
+    const start = i * USER_CAPTURE_ROWS_PER_PAGE;
+
+    const q = [
+      `descdistrito:"${escaparSolr(distritoAPD)}"`,
+      `(` +
+        [
+          `descripcioncargo:"${escaparSolr(cargoMateria)}"`,
+          `descripcionarea:"${escaparSolr(cargoMateria)}"`,
+          `cargo:"${escaparSolr(cargoMateria)}"`
+        ].join(" OR ") +
+      `)`
+    ].join(" AND ");
+
+    const consultaUrl =
+      `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select` +
+      `?q=${encodeURIComponent(q)}&rows=${USER_CAPTURE_ROWS_PER_PAGE}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+
+    const res = await fetch(consultaUrl);
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`APD respondio ${res.status}: ${txt}`);
+    }
+
+    const data = await res.json();
+    const docs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+
+    if (!docs.length) break;
+
+    const docsFiltrados = docs.filter(doc => {
+      const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
+      const textoCargo = textoCargoOferta(doc);
+
+      const cargoOk =
+        textoCargo.includes(cargoNorm) ||
+        cargoNorm.includes(textoCargo) ||
+        cargoCompatible(doc);
+
+      return distritoOk && cargoOk;
+    });
+
+    for (const doc of docsFiltrados) addDoc(doc);
+
+    if (docs.length < USER_CAPTURE_ROWS_PER_PAGE) break;
+  }
+
+  // 2) Fallback seguro:
+  // Sólo si la búsqueda original no encontró nada para este cargo.
+  // Trae el distrito completo y filtra localmente.
+  if (!docsTotales.length) {
+    const infoDistrito = await traerOfertasAPDDeUnDistrito(distritoAPD);
+
+    const fallbackFiltrado = (infoDistrito.docs || []).filter(doc => {
+      const distritoOk = norm(doc?.descdistrito || "") === distritoNorm;
+      return distritoOk && cargoCompatible(doc);
+    });
+
+    for (const doc of fallbackFiltrado) addDoc(doc);
+
+    return {
+      docs: docsTotales,
+      query: `fallback distrito completo: descdistrito:"${distritoAPD}" cargo:"${cargoMateria}"`,
+      totalBruto: infoDistrito.totalBruto || 0,
+      totalFiltrado: docsTotales.length
+    };
+  }
+
+  return {
+    docs: docsTotales,
+    query: `descdistrito:"${distritoAPD}" AND cargo:"${cargoMateria}"`,
+    totalBruto: docsTotales.length,
+    totalFiltrado: docsTotales.length
+  };
+}
+__name(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
+function buildSourceOfferKeyFromOferta(oferta) {
+  const detalle = sanitizeSolrNumber(oferta?.iddetalle || oferta?.id || "");
+  if (detalle) return `D_${detalle}`;
+  const ofertaId = sanitizeSolrNumber(oferta?.idoferta || "");
+  if (ofertaId) return `O_${ofertaId}`;
+  return [norm(oferta?.descdistrito || ""), norm(oferta?.escuela || oferta?.nombreestablecimiento || ""), norm(oferta?.descripcioncargo || oferta?.cargo || ""), norm(oferta?.descripcionarea || ""), sanitizeKeyText(oferta?.finoferta || "")].filter(Boolean).join("_").slice(0, 220);
+}
+__name(buildSourceOfferKeyFromOferta, "buildSourceOfferKeyFromOferta");
+function sanitizeKeyText(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+__name(sanitizeKeyText, "sanitizeKeyText");
+function escaparSolr(text) {
+  return String(text || "").replace(/(["\\])/g, "\\$1");
+}
+__name(escaparSolr, "escaparSolr");
+function ofertaEsVisibleParaAlerta(oferta) {
+  const estado = norm(oferta?.estado || "");
+  const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
+  const ahora = Date.now();
+  if (estado.includes("ANULADA")) return false;
+  if (estado.includes("DESIGNADA")) return false;
+  if (fin && fin < ahora - 48 * 60 * 60 * 1e3) return false;
+  return true;
+}
+__name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
+function ofertaEsVisibleParaHistoricoUsuario(oferta) {
+  const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
+  const ahora = Date.now();
+  if (fin && fin < ahora - 180 * 24 * 60 * 60 * 1e3) return false;
+  return true;
+}
+__name(ofertaEsVisibleParaHistoricoUsuario, "ofertaEsVisibleParaHistoricoUsuario");
+function norm(value) {
+  return String(value || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s/().,-]/gu, " ").replace(/\s+/g, " ").trim();
+}
+__name(norm, "norm");
+function arrNorm(value) {
+  if (Array.isArray(value)) return value.map((item) => norm(item)).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return value.split(",").map((item) => norm(item)).filter(Boolean);
+  return [];
+}
+__name(arrNorm, "arrNorm");
+function unique(arr) {
+  return [...new Set((arr || []).filter(Boolean))];
+}
+__name(unique, "unique");
+function adaptarPreferenciasRow(row) {
+  return { user_id: row.user_id || "", distrito_principal: norm(row.distrito_principal || ""), otros_distritos: unique(arrNorm(row.otros_distritos)), cargos: unique(arrNorm(row.cargos)), materias: unique(arrNorm(row.materias)), niveles: unique(arrNorm(row.niveles)), turnos: unique(arrNorm(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_whatsapp: !!row.alertas_whatsapp };
+}
+__name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
+function distritosPrefsAPD(prefs) {
+  return unique([norm(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""), ...prefs?.otros_distritos_apd || []].filter(Boolean));
+}
+__name(distritosPrefsAPD, "distritosPrefsAPD");
+function cargosMateriasPrefsAPD(prefs) {
+  return unique([...prefs?.cargos_apd || [], ...prefs?.materias_apd || []]);
+}
+__name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
+function turnosPrefs(prefs) {
+  return unique((prefs?.turnos || []).map((item) => {
+    const x = norm(item);
+    if (!x) return "";
+    if (x === "CUALQUIERA" || x === "CUALQUIER TURNO") return "";
+    if (x === "M" || x === "MANANA") return "MANANA";
+    if (x === "T" || x === "TARDE") return "TARDE";
+    if (x === "V" || x === "VESPERTINO") return "VESPERTINO";
+    if (x === "N" || x === "NOCHE") return "NOCHE";
+    if (x === "A" || x === "ALTERNADO") return "ALTERNADO";
+    return x;
+  }).filter(Boolean));
+}
+__name(turnosPrefs, "turnosPrefs");
+function categoriasNivel(texto) {
+  const t = norm(texto);
+  const out = /* @__PURE__ */ new Set();
+  if (!t) return out;
+  if (t.includes("INICIAL")) out.add("INICIAL");
+  if (t.includes("PRIMARIA") || t.includes("PRIMARIO")) out.add("PRIMARIO");
+  if (t.includes("SECUNDARIA") || t.includes("SECUNDARIO")) out.add("SECUNDARIO");
+  if (t.includes("SUPERIOR")) out.add("SUPERIOR");
+  if (t.includes("FORMACION DOCENTE")) out.add("SUPERIOR");
+  if (t.includes("DOCENTE")) out.add("SUPERIOR");
+  if (t.includes("ESPECIAL")) out.add("EDUCACION ESPECIAL");
+  if (t.includes("JOVENES") || t.includes("ADULTOS") || t.includes("CENS")) out.add("ADULTOS");
+  if (t.includes("FISICA")) out.add("EDUCACION FISICA");
+  if (t.includes("PSICOLOGIA") || t.includes("COMUNITARIA")) out.add("PSICOLOGIA");
+  if (t.includes("ARTISTICA") || t.includes("ARTE")) out.add("EDUCACION ARTISTICA");
+  if (t.includes("TECNICO")) out.add("TECNICO PROFESIONAL");
+  return out;
+}
+__name(categoriasNivel, "categoriasNivel");
+function matchDistritos(oferta, prefs) {
+  const prefsD = distritosPrefsAPD(prefs);
+  if (!prefsD.length) return { ok: true, motivo: "Sin filtro de distrito" };
+  const distritoOferta = norm(oferta?.descdistrito || oferta?.distrito || "");
+  if (!distritoOferta) return { ok: false, motivo: "La oferta no trae distrito" };
+  const ok = prefsD.includes(distritoOferta);
+  return { ok, motivo: ok ? `Distrito compatible: ${distritoOferta}` : `Distrito no compatible: ${distritoOferta}` };
+}
+__name(matchDistritos, "matchDistritos");
+function matchCargosMaterias(oferta, prefs) {
+  const prefsCM = cargosMateriasPrefsAPD(prefs);
+  if (!prefsCM.length) return { ok: true, motivo: "Sin filtro de cargo o materia" };
+  const textoOferta = norm([oferta?.descripcioncargo, oferta?.cargo, oferta?.descripcionarea, oferta?.materia, oferta?.asignatura, oferta?.descripcionmateria].filter(Boolean).join(" "));
+  if (!textoOferta) return { ok: false, motivo: "La oferta no trae cargo o materia" };
+  const ok = prefsCM.some((pref) => {
+    const p = norm(pref);
+    return textoOferta.includes(p) || p.includes(textoOferta) || textoOferta.split(" ").some((token) => token === p);
+  });
+  return { ok, motivo: ok ? "Cargo o materia compatible" : "Cargo o materia no compatible" };
+}
+__name(matchCargosMaterias, "matchCargosMaterias");
+function matchTurno(oferta, prefs) {
+  const prefsT = turnosPrefs(prefs);
+  if (!prefsT.length) return { ok: true, motivo: "Sin filtro de turno" };
+  const turnoOferta = norm(oferta?.turno || oferta?.descturno || "");
+  if (!turnoOferta) return { ok: false, motivo: "La oferta no trae turno" };
+  const ok = prefsT.includes(turnoOferta);
+  return { ok, motivo: ok ? `Turno compatible: ${turnoOferta}` : `Turno no compatible: ${turnoOferta}` };
+}
+__name(matchTurno, "matchTurno");
+function matchNivelModalidad(oferta, prefs) {
+  const prefsN = prefs?.niveles || [];
+  if (!prefsN.length) return { ok: true, motivo: "Sin filtro de nivel o modalidad" };
+  const textoOferta = norm([oferta?.descnivelmodalidad, oferta?.nivel, oferta?.modalidad, oferta?.nivel_modalidad].filter(Boolean).join(" "));
+  if (!textoOferta) return { ok: false, motivo: "La oferta no trae nivel o modalidad" };
+  const catsOferta = categoriasNivel(textoOferta);
+  const catsPrefs = /* @__PURE__ */ new Set();
+  for (const pref of prefsN) {
+    for (const cat of categoriasNivel(pref)) catsPrefs.add(cat);
+  }
+  if (!catsPrefs.size) return { ok: true, motivo: "Preferencia no reconocida" };
+  let ok = false;
+  for (const cat of catsPrefs) {
+    if (catsOferta.has(cat)) {
+      ok = true;
+      break;
+    }
+  }
+  return { ok, motivo: ok ? "Nivel o modalidad compatible" : "Nivel o modalidad no compatible" };
+}
+__name(matchNivelModalidad, "matchNivelModalidad");
+function coincideOfertaConPreferencias(oferta, prefs) {
+  const distrito = matchDistritos(oferta, prefs);
+  if (!distrito.ok) return { match: false, detalle: { distrito } };
+  const cargosMaterias = matchCargosMaterias(oferta, prefs);
+  if (!cargosMaterias.ok) return { match: false, detalle: { distrito, cargosMaterias } };
+  const turno = matchTurno(oferta, prefs);
+  if (!turno.ok) return { match: false, detalle: { distrito, cargosMaterias, turno } };
+  const nivelModalidad = matchNivelModalidad(oferta, prefs);
+  if (!nivelModalidad.ok) return { match: false, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
+  return { match: true, detalle: { distrito, cargosMaterias, turno, nivelModalidad } };
+}
+__name(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
+function mapTurnoAPD(turno) {
+  const x = norm(turno);
+  if (x === "M" || x === "MANANA") return "MANANA";
+  if (x === "T" || x === "TARDE") return "TARDE";
+  if (x === "V" || x === "VESPERTINO") return "VESPERTINO";
+  if (x === "N" || x === "NOCHE") return "NOCHE";
+  if (x === "MT") return "MANANA";
+  if (x === "TT") return "TARDE";
+  if (x === "A" || x === "ALTERNADO") return "ALTERNADO";
+  return x;
+}
+__name(mapTurnoAPD, "mapTurnoAPD");
+function coincideOfertaConPreferenciasAPD(oferta, prefs) {
+  return coincideOfertaConPreferencias({ descdistrito: oferta.descdistrito, descripcioncargo: oferta.descripcioncargo, cargo: oferta.cargo, descripcionarea: oferta.descripcionarea, materia: oferta.materia, asignatura: oferta.asignatura, descripcionmateria: oferta.descripcionmateria, turno: mapTurnoAPD(oferta.turno), descnivelmodalidad: oferta.descnivelmodalidad }, prefs);
+}
+__name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
+function historicoRowToOferta(row) {
+  return { descdistrito: row?.distrito || "", descripcioncargo: row?.cargo || "", descripcionarea: row?.area || "", turno: row?.turno || "", descnivelmodalidad: row?.nivel_modalidad || "" };
+}
+__name(historicoRowToOferta, "historicoRowToOferta");
+function historicoRowKey(row) {
+  const sourceKey = String(row?.source_offer_key || "").trim();
+  if (sourceKey) return sourceKey;
+  const detalle = String(row?.iddetalle || "").trim();
+  if (detalle) return detalle;
+  return [row?.idoferta || "", row?.distrito || "", row?.escuela || "", row?.cargo || "", row?.area || "", row?.finoferta || ""].map((value) => norm(value)).join("|");
+}
+__name(historicoRowKey, "historicoRowKey");
+function estadoHistoricoKey(value) {
+  const raw = typeof value === "string" ? value : value?.estado;
+  const estado = norm(raw || "");
+  if (!estado) return "SIN ESTADO";
+  if (estado.includes("ANUL")) return "ANULADA";
+  if (estado.includes("DESIER")) return "DESIERTA";
+  if (estado.includes("DESIGN")) return "DESIGNADA";
+  if (estado.includes("FINAL")) return "FINALIZADA";
+  if (estado.includes("CERR")) return "CERRADA";
+  if (estado.includes("ACT") || estado.includes("ABIERT") || estado.includes("VIGENT")) return "ACTIVA";
+  return estado;
+}
+__name(estadoHistoricoKey, "estadoHistoricoKey");
+function estadoHistoricoLabel(value) {
+  switch (estadoHistoricoKey(value)) {
+    case "ACTIVA":
+      return "Activa";
+    case "DESIGNADA":
+      return "Designada";
+    case "ANULADA":
+      return "Anulada";
+    case "DESIERTA":
+      return "Desierta";
+    case "CERRADA":
+      return "Cerrada";
+    case "FINALIZADA":
+      return "Finalizada";
+    default:
+      return String(value?.estado || value || "").trim() || "Sin estado";
+  }
+}
+__name(estadoHistoricoLabel, "estadoHistoricoLabel");
+function ofertaHistoricaActiva(row) {
+  const estadoKey = estadoHistoricoKey(row);
+  const fin = parseFechaFlexible(row?.finoferta)?.getTime() || 0;
+  const ahora = Date.now();
+  if (estadoKey === "ANULADA" || estadoKey === "DESIGNADA" || estadoKey === "DESIERTA" || estadoKey === "CERRADA" || estadoKey === "FINALIZADA") return false;
+  if (fin && fin < ahora - 48 * 60 * 60 * 1e3) return false;
+  return true;
+}
+__name(ofertaHistoricaActiva, "ofertaHistoricaActiva");
+function tituloHistoricoRow(row) {
+  return unique([row?.cargo || "", row?.area || ""].filter(Boolean)).join(" \xB7 ") || "Oferta APD";
+}
+__name(tituloHistoricoRow, "tituloHistoricoRow");
+function topCountItems(values, limit = 5) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const raw of Array.isArray(values) ? values : []) {
+    const label = String(raw || "").trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es")).slice(0, limit).map(([label, value]) => ({ label, value }));
+}
+__name(topCountItems, "topCountItems");
+function promedioNumerico(values, digits = 1) {
+  const nums = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (!nums.length) return null;
+  const avg = nums.reduce((acc, n) => acc + n, 0) / nums.length;
+  const factor = 10 ** digits;
+  return Math.round(avg * factor) / factor;
+}
+__name(promedioNumerico, "promedioNumerico");
+function sortHistoricoDesc(a, b) {
+  const ta = parseFechaFlexible(a?.captured_at || a?.last_seen_at)?.getTime() || 0;
+  const tb = parseFechaFlexible(b?.captured_at || b?.last_seen_at)?.getTime() || 0;
+  return tb - ta;
+}
+__name(sortHistoricoDesc, "sortHistoricoDesc");
+function parseFechaFlexible(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z)?$/);
+  if (iso) {
+    const [, yyyy, mm, dd, hh = "0", mi = "0", ss = "0"] = iso;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+  }
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+__name(parseFechaFlexible, "parseFechaFlexible");
+function parsePartesFechaAbc(raw) {
+  const value = String(raw || "").trim();
+  if (!value || value.includes("9999")) return null;
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z)?$/);
+  if (iso) {
+    const [, yyyy, mm, dd, hh = "00", mi = "00", ss = "00"] = iso;
+    return { yyyy, mm, dd, hh, mi, ss, hasTime: iso[4] != null };
+  }
+  const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = dmy;
+    return { yyyy, mm: String(mm).padStart(2, "0"), dd: String(dd).padStart(2, "0"), hh: String(hh).padStart(2, "0"), mi: String(mi).padStart(2, "0"), ss: String(ss).padStart(2, "0"), hasTime: dmy[4] != null };
+  }
+  return null;
+}
+__name(parsePartesFechaAbc, "parsePartesFechaAbc");
+function formatearFechaAbc(raw, mode = "auto") {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.includes("9999")) return "Sin fecha";
+  const parts = parsePartesFechaAbc(value);
+  if (!parts) return value;
+  const dateStr = `${parts.dd}/${parts.mm}/${parts.yyyy}`;
+  const hasRealTime = parts.hasTime && !(parts.hh === "00" && parts.mi === "00" && parts.ss === "00");
+  if (mode === "date") return dateStr;
+  if (mode === "datetime") return hasRealTime ? `${dateStr}, ${parts.hh}:${parts.mi}` : dateStr;
+  return hasRealTime ? `${dateStr}, ${parts.hh}:${parts.mi}` : dateStr;
+}
+__name(formatearFechaAbc, "formatearFechaAbc");
+function normalizarCursoDivisionServidor(value) {
+  let s = String(value || "").trim();
+  if (!s) return "";
+  s = s.replace(/Â°/g, "\xB0").replace(/º/g, "\xB0").replace(/Ş/g, "\xB0").replace(/�/g, "\xB0");
+  s = s.replace(/(\d)\s*°\s*(\d)\s*°?/g, "$1\xB0$2\xB0");
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+__name(normalizarCursoDivisionServidor, "normalizarCursoDivisionServidor");
+function sanitizeSolrNumber(value) {
+  return String(value || "").replace(/[^\d]/g, "");
+}
+__name(sanitizeSolrNumber, "sanitizeSolrNumber");
+function json2(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders2() });
+}
+__name(json2, "json");
+async function sendPendingEmailDigests(env, options = {}) {
+  const users = await supabaseSelect2(
+    env,
+    `users?select=id,nombre,apellido,email,activo&activo=eq.true&email=not.is.null`
+  ).catch(() => []);
+  let processedUsers = 0;
+  let sent = 0;
+  let failed = 0;
+  for (const user of users) {
+    if (!user?.id || !user?.email) continue;
+    const resolved = await resolverPlanUsuario(env, user.id).catch(() => null);
+    if (!resolved || !isPlanActivo(resolved)) continue;
+    const prefsRows = await supabaseSelect2(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_email`
+    ).catch(() => []);
+    const prefs = Array.isArray(prefsRows) ? prefsRows[0] : null;
+    if (!prefs?.alertas_activas || !prefs?.alertas_email) continue;
+    const rows = await supabaseSelect2(
+      env,
+      `user_offer_state?user_id=eq.${encodeURIComponent(user.id)}&is_active=eq.true&select=id,offer_id,offer_payload,first_emailed_at,last_emailed_at`
+    ).catch(() => []);
+    if (!rows || !rows.length) continue;
+    const nuevas = rows.filter((x) => !x.first_emailed_at);
+    const viejas = rows.filter((x) => !!x.first_emailed_at);
+    processedUsers++;
+    const alerts = await Promise.all(
+      rows.map(async (row) => {
+        const payload = row.offer_payload || {};
+        const merged = { ...payload };
+        const ofertaId = String(payload.idoferta || "").trim();
+        const detalleId = String(payload.iddetalle || "").trim();
+        if (ofertaId || detalleId) {
+          try {
+            const resumen = await obtenerResumenPostulantesABC(ofertaId, detalleId);
+            merged.total_postulantes = resumen.total_postulantes ?? payload.total_postulantes ?? null;
+            merged.puntaje_primero = resumen.puntaje_primero ?? payload.puntaje_primero ?? null;
+            merged.listado_origen_primero = resumen.listado_origen_primero || payload.listado_origen_primero || "";
+          } catch (_) {
+            merged.total_postulantes = payload.total_postulantes ?? null;
+            merged.puntaje_primero = payload.puntaje_primero ?? null;
+            merged.listado_origen_primero = payload.listado_origen_primero || "";
+          }
+        }
+        return {
+          offer_payload: merged
+        };
+      })
+    );
+    const html = buildDigestHtml(alerts, user);
+    const asunto = nuevas.length > 0 ? `APDocentePBA: ${nuevas.length} nueva${nuevas.length === 1 ? "" : "s"} y ${viejas.length} ya visible${viejas.length === 1 ? "" : "s"}` : `APDocentePBA: ${viejas.length} oferta${viejas.length === 1 ? "" : "s"} visible${viejas.length === 1 ? "" : "s"} en tu panel`;
+    const send = await enviarMailBrevo(
+      user.email,
+      user.nombre || "",
+      asunto,
+      html,
+      env
+    );
+    if (send?.ok) {
+      sent++;
+      const nowIso2 = (/* @__PURE__ */ new Date()).toISOString();
+      await Promise.all(
+        rows.map((row) => {
+          const patch = {
+            last_emailed_at: nowIso2
+          };
+          if (!row.first_emailed_at) {
+            patch.first_emailed_at = nowIso2;
+          }
+          return fetch(
+            `${env.SUPABASE_URL}/rest/v1/user_offer_state?id=eq.${encodeURIComponent(row.id)}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+                Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+                Prefer: "return=minimal"
+              },
+              body: JSON.stringify(patch)
+            }
+          ).catch(() => null);
+        })
+      );
+    } else {
+      failed++;
+    }
+  }
+  return {
+    ok: true,
+    processed_users: processedUsers,
+    sent,
+    failed
+  };
+}
+__name(sendPendingEmailDigests, "sendPendingEmailDigests");
+function buildDigestHtml(alerts, user) {
+  const panelUrl = "https://apdocentepba.github.io";
+  const items = alerts.map((a) => {
+    const o = normalizeOfferPayload(a.offer_payload || {});
+    const tipo = String(o.revista || "").trim() || (o.desde && String(o.desde).trim() && String(o.desde).trim().toLowerCase() !== "sin fecha" && o.hasta && String(o.hasta).trim() && String(o.hasta).trim().toLowerCase() !== "sin fecha" ? "Suplencia" : "Provisional");
+    return `
+      <tr>
+        <td style="padding:0 0 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dbe3f0;border-radius:14px;background:#ffffff;">
+            <tr>
+              <td style="padding:16px 16px 14px 16px;">
+
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:1.25;font-weight:700;color:#0f3460;margin:0 0 10px 0;">
+                  ${escHtml(o.cargo || o.materia || o.title || "Oferta APD")}
+                </div>
+
+                <div style="margin:0 0 12px 0;">
+                  ${o.escuela ? `<span style="display:inline-block;background:#eef4ff;color:#1f4fa3;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F3EB} ${escHtml(o.escuela)}</span>` : ""}
+                  ${o.distrito ? `<span style="display:inline-block;background:#e8f0fe;color:#1a4f8a;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F4CD} ${escHtml(o.distrito)}</span>` : ""}
+                  ${o.turno ? `<span style="display:inline-block;background:#eefbf3;color:#0d7a3e;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F552} ${escHtml(o.turno)}</span>` : ""}
+                  ${o.jornada ? `<span style="display:inline-block;background:#f3f4f6;color:#374151;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F3EB} ${escHtml(o.jornada)}</span>` : ""}
+                  ${o.nivel ? `<span style="display:inline-block;background:#fff4e5;color:#9a6700;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F393} ${escHtml(o.nivel)}</span>` : ""}
+                  ${tipo ? `<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;padding:6px 10px;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;margin:0 6px 6px 0;">\u{1F4CC} ${escHtml(tipo)}</span>` : ""}
+                </div>
+
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827;">
+                  ${digestRow("Curso / divisi\xF3n", o.curso_division)}
+                  ${digestRow("Tipo", tipo)}
+                  ${digestRow("Desde", o.desde)}
+                  ${digestRow("Hasta", o.hasta)}
+                  ${digestRow("M\xF3dulos", o.modulos)}
+                  ${digestRow("D\xEDas / horarios", o.dias_horarios)}
+                  ${digestRow("Cierre", o.fecha_cierre)}
+                </div>
+
+                ${o.observaciones ? `
+                      <div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;">
+                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px;">OBSERVACIONES</div>
+                        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#111827;">${escHtml(o.observaciones)}</div>
+                      </div>
+                    ` : ""}
+
+                <div style="margin-top:12px;padding:10px 12px;background:#f7faff;border:1px solid #dbeafe;border-radius:10px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px;">RESUMEN DE POSTULANTES</div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#111827;">
+                    ${digestRow("Cantidad", o.total_postulantes != null && o.total_postulantes !== "" ? o.total_postulantes : "Sin postulados informados")}
+${digestRow("Puntaje m\xE1s alto", o.puntaje_primero != null && o.puntaje_primero !== "" ? o.puntaje_primero : "Sin datos")}
+${digestRow("Listado del m\xE1s alto", o.listado_origen_primero ? o.listado_origen_primero : "Sin datos")}
+                  </div>
+                </div>
+
+                <div style="margin-top:14px;">
+                  ${o.link ? `<a href="${escHtml(o.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:10px 14px;margin:4px 8px 0 0;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a ABC</a>` : ""}
+                  <a href="${panelUrl}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:10px 14px;margin:4px 8px 0 0;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">Ir a mi panel</a>
+                </div>
+
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    `;
+  }).join("");
+  return `
+    <div style="background:#f0f2f7;padding:20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center">
+
+            <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:620px;max-width:620px;">
+              <tr>
+                <td style="background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%);color:#ffffff;padding:22px;border-radius:16px 16px 0 0;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:700;line-height:1.2;">
+                    APDocentePBA
+                  </div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;opacity:.9;margin-top:4px;">
+                    Alertas de Actos P\xFAblicos Digitales
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="background:#ffffff;padding:18px 18px 20px 18px;border:1px solid #dbe3f0;border-top:none;border-radius:0 0 16px 16px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:21px;font-weight:700;line-height:1.25;color:#0f3460;margin:0 0 10px 0;">
+                    Ofertas APD para vos
+                  </div>
+
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#374151;margin:0 0 16px 0;">
+                    Hola ${escHtml(user.nombre || "")}, estas son las ofertas actualmente visibles en tu panel.
+                  </div>
+
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${items || `
+                        <tr>
+                          <td style="padding:16px;border:1px dashed #cbd5e1;border-radius:12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#475569;">
+                            No hay ofertas para mostrar en este env\xEDo.
+                          </td>
+                        </tr>
+                      `}
+                  </table>
+
+                  <div style="margin-top:8px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;">
+                    <a href="https://abc.gob.ar" target="_blank" style="display:inline-block;background:#374151;color:#ffffff;padding:10px 14px;margin:5px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">
+                      Ir a ABC
+                    </a>
+                    <a href="${panelUrl}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:10px 14px;margin:5px;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;">
+                      Ir a mi panel
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+__name(buildDigestHtml, "buildDigestHtml");
+
+// worker_hotfix.js
+var API_URL_PREFIX3 = "/api";
+var HOTFIX_VERSION = "2026-04-12-repositorio-1";
+var LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
+var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
+var PBKDF2_ITERATIONS = 1e5;
+function corsHeaders3() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders3, "corsHeaders");
+function json3(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders3() });
+}
+__name(json3, "json");
+function normalizeEmail2(v) {
+  return String(v || "").trim().toLowerCase();
+}
+__name(normalizeEmail2, "normalizeEmail");
+function normalizeText3(v) {
+  return String(v || "").trim();
+}
+__name(normalizeText3, "normalizeText");
+function getBearerToken3(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken3, "getBearerToken");
+function toHex(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+__name(toHex, "toHex");
+function fromHex(hex) {
+  const clean = String(hex || "").trim();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i += 1) out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+__name(fromHex, "fromHex");
+function randomHex(bytes = 32) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return toHex(arr);
+}
+__name(randomHex, "randomHex");
+async function sha256Hex2(text) {
+  const data = new TextEncoder().encode(String(text || ""));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return toHex(new Uint8Array(hash));
+}
+__name(sha256Hex2, "sha256Hex");
+async function pbkdf2HashHex(password, saltHex, iterations = PBKDF2_ITERATIONS) {
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(password || "")), { name: "PBKDF2" }, false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromHex(saltHex), iterations, hash: "SHA-256" }, keyMaterial, 256);
+  return toHex(new Uint8Array(bits));
+}
+__name(pbkdf2HashHex, "pbkdf2HashHex");
+async function hashPasswordSecure(password) {
+  const salt = randomHex(16);
+  const hash = await pbkdf2HashHex(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2_sha256$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
+}
+__name(hashPasswordSecure, "hashPasswordSecure");
+async function verifyPasswordFlexible(storedPassword, plainPassword) {
+  const stored = String(storedPassword || "").trim();
+  const plain = String(plainPassword || "");
+  if (!stored || !plain) return { ok: false, needsUpgrade: false };
+  if (stored.startsWith("pbkdf2_sha256$")) {
+    const parts = stored.split("$");
+    if (parts.length !== 4) return { ok: false, needsUpgrade: false };
+    const iterations = Number(parts[1] || 0);
+    const saltHex = parts[2] || "";
+    const expectedHex = parts[3] || "";
+    if (!iterations || !saltHex || !expectedHex) return { ok: false, needsUpgrade: false };
+    if (iterations > PBKDF2_ITERATIONS) return { ok: false, needsUpgrade: false, unsupportedPbkdf2: true };
+    try {
+      const actualHex = await pbkdf2HashHex(plain, saltHex, iterations);
+      return { ok: actualHex === expectedHex, needsUpgrade: false };
+    } catch (err) {
+      return { ok: false, needsUpgrade: false, unsupportedPbkdf2: true, error: err?.message || String(err) };
+    }
+  }
+  if (stored === plain) return { ok: true, needsUpgrade: true };
+  const legacySha = await sha256Hex2(plain);
+  if (stored === legacySha) return { ok: true, needsUpgrade: true };
+  return { ok: false, needsUpgrade: false };
+}
+__name(verifyPasswordFlexible, "verifyPasswordFlexible");
+async function supabaseRequest(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest, "supabaseRequest");
+async function supabaseSelect3(env, query) {
+  return await supabaseRequest(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect3, "supabaseSelect");
+async function supabaseInsertReturning2(env, table, data) {
+  const rows = await supabaseRequest(env, table, { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(data) });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabaseInsertReturning2, "supabaseInsertReturning");
+async function supabasePatchReturning(env, table, filter, data) {
+  const rows = await supabaseRequest(env, `${table}?${filter}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(data) });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabasePatchReturning, "supabasePatchReturning");
+async function findUserByEmail2(env, email) {
+  const rows = await supabaseSelect3(env, `users?email=ilike.${encodeURIComponent(email)}&select=id,nombre,apellido,email,celular,password_hash,google_sub,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(findUserByEmail2, "findUserByEmail");
+async function findUserByGoogleSub2(env, sub) {
+  const rows = await supabaseSelect3(env, `users?google_sub=eq.${encodeURIComponent(sub)}&select=id,nombre,apellido,email,celular,password_hash,google_sub,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(findUserByGoogleSub2, "findUserByGoogleSub");
+async function getUserById2(env, userId) {
+  const rows = await supabaseSelect3(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin,google_sub,password_hash,created_at,ultimo_login&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById2, "getUserById");
+async function touchUltimoLogin2(env, userId) {
+  await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(userId)}`, { ultimo_login: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => null);
+}
+__name(touchUltimoLogin2, "touchUltimoLogin");
+async function ensureTrialIfNoSubscriptions2(env, userId, email, source = "trial_auto_hotfix") {
+  const existing = await supabaseSelect3(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`).catch(() => []);
+  if (Array.isArray(existing) && existing.length > 0) return { ok: true, created: false };
+  await supabaseInsertReturning2(env, "user_subscriptions", { user_id: userId, plan_code: "TRIAL_7D", status: "ACTIVE", source, started_at: (/* @__PURE__ */ new Date()).toISOString(), trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3).toISOString(), current_period_ends_at: null, mercadopago_preapproval_id: null, mercadopago_payer_email: email || null, external_reference: `${userId}:TRIAL_7D:${Date.now()}` }).catch(() => null);
+  return { ok: true, created: true };
+}
+__name(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions");
+async function createSession(env, userId, metodo = "password") {
+  const token = randomHex(32);
+  const createdAt = (/* @__PURE__ */ new Date()).toISOString();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  await supabaseInsertReturning2(env, "sessions", { token, user_id: userId, metodo, created_at: createdAt, expires_at: expiresAt, activo: true });
+  return { token, created_at: createdAt, expires_at: expiresAt };
+}
+__name(createSession, "createSession");
+async function resolveAuthUser2(env, request) {
+  const bearer = getBearerToken3(request);
+  if (!bearer) return { bearer: "", user: null, mode: "none" };
+  const sessions = await supabaseSelect3(env, `sessions?token=eq.${encodeURIComponent(bearer)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`).catch(() => []);
+  const session = Array.isArray(sessions) ? sessions[0] || null : null;
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return { bearer, user: null, mode: "expired" };
+    const user = await getUserById2(env, session.user_id);
+    if (user?.activo !== false && user?.id) return { bearer, user, mode: "session" };
+  }
+  const legacyUser = await getUserById2(env, bearer).catch(() => null);
+  if (legacyUser?.activo !== false && legacyUser?.id) return { bearer, user: legacyUser, mode: "legacy_user_id" };
+  return { bearer, user: null, mode: "invalid" };
+}
+__name(resolveAuthUser2, "resolveAuthUser");
+async function rewriteRequestWithUserId(request, userId) {
+  const url = new URL(request.url);
+  const method = String(request.method || "GET").toUpperCase();
+  const headers = new Headers(request.headers);
+  if (method === "GET" || method === "HEAD") {
+    url.searchParams.set("user_id", userId);
+    return new Request(url.toString(), { method, headers });
+  }
+  const contentType = headers.get("Content-Type") || headers.get("content-type") || "";
+  if (contentType.toLowerCase().includes("application/json")) {
+    const body = await request.clone().json().catch(() => ({}));
+    const nextBody = { ...body || {}, user_id: userId };
+    return new Request(url.toString(), { method, headers, body: JSON.stringify(nextBody) });
+  }
+  return request;
+}
+__name(rewriteRequestWithUserId, "rewriteRequestWithUserId");
+async function tryLegacyPasswordLogin(email, password) {
+  const payloads = [{ action: "login_password", email, password }, { action: "login", email, password }];
+  for (const payload of payloads) {
+    try {
+      const res = await fetch(LEGACY_GAS_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = {};
+      }
+      if (data?.ok || data?.success) return { ok: true, data };
+    } catch {
+    }
+  }
+  return { ok: false };
+}
+__name(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
+async function ensureLocalUser(env, payload = {}) {
+  const email = normalizeEmail2(payload?.email || "");
+  if (!email) throw new Error("Falta email");
+  const existing = await findUserByEmail2(env, email);
+  const secureHash = payload?.password ? await hashPasswordSecure(String(payload.password)) : null;
+  if (existing?.id) {
+    const patch = {};
+    if (!existing.nombre && payload?.nombre) patch.nombre = normalizeText3(payload.nombre);
+    if (!existing.apellido && payload?.apellido) patch.apellido = normalizeText3(payload.apellido);
+    if (!existing.celular && payload?.celular) patch.celular = normalizeText3(payload.celular);
+    if (existing.activo === false) patch.activo = true;
+    if (payload?.google_sub && !existing.google_sub) patch.google_sub = String(payload.google_sub);
+    if (secureHash && !String(existing.password_hash || "").startsWith("pbkdf2_sha256$")) patch.password_hash = secureHash;
+    if (Object.keys(patch).length) {
+      const patched = await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(existing.id)}`, patch).catch(() => null);
+      return patched || { ...existing, ...patch };
+    }
+    return existing;
+  }
+  return await supabaseInsertReturning2(env, "users", { nombre: normalizeText3(payload?.nombre || "Docente"), apellido: normalizeText3(payload?.apellido || "-") || "-", email, celular: normalizeText3(payload?.celular || ""), password_hash: secureHash, google_sub: payload?.google_sub ? String(payload.google_sub) : null, activo: true });
+}
+__name(ensureLocalUser, "ensureLocalUser");
+function splitGoogleName2(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const nombre = parts.shift() || "Docente";
+  const apellido = parts.join(" ") || "-";
+  return { nombre, apellido };
+}
+__name(splitGoogleName2, "splitGoogleName");
+async function verifyGoogleCredential2(idToken, expectedAud) {
+  if (!expectedAud) throw new Error("Falta GOOGLE_CLIENT_ID en Cloudflare");
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("Google no devolvi\xF3 una respuesta v\xE1lida");
+  }
+  if (!res.ok) throw new Error(data?.error_description || data?.error || "Google no valid\xF3 el token");
+  if (String(data.aud || "") !== String(expectedAud)) throw new Error("Google Client ID no coincide");
+  if (!(data.email_verified === true || data.email_verified === "true")) throw new Error("El email de Google no est\xE1 verificado");
+  const split = splitGoogleName2(data.name || "");
+  return { sub: String(data.sub || ""), email: normalizeEmail2(data.email || ""), nombre: String(data.given_name || split.nombre || "").trim() || "Docente", apellido: String(data.family_name || split.apellido || "").trim() || "-" };
+}
+__name(verifyGoogleCredential2, "verifyGoogleCredential");
+async function handleRegisterSecure(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const nombre = normalizeText3(body?.nombre);
+  const apellido = normalizeText3(body?.apellido);
+  const email = normalizeEmail2(body?.email);
+  const password = normalizeText3(body?.password);
+  const celular = normalizeText3(body?.celular);
+  if (!nombre) return json3({ ok: false, error: "Falta nombre" }, 400);
+  if (!apellido) return json3({ ok: false, error: "Falta apellido" }, 400);
+  if (!email) return json3({ ok: false, error: "Falta email" }, 400);
+  if (!password || password.length < 6) return json3({ ok: false, error: "La contrase\xF1a debe tener al menos 6 caracteres" }, 400);
+  const existing = await findUserByEmail2(env, email);
+  if (existing?.id) return json3({ ok: false, error: "Ese email ya est\xE1 registrado" }, 409);
+  const passwordHash = await hashPasswordSecure(password);
+  const nuevoUsuario = await supabaseInsertReturning2(env, "users", { nombre, apellido, email, celular, password_hash: passwordHash, activo: true });
+  if (!nuevoUsuario?.id) return json3({ ok: false, error: "No se pudo obtener el ID del usuario creado" }, 500);
+  await ensureTrialIfNoSubscriptions2(env, nuevoUsuario.id, email, "trial_auto_register_secure");
+  return json3({ ok: true, message: "Usuario registrado correctamente", data: { id: nuevoUsuario.id, nombre: nuevoUsuario.nombre || nombre, apellido: nuevoUsuario.apellido || apellido, email: nuevoUsuario.email || email, celular: nuevoUsuario.celular || celular, activo: nuevoUsuario.activo !== false } });
+}
+__name(handleRegisterSecure, "handleRegisterSecure");
+async function handleLoginSecure(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const email = normalizeEmail2(body?.email);
+  const password = String(body?.password || "");
+  if (!email || !password) return json3({ ok: false, message: "Faltan datos" }, 400);
+  let user = await findUserByEmail2(env, email);
+  if (user?.id && user.activo === false) return json3({ ok: false, message: "Usuario inactivo" }, 403);
+  if (user?.id) {
+    const verified = await verifyPasswordFlexible(user.password_hash, password);
+    if (verified.ok) {
+      if (verified.needsUpgrade) await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await hashPasswordSecure(password) }).catch(() => null);
+      await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_secure");
+      const session = await createSession(env, user.id, "password");
+      await touchUltimoLogin2(env, user.id);
+      return json3({ ok: true, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
+    }
+  }
+  const legacy = await tryLegacyPasswordLogin(email, password);
+  if (legacy.ok) {
+    const legacyUser = legacy.data?.user || legacy.data?.data || {};
+    user = await ensureLocalUser(env, { email, password, nombre: legacyUser?.nombre || legacyUser?.name || "", apellido: legacyUser?.apellido || legacyUser?.last_name || "", celular: legacyUser?.celular || legacyUser?.phone || "" });
+    if (!user?.id) return json3({ ok: false, message: "No se pudo migrar la cuenta existente" }, 500);
+    await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await hashPasswordSecure(password), activo: true }).catch(() => null);
+    await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_legacy_secure");
+    const session = await createSession(env, user.id, "password_legacy");
+    await touchUltimoLogin2(env, user.id);
+    return json3({ ok: true, migrated_legacy: true, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
+  }
+  if (user?.id) return json3({ ok: false, message: "Password incorrecto" }, 401);
+  return json3({ ok: false, message: "Usuario no encontrado o credenciales incorrectas" }, 401);
+}
+__name(handleLoginSecure, "handleLoginSecure");
+async function handleGoogleAuthSecure(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const credential = String(body?.credential || "").trim();
+  if (!credential) return json3({ ok: false, message: "Falta credential de Google" }, 400);
+  const googleUser = await verifyGoogleCredential2(credential, env.GOOGLE_CLIENT_ID);
+  let user = await findUserByGoogleSub2(env, googleUser.sub);
+  let mode = "login";
+  if (!user) {
+    user = await ensureLocalUser(env, { email: googleUser.email, nombre: googleUser.nombre, apellido: googleUser.apellido, google_sub: googleUser.sub });
+    mode = "register";
+  }
+  if (!user?.id) return json3({ ok: false, message: "No se pudo crear o vincular el usuario con Google" }, 500);
+  if (user.activo === false) return json3({ ok: false, message: "Usuario inactivo" }, 403);
+  if (!user.google_sub || user.google_sub !== googleUser.sub) await supabasePatchReturning(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { google_sub: googleUser.sub, activo: true }).catch(() => null);
+  await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_google_secure");
+  const session = await createSession(env, user.id, "google");
+  await touchUltimoLogin2(env, user.id);
+  return json3({ ok: true, mode, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || googleUser.nombre || "", apellido: user.apellido || googleUser.apellido || "", email: user.email || googleUser.email || "" } });
+}
+__name(handleGoogleAuthSecure, "handleGoogleAuthSecure");
+var REWRITE_GET_PATHS = /* @__PURE__ */ new Set([`${API_URL_PREFIX3}/mi-plan`, `${API_URL_PREFIX3}/mis-alertas`, `${API_URL_PREFIX3}/historico-resumen`]);
+var REWRITE_POST_PATHS = /* @__PURE__ */ new Set([`${API_URL_PREFIX3}/guardar-preferencias`, `${API_URL_PREFIX3}/capturar-historico-apd`, `${API_URL_PREFIX3}/mercadopago/create-checkout-link`, `${API_URL_PREFIX3}/whatsapp/test-send`]);
+var worker_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders3() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX3}/version` && request.method === "GET") return json3({ ok: true, version: HOTFIX_VERSION, worker_version: env.WORKER_URL || "worker-hotfix" });
+    if (path === `${API_URL_PREFIX3}/register` && request.method === "POST") {
+      try {
+        return await handleRegisterSecure(request, env);
+      } catch (err) {
+        return json3({ ok: false, message: err?.message || "No se pudo registrar" }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/login` && request.method === "POST") {
+      try {
+        return await handleLoginSecure(request, env);
+      } catch (err) {
+        return json3({ ok: false, message: err?.message || "No se pudo iniciar sesi\xF3n" }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX3}/google-auth` && request.method === "POST") {
+      try {
+        return await handleGoogleAuthSecure(request, env);
+      } catch (err) {
+        return json3({ ok: false, message: err?.message || "No se pudo ingresar con Google" }, 400);
+      }
+    }
+    {
+      const repoRouted = await handleRepositoryRoute(request, env);
+      if (repoRouted) return repoRouted;
+    }
+    if (path.startsWith(`${API_URL_PREFIX3}/profile/`) || path.startsWith(`${API_URL_PREFIX3}/listados/`) || path.startsWith(`${API_URL_PREFIX3}/eligibility/`)) {
+      const routed = await handleProfileListadosRoute(request, env);
+      if (routed) return routed;
+    }
+    if (REWRITE_GET_PATHS.has(path) || REWRITE_POST_PATHS.has(path)) {
+      const bearer = getBearerToken3(request);
+      if (bearer) {
+        const auth = await resolveAuthUser2(env, request);
+        if (!auth.user?.id) return json3({ ok: false, message: "No autenticado" }, 401);
+        const rewritten = await rewriteRequestWithUserId(request, auth.user.id);
+        return await worker_default.fetch(rewritten, env, ctx);
+      }
+    }
+    return await worker_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_default?.scheduled === "function") return await worker_default.scheduled(controller, env, ctx);
+  }
+};
+
+// worker_subscription_hotfix.js
+var API_URL_PREFIX4 = "/api";
+var SUBSCRIPTION_POLICY_VERSION = "2026-04-04-subscription-safe-3";
+function corsHeaders4() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders4, "corsHeaders");
+function json4(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders4() });
+}
+__name(json4, "json");
+function norm2(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm2, "norm");
+function parseFechaFlexible2(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z)?$/);
+  if (iso) {
+    const [, yyyy, mm, dd, hh = "0", mi = "0", ss = "0"] = iso;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+  }
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = dmy;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible2, "parseFechaFlexible");
+function canonicalPlanCode2(code) {
+  const raw = norm2(code);
+  if (raw === "PRO") return "PREMIUM";
+  return raw || "PLUS";
+}
+__name(canonicalPlanCode2, "canonicalPlanCode");
+function normalizeSubscriptionStatus(status) {
+  const raw = norm2(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval, "hasRecurringPreapproval");
+function isPaidPlan(planCode) {
+  return !!planCode && canonicalPlanCode2(planCode) !== "TRIAL_7D";
+}
+__name(isPaidPlan, "isPaidPlan");
+function isSubscriptionCurrent(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus(subscription.status);
+  const planCode = canonicalPlanCode2(subscription.plan_code);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible2(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status)) {
+    const end = parseFechaFlexible2(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+  return false;
+}
+__name(isSubscriptionCurrent, "isSubscriptionCurrent");
+function getSubscriptionBillingMode(subscription) {
+  if (hasRecurringPreapproval(subscription)) return "recurring_preapproval";
+  if (canonicalPlanCode2(subscription?.plan_code) === "TRIAL_7D") return "trial";
+  return "one_time_cycle";
+}
+__name(getSubscriptionBillingMode, "getSubscriptionBillingMode");
+function getRenewalPolicy(subscription) {
+  const billingMode = getSubscriptionBillingMode(subscription);
+  if (billingMode === "recurring_preapproval") return "automatic_recurring";
+  if (billingMode === "trial") return "trial";
+  return "manual_renewal";
+}
+__name(getRenewalPolicy, "getRenewalPolicy");
+function getBearerToken4(request) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) return "";
+  return auth.slice(7).trim();
+}
+__name(getBearerToken4, "getBearerToken");
+function formatDateAr(value) {
+  const date = parseFechaFlexible2(value);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+__name(formatDateAr, "formatDateAr");
+function roundArs(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+__name(roundArs, "roundArs");
+function planPresets() {
+  return {
+    TRIAL_7D: {
+      code: "TRIAL_7D",
+      nombre: "Prueba gratis 7 d\xEDas",
+      price_ars: 0,
+      description: "Prueba gratis"
+    },
+    PLUS: {
+      code: "PLUS",
+      nombre: "Plan Plus",
+      price_ars: 2990,
+      description: "2 distritos y 4 materias/cargos"
+    },
+    PREMIUM: {
+      code: "PREMIUM",
+      nombre: "Plan Pro",
+      price_ars: 4990,
+      description: "3 distritos y 6 materias/cargos"
+    },
+    INSIGNE: {
+      code: "INSIGNE",
+      nombre: "Plan Insigne",
+      price_ars: 7990,
+      description: "3 distritos principales + 2 de emergencia y hasta 10 materias/cargos"
+    }
+  };
+}
+__name(planPresets, "planPresets");
+async function supabaseRequest2(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  }
+  return data;
+}
+__name(supabaseRequest2, "supabaseRequest");
+async function supabaseSelect4(env, query) {
+  return await supabaseRequest2(env, query, {
+    method: "GET",
+    headers: { Prefer: "return=representation" }
+  });
+}
+__name(supabaseSelect4, "supabaseSelect");
+async function supabaseInsertReturning3(env, table, data) {
+  const rows = await supabaseRequest2(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(data)
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+__name(supabaseInsertReturning3, "supabaseInsertReturning");
+async function getUserById3(env, userId) {
+  const rows = await supabaseSelect4(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById3, "getUserById");
+async function getUserSubscriptions(env, userId) {
+  const rows = await supabaseSelect4(
+    env,
+    `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions, "getUserSubscriptions");
+async function getPlanByCode(env, planCode) {
+  const code = canonicalPlanCode2(planCode);
+  const rows = await supabaseSelect4(
+    env,
+    `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags,sort_order&limit=1`
+  ).catch(() => []);
+  if (Array.isArray(rows) && rows[0]) {
+    return rows[0];
+  }
+  return planPresets()[code] || null;
+}
+__name(getPlanByCode, "getPlanByCode");
+async function resolveSubscriptionSnapshot(env, userId) {
+  const rows = await getUserSubscriptions(env, userId);
+  const current = rows.find(isSubscriptionCurrent) || rows[0] || null;
+  const trialUsed = rows.some((row) => canonicalPlanCode2(row?.plan_code) === "TRIAL_7D");
+  const currentPlan = current ? await getPlanByCode(env, current.plan_code) : null;
+  return {
+    rows,
+    current,
+    currentPlan,
+    trialUsed,
+    hasRecurring: hasRecurringPreapproval(current),
+    currentPlanCode: canonicalPlanCode2(current?.plan_code || ""),
+    currentStatus: normalizeSubscriptionStatus(current?.status || "")
+  };
+}
+__name(resolveSubscriptionSnapshot, "resolveSubscriptionSnapshot");
+function buildSubscriptionActions(snapshot) {
+  const current = snapshot?.current || null;
+  const currentPlan = snapshot?.currentPlan || null;
+  const currentPlanCode = canonicalPlanCode2(current?.plan_code || "");
+  const currentPaid = !!current && isPaidPlan(currentPlanCode) && isSubscriptionCurrent(current);
+  const recurring = hasRecurringPreapproval(current);
+  return {
+    can_checkout_new_paid_plan: !currentPaid,
+    can_upgrade_paid_plan: currentPaid && !recurring,
+    can_change_paid_plan_automatically: currentPaid && !recurring,
+    can_return_to_trial: false,
+    can_cancel_recurring: recurring,
+    requires_manual_support_for_paid_plan_change: currentPaid && recurring,
+    billing_mode: getSubscriptionBillingMode(current),
+    renewal_policy: getRenewalPolicy(current),
+    recurring_enabled: recurring,
+    current_plan_price_ars: Number(currentPlan?.price_ars || 0) || 0
+  };
+}
+__name(buildSubscriptionActions, "buildSubscriptionActions");
+function calculateUpgradeQuote(currentPlan, targetPlan, currentSubscription) {
+  const currentPrice = Number(currentPlan?.price_ars || 0);
+  const targetPrice = Number(targetPlan?.price_ars || 0);
+  const delta = Math.max(0, targetPrice - currentPrice);
+  const startTs = parseFechaFlexible2(currentSubscription?.started_at)?.getTime() || 0;
+  const endTs = parseFechaFlexible2(currentSubscription?.current_period_ends_at)?.getTime() || 0;
+  const nowTs = Date.now();
+  let credit = 0;
+  if (startTs && endTs && endTs > startTs && endTs > nowTs) {
+    const totalMs = endTs - startTs;
+    const remainingMs = endTs - nowTs;
+    const remainingRatio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    credit = roundArs(currentPrice * remainingRatio);
+  }
+  if (!credit) {
+    credit = 0;
+  }
+  const amountToCharge = Math.max(1, roundArs(targetPrice - credit));
+  return {
+    current_plan_code: canonicalPlanCode2(currentPlan?.code || currentSubscription?.plan_code || ""),
+    target_plan_code: canonicalPlanCode2(targetPlan?.code || ""),
+    current_price_ars: currentPrice,
+    target_price_ars: targetPrice,
+    credit_ars: credit,
+    amount_to_charge_ars: amountToCharge,
+    cycle_started_at: currentSubscription?.started_at || null,
+    cycle_ends_at: currentSubscription?.current_period_ends_at || null,
+    cycle_ends_label: formatDateAr(currentSubscription?.current_period_ends_at)
+  };
+}
+__name(calculateUpgradeQuote, "calculateUpgradeQuote");
+function decidePlanTransition(snapshot, targetPlan) {
+  const targetPlanCode = canonicalPlanCode2(targetPlan?.code || "");
+  const current = snapshot?.current || null;
+  const currentPlan = snapshot?.currentPlan || null;
+  const currentPlanCode = canonicalPlanCode2(current?.plan_code || "");
+  const currentPaid = !!current && isPaidPlan(currentPlanCode) && isSubscriptionCurrent(current);
+  const recurring = hasRecurringPreapproval(current);
+  if (!targetPlanCode) {
+    return {
+      allowed: false,
+      status: 400,
+      reason: "missing_target_plan",
+      message: "No se recibi\xF3 el plan de destino."
+    };
+  }
+  if (targetPlanCode === currentPlanCode && current) {
+    return {
+      allowed: false,
+      status: 409,
+      reason: "same_plan",
+      message: "Ya est\xE1s en ese plan."
+    };
+  }
+  if (targetPlanCode === "TRIAL_7D") {
+    return {
+      allowed: false,
+      status: 409,
+      reason: "trial_return_blocked",
+      message: "La vuelta a prueba gratis queda bloqueada para evitar inconsistencias de facturaci\xF3n y de estado."
+    };
+  }
+  if (!current || !currentPaid || currentPlanCode === "TRIAL_7D") {
+    return {
+      allowed: true,
+      status: 200,
+      mode: "new_checkout",
+      reason: "initial_activation",
+      message: "Alta inicial o salida de prueba a plan pago."
+    };
+  }
+  if (recurring) {
+    return {
+      allowed: false,
+      status: 409,
+      reason: "manual_transition_required",
+      message: "Los cambios entre planes pagos con renovaci\xF3n autom\xE1tica quedan bloqueados hasta definir bien prorrateos y cancelaci\xF3n segura."
+    };
+  }
+  const currentPrice = Number(currentPlan?.price_ars || 0);
+  const targetPrice = Number(targetPlan?.price_ars || 0);
+  if (targetPrice > currentPrice) {
+    return {
+      allowed: true,
+      status: 200,
+      mode: "upgrade_prorated",
+      reason: "paid_upgrade_prorated",
+      message: "Upgrade habilitado con cobro proporcional sobre el tiempo restante del plan actual.",
+      quote: calculateUpgradeQuote(currentPlan, targetPlan, current)
+    };
+  }
+  if (targetPrice < currentPrice) {
+    return {
+      allowed: false,
+      status: 409,
+      reason: "downgrade_wait_for_renewal",
+      message: current?.current_period_ends_at ? `Tu plan actual ya est\xE1 pago hasta el ${formatDateAr(current.current_period_ends_at)}. El cambio a un plan menor se hace cuando renueve o cuando venza el ciclo actual.` : "Tu plan actual ya est\xE1 pago. El cambio a un plan menor se hace cuando renueve o cuando venza el ciclo actual."
+    };
+  }
+  return {
+    allowed: false,
+    status: 409,
+    reason: "same_price_manual",
+    message: "El cambio entre planes del mismo valor todav\xEDa no qued\xF3 automatizado."
+  };
+}
+__name(decidePlanTransition, "decidePlanTransition");
+async function createMercadoPagoCheckoutPreference2(env, context) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  const amount = Number(context?.amount_ars);
+  if (!accessToken) {
+    throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("El monto calculado para el checkout no es v\xE1lido");
+  }
+  const payload = {
+    items: [
+      {
+        id: String(context?.target_plan?.code || "PLAN").trim().toUpperCase(),
+        title: String(context?.title || context?.target_plan?.nombre || "Suscripci\xF3n APDocentePBA").trim(),
+        description: String(context?.description || context?.target_plan?.descripcion || "").trim() || void 0,
+        quantity: 1,
+        currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS",
+        unit_price: amount
+      }
+    ],
+    payer: {
+      email: String(context?.user?.email || "").trim().toLowerCase() || void 0,
+      name: String(context?.user?.nombre || "").trim() || void 0,
+      surname: String(context?.user?.apellido || "").trim() || void 0
+    },
+    external_reference: context.external_reference,
+    notification_url: context.webhook_url,
+    statement_descriptor: String(env.MERCADOPAGO_STATEMENT_DESCRIPTOR || "APDOCENTEPBA").slice(0, 13)
+  };
+  const successUrl = String(env.MERCADOPAGO_SUCCESS_URL || "").trim();
+  const pendingUrl = String(env.MERCADOPAGO_PENDING_URL || "").trim();
+  const failureUrl = String(env.MERCADOPAGO_FAILURE_URL || "").trim();
+  if (successUrl || pendingUrl || failureUrl) {
+    payload.back_urls = {};
+    if (successUrl) payload.back_urls.success = successUrl;
+    if (pendingUrl) payload.back_urls.pending = pendingUrl;
+    if (failureUrl) payload.back_urls.failure = failureUrl;
+  }
+  if (successUrl) {
+    payload.auto_return = "approved";
+  }
+  const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  const rawText = await res.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { raw_text: rawText };
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || data?.cause?.[0]?.description || "Mercado Pago no pudo crear la preferencia");
+  }
+  return {
+    mode: "mercadopago_preference",
+    preference_id: data?.id || null,
+    checkout_url: data?.init_point || null,
+    sandbox_init_point: data?.sandbox_init_point || null,
+    raw: data
+  };
+}
+__name(createMercadoPagoCheckoutPreference2, "createMercadoPagoCheckoutPreference");
+async function createCheckoutSessionRecord(env, session) {
+  return await supabaseInsertReturning3(env, "mercadopago_checkout_sessions", session);
+}
+__name(createCheckoutSessionRecord, "createCheckoutSessionRecord");
+async function delegateJson(worker, request, env, ctx) {
+  const response = await worker.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson, "delegateJson");
+async function handleMiPlanSubscriptionHotfix(request, url, env, ctx) {
+  const delegated = await delegateJson(worker_hotfix_default, request, env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) {
+    return json4(delegated.data || { ok: false, message: "No se pudo leer el plan" }, delegated.response.status || 500);
+  }
+  const userId = String(url.searchParams.get("user_id") || delegated.data?.user_id || "").trim();
+  const snapshot = userId ? await resolveSubscriptionSnapshot(env, userId) : { current: delegated.data?.subscription || null, trialUsed: false, currentPlan: delegated.data?.plan || null };
+  const current = snapshot.current || delegated.data?.subscription || null;
+  const currentPlan = snapshot.currentPlan || delegated.data?.plan || null;
+  const billingNote = hasRecurringPreapproval(current) ? "Tu plan usa renovaci\xF3n autom\xE1tica por preapproval." : canonicalPlanCode2(current?.plan_code) === "TRIAL_7D" ? "Tu cuenta est\xE1 en prueba gratis." : current?.current_period_ends_at ? `Tu plan actual corre hasta el ${formatDateAr(current.current_period_ends_at)}. Si sub\xEDs de plan antes de esa fecha, se calcula una diferencia proporcional y el nuevo ciclo arranca cuando se acredita el pago.` : "Tu plan actual usa ciclos manuales. Si sub\xEDs de plan, se puede cobrar la diferencia proporcional del tiempo restante.";
+  return json4({
+    ...delegated.data,
+    subscription: {
+      ...delegated.data?.subscription || {},
+      ...current || {},
+      plan_code: canonicalPlanCode2(current?.plan_code || delegated.data?.subscription?.plan_code || "TRIAL_7D"),
+      status: String(current?.status || delegated.data?.subscription?.status || "available").toLowerCase(),
+      billing_mode: getSubscriptionBillingMode(current),
+      renewal_policy: getRenewalPolicy(current),
+      recurring_enabled: hasRecurringPreapproval(current),
+      trial_used: !!snapshot.trialUsed
+    },
+    plan: delegated.data?.plan || currentPlan,
+    actions: buildSubscriptionActions(snapshot),
+    subscription_policy_version: SUBSCRIPTION_POLICY_VERSION,
+    billing_note: billingNote
+  }, delegated.response.status || 200);
+}
+__name(handleMiPlanSubscriptionHotfix, "handleMiPlanSubscriptionHotfix");
+async function handleCreateCheckoutSubscriptionHotfix(request, env, ctx) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  const targetPlanCode = canonicalPlanCode2(body?.plan_code || "");
+  if (!userId || !targetPlanCode) {
+    return json4({ ok: false, reason: "missing_data", message: "Faltan user_id o plan_code.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 400);
+  }
+  const user = await getUserById3(env, userId);
+  if (!user) {
+    return json4({ ok: false, reason: "user_not_found", message: "Usuario no encontrado.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 404);
+  }
+  const snapshot = await resolveSubscriptionSnapshot(env, userId);
+  const targetPlan = await getPlanByCode(env, targetPlanCode);
+  if (!targetPlan) {
+    return json4({ ok: false, reason: "plan_not_found", message: "No encontramos el plan elegido.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 404);
+  }
+  const decision = decidePlanTransition(snapshot, targetPlan);
+  if (!decision.allowed) {
+    return json4({
+      ok: false,
+      reason: decision.reason,
+      message: decision.message,
+      actions: buildSubscriptionActions(snapshot),
+      subscription_policy_version: SUBSCRIPTION_POLICY_VERSION
+    }, decision.status);
+  }
+  if (decision.mode === "new_checkout") {
+    const forwardedRequest = new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify({ ...body, plan_code: targetPlanCode })
+    });
+    const delegated = await delegateJson(worker_hotfix_default, forwardedRequest, env, ctx);
+    if (!delegated.response.ok || !delegated.data?.ok) {
+      return json4(delegated.data || { ok: false, message: "No se pudo preparar el checkout" }, delegated.response.status || 500);
+    }
+    return json4({
+      ...delegated.data,
+      plan_code: targetPlanCode,
+      recurring_enabled: false,
+      billing_mode: "one_time_cycle",
+      renewal_policy: "manual_renewal",
+      subscription_policy_version: SUBSCRIPTION_POLICY_VERSION,
+      message: `${delegated.data?.message || "Checkout preparado"}. Este checkout activa un ciclo del plan y no deja renovaci\xF3n autom\xE1tica mensual.`
+    }, delegated.response.status || 200);
+  }
+  if (decision.mode === "upgrade_prorated") {
+    const quote = decision.quote;
+    const externalReference = `${userId}:${targetPlanCode}:${Date.now()}`;
+    const webhookUrl = env.MERCADOPAGO_WEBHOOK_URL || new URL(`${API_URL_PREFIX4}/mercadopago/webhook`, request.url).toString();
+    const currentPlanName = snapshot.currentPlan?.nombre || snapshot.currentPlan?.display_name || snapshot.currentPlanCode || "Plan actual";
+    const targetPlanName = targetPlan?.nombre || targetPlan?.display_name || targetPlanCode;
+    const preference = await createMercadoPagoCheckoutPreference2(env, {
+      user,
+      target_plan: targetPlan,
+      amount_ars: quote.amount_to_charge_ars,
+      external_reference: externalReference,
+      webhook_url: webhookUrl,
+      title: `Upgrade APDocentePBA: ${currentPlanName} \u2192 ${targetPlanName}`,
+      description: `Diferencia proporcional para pasar de ${currentPlanName} a ${targetPlanName}. Cr\xE9dito aplicado por tiempo restante del ciclo actual.`
+    }).catch((err) => {
+      throw new Error(err?.message || "No se pudo crear el checkout de upgrade");
+    });
+    const session = await createCheckoutSessionRecord(env, {
+      user_id: userId,
+      plan_code: targetPlanCode,
+      status: preference?.checkout_url ? "ready" : "pending_config",
+      provider: "mercadopago",
+      checkout_url: preference?.checkout_url || null,
+      external_reference: externalReference,
+      provider_payload: {
+        configured: !!preference?.checkout_url,
+        provider_mode: preference?.mode || "mercadopago_preference",
+        preference_id: preference?.preference_id || null,
+        sandbox_init_point: preference?.sandbox_init_point || null,
+        transition_mode: "upgrade_prorated",
+        current_plan_code: snapshot.currentPlanCode,
+        target_plan_code: targetPlanCode,
+        current_price_ars: quote.current_price_ars,
+        target_price_ars: quote.target_price_ars,
+        credit_ars: quote.credit_ars,
+        amount_to_charge_ars: quote.amount_to_charge_ars,
+        cycle_started_at: quote.cycle_started_at,
+        cycle_ends_at: quote.cycle_ends_at
+      }
+    });
+    return json4({
+      ok: true,
+      configured: !!preference?.checkout_url,
+      provider_mode: preference?.mode || "mercadopago_preference",
+      message: `Upgrade habilitado. Se te va a cobrar $${quote.amount_to_charge_ars.toLocaleString("es-AR")} como diferencia proporcional para pasar de ${currentPlanName} a ${targetPlanName}. El cr\xE9dito aplicado por el tiempo restante es de $${quote.credit_ars.toLocaleString("es-AR")}${quote.cycle_ends_label ? ` y tu ciclo actual venc\xEDa el ${quote.cycle_ends_label}` : ""}.`,
+      session_id: session?.id || null,
+      checkout_url: preference?.checkout_url || null,
+      sandbox_init_point: preference?.sandbox_init_point || null,
+      preference_id: preference?.preference_id || null,
+      external_reference: externalReference,
+      plan: targetPlan,
+      upgrade_quote: quote,
+      recurring_enabled: false,
+      billing_mode: "one_time_cycle",
+      renewal_policy: "manual_renewal",
+      subscription_policy_version: SUBSCRIPTION_POLICY_VERSION
+    }, 200);
+  }
+  return json4({ ok: false, reason: "unsupported_transition_mode", message: "No pudimos resolver ese cambio todav\xEDa.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 409);
+}
+__name(handleCreateCheckoutSubscriptionHotfix, "handleCreateCheckoutSubscriptionHotfix");
+async function handleCancelSubscriptionHotfix(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || getBearerToken4(request) || "").trim();
+  if (!userId) {
+    return json4({ ok: false, reason: "missing_user_id", message: "Falta user_id.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 400);
+  }
+  const user = await getUserById3(env, userId);
+  if (!user) {
+    return json4({ ok: false, reason: "user_not_found", message: "Usuario no encontrado.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 404);
+  }
+  const snapshot = await resolveSubscriptionSnapshot(env, userId);
+  const current = snapshot.current;
+  if (!current || !isPaidPlan(current?.plan_code)) {
+    return json4({ ok: false, reason: "no_paid_subscription", message: "No hay un plan pago activo para cancelar.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 409);
+  }
+  if (!hasRecurringPreapproval(current)) {
+    return json4({
+      ok: false,
+      reason: "no_recurring_subscription",
+      message: current?.current_period_ends_at ? `Tu plan actual no tiene renovaci\xF3n autom\xE1tica mensual en Mercado Pago. No hay un cobro recurrente para cancelar; el acceso vence al final del per\xEDodo actual (${current.current_period_ends_at}).` : "Tu plan actual no tiene renovaci\xF3n autom\xE1tica mensual en Mercado Pago. No hay un cobro recurrente para cancelar.",
+      subscription_policy_version: SUBSCRIPTION_POLICY_VERSION
+    }, 409);
+  }
+  return json4({ ok: false, reason: "manual_cancel_required", message: "Existe un preapproval asociado, pero la cancelaci\xF3n autom\xE1tica segura todav\xEDa no qued\xF3 habilitada en este hotfix.", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 501);
+}
+__name(handleCancelSubscriptionHotfix, "handleCancelSubscriptionHotfix");
+var worker_subscription_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders4() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX4}/mi-plan` && request.method === "GET") {
+      try {
+        return await handleMiPlanSubscriptionHotfix(request, url, env, ctx);
+      } catch (err) {
+        return json4({ ok: false, message: err?.message || "No se pudo leer el plan", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX4}/mercadopago/create-checkout-link` && request.method === "POST") {
+      try {
+        return await handleCreateCheckoutSubscriptionHotfix(request, env, ctx);
+      } catch (err) {
+        return json4({ ok: false, message: err?.message || "No se pudo preparar el checkout", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX4}/subscription/cancel` && request.method === "POST") {
+      try {
+        return await handleCancelSubscriptionHotfix(request, env);
+      } catch (err) {
+        return json4({ ok: false, message: err?.message || "No se pudo resolver la cancelaci\xF3n", subscription_policy_version: SUBSCRIPTION_POLICY_VERSION }, 500);
+      }
+    }
+    return await worker_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_hotfix_default?.scheduled === "function") {
+      return await worker_hotfix_default.scheduled(controller, env, ctx);
+    }
+  }
+};
+
+// worker_autorenew_optin_hotfix.js
+var API_URL_PREFIX5 = "/api";
+var AUTORENEW_POLICY_VERSION = "2026-04-04-autorenew-optin-1";
+function corsHeaders5() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders5, "corsHeaders");
+function json5(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders5() });
+}
+__name(json5, "json");
+function norm3(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm3, "norm");
+function canonicalPlanCode3(code) {
+  const raw = norm3(code);
+  return raw === "PRO" ? "PREMIUM" : raw || "";
+}
+__name(canonicalPlanCode3, "canonicalPlanCode");
+function hasRecurringPreapproval2(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval2, "hasRecurringPreapproval");
+function parseFechaFlexible3(value) {
+  const d = new Date(String(value || "").trim());
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible3, "parseFechaFlexible");
+function addDaysIso2(baseIso, days) {
+  const baseDate = parseFechaFlexible3(baseIso) || /* @__PURE__ */ new Date();
+  return new Date(baseDate.getTime() + days * 864e5).toISOString();
+}
+__name(addDaysIso2, "addDaysIso");
+function formatDateAr2(value) {
+  const d = parseFechaFlexible3(value);
+  return d ? new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d) : "";
+}
+__name(formatDateAr2, "formatDateAr");
+function normalizeRecurringStatus(status) {
+  const raw = String(status || "").trim().toLowerCase();
+  if (!raw) return "inactive";
+  if (raw === "authorized" || raw === "active") return "active";
+  if (raw === "pending") return "pending_setup";
+  if (raw === "paused") return "paused";
+  if (raw === "cancelled" || raw === "canceled") return "canceled";
+  return raw;
+}
+__name(normalizeRecurringStatus, "normalizeRecurringStatus");
+async function supabaseRequest3(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest3, "supabaseRequest");
+async function supabaseSelect5(env, query) {
+  return await supabaseRequest3(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect5, "supabaseSelect");
+async function supabasePatchById(env, table, id, payload) {
+  const rows = await supabaseRequest3(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabasePatchById, "supabasePatchById");
+async function supabaseInsertReturning4(env, table, payload) {
+  const rows = await supabaseRequest3(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabaseInsertReturning4, "supabaseInsertReturning");
+async function getUserById4(env, userId) {
+  const rows = await supabaseSelect5(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById4, "getUserById");
+async function getUserSubscriptions2(env, userId) {
+  const rows = await supabaseSelect5(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions2, "getUserSubscriptions");
+async function getPlanByCode2(env, planCode) {
+  const code = canonicalPlanCode3(planCode);
+  const rows = await supabaseSelect5(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,mercadopago_plan_id&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode2, "getPlanByCode");
+function isSubscriptionCurrent2(subscription) {
+  if (!subscription) return false;
+  const planCode = canonicalPlanCode3(subscription.plan_code);
+  const status = String(subscription.status || "").trim().toUpperCase();
+  const now = Date.now();
+  if (status === "CANCELLED" || status === "CANCELED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end2 = parseFechaFlexible3(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end2 && now <= end2;
+  }
+  const end = parseFechaFlexible3(subscription.current_period_ends_at)?.getTime() || 0;
+  return !end || now <= end;
+}
+__name(isSubscriptionCurrent2, "isSubscriptionCurrent");
+async function resolveCurrentSubscription(env, userId) {
+  const rows = await getUserSubscriptions2(env, userId);
+  const current = rows.find(isSubscriptionCurrent2) || rows[0] || null;
+  const currentPlan = current ? await getPlanByCode2(env, current.plan_code) : null;
+  return { current, currentPlan };
+}
+__name(resolveCurrentSubscription, "resolveCurrentSubscription");
+async function mercadoPagoRequest(env, path, init = {}) {
+  const token = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!token) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  const res = await fetch(`https://api.mercadopago.com${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers || {} }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(data?.message || data?.cause?.[0]?.description || `Mercado Pago error ${res.status}`);
+  return data;
+}
+__name(mercadoPagoRequest, "mercadoPagoRequest");
+async function getMercadoPagoPreapproval(env, preapprovalId) {
+  if (!preapprovalId) return null;
+  return await mercadoPagoRequest(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "GET" }).catch(() => null);
+}
+__name(getMercadoPagoPreapproval, "getMercadoPagoPreapproval");
+async function cancelMercadoPagoPreapproval(env, preapprovalId) {
+  return await mercadoPagoRequest(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "PUT", body: JSON.stringify({ status: "cancelled" }) });
+}
+__name(cancelMercadoPagoPreapproval, "cancelMercadoPagoPreapproval");
+async function createMercadoPagoPendingPreapproval(env, context) {
+  const backUrl = String(env.MERCADOPAGO_SUCCESS_URL || env.APP_PUBLIC_URL || "https://apdocentepba-hub.github.io/apdocentepba-v2/").trim();
+  return await mercadoPagoRequest(env, "/preapproval", {
+    method: "POST",
+    body: JSON.stringify({
+      reason: context.reason,
+      external_reference: context.external_reference,
+      payer_email: context.payer_email,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: "months",
+        start_date: context.start_date,
+        transaction_amount: context.transaction_amount,
+        currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS"
+      },
+      back_url: backUrl,
+      status: "pending"
+    })
+  });
+}
+__name(createMercadoPagoPendingPreapproval, "createMercadoPagoPendingPreapproval");
+async function delegateJson2(request, env, ctx) {
+  const response = await worker_subscription_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data };
+}
+__name(delegateJson2, "delegateJson");
+async function enrichMiPlan(request, env, ctx) {
+  const url = new URL(request.url);
+  const delegated = await delegateJson2(request, env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json5(delegated.data || { ok: false }, delegated.response.status || 500);
+  const userId = String(url.searchParams.get("user_id") || delegated.data?.user_id || "").trim();
+  if (!userId) return json5({ ...delegated.data, auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, delegated.response.status || 200);
+  const { current, currentPlan } = await resolveCurrentSubscription(env, userId);
+  const currentPaid = !!current && canonicalPlanCode3(current.plan_code) !== "TRIAL_7D" && isSubscriptionCurrent2(current);
+  let recurringInfo = null;
+  let recurringStatus = "inactive";
+  let recurringEnabled = false;
+  if (hasRecurringPreapproval2(current)) {
+    recurringInfo = await getMercadoPagoPreapproval(env, current.mercadopago_preapproval_id);
+    recurringStatus = normalizeRecurringStatus(recurringInfo?.status || "pending");
+    recurringEnabled = recurringStatus !== "canceled";
+    if (!recurringEnabled && current?.id) {
+      await supabasePatchById(env, "user_subscriptions", current.id, { mercadopago_preapproval_id: null });
+      current.mercadopago_preapproval_id = null;
+    }
+  }
+  const actions = {
+    ...delegated.data?.actions || {},
+    can_enable_auto_renew: currentPaid && !recurringEnabled,
+    can_disable_auto_renew: currentPaid && recurringEnabled
+  };
+  let billingNote = delegated.data?.billing_note || "";
+  if (currentPaid && !recurringEnabled) {
+    billingNote = current?.current_period_ends_at ? `Tu plan actual est\xE1 pago hasta el ${formatDateAr2(current.current_period_ends_at)}. Si no activ\xE1s renovaci\xF3n autom\xE1tica, cuando venza ese ciclo dejar\xE1s de poder usar APDocentePBA.` : `Tu plan actual usa renovaci\xF3n manual. Si no activ\xE1s renovaci\xF3n autom\xE1tica, cuando venza el ciclo dejar\xE1s de poder usar APDocentePBA.`;
+  }
+  if (recurringEnabled) {
+    billingNote = recurringStatus === "pending_setup" ? `La renovaci\xF3n autom\xE1tica qued\xF3 iniciada, pero falta completar el medio de pago en Mercado Pago. Si no termin\xE1s esa configuraci\xF3n, al vencer el ciclo actual se corta el acceso.` : `La renovaci\xF3n autom\xE1tica est\xE1 activa. Si Mercado Pago no logra cobrar el pr\xF3ximo ciclo, el plan no se renueva y el acceso se corta al vencimiento.`;
+  }
+  return json5({
+    ...delegated.data,
+    subscription: {
+      ...delegated.data?.subscription || {},
+      ...current || {},
+      recurring_enabled: recurringEnabled,
+      renewal_policy: recurringEnabled ? "automatic_opt_in" : "manual_renewal",
+      billing_mode: recurringEnabled ? "recurring_preapproval" : delegated.data?.subscription?.billing_mode || "one_time_cycle",
+      auto_renew_status: recurringStatus,
+      next_payment_date: recurringInfo?.next_payment_date || null
+    },
+    plan: delegated.data?.plan || currentPlan,
+    actions,
+    billing_note: billingNote,
+    auto_renew_policy_version: AUTORENEW_POLICY_VERSION
+  }, delegated.response.status || 200);
+}
+__name(enrichMiPlan, "enrichMiPlan");
+async function createCheckoutSessionRecord2(env, payload) {
+  return await supabaseInsertReturning4(env, "mercadopago_checkout_sessions", payload);
+}
+__name(createCheckoutSessionRecord2, "createCheckoutSessionRecord");
+async function handleEnableAutoRenew(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  if (!userId) return json5({ ok: false, message: "Falta user_id.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 400);
+  const user = await getUserById4(env, userId);
+  if (!user) return json5({ ok: false, message: "Usuario no encontrado.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 404);
+  const { current, currentPlan } = await resolveCurrentSubscription(env, userId);
+  if (!current || !currentPlan || canonicalPlanCode3(current.plan_code) === "TRIAL_7D" || !isSubscriptionCurrent2(current)) {
+    return json5({ ok: false, message: "Necesit\xE1s un plan pago activo para activar renovaci\xF3n autom\xE1tica.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 409);
+  }
+  if (hasRecurringPreapproval2(current)) {
+    return json5({ ok: false, message: "La renovaci\xF3n autom\xE1tica ya est\xE1 activa o en proceso de configuraci\xF3n.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 409);
+  }
+  const startDate = current.current_period_ends_at || addDaysIso2((/* @__PURE__ */ new Date()).toISOString(), 30);
+  const externalReference = `AUTORENEW:${userId}:${canonicalPlanCode3(current.plan_code)}:${Date.now()}`;
+  const mp = await createMercadoPagoPendingPreapproval(env, {
+    reason: `APDocentePBA \xB7 Renovaci\xF3n autom\xE1tica ${currentPlan?.nombre || canonicalPlanCode3(current.plan_code)}`,
+    external_reference: externalReference,
+    payer_email: user.email,
+    transaction_amount: Number(currentPlan?.price_ars || 0),
+    start_date: startDate
+  });
+  await createCheckoutSessionRecord2(env, {
+    user_id: userId,
+    plan_code: canonicalPlanCode3(current.plan_code),
+    status: mp?.init_point ? "ready" : "pending_config",
+    provider: "mercadopago",
+    checkout_url: mp?.init_point || null,
+    external_reference: externalReference,
+    provider_payload: { provider_mode: "mercadopago_preapproval_pending", preapproval_id: mp?.id || null, status: mp?.status || null, auto_renew_opt_in: true, starts_at: startDate }
+  }).catch(() => null);
+  if (current?.id && mp?.id) {
+    await supabasePatchById(env, "user_subscriptions", current.id, { mercadopago_preapproval_id: mp.id, external_reference: externalReference });
+  }
+  return json5({
+    ok: true,
+    checkout_url: mp?.init_point || null,
+    preapproval_id: mp?.id || null,
+    recurring_enabled: true,
+    auto_renew_status: normalizeRecurringStatus(mp?.status || "pending"),
+    message: `Se abri\xF3 Mercado Pago para activar la renovaci\xF3n autom\xE1tica. El pr\xF3ximo ciclo se intentar\xE1 cobrar desde el ${formatDateAr2(startDate)} solo si complet\xE1s la configuraci\xF3n del d\xE9bito autom\xE1tico.`,
+    auto_renew_policy_version: AUTORENEW_POLICY_VERSION
+  }, 200);
+}
+__name(handleEnableAutoRenew, "handleEnableAutoRenew");
+async function handleDisableAutoRenew(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  if (!userId) return json5({ ok: false, message: "Falta user_id.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 400);
+  const user = await getUserById4(env, userId);
+  if (!user) return json5({ ok: false, message: "Usuario no encontrado.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 404);
+  const { current } = await resolveCurrentSubscription(env, userId);
+  if (!current || !hasRecurringPreapproval2(current)) {
+    return json5({ ok: false, message: "No ten\xE9s renovaci\xF3n autom\xE1tica activa para desactivar.", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 409);
+  }
+  await cancelMercadoPagoPreapproval(env, current.mercadopago_preapproval_id);
+  await supabasePatchById(env, "user_subscriptions", current.id, { mercadopago_preapproval_id: null });
+  return json5({ ok: true, recurring_enabled: false, renewal_policy: "manual_renewal", message: current?.current_period_ends_at ? `La renovaci\xF3n autom\xE1tica qued\xF3 desactivada. Conserv\xE1s el acceso hasta el ${formatDateAr2(current.current_period_ends_at)} y despu\xE9s el plan vence sin cobrarte de nuevo.` : `La renovaci\xF3n autom\xE1tica qued\xF3 desactivada. No se har\xE1n nuevos cobros autom\xE1ticos.`, auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 200);
+}
+__name(handleDisableAutoRenew, "handleDisableAutoRenew");
+var worker_autorenew_optin_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders5() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX5}/mi-plan` && request.method === "GET") {
+      try {
+        return await enrichMiPlan(request, env, ctx);
+      } catch (err) {
+        return json5({ ok: false, message: err?.message || "No se pudo leer el plan", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX5}/subscription/enable-auto-renew` && request.method === "POST") {
+      try {
+        return await handleEnableAutoRenew(request, env);
+      } catch (err) {
+        return json5({ ok: false, message: err?.message || "No se pudo activar la renovaci\xF3n autom\xE1tica", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX5}/subscription/cancel` && request.method === "POST") {
+      try {
+        return await handleDisableAutoRenew(request, env);
+      } catch (err) {
+        return json5({ ok: false, message: err?.message || "No se pudo desactivar la renovaci\xF3n autom\xE1tica", auto_renew_policy_version: AUTORENEW_POLICY_VERSION }, 500);
+      }
+    }
+    return await worker_subscription_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_subscription_hotfix_default?.scheduled === "function") return await worker_subscription_hotfix_default.scheduled(controller, env, ctx);
+  }
+};
+
+// worker_subscription_state_hotfix.js
+var API_URL_PREFIX6 = "/api";
+var SUBSCRIPTION_STATE_POLICY_VERSION = "2026-04-06-admin-payments-1";
+var REUSE_SESSION_WINDOW_MS = 20 * 60 * 1e3;
+function corsHeaders6() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders6, "corsHeaders");
+function json6(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders6() });
+}
+__name(json6, "json");
+function norm4(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm4, "norm");
+function getBearerToken5(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken5, "getBearerToken");
+function canonicalPlanCode4(code) {
+  const raw = norm4(code);
+  if (raw === "PRO") return "PREMIUM";
+  return raw || "";
+}
+__name(canonicalPlanCode4, "canonicalPlanCode");
+function parseFechaFlexible4(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible4, "parseFechaFlexible");
+function formatDateAr3(value) {
+  const d = parseFechaFlexible4(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+__name(formatDateAr3, "formatDateAr");
+function normalizeSubscriptionStatus2(status) {
+  const raw = norm4(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus2, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval3(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval3, "hasRecurringPreapproval");
+function isPaidPlan2(planCode) {
+  return !!planCode && canonicalPlanCode4(planCode) !== "TRIAL_7D";
+}
+__name(isPaidPlan2, "isPaidPlan");
+function isSubscriptionCurrent3(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus2(subscription.status);
+  const planCode = canonicalPlanCode4(subscription.plan_code);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible4(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status)) {
+    const end = parseFechaFlexible4(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+  return false;
+}
+__name(isSubscriptionCurrent3, "isSubscriptionCurrent");
+function getSubscriptionAccessUntil(subscription) {
+  if (!subscription) return null;
+  const planCode = canonicalPlanCode4(subscription.plan_code);
+  return planCode === "TRIAL_7D" ? subscription.trial_ends_at || null : subscription.current_period_ends_at || null;
+}
+__name(getSubscriptionAccessUntil, "getSubscriptionAccessUntil");
+function getSubscriptionBillingMode2(subscription) {
+  if (hasRecurringPreapproval3(subscription)) return "recurring_preapproval";
+  if (canonicalPlanCode4(subscription?.plan_code) === "TRIAL_7D") return "trial";
+  return "one_time_cycle";
+}
+__name(getSubscriptionBillingMode2, "getSubscriptionBillingMode");
+function getRenewalPolicy2(subscription) {
+  const billingMode = getSubscriptionBillingMode2(subscription);
+  if (billingMode === "recurring_preapproval") return "automatic_opt_in";
+  if (billingMode === "trial") return "trial";
+  return "manual_renewal";
+}
+__name(getRenewalPolicy2, "getRenewalPolicy");
+function safeJsonParse(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse, "safeJsonParse");
+function sessionCreatedAtTs(session) {
+  return parseFechaFlexible4(session?.created_at)?.getTime() || 0;
+}
+__name(sessionCreatedAtTs, "sessionCreatedAtTs");
+async function supabaseRequest4(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  }
+  return data;
+}
+__name(supabaseRequest4, "supabaseRequest");
+async function supabaseSelect6(env, query) {
+  return await supabaseRequest4(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect6, "supabaseSelect");
+async function supabaseInsertReturning5(env, table, data) {
+  const rows = await supabaseRequest4(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(data)
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+__name(supabaseInsertReturning5, "supabaseInsertReturning");
+async function getUserById5(env, userId) {
+  const rows = await supabaseSelect6(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById5, "getUserById");
+async function getSessionByToken(env, token) {
+  const rows = await supabaseSelect6(env, `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getSessionByToken, "getSessionByToken");
+async function resolveAuthUser3(env, request) {
+  const bearer = getBearerToken5(request);
+  if (!bearer) return null;
+  const session = await getSessionByToken(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById5(env, session.user_id);
+  }
+  return await getUserById5(env, bearer);
+}
+__name(resolveAuthUser3, "resolveAuthUser");
+async function getUserSubscriptions3(env, userId) {
+  const rows = await supabaseSelect6(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions3, "getUserSubscriptions");
+async function getPlanByCode3(env, planCode) {
+  const code = canonicalPlanCode4(planCode);
+  const rows = await supabaseSelect6(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags,sort_order&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode3, "getPlanByCode");
+async function getUserCheckoutSessions(env, userId) {
+  const rows = await supabaseSelect6(env, `mercadopago_checkout_sessions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&order=created_at.desc&limit=50`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse(row.provider_payload) || row.provider_payload || null })) : [];
+}
+__name(getUserCheckoutSessions, "getUserCheckoutSessions");
+async function getRecentSubscriptionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect6(env, `user_subscriptions?select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,mercadopago_payer_email,external_reference,created_at&order=created_at.desc&limit=${limit}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getRecentSubscriptionsAdmin, "getRecentSubscriptionsAdmin");
+async function getRecentCheckoutSessionsAdmin(env, limit = 200) {
+  const rows = await supabaseSelect6(env, `mercadopago_checkout_sessions?select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at,updated_at&order=created_at.desc&limit=${limit}`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse(row.provider_payload) || row.provider_payload || null })) : [];
+}
+__name(getRecentCheckoutSessionsAdmin, "getRecentCheckoutSessionsAdmin");
+function resolveLifecycleStatus(subscription) {
+  if (!subscription) return "none";
+  const status = normalizeSubscriptionStatus2(subscription.status);
+  const accessUntilTs = parseFechaFlexible4(getSubscriptionAccessUntil(subscription))?.getTime() || 0;
+  const now = Date.now();
+  if (status === "CANCELLED") return accessUntilTs && accessUntilTs > now ? "active_until_canceled" : "canceled";
+  if (!accessUntilTs) return "active_open";
+  if (accessUntilTs <= now) return "expired";
+  if (accessUntilTs - now <= 72 * 60 * 60 * 1e3) return "expiring";
+  return status === "TRIALING" ? "trialing" : "active";
+}
+__name(resolveLifecycleStatus, "resolveLifecycleStatus");
+function findReusableCheckoutSession(sessions, options = {}) {
+  const planCode = canonicalPlanCode4(options.planCode || "");
+  const transitionMode = String(options.transitionMode || "").trim();
+  const autoRenewOptIn = options.autoRenewOptIn === true;
+  const now = Date.now();
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
+    const status = String(session?.status || "").trim().toLowerCase();
+    if (!["ready", "pending_config"].includes(status)) return false;
+    if (!session?.checkout_url) return false;
+    const createdAt = sessionCreatedAtTs(session);
+    if (!createdAt || now - createdAt > REUSE_SESSION_WINDOW_MS) return false;
+    const payload = safeJsonParse(session?.provider_payload) || {};
+    if (autoRenewOptIn) {
+      return payload?.auto_renew_opt_in === true && canonicalPlanCode4(session?.plan_code || payload?.plan_code || "") === planCode;
+    }
+    const payloadMode = String(payload?.transition_mode || "").trim();
+    if (transitionMode) {
+      return canonicalPlanCode4(session?.plan_code || payload?.target_plan_code || "") === planCode && payloadMode === transitionMode;
+    }
+    return canonicalPlanCode4(session?.plan_code || "") === planCode && !payloadMode && payload?.auto_renew_opt_in !== true;
+  }) || null;
+}
+__name(findReusableCheckoutSession, "findReusableCheckoutSession");
+function findScheduledDowngradeSession(sessions, currentPlanCode) {
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
+    if (String(session?.status || "").trim().toLowerCase() !== "scheduled") return false;
+    const payload = safeJsonParse(session?.provider_payload) || {};
+    return String(payload?.transition_mode || "") === "downgrade_next_cycle" && (!currentPlanCode || canonicalPlanCode4(payload?.current_plan_code || "") === currentPlanCode);
+  }) || null;
+}
+__name(findScheduledDowngradeSession, "findScheduledDowngradeSession");
+async function resolveSubscriptionSnapshot2(env, userId) {
+  const rows = await getUserSubscriptions3(env, userId);
+  const current = rows.find(isSubscriptionCurrent3) || rows[0] || null;
+  const trialUsed = rows.some((row) => canonicalPlanCode4(row?.plan_code) === "TRIAL_7D");
+  const currentPlan = current ? await getPlanByCode3(env, current.plan_code) : null;
+  const sessions = await getUserCheckoutSessions(env, userId);
+  const currentPlanCode = canonicalPlanCode4(current?.plan_code || "");
+  const scheduledChangeSession = findScheduledDowngradeSession(sessions, currentPlanCode);
+  const scheduledPayload = safeJsonParse(scheduledChangeSession?.provider_payload) || null;
+  return {
+    rows,
+    sessions,
+    current,
+    currentPlan,
+    trialUsed,
+    hasRecurring: hasRecurringPreapproval3(current),
+    currentPlanCode,
+    currentStatus: normalizeSubscriptionStatus2(current?.status || ""),
+    scheduledChange: scheduledChangeSession ? {
+      session_id: scheduledChangeSession.id || null,
+      status: scheduledChangeSession.status || "scheduled",
+      mode: String(scheduledPayload?.transition_mode || "downgrade_next_cycle"),
+      current_plan_code: canonicalPlanCode4(scheduledPayload?.current_plan_code || currentPlanCode),
+      next_plan_code: canonicalPlanCode4(scheduledPayload?.target_plan_code || scheduledChangeSession?.plan_code || ""),
+      apply_at: scheduledPayload?.apply_at || null,
+      created_at: scheduledChangeSession?.created_at || null
+    } : null
+  };
+}
+__name(resolveSubscriptionSnapshot2, "resolveSubscriptionSnapshot");
+function buildResolvedState(snapshot) {
+  const current = snapshot?.current || null;
+  const accessUntil = getSubscriptionAccessUntil(current);
+  return {
+    access_active: !!current && isSubscriptionCurrent3(current),
+    access_until: accessUntil,
+    access_until_label: formatDateAr3(accessUntil),
+    current_plan_code: canonicalPlanCode4(current?.plan_code || "TRIAL_7D"),
+    current_status: normalizeSubscriptionStatus2(current?.status || ""),
+    lifecycle_status: resolveLifecycleStatus(current),
+    billing_mode: getSubscriptionBillingMode2(current),
+    renewal_policy: getRenewalPolicy2(current),
+    recurring_enabled: hasRecurringPreapproval3(current),
+    scheduled_next_plan_code: snapshot?.scheduledChange?.next_plan_code || null,
+    scheduled_next_plan_apply_at: snapshot?.scheduledChange?.apply_at || null,
+    scheduled_next_plan_apply_label: formatDateAr3(snapshot?.scheduledChange?.apply_at)
+  };
+}
+__name(buildResolvedState, "buildResolvedState");
+function buildSubscriptionActions2(snapshot) {
+  const current = snapshot?.current || null;
+  const currentPlan = snapshot?.currentPlan || null;
+  const currentPlanCode = canonicalPlanCode4(current?.plan_code || "");
+  const currentPaid = !!current && isPaidPlan2(currentPlanCode) && isSubscriptionCurrent3(current);
+  const recurring = hasRecurringPreapproval3(current);
+  return {
+    can_checkout_new_paid_plan: !currentPaid,
+    can_upgrade_paid_plan: currentPaid && !recurring,
+    can_change_paid_plan_automatically: currentPaid && !recurring,
+    can_schedule_downgrade: currentPaid,
+    can_return_to_trial: false,
+    can_cancel_recurring: recurring,
+    requires_manual_support_for_paid_plan_change: currentPaid && recurring,
+    billing_mode: getSubscriptionBillingMode2(current),
+    renewal_policy: getRenewalPolicy2(current),
+    recurring_enabled: recurring,
+    current_plan_price_ars: Number(currentPlan?.price_ars || 0) || 0
+  };
+}
+__name(buildSubscriptionActions2, "buildSubscriptionActions");
+function decidePlanTransition2(snapshot, targetPlan) {
+  const targetPlanCode = canonicalPlanCode4(targetPlan?.code || "");
+  const current = snapshot?.current || null;
+  const currentPlan = snapshot?.currentPlan || null;
+  const currentPlanCode = canonicalPlanCode4(current?.plan_code || "");
+  const currentPaid = !!current && isPaidPlan2(currentPlanCode) && isSubscriptionCurrent3(current);
+  const recurring = hasRecurringPreapproval3(current);
+  if (!targetPlanCode) return { allowed: false, status: 400, reason: "missing_target_plan", message: "No se recibi\xF3 el plan de destino." };
+  if (targetPlanCode === currentPlanCode && current) return { allowed: false, status: 409, reason: "same_plan", message: "Ya est\xE1s en ese plan." };
+  if (targetPlanCode === "TRIAL_7D") return { allowed: false, status: 409, reason: "trial_return_blocked", message: "La vuelta a prueba gratis queda bloqueada para evitar inconsistencias de facturaci\xF3n y de estado." };
+  if (!current || !currentPaid || currentPlanCode === "TRIAL_7D") return { allowed: true, status: 200, mode: "new_checkout", reason: "initial_activation", message: "Alta inicial o salida de prueba a plan pago." };
+  const currentPrice = Number(currentPlan?.price_ars || 0);
+  const targetPrice = Number(targetPlan?.price_ars || 0);
+  if (targetPrice < currentPrice) {
+    return {
+      allowed: true,
+      status: 200,
+      mode: "downgrade_scheduled",
+      reason: "downgrade_next_cycle",
+      message: current?.current_period_ends_at ? `El cambio a ${targetPlan?.nombre || targetPlanCode} queda programado para cuando venza el ciclo actual (${formatDateAr3(current.current_period_ends_at)}).` : `El cambio a ${targetPlan?.nombre || targetPlanCode} queda programado para el pr\xF3ximo ciclo.`
+    };
+  }
+  if (recurring) {
+    return {
+      allowed: false,
+      status: 409,
+      reason: "manual_transition_required",
+      message: "Los cambios hacia arriba con renovaci\xF3n autom\xE1tica activa quedan bloqueados hasta actualizar el d\xE9bito del pr\xF3ximo ciclo de forma segura."
+    };
+  }
+  if (targetPrice > currentPrice) {
+    return { allowed: true, status: 200, mode: "delegate_checkout", reason: "paid_upgrade_prorated", message: "Upgrade permitido." };
+  }
+  return { allowed: false, status: 409, reason: "same_price_manual", message: "El cambio entre planes del mismo valor todav\xEDa no qued\xF3 automatizado." };
+}
+__name(decidePlanTransition2, "decidePlanTransition");
+async function handleAdminPagos(request, env) {
+  const user = await resolveAuthUser3(env, request);
+  if (!user) return json6({ ok: false, error: "No autenticado" }, 401);
+  if (!user.es_admin) return json6({ ok: false, error: "No autorizado" }, 403);
+  const [subscriptions, checkouts] = await Promise.all([
+    getRecentSubscriptionsAdmin(env, 200),
+    getRecentCheckoutSessionsAdmin(env, 200)
+  ]);
+  const planCounts = {};
+  for (const row of subscriptions) {
+    const code = canonicalPlanCode4(row?.plan_code || "") || "SIN_PLAN";
+    planCounts[code] = (planCounts[code] || 0) + 1;
+  }
+  const summary = {
+    subscriptions_total: subscriptions.length,
+    subscriptions_active: subscriptions.filter(isSubscriptionCurrent3).length,
+    subscriptions_trial: subscriptions.filter((row) => canonicalPlanCode4(row?.plan_code) === "TRIAL_7D").length,
+    subscriptions_recurring: subscriptions.filter((row) => hasRecurringPreapproval3(row)).length,
+    subscriptions_cancelled: subscriptions.filter((row) => normalizeSubscriptionStatus2(row?.status) === "CANCELLED").length,
+    checkout_total: checkouts.length,
+    checkout_ready: checkouts.filter((row) => String(row?.status || "").toLowerCase() === "ready").length,
+    checkout_pending: checkouts.filter((row) => ["pending", "pending_config", "scheduled"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_approved: checkouts.filter((row) => ["approved", "authorized"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_rejected: checkouts.filter((row) => ["rejected", "refunded"].includes(String(row?.status || "").toLowerCase())).length,
+    by_plan: planCounts
+  };
+  return json6({
+    ok: true,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+    summary,
+    recent_subscriptions: subscriptions.slice(0, 60),
+    recent_checkouts: checkouts.slice(0, 60)
+  });
+}
+__name(handleAdminPagos, "handleAdminPagos");
+async function delegateJson3(request, env, ctx) {
+  const response = await worker_autorenew_optin_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson3, "delegateJson");
+async function handleMiPlanWithState(request, env, ctx) {
+  const delegated = await delegateJson3(request, env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) {
+    return json6(delegated.data || { ok: false, message: "No se pudo leer el plan" }, delegated.response.status || 500);
+  }
+  const url = new URL(request.url);
+  const userId = String(url.searchParams.get("user_id") || delegated.data?.user_id || "").trim();
+  if (!userId) {
+    return json6({ ...delegated.data, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, delegated.response.status || 200);
+  }
+  const snapshot = await resolveSubscriptionSnapshot2(env, userId);
+  const resolvedState = buildResolvedState(snapshot);
+  const actions = { ...delegated.data?.actions || {}, ...buildSubscriptionActions2(snapshot) };
+  let billingNote = delegated.data?.billing_note || "";
+  if (snapshot?.scheduledChange?.next_plan_code) {
+    const nextPlan = await getPlanByCode3(env, snapshot.scheduledChange.next_plan_code).catch(() => null);
+    const nextLabel = nextPlan?.nombre || snapshot.scheduledChange.next_plan_code;
+    const dateLabel = formatDateAr3(snapshot.scheduledChange.apply_at);
+    const extra = dateLabel ? ` Ya qued\xF3 programado el cambio a ${nextLabel} para el ${dateLabel}.` : ` Ya qued\xF3 programado el cambio a ${nextLabel} para el pr\xF3ximo ciclo.`;
+    billingNote = `${billingNote || ""}${extra}`.trim();
+  }
+  return json6({
+    ...delegated.data,
+    actions,
+    resolved_state: resolvedState,
+    scheduled_change: snapshot?.scheduledChange || null,
+    billing_note: billingNote,
+    subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION
+  }, delegated.response.status || 200);
+}
+__name(handleMiPlanWithState, "handleMiPlanWithState");
+function buildReuseCheckoutResponse(session, message) {
+  const payload = safeJsonParse(session?.provider_payload) || {};
+  return {
+    ok: true,
+    configured: !!session?.checkout_url,
+    provider_mode: payload?.provider_mode || payload?.transition_mode || "reuse_existing_session",
+    message,
+    session_id: session?.id || null,
+    checkout_url: session?.checkout_url || null,
+    sandbox_init_point: payload?.sandbox_init_point || null,
+    preference_id: payload?.preference_id || null,
+    external_reference: session?.external_reference || null,
+    recurring_enabled: false,
+    subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION
+  };
+}
+__name(buildReuseCheckoutResponse, "buildReuseCheckoutResponse");
+async function handleCreateCheckoutWithSafety(request, env, ctx) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  const targetPlanCode = canonicalPlanCode4(body?.plan_code || "");
+  if (!userId || !targetPlanCode) return json6({ ok: false, reason: "missing_data", message: "Faltan user_id o plan_code.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
+  const user = await getUserById5(env, userId);
+  if (!user) return json6({ ok: false, reason: "user_not_found", message: "Usuario no encontrado.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
+  const snapshot = await resolveSubscriptionSnapshot2(env, userId);
+  const targetPlan = await getPlanByCode3(env, targetPlanCode);
+  if (!targetPlan) return json6({ ok: false, reason: "plan_not_found", message: "No encontramos el plan elegido.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 404);
+  const decision = decidePlanTransition2(snapshot, targetPlan);
+  if (!decision.allowed) return json6({ ok: false, reason: decision.reason, message: decision.message, actions: buildSubscriptionActions2(snapshot), subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, decision.status);
+  if (decision.mode === "downgrade_scheduled") {
+    const existing = snapshot?.scheduledChange;
+    if (existing?.next_plan_code === targetPlanCode) {
+      return json6({ ok: true, scheduled: true, mode: "downgrade_next_cycle", message: decision.message, scheduled_change: existing, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 200);
+    }
+    const currentPlanName = snapshot.currentPlan?.nombre || snapshot.currentPlanCode || "Plan actual";
+    const applyAt = snapshot?.current?.current_period_ends_at || null;
+    const scheduled = await supabaseInsertReturning5(env, "mercadopago_checkout_sessions", {
+      user_id: userId,
+      plan_code: targetPlanCode,
+      status: "scheduled",
+      provider: "mercadopago",
+      checkout_url: null,
+      external_reference: `DOWNGRADE:${userId}:${targetPlanCode}:${Date.now()}`,
+      provider_payload: {
+        transition_mode: "downgrade_next_cycle",
+        current_plan_code: snapshot.currentPlanCode,
+        current_plan_name: currentPlanName,
+        target_plan_code: targetPlanCode,
+        target_plan_name: targetPlan?.nombre || targetPlanCode,
+        apply_at: applyAt,
+        scheduled_by: "user_request"
+      }
+    });
+    return json6({
+      ok: true,
+      scheduled: true,
+      mode: "downgrade_next_cycle",
+      message: decision.message,
+      scheduled_change: {
+        session_id: scheduled?.id || null,
+        status: scheduled?.status || "scheduled",
+        mode: "downgrade_next_cycle",
+        current_plan_code: snapshot.currentPlanCode,
+        next_plan_code: targetPlanCode,
+        apply_at: applyAt,
+        created_at: scheduled?.created_at || null
+      },
+      subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION
+    }, 200);
+  }
+  const transitionMode = !snapshot?.current || canonicalPlanCode4(snapshot?.current?.plan_code || "") === "TRIAL_7D" ? "new_checkout" : "upgrade_prorated";
+  const reusable = findReusableCheckoutSession(snapshot?.sessions, { planCode: targetPlanCode, transitionMode: transitionMode === "new_checkout" ? "" : "upgrade_prorated" });
+  if (reusable) {
+    return json6(buildReuseCheckoutResponse(reusable, "Ya hab\xEDa un checkout reciente preparado para este cambio. Reutilizamos ese enlace para evitar duplicados."), 200);
+  }
+  const delegated = await delegateJson3(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify({ ...body, plan_code: targetPlanCode }) }), env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json6(delegated.data || { ok: false, message: "No se pudo preparar el checkout" }, delegated.response.status || 500);
+  return json6({ ...delegated.data, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, delegated.response.status || 200);
+}
+__name(handleCreateCheckoutWithSafety, "handleCreateCheckoutWithSafety");
+async function handleEnableAutoRenewWithSafety(request, env, ctx) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  if (!userId) return json6({ ok: false, message: "Falta user_id.", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 400);
+  const snapshot = await resolveSubscriptionSnapshot2(env, userId);
+  const currentPlanCode = snapshot?.currentPlanCode || canonicalPlanCode4(snapshot?.current?.plan_code || "");
+  const reusable = findReusableCheckoutSession(snapshot?.sessions, { planCode: currentPlanCode, autoRenewOptIn: true });
+  if (reusable) return json6(buildReuseCheckoutResponse(reusable, "Ya hab\xEDa una activaci\xF3n reciente de d\xE9bito autom\xE1tico en curso. Reutilizamos ese enlace para evitar duplicados."), 200);
+  const delegated = await delegateJson3(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(body) }), env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) return json6(delegated.data || { ok: false, message: "No se pudo activar la renovaci\xF3n autom\xE1tica" }, delegated.response.status || 500);
+  return json6({ ...delegated.data, subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, delegated.response.status || 200);
+}
+__name(handleEnableAutoRenewWithSafety, "handleEnableAutoRenewWithSafety");
+var worker_subscription_state_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders6() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX6}/admin/pagos` && request.method === "GET") {
+      try {
+        return await handleAdminPagos(request, env);
+      } catch (err) {
+        return json6({ ok: false, error: err?.message || "No se pudieron leer los pagos" }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX6}/mi-plan` && request.method === "GET") {
+      try {
+        return await handleMiPlanWithState(request, env, ctx);
+      } catch (err) {
+        return json6({ ok: false, message: err?.message || "No se pudo leer el plan", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX6}/mercadopago/create-checkout-link` && request.method === "POST") {
+      try {
+        return await handleCreateCheckoutWithSafety(request, env, ctx);
+      } catch (err) {
+        return json6({ ok: false, message: err?.message || "No se pudo preparar el checkout", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX6}/subscription/enable-auto-renew` && request.method === "POST") {
+      try {
+        return await handleEnableAutoRenewWithSafety(request, env, ctx);
+      } catch (err) {
+        return json6({ ok: false, message: err?.message || "No se pudo activar la renovaci\xF3n autom\xE1tica", subscription_state_policy_version: SUBSCRIPTION_STATE_POLICY_VERSION }, 500);
+      }
+    }
+    return await worker_autorenew_optin_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_autorenew_optin_hotfix_default?.scheduled === "function") {
+      return await worker_autorenew_optin_hotfix_default.scheduled(controller, env, ctx);
+    }
+  }
+};
+
+// worker_recurring_plan_change_hotfix.js
+var API_URL_PREFIX7 = "/api";
+var RECURRING_PLAN_CHANGE_VERSION = "2026-04-05-recurring-change-1";
+var REUSE_SESSION_WINDOW_MS2 = 20 * 60 * 1e3;
+function corsHeaders7() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders7, "corsHeaders");
+function json7(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders7() });
+}
+__name(json7, "json");
+function norm5(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm5, "norm");
+function canonicalPlanCode5(code) {
+  const raw = norm5(code);
+  if (raw === "PRO") return "PREMIUM";
+  return raw || "";
+}
+__name(canonicalPlanCode5, "canonicalPlanCode");
+function parseFechaFlexible5(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible5, "parseFechaFlexible");
+function formatDateAr4(value) {
+  const d = parseFechaFlexible5(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+__name(formatDateAr4, "formatDateAr");
+function normalizeSubscriptionStatus3(status) {
+  const raw = norm5(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus3, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval4(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval4, "hasRecurringPreapproval");
+function isPaidPlan3(planCode) {
+  return !!planCode && canonicalPlanCode5(planCode) !== "TRIAL_7D";
+}
+__name(isPaidPlan3, "isPaidPlan");
+function isSubscriptionCurrent4(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus3(subscription.status);
+  const planCode = canonicalPlanCode5(subscription.plan_code);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible5(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status)) {
+    const end = parseFechaFlexible5(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+  return false;
+}
+__name(isSubscriptionCurrent4, "isSubscriptionCurrent");
+function safeJsonParse2(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse2, "safeJsonParse");
+function sessionCreatedAtTs2(session) {
+  return parseFechaFlexible5(session?.created_at)?.getTime() || 0;
+}
+__name(sessionCreatedAtTs2, "sessionCreatedAtTs");
+function mapMercadoPagoCheckoutStatus2(status) {
+  const key = String(status || "").trim().toUpperCase();
+  if (key === "APPROVED") return "approved";
+  if (key === "AUTHORIZED") return "authorized";
+  if (["PENDING", "IN_PROCESS", "PENDING_CONTINGENCY"].includes(key)) return "pending";
+  if (["REJECTED", "CANCELLED"].includes(key)) return "rejected";
+  if (["REFUNDED", "CHARGED_BACK"].includes(key)) return "refunded";
+  return key.toLowerCase() || "pending";
+}
+__name(mapMercadoPagoCheckoutStatus2, "mapMercadoPagoCheckoutStatus");
+async function supabaseRequest5(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest5, "supabaseRequest");
+async function supabaseSelect7(env, query) {
+  return await supabaseRequest5(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect7, "supabaseSelect");
+async function supabaseInsertReturning6(env, table, data) {
+  const rows = await supabaseRequest5(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(data)
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+__name(supabaseInsertReturning6, "supabaseInsertReturning");
+async function supabasePatchById2(env, table, id, payload) {
+  const rows = await supabaseRequest5(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabasePatchById2, "supabasePatchById");
+async function getUserById6(env, userId) {
+  const rows = await supabaseSelect7(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById6, "getUserById");
+async function getPlanByCode4(env, planCode) {
+  const code = canonicalPlanCode5(planCode);
+  const rows = await supabaseSelect7(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,mercadopago_plan_id&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode4, "getPlanByCode");
+async function getUserSubscriptions4(env, userId) {
+  const rows = await supabaseSelect7(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions4, "getUserSubscriptions");
+async function getUserCheckoutSessions2(env, userId) {
+  const rows = await supabaseSelect7(env, `mercadopago_checkout_sessions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&order=created_at.desc&limit=50`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse2(row.provider_payload) || row.provider_payload || null })) : [];
+}
+__name(getUserCheckoutSessions2, "getUserCheckoutSessions");
+async function findCheckoutSessionByExternalReference2(env, externalReference) {
+  const rows = await supabaseSelect7(env, `mercadopago_checkout_sessions?external_reference=eq.${encodeURIComponent(externalReference)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&limit=1`).catch(() => []);
+  const session = Array.isArray(rows) ? rows[0] || null : null;
+  return session ? { ...session, provider_payload: safeJsonParse2(session.provider_payload) || session.provider_payload || null } : null;
+}
+__name(findCheckoutSessionByExternalReference2, "findCheckoutSessionByExternalReference");
+async function resolveCurrentSubscription2(env, userId) {
+  const rows = await getUserSubscriptions4(env, userId);
+  const current = rows.find(isSubscriptionCurrent4) || rows[0] || null;
+  const currentPlan = current ? await getPlanByCode4(env, current.plan_code) : null;
+  return { rows, current, currentPlan };
+}
+__name(resolveCurrentSubscription2, "resolveCurrentSubscription");
+function calculateUpgradeQuote2(currentPlan, targetPlan, currentSubscription) {
+  const currentPrice = Number(currentPlan?.price_ars || 0);
+  const targetPrice = Number(targetPlan?.price_ars || 0);
+  const delta = Math.max(0, targetPrice - currentPrice);
+  const startTs = parseFechaFlexible5(currentSubscription?.started_at)?.getTime() || 0;
+  const endTs = parseFechaFlexible5(currentSubscription?.current_period_ends_at)?.getTime() || 0;
+  const nowTs = Date.now();
+  let credit = 0;
+  if (startTs && endTs && endTs > startTs && endTs > nowTs) {
+    const totalMs = endTs - startTs;
+    const remainingMs = endTs - nowTs;
+    const remainingRatio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    credit = Math.max(0, Math.round(currentPrice * remainingRatio));
+  }
+  const amountToCharge = Math.max(1, Math.round(Math.max(delta, targetPrice - credit)));
+  return {
+    current_plan_code: canonicalPlanCode5(currentPlan?.code || currentSubscription?.plan_code || ""),
+    target_plan_code: canonicalPlanCode5(targetPlan?.code || ""),
+    current_price_ars: currentPrice,
+    target_price_ars: targetPrice,
+    credit_ars: credit,
+    amount_to_charge_ars: amountToCharge,
+    cycle_started_at: currentSubscription?.started_at || null,
+    cycle_ends_at: currentSubscription?.current_period_ends_at || null,
+    cycle_ends_label: formatDateAr4(currentSubscription?.current_period_ends_at)
+  };
+}
+__name(calculateUpgradeQuote2, "calculateUpgradeQuote");
+function findReusableSession(sessions, matcher) {
+  const now = Date.now();
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
+    const status = String(session?.status || "").trim().toLowerCase();
+    if (!["ready", "pending_config", "scheduled", "approved", "authorized"].includes(status)) return false;
+    const createdAt = sessionCreatedAtTs2(session);
+    if (createdAt && now - createdAt > REUSE_SESSION_WINDOW_MS2 && status !== "scheduled") return false;
+    return matcher(session, safeJsonParse2(session?.provider_payload) || session?.provider_payload || {});
+  }) || null;
+}
+__name(findReusableSession, "findReusableSession");
+async function mercadoPagoRequest2(env, path, init = {}) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!accessToken) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  const res = await fetch(`https://api.mercadopago.com${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const rawText = await res.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = rawText;
+  }
+  if (!res.ok) throw new Error(data?.message || data?.cause?.[0]?.description || `Mercado Pago error ${res.status}`);
+  return data;
+}
+__name(mercadoPagoRequest2, "mercadoPagoRequest");
+async function createMercadoPagoCheckoutPreference3(env, context) {
+  const amount = Number(context?.amount_ars);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("El monto calculado para el checkout no es v\xE1lido");
+  const payload = {
+    items: [
+      {
+        id: String(context?.target_plan?.code || "PLAN").trim().toUpperCase(),
+        title: String(context?.title || context?.target_plan?.nombre || "Suscripci\xF3n APDocentePBA").trim(),
+        description: String(context?.description || context?.target_plan?.descripcion || "").trim() || void 0,
+        quantity: 1,
+        currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS",
+        unit_price: amount
+      }
+    ],
+    payer: {
+      email: String(context?.user?.email || "").trim().toLowerCase() || void 0,
+      name: String(context?.user?.nombre || "").trim() || void 0,
+      surname: String(context?.user?.apellido || "").trim() || void 0
+    },
+    external_reference: context.external_reference,
+    notification_url: context.webhook_url,
+    statement_descriptor: String(env.MERCADOPAGO_STATEMENT_DESCRIPTOR || "APDOCENTEPBA").slice(0, 13)
+  };
+  const successUrl = String(env.MERCADOPAGO_SUCCESS_URL || "").trim();
+  const pendingUrl = String(env.MERCADOPAGO_PENDING_URL || "").trim();
+  const failureUrl = String(env.MERCADOPAGO_FAILURE_URL || "").trim();
+  if (successUrl || pendingUrl || failureUrl) {
+    payload.back_urls = {};
+    if (successUrl) payload.back_urls.success = successUrl;
+    if (pendingUrl) payload.back_urls.pending = pendingUrl;
+    if (failureUrl) payload.back_urls.failure = failureUrl;
+  }
+  if (successUrl) payload.auto_return = "approved";
+  const data = await mercadoPagoRequest2(env, "/checkout/preferences", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return {
+    mode: "mercadopago_preference",
+    preference_id: data?.id || null,
+    checkout_url: data?.init_point || null,
+    sandbox_init_point: data?.sandbox_init_point || null,
+    raw: data
+  };
+}
+__name(createMercadoPagoCheckoutPreference3, "createMercadoPagoCheckoutPreference");
+async function updateMercadoPagoPreapprovalAmount(env, preapprovalId, amount) {
+  const payload = {
+    auto_recurring: {
+      transaction_amount: Number(amount),
+      currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS"
+    }
+  };
+  return await mercadoPagoRequest2(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+__name(updateMercadoPagoPreapprovalAmount, "updateMercadoPagoPreapprovalAmount");
+async function fetchMercadoPagoPayment2(env, paymentId) {
+  return await mercadoPagoRequest2(env, `/v1/payments/${encodeURIComponent(paymentId)}`, { method: "GET" });
+}
+__name(fetchMercadoPagoPayment2, "fetchMercadoPagoPayment");
+async function delegateJson4(request, env, ctx) {
+  const response = await worker_subscription_state_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson4, "delegateJson");
+function buildReuseCheckoutResponse2(session, message) {
+  const payload = safeJsonParse2(session?.provider_payload) || {};
+  return {
+    ok: true,
+    configured: !!session?.checkout_url,
+    provider_mode: payload?.provider_mode || payload?.transition_mode || "reuse_existing_session",
+    message,
+    session_id: session?.id || null,
+    checkout_url: session?.checkout_url || null,
+    sandbox_init_point: payload?.sandbox_init_point || null,
+    preference_id: payload?.preference_id || null,
+    external_reference: session?.external_reference || null,
+    recurring_enabled: true,
+    recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION
+  };
+}
+__name(buildReuseCheckoutResponse2, "buildReuseCheckoutResponse");
+async function handleRecurringPlanChangeCheckout(request, env, ctx) {
+  const body = await request.json().catch(() => ({}));
+  const userId = String(body?.user_id || "").trim();
+  const targetPlanCode = canonicalPlanCode5(body?.plan_code || "");
+  if (!userId || !targetPlanCode) {
+    return json7({ ok: false, message: "Faltan user_id o plan_code.", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 400);
+  }
+  const user = await getUserById6(env, userId);
+  if (!user) {
+    return json7({ ok: false, message: "Usuario no encontrado.", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 404);
+  }
+  const { current, currentPlan } = await resolveCurrentSubscription2(env, userId);
+  const targetPlan = await getPlanByCode4(env, targetPlanCode);
+  if (!targetPlan) {
+    return json7({ ok: false, message: "No encontramos el plan elegido.", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 404);
+  }
+  const currentPlanCode = canonicalPlanCode5(current?.plan_code || "");
+  const currentRecurring = !!current && isPaidPlan3(currentPlanCode) && isSubscriptionCurrent4(current) && hasRecurringPreapproval4(current);
+  if (!currentRecurring) {
+    const delegated = await delegateJson4(new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify({ ...body, plan_code: targetPlanCode })
+    }), env, ctx);
+    return json7({ ...delegated.data || {}, recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, delegated.response.status || 200);
+  }
+  if (targetPlanCode === currentPlanCode) {
+    return json7({ ok: false, message: "Ya est\xE1s en ese plan.", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 409);
+  }
+  const currentPrice = Number(currentPlan?.price_ars || 0);
+  const targetPrice = Number(targetPlan?.price_ars || 0);
+  const sessions = await getUserCheckoutSessions2(env, userId);
+  if (targetPrice < currentPrice) {
+    const existing = findReusableSession(sessions, (_session, payload) => String(payload?.transition_mode || "") === "recurring_downgrade_next_cycle" && canonicalPlanCode5(payload?.target_plan_code || "") === targetPlanCode && canonicalPlanCode5(payload?.current_plan_code || "") === currentPlanCode);
+    if (existing) {
+      return json7({
+        ok: true,
+        scheduled: true,
+        mode: "recurring_downgrade_next_cycle",
+        message: `Ya estaba programado el cambio a ${targetPlan?.nombre || targetPlanCode} para el pr\xF3ximo ciclo.`,
+        session_id: existing.id || null,
+        recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION
+      }, 200);
+    }
+    await updateMercadoPagoPreapprovalAmount(env, current.mercadopago_preapproval_id, targetPrice);
+    const scheduled = await supabaseInsertReturning6(env, "mercadopago_checkout_sessions", {
+      user_id: userId,
+      plan_code: targetPlanCode,
+      status: "scheduled",
+      provider: "mercadopago",
+      checkout_url: null,
+      external_reference: `RECURDOWN:${userId}:${targetPlanCode}:${Date.now()}`,
+      provider_payload: {
+        transition_mode: "recurring_downgrade_next_cycle",
+        current_subscription_id: current.id,
+        current_plan_code: currentPlanCode,
+        target_plan_code: targetPlanCode,
+        current_price_ars: currentPrice,
+        target_price_ars: targetPrice,
+        recurring_preapproval_id: current.mercadopago_preapproval_id,
+        apply_at: current.current_period_ends_at || null,
+        recurring_amount_updated: true
+      }
+    });
+    return json7({
+      ok: true,
+      scheduled: true,
+      mode: "recurring_downgrade_next_cycle",
+      message: current?.current_period_ends_at ? `Vas a seguir con ${currentPlan?.nombre || currentPlanCode} hasta el ${formatDateAr4(current.current_period_ends_at)}. Despu\xE9s el d\xE9bito autom\xE1tico ya va a cobrar ${targetPlan?.nombre || targetPlanCode} por $${targetPrice.toLocaleString("es-AR")}.` : `El pr\xF3ximo d\xE9bito autom\xE1tico ya va a cobrar ${targetPlan?.nombre || targetPlanCode} por $${targetPrice.toLocaleString("es-AR")}.`,
+      session_id: scheduled?.id || null,
+      recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION
+    }, 200);
+  }
+  if (targetPrice > currentPrice) {
+    const existing = findReusableSession(sessions, (_session, payload) => String(payload?.transition_mode || "") === "recurring_upgrade_prorated" && canonicalPlanCode5(payload?.target_plan_code || "") === targetPlanCode && canonicalPlanCode5(payload?.current_plan_code || "") === currentPlanCode);
+    if (existing?.checkout_url) {
+      return json7(buildReuseCheckoutResponse2(existing, "Ya hab\xEDa un checkout reciente preparado para este upgrade con d\xE9bito autom\xE1tico. Reutilizamos ese enlace para evitar duplicados."), 200);
+    }
+    const quote = calculateUpgradeQuote2(currentPlan, targetPlan, current);
+    const externalReference = `RECURUP:${userId}:${targetPlanCode}:${Date.now()}`;
+    const webhookUrl = env.MERCADOPAGO_WEBHOOK_URL || new URL(`${API_URL_PREFIX7}/mercadopago/webhook`, request.url).toString();
+    const preference = await createMercadoPagoCheckoutPreference3(env, {
+      user,
+      target_plan: targetPlan,
+      amount_ars: quote.amount_to_charge_ars,
+      external_reference: externalReference,
+      webhook_url: webhookUrl,
+      title: `Upgrade APDocentePBA: ${currentPlan?.nombre || currentPlanCode} \u2192 ${targetPlan?.nombre || targetPlanCode}`,
+      description: `Diferencia proporcional para pasar de ${currentPlan?.nombre || currentPlanCode} a ${targetPlan?.nombre || targetPlanCode}. El pr\xF3ximo d\xE9bito autom\xE1tico se actualizar\xE1 al nuevo plan.`
+    });
+    const session = await supabaseInsertReturning6(env, "mercadopago_checkout_sessions", {
+      user_id: userId,
+      plan_code: targetPlanCode,
+      status: preference?.checkout_url ? "ready" : "pending_config",
+      provider: "mercadopago",
+      checkout_url: preference?.checkout_url || null,
+      external_reference: externalReference,
+      provider_payload: {
+        provider_mode: preference?.mode || "mercadopago_preference",
+        preference_id: preference?.preference_id || null,
+        sandbox_init_point: preference?.sandbox_init_point || null,
+        transition_mode: "recurring_upgrade_prorated",
+        current_subscription_id: current.id,
+        current_plan_code: currentPlanCode,
+        target_plan_code: targetPlanCode,
+        current_price_ars: quote.current_price_ars,
+        target_price_ars: quote.target_price_ars,
+        credit_ars: quote.credit_ars,
+        amount_to_charge_ars: quote.amount_to_charge_ars,
+        cycle_started_at: current.started_at || null,
+        cycle_ends_at: current.current_period_ends_at || null,
+        recurring_preapproval_id: current.mercadopago_preapproval_id,
+        recurring_new_amount_ars: targetPrice,
+        preserve_cycle_ends_at: current.current_period_ends_at || null,
+        preserve_started_at: current.started_at || null,
+        apply_plan_now: true
+      }
+    });
+    return json7({
+      ok: true,
+      configured: !!preference?.checkout_url,
+      provider_mode: preference?.mode || "mercadopago_preference",
+      message: `Upgrade habilitado. Se te va a cobrar $${quote.amount_to_charge_ars.toLocaleString("es-AR")} como diferencia proporcional para pasar de ${currentPlan?.nombre || currentPlanCode} a ${targetPlan?.nombre || targetPlanCode}. En cuanto se acredite, tu plan cambia ahora y el pr\xF3ximo d\xE9bito autom\xE1tico ya queda actualizado al nuevo valor.`,
+      session_id: session?.id || null,
+      checkout_url: preference?.checkout_url || null,
+      sandbox_init_point: preference?.sandbox_init_point || null,
+      preference_id: preference?.preference_id || null,
+      external_reference: externalReference,
+      recurring_enabled: true,
+      upgrade_quote: quote,
+      recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION
+    }, 200);
+  }
+  return json7({ ok: false, message: "El cambio entre planes del mismo valor todav\xEDa no qued\xF3 automatizado.", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 409);
+}
+__name(handleRecurringPlanChangeCheckout, "handleRecurringPlanChangeCheckout");
+async function applyRecurringUpgradePayment(env, payment, session) {
+  const payload = safeJsonParse2(session?.provider_payload) || {};
+  const paymentStatus = String(payment?.status || "").trim().toUpperCase();
+  const sessionStatus = mapMercadoPagoCheckoutStatus2(paymentStatus);
+  const nowIso2 = (/* @__PURE__ */ new Date()).toISOString();
+  await supabasePatchById2(env, "mercadopago_checkout_sessions", session.id, {
+    status: sessionStatus,
+    provider_payload: {
+      ...payload,
+      payment_id: payment?.id || null,
+      payment_status: payment?.status || null,
+      payment_status_detail: payment?.status_detail || null,
+      payer_email: payment?.payer?.email || null,
+      processed_at: nowIso2
+    },
+    updated_at: nowIso2
+  }).catch(() => null);
+  if (!["APPROVED", "AUTHORIZED"].includes(paymentStatus)) {
+    return {
+      processed: true,
+      external_reference: payment?.external_reference || null,
+      payment_id: payment?.id || null,
+      payment_status: paymentStatus,
+      recurring_plan_change_applied: false,
+      reason: "payment_not_approved"
+    };
+  }
+  const currentSubscriptionId = String(payload?.current_subscription_id || "").trim();
+  const recurringPreapprovalId = String(payload?.recurring_preapproval_id || "").trim();
+  const targetPlanCode = canonicalPlanCode5(payload?.target_plan_code || session?.plan_code || "");
+  const recurringNewAmount = Number(payload?.recurring_new_amount_ars || 0);
+  if (!currentSubscriptionId || !recurringPreapprovalId || !targetPlanCode || !Number.isFinite(recurringNewAmount) || recurringNewAmount <= 0) {
+    return {
+      processed: false,
+      reason: "missing_upgrade_payload",
+      external_reference: payment?.external_reference || null
+    };
+  }
+  await updateMercadoPagoPreapprovalAmount(env, recurringPreapprovalId, recurringNewAmount);
+  await supabasePatchById2(env, "user_subscriptions", currentSubscriptionId, {
+    plan_code: targetPlanCode,
+    status: paymentStatus === "AUTHORIZED" ? "AUTHORIZED" : "ACTIVE",
+    source: "mercadopago_recurring_upgrade",
+    current_period_ends_at: payload?.preserve_cycle_ends_at || null,
+    started_at: payload?.preserve_started_at || null,
+    mercadopago_preapproval_id: recurringPreapprovalId,
+    updated_at: nowIso2
+  });
+  await supabasePatchById2(env, "mercadopago_checkout_sessions", session.id, {
+    provider_payload: {
+      ...payload,
+      payment_id: payment?.id || null,
+      payment_status: payment?.status || null,
+      recurring_amount_updated: true,
+      plan_change_applied: true,
+      applied_at: nowIso2
+    },
+    updated_at: nowIso2
+  }).catch(() => null);
+  return {
+    processed: true,
+    external_reference: payment?.external_reference || null,
+    payment_id: payment?.id || null,
+    payment_status: paymentStatus,
+    recurring_plan_change_applied: true,
+    user_id: session?.user_id || null,
+    plan_code: targetPlanCode
+  };
+}
+__name(applyRecurringUpgradePayment, "applyRecurringUpgradePayment");
+async function handleMercadoPagoWebhookWithRecurringChanges(request, env, ctx) {
+  const raw = await request.text();
+  let payload = null;
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    payload = { raw_text: raw };
+  }
+  const topic = String(payload?.type || payload?.topic || payload?.action || "").trim().toLowerCase();
+  const resourceId = String(payload?.data?.id || payload?.id || "").trim();
+  if (!resourceId || !topic.includes("payment")) {
+    return await worker_subscription_state_hotfix_default.fetch(new Request(request.url, { method: request.method, headers: request.headers, body: raw }), env, ctx);
+  }
+  const payment = await fetchMercadoPagoPayment2(env, resourceId);
+  const externalReference = String(payment?.external_reference || "").trim();
+  const session = externalReference ? await findCheckoutSessionByExternalReference2(env, externalReference) : null;
+  const sessionPayload = safeJsonParse2(session?.provider_payload) || session?.provider_payload || {};
+  if (String(sessionPayload?.transition_mode || "") !== "recurring_upgrade_prorated") {
+    return await worker_subscription_state_hotfix_default.fetch(new Request(request.url, { method: request.method, headers: request.headers, body: raw }), env, ctx);
+  }
+  const sync = await applyRecurringUpgradePayment(env, payment, session);
+  return json7({ ok: true, sync, recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION });
+}
+__name(handleMercadoPagoWebhookWithRecurringChanges, "handleMercadoPagoWebhookWithRecurringChanges");
+var worker_recurring_plan_change_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders7() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX7}/mercadopago/create-checkout-link` && request.method === "POST") {
+      try {
+        return await handleRecurringPlanChangeCheckout(request, env, ctx);
+      } catch (err) {
+        return json7({ ok: false, message: err?.message || "No se pudo resolver el cambio de plan", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX7}/mercadopago/webhook` && request.method === "POST") {
+      try {
+        return await handleMercadoPagoWebhookWithRecurringChanges(request, env, ctx);
+      } catch (err) {
+        return json7({ ok: false, message: err?.message || "No se pudo procesar el webhook", recurring_plan_change_version: RECURRING_PLAN_CHANGE_VERSION }, 500);
+      }
+    }
+    return await worker_subscription_state_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_subscription_state_hotfix_default?.scheduled === "function") {
+      return await worker_subscription_state_hotfix_default.scheduled(controller, env, ctx);
+    }
+  }
+};
+
+// worker_subscription_reconciliation_hotfix.js
+var API_URL_PREFIX8 = "/api";
+var SUBSCRIPTION_RECONCILIATION_VERSION = "2026-04-05-reconcile-1";
+var RECONCILE_BATCH_LIMIT = 25;
+function corsHeaders8() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders8, "corsHeaders");
+function json8(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders8() });
+}
+__name(json8, "json");
+function norm6(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm6, "norm");
+function canonicalPlanCode6(code) {
+  const raw = norm6(code);
+  if (raw === "PRO") return "PREMIUM";
+  return raw || "";
+}
+__name(canonicalPlanCode6, "canonicalPlanCode");
+function parseFechaFlexible6(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible6, "parseFechaFlexible");
+function normalizeSubscriptionStatus4(status) {
+  const raw = norm6(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus4, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval5(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval5, "hasRecurringPreapproval");
+function isPaidPlan4(planCode) {
+  return !!planCode && canonicalPlanCode6(planCode) !== "TRIAL_7D";
+}
+__name(isPaidPlan4, "isPaidPlan");
+function isSubscriptionCurrent5(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus4(subscription.status);
+  const planCode = canonicalPlanCode6(subscription.plan_code);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible6(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status)) {
+    const end = parseFechaFlexible6(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+  return false;
+}
+__name(isSubscriptionCurrent5, "isSubscriptionCurrent");
+function safeJsonParse3(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse3, "safeJsonParse");
+async function supabaseRequest6(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest6, "supabaseRequest");
+async function supabaseSelect8(env, query) {
+  return await supabaseRequest6(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect8, "supabaseSelect");
+async function supabasePatchById3(env, table, id, payload) {
+  const rows = await supabaseRequest6(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabasePatchById3, "supabasePatchById");
+async function getUserSubscriptions5(env, userId) {
+  const rows = await supabaseSelect8(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions5, "getUserSubscriptions");
+async function getRecurringSubscriptionsBatch(env, limit = RECONCILE_BATCH_LIMIT) {
+  const rows = await supabaseSelect8(env, `user_subscriptions?mercadopago_preapproval_id=not.is.null&status=in.(ACTIVE,AUTHORIZED,PENDING,PAUSED)&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || RECONCILE_BATCH_LIMIT)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getRecurringSubscriptionsBatch, "getRecurringSubscriptionsBatch");
+async function getPlanByCode5(env, planCode) {
+  const code = canonicalPlanCode6(planCode);
+  const rows = await supabaseSelect8(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,mercadopago_plan_id&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode5, "getPlanByCode");
+async function getUserCheckoutSessions3(env, userId) {
+  const rows = await supabaseSelect8(env, `mercadopago_checkout_sessions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&order=created_at.desc&limit=100`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse3(row.provider_payload) || row.provider_payload || null })) : [];
+}
+__name(getUserCheckoutSessions3, "getUserCheckoutSessions");
+function mapRemotePreapprovalStatus(status) {
+  const raw = norm6(status);
+  if (!raw) return "PENDING";
+  if (raw === "ACTIVE") return "ACTIVE";
+  if (raw === "AUTHORIZED") return "AUTHORIZED";
+  if (raw === "PAUSED") return "PAUSED";
+  if (raw === "CANCELLED" || raw === "CANCELED") return "CANCELLED";
+  if (raw === "PENDING") return "PENDING";
+  return raw;
+}
+__name(mapRemotePreapprovalStatus, "mapRemotePreapprovalStatus");
+async function mercadoPagoRequest3(env, path, init = {}) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!accessToken) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  const res = await fetch(`https://api.mercadopago.com${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(data?.message || data?.cause?.[0]?.description || `Mercado Pago error ${res.status}`);
+  return data;
+}
+__name(mercadoPagoRequest3, "mercadoPagoRequest");
+async function fetchMercadoPagoPreapproval(env, preapprovalId) {
+  return await mercadoPagoRequest3(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "GET" });
+}
+__name(fetchMercadoPagoPreapproval, "fetchMercadoPagoPreapproval");
+function findScheduledRecurringDowngradeSession(sessions, subscriptionId) {
+  return (Array.isArray(sessions) ? sessions : []).find((session) => {
+    const payload = safeJsonParse3(session?.provider_payload) || {};
+    return String(payload?.transition_mode || "") === "recurring_downgrade_next_cycle" && String(payload?.current_subscription_id || "") === String(subscriptionId || "") && String(session?.status || "").trim().toLowerCase() === "scheduled";
+  }) || null;
+}
+__name(findScheduledRecurringDowngradeSession, "findScheduledRecurringDowngradeSession");
+async function reconcileRecurringSubscription(env, subscription, sessions = null) {
+  if (!subscription?.id || !hasRecurringPreapproval5(subscription)) {
+    return { checked: false, reason: "no_recurring_preapproval" };
+  }
+  const remote = await fetchMercadoPagoPreapproval(env, subscription.mercadopago_preapproval_id);
+  const remoteStatus = mapRemotePreapprovalStatus(remote?.status || "");
+  const remoteNextPaymentDate = remote?.next_payment_date || null;
+  const remoteAmountArs = Number(remote?.auto_recurring?.transaction_amount || 0) || 0;
+  const nowIso2 = (/* @__PURE__ */ new Date()).toISOString();
+  const updates = {};
+  if (remoteStatus && remoteStatus !== normalizeSubscriptionStatus4(subscription.status)) {
+    updates.status = remoteStatus;
+  }
+  if (remoteNextPaymentDate && remoteNextPaymentDate !== subscription.current_period_ends_at) {
+    updates.current_period_ends_at = remoteNextPaymentDate;
+  }
+  if (!subscription.started_at && remote?.date_created) {
+    updates.started_at = remote.date_created;
+  }
+  let scheduledApplied = false;
+  let switchedPlanCode = null;
+  const sessionRows = Array.isArray(sessions) ? sessions : await getUserCheckoutSessions3(env, subscription.user_id);
+  const scheduledDowngrade = findScheduledRecurringDowngradeSession(sessionRows, subscription.id);
+  if (scheduledDowngrade) {
+    const payload = safeJsonParse3(scheduledDowngrade.provider_payload) || {};
+    const targetPlanCode = canonicalPlanCode6(payload?.target_plan_code || scheduledDowngrade.plan_code || "");
+    const targetPlan = targetPlanCode ? await getPlanByCode5(env, targetPlanCode).catch(() => null) : null;
+    const targetPrice = Number(targetPlan?.price_ars || 0) || Number(payload?.target_price_ars || 0) || 0;
+    const applyAt = parseFechaFlexible6(payload?.apply_at || subscription.current_period_ends_at)?.getTime() || 0;
+    const remoteNextTs = parseFechaFlexible6(remoteNextPaymentDate)?.getTime() || 0;
+    const lastChargedTs = parseFechaFlexible6(remote?.summarized?.last_charged_date)?.getTime() || 0;
+    const renewalDetected = !!applyAt && (remoteNextTs && remoteNextTs > applyAt || lastChargedTs && lastChargedTs >= applyAt - 24 * 60 * 60 * 1e3);
+    if (targetPlanCode && targetPrice > 0 && Math.abs(remoteAmountArs - targetPrice) < 0.01 && renewalDetected) {
+      if (targetPlanCode !== canonicalPlanCode6(subscription.plan_code || "")) {
+        updates.plan_code = targetPlanCode;
+        switchedPlanCode = targetPlanCode;
+      }
+      scheduledApplied = true;
+      await supabasePatchById3(env, "mercadopago_checkout_sessions", scheduledDowngrade.id, {
+        status: "applied",
+        provider_payload: {
+          ...payload,
+          applied_at: nowIso2,
+          detected_by: "reconciliation",
+          remote_next_payment_date: remoteNextPaymentDate,
+          remote_status: remoteStatus
+        },
+        updated_at: nowIso2
+      }).catch(() => null);
+    }
+  }
+  const updated = Object.keys(updates).length ? await supabasePatchById3(env, "user_subscriptions", subscription.id, { ...updates, updated_at: nowIso2 }).catch(() => null) : null;
+  return {
+    checked: true,
+    user_id: subscription.user_id,
+    subscription_id: subscription.id,
+    remote_status: remoteStatus,
+    remote_next_payment_date: remoteNextPaymentDate,
+    remote_amount_ars: remoteAmountArs || null,
+    local_updated: !!updated,
+    switched_plan_code: switchedPlanCode,
+    scheduled_change_applied: scheduledApplied,
+    reconciliation_message: scheduledApplied ? switchedPlanCode ? `Se confirm\xF3 en Mercado Pago la renovaci\xF3n del ciclo y el plan pas\xF3 a ${switchedPlanCode}.` : "Se confirm\xF3 en Mercado Pago la renovaci\xF3n del ciclo programado." : null
+  };
+}
+__name(reconcileRecurringSubscription, "reconcileRecurringSubscription");
+async function resolveCurrentRecurringSubscription(env, userId) {
+  const rows = await getUserSubscriptions5(env, userId);
+  const current = rows.find((row) => isSubscriptionCurrent5(row) && isPaidPlan4(row.plan_code) && hasRecurringPreapproval5(row)) || rows.find((row) => isPaidPlan4(row.plan_code) && hasRecurringPreapproval5(row)) || null;
+  return current;
+}
+__name(resolveCurrentRecurringSubscription, "resolveCurrentRecurringSubscription");
+async function delegateJson5(request, env, ctx) {
+  const response = await worker_recurring_plan_change_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson5, "delegateJson");
+async function handleMiPlanWithReconciliation(request, env, ctx) {
+  const first = await delegateJson5(request, env, ctx);
+  if (!first.response.ok || !first.data?.ok) {
+    return json8(first.data || { ok: false, message: "No se pudo leer el plan" }, first.response.status || 500);
+  }
+  const url = new URL(request.url);
+  const userId = String(url.searchParams.get("user_id") || first.data?.user_id || "").trim();
+  if (!userId) {
+    return json8({ ...first.data, subscription_reconciliation_version: SUBSCRIPTION_RECONCILIATION_VERSION }, first.response.status || 200);
+  }
+  const currentRecurring = await resolveCurrentRecurringSubscription(env, userId);
+  if (!currentRecurring) {
+    return json8({
+      ...first.data,
+      reconciliation: { checked: false, reason: "no_current_recurring_subscription" },
+      subscription_reconciliation_version: SUBSCRIPTION_RECONCILIATION_VERSION
+    }, first.response.status || 200);
+  }
+  const sessions = await getUserCheckoutSessions3(env, userId);
+  const reconciliation = await reconcileRecurringSubscription(env, currentRecurring, sessions).catch((err) => ({
+    checked: false,
+    reason: "reconcile_failed",
+    message: err?.message || "No se pudo reconciliar con Mercado Pago"
+  }));
+  if (reconciliation?.local_updated || reconciliation?.scheduled_change_applied) {
+    const second = await delegateJson5(request, env, ctx);
+    if (second.response.ok && second.data?.ok) {
+      let billingNote = second.data?.billing_note || "";
+      if (reconciliation?.reconciliation_message) {
+        billingNote = `${billingNote ? `${billingNote} ` : ""}${reconciliation.reconciliation_message}`.trim();
+      }
+      return json8({
+        ...second.data,
+        billing_note: billingNote,
+        reconciliation,
+        subscription_reconciliation_version: SUBSCRIPTION_RECONCILIATION_VERSION
+      }, second.response.status || 200);
+    }
+  }
+  return json8({
+    ...first.data,
+    reconciliation,
+    subscription_reconciliation_version: SUBSCRIPTION_RECONCILIATION_VERSION
+  }, first.response.status || 200);
+}
+__name(handleMiPlanWithReconciliation, "handleMiPlanWithReconciliation");
+async function reconcileRecurringSubscriptionsBatch(env) {
+  const rows = await getRecurringSubscriptionsBatch(env, RECONCILE_BATCH_LIMIT);
+  let checked = 0;
+  let updated = 0;
+  let scheduledApplied = 0;
+  const errors = [];
+  for (const row of rows) {
+    try {
+      const sessions = await getUserCheckoutSessions3(env, row.user_id);
+      const result = await reconcileRecurringSubscription(env, row, sessions);
+      if (result.checked) checked += 1;
+      if (result.local_updated) updated += 1;
+      if (result.scheduled_change_applied) scheduledApplied += 1;
+    } catch (err) {
+      errors.push({
+        subscription_id: row.id,
+        user_id: row.user_id,
+        message: err?.message || "Error de reconciliaci\xF3n"
+      });
+    }
+  }
+  return {
+    ok: true,
+    checked,
+    updated,
+    scheduled_applied: scheduledApplied,
+    errors
+  };
+}
+__name(reconcileRecurringSubscriptionsBatch, "reconcileRecurringSubscriptionsBatch");
+var worker_subscription_reconciliation_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders8() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX8}/mi-plan` && request.method === "GET") {
+      try {
+        return await handleMiPlanWithReconciliation(request, env, ctx);
+      } catch (err) {
+        return json8({ ok: false, message: err?.message || "No se pudo reconciliar el plan", subscription_reconciliation_version: SUBSCRIPTION_RECONCILIATION_VERSION }, 500);
+      }
+    }
+    return await worker_recurring_plan_change_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_recurring_plan_change_hotfix_default?.scheduled === "function") {
+      await worker_recurring_plan_change_hotfix_default.scheduled(controller, env, ctx);
+    }
+    ctx.waitUntil(
+      reconcileRecurringSubscriptionsBatch(env).catch((err) => {
+        console.error("SUBSCRIPTION RECONCILIATION ERROR:", err);
+      })
+    );
+  }
+};
+
+// worker_payment_notifications_hotfix.js
+var API_URL_PREFIX9 = "/api";
+var PAYMENT_NOTIFICATIONS_VERSION = "2026-04-05-paymail-1";
+var NOTIFY_TTL_SECONDS = 60 * 24 * 60 * 60;
+var EXPIRING_SOON_WINDOW_MS = 48 * 60 * 60 * 1e3;
+var EXPIRED_WINDOW_MS = 5 * 24 * 60 * 60 * 1e3;
+var BATCH_LIMIT = 50;
+function corsHeaders9() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders9, "corsHeaders");
+function json9(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders9() });
+}
+__name(json9, "json");
+function norm7(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm7, "norm");
+function canonicalPlanCode7(code) {
+  const raw = norm7(code);
+  if (raw === "PRO") return "PREMIUM";
+  return raw || "";
+}
+__name(canonicalPlanCode7, "canonicalPlanCode");
+function parseFechaFlexible7(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible7, "parseFechaFlexible");
+function formatDateAr5(value) {
+  const d = parseFechaFlexible7(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+__name(formatDateAr5, "formatDateAr");
+function escapeHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+}
+__name(escapeHtml, "escapeHtml");
+function normalizeSubscriptionStatus5(status) {
+  const raw = norm7(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus5, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval6(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval6, "hasRecurringPreapproval");
+function getSubscriptionAccessUntil2(subscription) {
+  if (!subscription) return null;
+  const planCode = canonicalPlanCode7(subscription.plan_code);
+  return planCode === "TRIAL_7D" ? subscription.trial_ends_at || null : subscription.current_period_ends_at || null;
+}
+__name(getSubscriptionAccessUntil2, "getSubscriptionAccessUntil");
+function isSubscriptionCurrent6(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus5(subscription.status);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  const end = parseFechaFlexible7(getSubscriptionAccessUntil2(subscription))?.getTime() || 0;
+  if (!end) return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status);
+  return end > now;
+}
+__name(isSubscriptionCurrent6, "isSubscriptionCurrent");
+function safeJsonParse4(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse4, "safeJsonParse");
+async function supabaseRequest7(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest7, "supabaseRequest");
+async function supabaseSelect9(env, query) {
+  return await supabaseRequest7(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect9, "supabaseSelect");
+async function getUserById7(env, userId) {
+  const rows = await supabaseSelect9(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById7, "getUserById");
+async function getPlanByCode6(env, planCode) {
+  const code = canonicalPlanCode7(planCode);
+  const rows = await supabaseSelect9(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode6, "getPlanByCode");
+async function getUserSubscriptions6(env, userId) {
+  const rows = await supabaseSelect9(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions6, "getUserSubscriptions");
+async function getUserCheckoutSessions4(env, userId) {
+  const rows = await supabaseSelect9(env, `mercadopago_checkout_sessions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at&order=created_at.desc&limit=100`).catch(() => []);
+  return Array.isArray(rows) ? rows.map((row) => ({ ...row, provider_payload: safeJsonParse4(row.provider_payload) || row.provider_payload || null })) : [];
+}
+__name(getUserCheckoutSessions4, "getUserCheckoutSessions");
+async function getSubscriptionsForBillingSweep(env, limit = BATCH_LIMIT) {
+  const rows = await supabaseSelect9(env, `user_subscriptions?status=in.(ACTIVE,AUTHORIZED,PENDING,PAUSED,TRIALING,BETA)&select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || BATCH_LIMIT)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getSubscriptionsForBillingSweep, "getSubscriptionsForBillingSweep");
+function resolveBrevoConfig(env) {
+  const apiKey = String(
+    env.BREVO_API_KEY || env.SENDINBLUE_API_KEY || env.BREVO_TRANSACTIONAL_API_KEY || ""
+  ).trim();
+  const senderEmail = String(
+    env.BREVO_FROM_EMAIL || env.BREVO_SENDER_EMAIL || env.ALERT_FROM_EMAIL || env.EMAIL_FROM || ""
+  ).trim();
+  const senderName = String(
+    env.BREVO_FROM_NAME || env.BREVO_SENDER_NAME || env.ALERT_FROM_NAME || env.EMAIL_FROM_NAME || "APDocentePBA"
+  ).trim() || "APDocentePBA";
+  return {
+    apiKey,
+    senderEmail,
+    senderName,
+    replyToEmail: String(env.BREVO_REPLY_TO_EMAIL || env.EMAIL_REPLY_TO || "").trim(),
+    replyToName: String(env.BREVO_REPLY_TO_NAME || senderName).trim() || senderName,
+    appUrl: String(env.MERCADOPAGO_SUCCESS_URL || env.APP_PUBLIC_URL || "https://apdocentepba-hub.github.io/apdocentepba-v2/").trim()
+  };
+}
+__name(resolveBrevoConfig, "resolveBrevoConfig");
+async function sendBrevoEmail(env, payload) {
+  const config = resolveBrevoConfig(env);
+  if (!config.apiKey || !config.senderEmail) {
+    return { ok: false, reason: "brevo_not_configured" };
+  }
+  const body = {
+    sender: { email: config.senderEmail, name: config.senderName },
+    to: [{ email: payload.to.email, name: payload.to.name || "" }],
+    subject: payload.subject,
+    htmlContent: payload.htmlContent,
+    tags: payload.tags || ["apdocentepba", "billing"],
+    textContent: payload.textContent || void 0,
+    replyTo: config.replyToEmail ? { email: config.replyToEmail, name: config.replyToName } : void 0
+  };
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": config.apiKey
+    },
+    body: JSON.stringify(body)
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    return { ok: false, reason: "brevo_request_failed", status: res.status, error: data };
+  }
+  return { ok: true, messageId: data?.messageId || null };
+}
+__name(sendBrevoEmail, "sendBrevoEmail");
+function getNotificationStore(env) {
+  return env.EMAIL_SWEEP_STATE && typeof env.EMAIL_SWEEP_STATE.get === "function" ? env.EMAIL_SWEEP_STATE : null;
+}
+__name(getNotificationStore, "getNotificationStore");
+async function notificationAlreadySent(env, key) {
+  const store = getNotificationStore(env);
+  if (!store) return false;
+  return !!await store.get(key).catch(() => null);
+}
+__name(notificationAlreadySent, "notificationAlreadySent");
+async function markNotificationSent(env, key, data) {
+  const store = getNotificationStore(env);
+  if (!store) return;
+  await store.put(key, JSON.stringify(data || {}), { expirationTtl: NOTIFY_TTL_SECONDS }).catch(() => null);
+}
+__name(markNotificationSent, "markNotificationSent");
+function displayName(user) {
+  const full = `${String(user?.nombre || "").trim()} ${String(user?.apellido || "").trim()}`.trim();
+  return full || String(user?.email || "").trim() || "docente";
+}
+__name(displayName, "displayName");
+function buildMailShell(title, intro, bullets, closingHtml) {
+  const bulletHtml = (bullets || []).filter(Boolean).map((item) => `<li style="margin:0 0 8px 0;">${escapeHtml(item)}</li>`).join("");
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#14213d;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;padding:28px;">
+        <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:12px;">APDocentePBA \xB7 Pagos</div>
+        <h1 style="font-size:24px;line-height:1.3;margin:0 0 14px 0;">${escapeHtml(title)}</h1>
+        <p style="font-size:15px;line-height:1.6;margin:0 0 16px 0;">${escapeHtml(intro)}</p>
+        ${bulletHtml ? `<ul style="padding-left:20px;margin:0 0 18px 0;font-size:14px;line-height:1.6;">${bulletHtml}</ul>` : ""}
+        ${closingHtml || ""}
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+__name(buildMailShell, "buildMailShell");
+async function sendBillingNotification(env, eventKey, user, mail) {
+  const email = String(user?.email || "").trim();
+  if (!email) return { ok: false, reason: "missing_user_email" };
+  if (await notificationAlreadySent(env, eventKey)) {
+    return { ok: true, deduped: true };
+  }
+  const result = await sendBrevoEmail(env, {
+    to: { email, name: displayName(user) },
+    subject: mail.subject,
+    htmlContent: mail.htmlContent,
+    textContent: mail.textContent,
+    tags: ["apdocentepba", "billing", mail.tag || "generic"]
+  });
+  if (result.ok) {
+    await markNotificationSent(env, eventKey, {
+      sent_at: (/* @__PURE__ */ new Date()).toISOString(),
+      subject: mail.subject,
+      message_id: result.messageId || null,
+      user_id: user?.id || null,
+      event_tag: mail.tag || "generic"
+    });
+  }
+  return result;
+}
+__name(sendBillingNotification, "sendBillingNotification");
+function autoRenewEnabledMail(user, planName, appUrl) {
+  const intro = `${displayName(user)}, te abrimos Mercado Pago para que completes la activaci\xF3n del d\xE9bito autom\xE1tico de ${planName}.`;
+  const bullets = [
+    "La renovaci\xF3n autom\xE1tica no queda confirmada hasta que completes la autorizaci\xF3n en Mercado Pago.",
+    "Si no complet\xE1s ese paso, tu plan seguir\xE1 con renovaci\xF3n manual.",
+    "Pod\xE9s volver a entrar a Mi plan para revisar el estado cuando quieras."
+  ];
+  const closingHtml = `<p style="font-size:14px;line-height:1.6;margin:0 0 16px 0;">Entr\xE1 desde tu panel para continuar o revisar el estado.</p><p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Abrir APDocentePBA</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Activaci\xF3n de d\xE9bito autom\xE1tico para ${planName}`,
+    htmlContent: buildMailShell(`Activaci\xF3n de d\xE9bito autom\xE1tico`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "auto-renew-enabled"
+  };
+}
+__name(autoRenewEnabledMail, "autoRenewEnabledMail");
+function autoRenewCanceledMail(user, planName, accessUntil, appUrl) {
+  const dateLabel = formatDateAr5(accessUntil) || "el fin del ciclo actual";
+  const intro = `${displayName(user)}, desactivaste el d\xE9bito autom\xE1tico de ${planName}.`;
+  const bullets = [
+    `Vas a conservar el acceso hasta ${dateLabel}.`,
+    "Despu\xE9s de esa fecha el plan no se volver\xE1 a cobrar autom\xE1ticamente.",
+    "Si quer\xE9s continuar, m\xE1s adelante pod\xE9s renovarlo de forma manual o volver a activar el d\xE9bito autom\xE1tico."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Ver Mi plan</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 D\xE9bito autom\xE1tico desactivado`,
+    htmlContent: buildMailShell(`D\xE9bito autom\xE1tico desactivado`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "auto-renew-cancelled"
+  };
+}
+__name(autoRenewCanceledMail, "autoRenewCanceledMail");
+function downgradeScheduledMail(user, currentPlanName, targetPlanName, accessUntil, appUrl) {
+  const dateLabel = formatDateAr5(accessUntil) || "el pr\xF3ximo ciclo";
+  const intro = `${displayName(user)}, programaste el cambio de ${currentPlanName} a ${targetPlanName}.`;
+  const bullets = [
+    `Vas a seguir usando ${currentPlanName} hasta ${dateLabel}.`,
+    `En el pr\xF3ximo ciclo se va a cobrar ${targetPlanName}.`,
+    "No ten\xE9s que hacer nada m\xE1s ahora; el cambio qued\xF3 agendado."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Revisar cambio programado</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Cambio de plan programado`,
+    htmlContent: buildMailShell(`Cambio de plan programado`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "downgrade-scheduled"
+  };
+}
+__name(downgradeScheduledMail, "downgradeScheduledMail");
+function upgradeAppliedMail(user, currentPlanName, targetPlanName, amountToCharge, appUrl) {
+  const intro = `${displayName(user)}, tu cambio de ${currentPlanName} a ${targetPlanName} qued\xF3 aplicado.`;
+  const bullets = [
+    `Se registr\xF3 el cobro de $${Number(amountToCharge || 0).toLocaleString("es-AR")} por la diferencia proporcional del upgrade.`,
+    `Desde ahora ya ten\xE9s activo ${targetPlanName}.`,
+    "El pr\xF3ximo d\xE9bito autom\xE1tico va a usar el valor del plan nuevo."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Ver Mi plan</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Upgrade confirmado`,
+    htmlContent: buildMailShell(`Upgrade confirmado`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "upgrade-applied"
+  };
+}
+__name(upgradeAppliedMail, "upgradeAppliedMail");
+function recurringStatusProblemMail(user, planName, statusLabel, accessUntil, appUrl) {
+  const intro = `${displayName(user)}, detectamos un problema con la renovaci\xF3n autom\xE1tica de ${planName}.`;
+  const bullets = [
+    `Estado detectado en Mercado Pago: ${statusLabel}.`,
+    accessUntil ? `Tu acceso actual figura hasta ${formatDateAr5(accessUntil)}.` : "Revis\xE1 tu plan y el medio de pago para evitar cortes.",
+    "Entr\xE1 a Mi plan para revisar el estado y, si hace falta, volver a activar el d\xE9bito autom\xE1tico o renovar manualmente."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Revisar pagos</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Problema con la renovaci\xF3n autom\xE1tica`,
+    htmlContent: buildMailShell(`Revis\xE1 tu renovaci\xF3n autom\xE1tica`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "renewal-problem"
+  };
+}
+__name(recurringStatusProblemMail, "recurringStatusProblemMail");
+function expiringSoonMail(user, planName, accessUntil, appUrl) {
+  const dateLabel = formatDateAr5(accessUntil) || "pr\xF3ximamente";
+  const intro = `${displayName(user)}, tu plan ${planName} est\xE1 por vencer.`;
+  const bullets = [
+    `La fecha de corte actual es ${dateLabel}.`,
+    "Si quer\xE9s seguir usando APDocentePBA sin interrupciones, renov\xE1 el plan o activ\xE1 el d\xE9bito autom\xE1tico antes de esa fecha.",
+    "Si no hac\xE9s nada, al vencer el ciclo se te va a cortar el acceso al plan pago."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Resolver ahora</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Tu plan est\xE1 por vencer`,
+    htmlContent: buildMailShell(`Tu plan est\xE1 por vencer`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "expiring-soon"
+  };
+}
+__name(expiringSoonMail, "expiringSoonMail");
+function expiredMail(user, planName, accessUntil, appUrl) {
+  const dateLabel = formatDateAr5(accessUntil) || "la fecha prevista";
+  const intro = `${displayName(user)}, tu acceso al plan ${planName} venci\xF3.`;
+  const bullets = [
+    `La \xFAltima fecha de acceso registrada fue ${dateLabel}.`,
+    "Para volver a usar las funciones pagas necesit\xE1s renovar el plan o activar el d\xE9bito autom\xE1tico.",
+    "Tus datos siguen ah\xED; lo que cambia es el acceso al plan pago."
+  ];
+  const closingHtml = `<p style="margin:0;"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Volver a activar</a></p>`;
+  return {
+    subject: `APDocentePBA \xB7 Tu plan venci\xF3`,
+    htmlContent: buildMailShell(`Tu plan venci\xF3`, intro, bullets, closingHtml),
+    textContent: `${intro}
+- ${bullets.join("\n- ")}
+${appUrl}`,
+    tag: "expired"
+  };
+}
+__name(expiredMail, "expiredMail");
+async function delegateJson6(request, env, ctx) {
+  const response = await worker_subscription_reconciliation_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson6, "delegateJson");
+async function maybeNotifyAutoRenewEnabled(env, data, userId) {
+  const user = await getUserById7(env, userId);
+  if (!user) return null;
+  const subscriptions = await getUserSubscriptions6(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent6) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode7(current?.plan_code || data?.plan?.code || data?.current_plan_code || "");
+  const plan = await getPlanByCode6(env, planCode).catch(() => null);
+  const appUrl = resolveBrevoConfig(env).appUrl;
+  const eventKey = `paymail:auto-renew-enabled:${userId}:${planCode}:${String(data?.preapproval_id || data?.external_reference || "pending")}`;
+  return await sendBillingNotification(env, eventKey, user, autoRenewEnabledMail(user, plan?.nombre || planCode || "tu plan", appUrl));
+}
+__name(maybeNotifyAutoRenewEnabled, "maybeNotifyAutoRenewEnabled");
+async function maybeNotifyAutoRenewCanceled(env, data, userId) {
+  const user = await getUserById7(env, userId);
+  if (!user) return null;
+  const subscriptions = await getUserSubscriptions6(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent6) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode7(current?.plan_code || data?.current_plan_code || "");
+  const plan = await getPlanByCode6(env, planCode).catch(() => null);
+  const appUrl = resolveBrevoConfig(env).appUrl;
+  const eventKey = `paymail:auto-renew-cancelled:${userId}:${planCode}:${formatDateAr5(current?.current_period_ends_at || data?.access_until || "")}`;
+  return await sendBillingNotification(env, eventKey, user, autoRenewCanceledMail(user, plan?.nombre || planCode || "tu plan", current?.current_period_ends_at || data?.access_until || null, appUrl));
+}
+__name(maybeNotifyAutoRenewCanceled, "maybeNotifyAutoRenewCanceled");
+async function maybeNotifyDowngradeScheduled(env, data, userId, targetPlanCode) {
+  const user = await getUserById7(env, userId);
+  if (!user) return null;
+  const subscriptions = await getUserSubscriptions6(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent6) || subscriptions[0] || null;
+  const currentPlan = await getPlanByCode6(env, current?.plan_code || "").catch(() => null);
+  const targetPlan = await getPlanByCode6(env, targetPlanCode).catch(() => null);
+  const appUrl = resolveBrevoConfig(env).appUrl;
+  const eventKey = `paymail:downgrade-scheduled:${userId}:${canonicalPlanCode7(current?.plan_code || "")}:${targetPlanCode}:${formatDateAr5(data?.scheduled_change?.apply_at || current?.current_period_ends_at || "")}`;
+  return await sendBillingNotification(env, eventKey, user, downgradeScheduledMail(user, currentPlan?.nombre || current?.plan_code || "plan actual", targetPlan?.nombre || targetPlanCode, data?.scheduled_change?.apply_at || current?.current_period_ends_at || null, appUrl));
+}
+__name(maybeNotifyDowngradeScheduled, "maybeNotifyDowngradeScheduled");
+async function maybeNotifyUpgradeApplied(env, sync) {
+  const userId = String(sync?.user_id || "").trim();
+  if (!userId) return null;
+  const user = await getUserById7(env, userId);
+  if (!user) return null;
+  const targetPlanCode = canonicalPlanCode7(sync?.plan_code || "");
+  const targetPlan = await getPlanByCode6(env, targetPlanCode).catch(() => null);
+  const sessions = await getUserCheckoutSessions4(env, userId);
+  const paymentId = String(sync?.payment_id || "").trim();
+  const upgradeSession = sessions.find((session) => {
+    const payload2 = safeJsonParse4(session?.provider_payload) || {};
+    return String(payload2?.payment_id || "") === paymentId || String(session?.external_reference || "") === String(sync?.external_reference || "");
+  }) || null;
+  const payload = safeJsonParse4(upgradeSession?.provider_payload) || {};
+  const currentPlanCode = canonicalPlanCode7(payload?.current_plan_code || "");
+  const currentPlan = await getPlanByCode6(env, currentPlanCode).catch(() => null);
+  const appUrl = resolveBrevoConfig(env).appUrl;
+  const eventKey = `paymail:upgrade-applied:${userId}:${paymentId || targetPlanCode}`;
+  return await sendBillingNotification(env, eventKey, user, upgradeAppliedMail(user, currentPlan?.nombre || currentPlanCode || "plan actual", targetPlan?.nombre || targetPlanCode || "plan nuevo", Number(payload?.amount_to_charge_ars || 0), appUrl));
+}
+__name(maybeNotifyUpgradeApplied, "maybeNotifyUpgradeApplied");
+async function maybeNotifyBillingSweepItem(env, subscription) {
+  const userId = String(subscription?.user_id || "").trim();
+  if (!userId) return null;
+  const user = await getUserById7(env, userId);
+  if (!user) return null;
+  const planCode = canonicalPlanCode7(subscription?.plan_code || "");
+  const plan = await getPlanByCode6(env, planCode).catch(() => null);
+  const appUrl = resolveBrevoConfig(env).appUrl;
+  const status = normalizeSubscriptionStatus5(subscription?.status || "");
+  const accessUntil = getSubscriptionAccessUntil2(subscription);
+  const accessTs = parseFechaFlexible7(accessUntil)?.getTime() || 0;
+  const now = Date.now();
+  if (hasRecurringPreapproval6(subscription) && ["PAUSED", "CANCELLED"].includes(status)) {
+    const eventKey = `paymail:renewal-problem:${userId}:${subscription.id}:${status}:${formatDateAr5(accessUntil)}`;
+    return await sendBillingNotification(env, eventKey, user, recurringStatusProblemMail(user, plan?.nombre || planCode || "tu plan", status, accessUntil, appUrl));
+  }
+  if (!hasRecurringPreapproval6(subscription)) {
+    if (accessTs > now && accessTs - now <= EXPIRING_SOON_WINDOW_MS) {
+      const eventKey = `paymail:expiring-soon:${userId}:${subscription.id}:${formatDateAr5(accessUntil)}`;
+      return await sendBillingNotification(env, eventKey, user, expiringSoonMail(user, plan?.nombre || planCode || "tu plan", accessUntil, appUrl));
+    }
+    if (accessTs && accessTs <= now && now - accessTs <= EXPIRED_WINDOW_MS) {
+      const eventKey = `paymail:expired:${userId}:${subscription.id}:${formatDateAr5(accessUntil)}`;
+      return await sendBillingNotification(env, eventKey, user, expiredMail(user, plan?.nombre || planCode || "tu plan", accessUntil, appUrl));
+    }
+  }
+  return null;
+}
+__name(maybeNotifyBillingSweepItem, "maybeNotifyBillingSweepItem");
+async function runBillingNotificationsSweep(env) {
+  const rows = await getSubscriptionsForBillingSweep(env, BATCH_LIMIT);
+  let processed = 0;
+  let sent = 0;
+  const results = [];
+  for (const subscription of rows) {
+    try {
+      const result = await maybeNotifyBillingSweepItem(env, subscription);
+      processed += 1;
+      if (result?.ok && !result?.deduped) sent += 1;
+      if (result) {
+        results.push({ user_id: subscription.user_id, subscription_id: subscription.id, result });
+      }
+    } catch (err) {
+      results.push({ user_id: subscription.user_id, subscription_id: subscription.id, error: err?.message || "billing sweep error" });
+    }
+  }
+  return { ok: true, processed, sent, results };
+}
+__name(runBillingNotificationsSweep, "runBillingNotificationsSweep");
+var worker_payment_notifications_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders9() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX9}/subscription/enable-auto-renew` && request.method === "POST") {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const delegated2 = await delegateJson6(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(body) }), env, ctx);
+        if (delegated2.response.ok && delegated2.data?.ok) {
+          ctx.waitUntil(maybeNotifyAutoRenewEnabled(env, delegated2.data, String(body?.user_id || delegated2.data?.user_id || "").trim()).catch(() => null));
+        }
+        return json9({ ...delegated2.data || {}, payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, delegated2.response.status || 200);
+      } catch (err) {
+        return json9({ ok: false, message: err?.message || "No se pudo activar la renovaci\xF3n autom\xE1tica", payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX9}/subscription/cancel` && request.method === "POST") {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const delegated2 = await delegateJson6(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(body) }), env, ctx);
+        if (delegated2.response.ok && delegated2.data?.ok) {
+          ctx.waitUntil(maybeNotifyAutoRenewCanceled(env, delegated2.data, String(body?.user_id || delegated2.data?.user_id || "").trim()).catch(() => null));
+        }
+        return json9({ ...delegated2.data || {}, payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, delegated2.response.status || 200);
+      } catch (err) {
+        return json9({ ok: false, message: err?.message || "No se pudo desactivar la renovaci\xF3n autom\xE1tica", payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX9}/mercadopago/create-checkout-link` && request.method === "POST") {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const targetPlanCode = canonicalPlanCode7(body?.plan_code || "");
+        const delegated2 = await delegateJson6(new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(body) }), env, ctx);
+        if (delegated2.response.ok && delegated2.data?.ok && delegated2.data?.scheduled === true) {
+          const mode = String(delegated2.data?.mode || "").trim();
+          if (mode === "downgrade_next_cycle" || mode === "recurring_downgrade_next_cycle") {
+            ctx.waitUntil(maybeNotifyDowngradeScheduled(env, delegated2.data, String(body?.user_id || delegated2.data?.user_id || "").trim(), targetPlanCode).catch(() => null));
+          }
+        }
+        return json9({ ...delegated2.data || {}, payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, delegated2.response.status || 200);
+      } catch (err) {
+        return json9({ ok: false, message: err?.message || "No se pudo preparar el checkout", payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, 500);
+      }
+    }
+    if (path === `${API_URL_PREFIX9}/mercadopago/webhook` && request.method === "POST") {
+      try {
+        const raw = await request.text();
+        const delegated2 = await delegateJson6(new Request(request.url, { method: "POST", headers: request.headers, body: raw }), env, ctx);
+        if (delegated2.response.ok && delegated2.data?.ok && delegated2.data?.sync?.recurring_plan_change_applied) {
+          ctx.waitUntil(maybeNotifyUpgradeApplied(env, delegated2.data.sync).catch(() => null));
+        }
+        return json9({ ...delegated2.data || {}, payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, delegated2.response.status || 200);
+      } catch (err) {
+        return json9({ ok: false, message: err?.message || "No se pudo procesar el webhook", payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, 500);
+      }
+    }
+    const delegated = await delegateJson6(request, env, ctx);
+    return json9({ ...delegated.data || {}, payment_notifications_version: PAYMENT_NOTIFICATIONS_VERSION }, delegated.response.status || 200);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_subscription_reconciliation_hotfix_default?.scheduled === "function") {
+      await worker_subscription_reconciliation_hotfix_default.scheduled(controller, env, ctx);
+    }
+    ctx.waitUntil(runBillingNotificationsSweep(env).catch((err) => {
+      console.error("PAYMENT NOTIFICATION SWEEP ERROR:", err);
+    }));
+  }
+};
+
+// worker_plan_catalog_hotfix.js
+var API_URL_PREFIX10 = "/api";
+var PLAN_CATALOG_VERSION = "2026-04-05-plan-catalog-1";
+var PLAN_FALLBACKS = {
+  TRIAL_7D: {
+    code: "TRIAL_7D",
+    canonical_code: "TRIAL_7D",
+    family: "free_trial",
+    legacy_codes: ["TRIAL", "FREE", "PRUEBA", "PRUEBA_7D"],
+    display_name: "Prueba gratis",
+    short_name: "Free",
+    price_ars: 0,
+    trial_days: 7,
+    public_visible: true,
+    is_paid: false,
+    sort_order: 0,
+    ui_badge: "Gratis"
+  },
+  PLUS: {
+    code: "PLUS",
+    canonical_code: "PLUS",
+    family: "plus",
+    legacy_codes: ["BASIC"],
+    display_name: "Plus",
+    short_name: "Plus",
+    price_ars: null,
+    trial_days: 0,
+    public_visible: true,
+    is_paid: true,
+    sort_order: 10,
+    ui_badge: "Plan pago"
+  },
+  PREMIUM: {
+    code: "PREMIUM",
+    canonical_code: "PREMIUM",
+    family: "premium",
+    legacy_codes: ["PRO"],
+    display_name: "Premium",
+    short_name: "Premium",
+    price_ars: null,
+    trial_days: 0,
+    public_visible: true,
+    is_paid: true,
+    sort_order: 20,
+    ui_badge: "Plan pago"
+  },
+  INSIGNE: {
+    code: "INSIGNE",
+    canonical_code: "INSIGNE",
+    family: "insigne",
+    legacy_codes: ["SIGNATURE"],
+    display_name: "Insigne",
+    short_name: "Insigne",
+    price_ars: null,
+    trial_days: 0,
+    public_visible: true,
+    is_paid: true,
+    sort_order: 30,
+    ui_badge: "Plan pago"
+  }
+};
+function corsHeaders10() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders10, "corsHeaders");
+function json10(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders10() });
+}
+__name(json10, "json");
+function norm8(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm8, "norm");
+function canonicalPlanCode8(code) {
+  const raw = norm8(code);
+  if (!raw) return "";
+  for (const fallback of Object.values(PLAN_FALLBACKS)) {
+    if (raw === fallback.canonical_code) return fallback.canonical_code;
+    if ((fallback.legacy_codes || []).includes(raw)) return fallback.canonical_code;
+  }
+  if (raw === "PRO") return "PREMIUM";
+  if (raw === "SIGNATURE") return "INSIGNE";
+  if (raw === "FREE") return "TRIAL_7D";
+  return raw;
+}
+__name(canonicalPlanCode8, "canonicalPlanCode");
+function parseFechaFlexible8(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible8, "parseFechaFlexible");
+function formatDateAr6(value) {
+  const d = parseFechaFlexible8(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+__name(formatDateAr6, "formatDateAr");
+async function supabaseRequest8(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest8, "supabaseRequest");
+async function supabaseSelect10(env, query) {
+  return await supabaseRequest8(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect10, "supabaseSelect");
+async function getSubscriptionPlans(env) {
+  const rows = await supabaseSelect10(env, "subscription_plans?select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags,sort_order&order=sort_order.asc").catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getSubscriptionPlans, "getSubscriptionPlans");
+function buildPlanFromFallback(fallback) {
+  return {
+    code: fallback.canonical_code,
+    canonical_code: fallback.canonical_code,
+    legacy_codes: fallback.legacy_codes || [],
+    family: fallback.family || fallback.canonical_code.toLowerCase(),
+    display_name: fallback.display_name || fallback.short_name || fallback.canonical_code,
+    short_name: fallback.short_name || fallback.display_name || fallback.canonical_code,
+    descripcion: "",
+    price_ars: fallback.price_ars,
+    trial_days: fallback.trial_days || 0,
+    max_distritos: null,
+    max_cargos: null,
+    public_visible: fallback.public_visible !== false,
+    mercadopago_plan_id: null,
+    feature_flags: null,
+    sort_order: fallback.sort_order || 999,
+    is_paid: fallback.is_paid !== false,
+    ui_badge: fallback.ui_badge || null
+  };
+}
+__name(buildPlanFromFallback, "buildPlanFromFallback");
+function mergePlanData(basePlan, dbRow) {
+  const canonical = canonicalPlanCode8(dbRow?.code || basePlan?.code || "");
+  const fallback = PLAN_FALLBACKS[canonical] || null;
+  const displayName2 = String(dbRow?.nombre || "").trim() || basePlan?.display_name || fallback?.display_name || canonical;
+  return {
+    code: canonical,
+    canonical_code: canonical,
+    legacy_codes: fallback?.legacy_codes || basePlan?.legacy_codes || [],
+    family: fallback?.family || basePlan?.family || canonical.toLowerCase(),
+    display_name: displayName2,
+    short_name: displayName2,
+    descripcion: String(dbRow?.descripcion || basePlan?.descripcion || "").trim(),
+    price_ars: dbRow?.price_ars != null ? Number(dbRow.price_ars) : basePlan?.price_ars ?? fallback?.price_ars ?? null,
+    trial_days: dbRow?.trial_days != null ? Number(dbRow.trial_days) : basePlan?.trial_days ?? fallback?.trial_days ?? 0,
+    max_distritos: dbRow?.max_distritos ?? basePlan?.max_distritos ?? null,
+    max_cargos: dbRow?.max_cargos ?? basePlan?.max_cargos ?? null,
+    public_visible: dbRow?.public_visible != null ? !!dbRow.public_visible : basePlan?.public_visible ?? fallback?.public_visible ?? true,
+    mercadopago_plan_id: dbRow?.mercadopago_plan_id || basePlan?.mercadopago_plan_id || null,
+    feature_flags: dbRow?.feature_flags ?? basePlan?.feature_flags ?? null,
+    sort_order: dbRow?.sort_order != null ? Number(dbRow.sort_order) : basePlan?.sort_order ?? fallback?.sort_order ?? 999,
+    is_paid: canonical !== "TRIAL_7D",
+    ui_badge: fallback?.ui_badge || basePlan?.ui_badge || null
+  };
+}
+__name(mergePlanData, "mergePlanData");
+async function buildNormalizedPlanCatalog(env) {
+  const dbPlans = await getSubscriptionPlans(env);
+  const byCode = /* @__PURE__ */ new Map();
+  for (const fallback of Object.values(PLAN_FALLBACKS)) {
+    byCode.set(fallback.canonical_code, buildPlanFromFallback(fallback));
+  }
+  for (const row of dbPlans) {
+    const canonical = canonicalPlanCode8(row?.code || "");
+    const current = byCode.get(canonical) || buildPlanFromFallback(PLAN_FALLBACKS[canonical] || {
+      canonical_code: canonical,
+      display_name: canonical,
+      short_name: canonical,
+      public_visible: true,
+      is_paid: canonical !== "TRIAL_7D",
+      sort_order: 999,
+      legacy_codes: []
+    });
+    byCode.set(canonical, mergePlanData(current, row));
+  }
+  return Array.from(byCode.values()).sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+}
+__name(buildNormalizedPlanCatalog, "buildNormalizedPlanCatalog");
+function findPlanInCatalog(catalog, code) {
+  const canonical = canonicalPlanCode8(code);
+  return (Array.isArray(catalog) ? catalog : []).find((plan) => canonicalPlanCode8(plan?.code || plan?.canonical_code || "") === canonical) || null;
+}
+__name(findPlanInCatalog, "findPlanInCatalog");
+function normalizePlanPayload(plan, catalog) {
+  if (!plan) return null;
+  const canonical = canonicalPlanCode8(plan?.code || plan?.plan_code || plan?.canonical_code || "");
+  const catalogPlan = findPlanInCatalog(catalog, canonical);
+  return {
+    code: canonical,
+    canonical_code: canonical,
+    display_name: catalogPlan?.display_name || String(plan?.nombre || plan?.display_name || canonical).trim() || canonical,
+    short_name: catalogPlan?.short_name || catalogPlan?.display_name || String(plan?.nombre || plan?.display_name || canonical).trim() || canonical,
+    price_ars: plan?.price_ars != null ? Number(plan.price_ars) : catalogPlan?.price_ars ?? null,
+    trial_days: plan?.trial_days != null ? Number(plan.trial_days) : catalogPlan?.trial_days ?? 0,
+    max_distritos: plan?.max_distritos ?? catalogPlan?.max_distritos ?? null,
+    max_cargos: plan?.max_cargos ?? catalogPlan?.max_cargos ?? null,
+    is_paid: canonical !== "TRIAL_7D",
+    mercadopago_plan_id: plan?.mercadopago_plan_id || catalogPlan?.mercadopago_plan_id || null,
+    public_visible: catalogPlan?.public_visible ?? true,
+    legacy_codes: catalogPlan?.legacy_codes || []
+  };
+}
+__name(normalizePlanPayload, "normalizePlanPayload");
+function normalizePlansArray(plans, catalog) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const plan of Array.isArray(plans) ? plans : []) {
+    const normalized = normalizePlanPayload(plan, catalog);
+    const key = normalized?.canonical_code;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+__name(normalizePlansArray, "normalizePlansArray");
+function normalizeResolvedState(resolvedState, catalog) {
+  if (!resolvedState) return resolvedState;
+  const currentPlan = findPlanInCatalog(catalog, resolvedState?.current_plan_code || "");
+  const nextPlan = findPlanInCatalog(catalog, resolvedState?.scheduled_next_plan_code || "");
+  return {
+    ...resolvedState,
+    current_plan_code: currentPlan?.canonical_code || canonicalPlanCode8(resolvedState?.current_plan_code || ""),
+    current_plan_name: currentPlan?.display_name || null,
+    scheduled_next_plan_code: nextPlan?.canonical_code || canonicalPlanCode8(resolvedState?.scheduled_next_plan_code || ""),
+    scheduled_next_plan_name: nextPlan?.display_name || null
+  };
+}
+__name(normalizeResolvedState, "normalizeResolvedState");
+function normalizeScheduledChange(scheduledChange, catalog) {
+  if (!scheduledChange) return scheduledChange;
+  const currentPlan = findPlanInCatalog(catalog, scheduledChange?.current_plan_code || "");
+  const nextPlan = findPlanInCatalog(catalog, scheduledChange?.next_plan_code || scheduledChange?.target_plan_code || "");
+  return {
+    ...scheduledChange,
+    current_plan_code: currentPlan?.canonical_code || canonicalPlanCode8(scheduledChange?.current_plan_code || ""),
+    current_plan_name: currentPlan?.display_name || null,
+    next_plan_code: nextPlan?.canonical_code || canonicalPlanCode8(scheduledChange?.next_plan_code || scheduledChange?.target_plan_code || ""),
+    next_plan_name: nextPlan?.display_name || null,
+    apply_label: formatDateAr6(scheduledChange?.apply_at || scheduledChange?.scheduled_next_plan_apply_at || "")
+  };
+}
+__name(normalizeScheduledChange, "normalizeScheduledChange");
+function normalizeUpgradeQuote(quote, catalog) {
+  if (!quote) return quote;
+  const currentPlan = findPlanInCatalog(catalog, quote?.current_plan_code || "");
+  const targetPlan = findPlanInCatalog(catalog, quote?.target_plan_code || "");
+  return {
+    ...quote,
+    current_plan_code: currentPlan?.canonical_code || canonicalPlanCode8(quote?.current_plan_code || ""),
+    current_plan_name: currentPlan?.display_name || null,
+    target_plan_code: targetPlan?.canonical_code || canonicalPlanCode8(quote?.target_plan_code || ""),
+    target_plan_name: targetPlan?.display_name || null
+  };
+}
+__name(normalizeUpgradeQuote, "normalizeUpgradeQuote");
+function normalizeResponsePayload(data, catalog) {
+  if (!data || typeof data !== "object") return data;
+  const out = { ...data };
+  if (out.plan) out.plan = normalizePlanPayload(out.plan, catalog);
+  if (out.current_plan) out.current_plan = normalizePlanPayload(out.current_plan, catalog);
+  if (out.available_plans) out.available_plans = normalizePlansArray(out.available_plans, catalog);
+  if (out.plans) out.plans = normalizePlansArray(out.plans, catalog);
+  if (out.resolved_state) out.resolved_state = normalizeResolvedState(out.resolved_state, catalog);
+  if (out.scheduled_change) out.scheduled_change = normalizeScheduledChange(out.scheduled_change, catalog);
+  if (out.upgrade_quote) out.upgrade_quote = normalizeUpgradeQuote(out.upgrade_quote, catalog);
+  if (out.actions && typeof out.actions === "object") {
+    out.actions = {
+      ...out.actions,
+      plan_catalog_version: PLAN_CATALOG_VERSION
+    };
+  }
+  out.plan_catalog = catalog;
+  out.plan_catalog_version = PLAN_CATALOG_VERSION;
+  return out;
+}
+__name(normalizeResponsePayload, "normalizeResponsePayload");
+async function delegateJson7(request, env, ctx) {
+  const response = await worker_payment_notifications_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson7, "delegateJson");
+function shouldNormalizePath(path) {
+  return [
+    `${API_URL_PREFIX10}/mi-plan`,
+    `${API_URL_PREFIX10}/mercadopago/create-checkout-link`,
+    `${API_URL_PREFIX10}/subscription/enable-auto-renew`,
+    `${API_URL_PREFIX10}/subscription/cancel`
+  ].includes(path);
+}
+__name(shouldNormalizePath, "shouldNormalizePath");
+var worker_plan_catalog_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders10() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const delegated = await delegateJson7(request, env, ctx);
+    if (!shouldNormalizePath(path) || !delegated.data || typeof delegated.data !== "object") {
+      return json10(
+        typeof delegated.data === "object" && delegated.data !== null ? { ...delegated.data, plan_catalog_version: PLAN_CATALOG_VERSION } : delegated.data,
+        delegated.response.status || 200
+      );
+    }
+    const catalog = await buildNormalizedPlanCatalog(env).catch(() => Object.values(PLAN_FALLBACKS).map(buildPlanFromFallback));
+    const normalized = normalizeResponsePayload(delegated.data, catalog);
+    return json10(normalized, delegated.response.status || 200);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_payment_notifications_hotfix_default?.scheduled === "function") {
+      return await worker_payment_notifications_hotfix_default.scheduled(controller, env, ctx);
+    }
+  }
+};
+
+// worker_plan_price_policy_hotfix.js
+var API_URL_PREFIX11 = "/api";
+var PRICE_POLICY_VERSION = "2026-04-05-price-policy-1";
+var PRICE_POLICY_MODE = "next_renewal_uses_current_price";
+var REPRICE_BATCH_LIMIT = 25;
+function corsHeaders11() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders11, "corsHeaders");
+function json11(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders11() });
+}
+__name(json11, "json");
+function norm9(v) {
+  return String(v || "").trim().toUpperCase();
+}
+__name(norm9, "norm");
+function getBearerToken6(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken6, "getBearerToken");
+function canonicalPlanCode9(code) {
+  const raw = norm9(code);
+  if (!raw) return "";
+  if (["FREE", "TRIAL", "PRUEBA", "PRUEBA_7D"].includes(raw)) return "TRIAL_7D";
+  if (raw === "PRO") return "PREMIUM";
+  if (raw === "SIGNATURE") return "INSIGNE";
+  return raw;
+}
+__name(canonicalPlanCode9, "canonicalPlanCode");
+function parseFechaFlexible9(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible9, "parseFechaFlexible");
+function formatDateAr7(value) {
+  const d = parseFechaFlexible9(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+__name(formatDateAr7, "formatDateAr");
+function normalizeSubscriptionStatus6(status) {
+  const raw = norm9(status);
+  if (!raw) return "PENDING";
+  if (raw === "APPROVED") return "ACTIVE";
+  if (raw === "TRIAL") return "TRIALING";
+  if (["ACTIVE", "AUTHORIZED", "TRIALING", "PAUSED", "PENDING", "BETA", "CANCELLED", "CANCELED"].includes(raw)) return raw;
+  if (["IN_PROCESS", "PENDING_CONTINGENCY"].includes(raw)) return "PENDING";
+  if (["REJECTED", "REFUNDED", "CHARGED_BACK", "EXPIRED"].includes(raw)) return "CANCELLED";
+  return raw;
+}
+__name(normalizeSubscriptionStatus6, "normalizeSubscriptionStatus");
+function hasRecurringPreapproval7(subscription) {
+  return !!String(subscription?.mercadopago_preapproval_id || "").trim();
+}
+__name(hasRecurringPreapproval7, "hasRecurringPreapproval");
+function isCurrentOrUpcomingRecurring(subscription) {
+  if (!subscription || !hasRecurringPreapproval7(subscription)) return false;
+  const status = normalizeSubscriptionStatus6(subscription.status);
+  return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA"].includes(status);
+}
+__name(isCurrentOrUpcomingRecurring, "isCurrentOrUpcomingRecurring");
+function isSubscriptionCurrent7(subscription) {
+  if (!subscription) return false;
+  const status = normalizeSubscriptionStatus6(subscription.status);
+  const planCode = canonicalPlanCode9(subscription.plan_code);
+  const now = Date.now();
+  if (status === "CANCELLED") return false;
+  if (planCode === "TRIAL_7D") {
+    const end = parseFechaFlexible9(subscription.trial_ends_at)?.getTime() || 0;
+    return !!end && now <= end;
+  }
+  if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status)) {
+    const end = parseFechaFlexible9(subscription.current_period_ends_at)?.getTime() || 0;
+    return !end || now <= end;
+  }
+  return false;
+}
+__name(isSubscriptionCurrent7, "isSubscriptionCurrent");
+async function supabaseRequest9(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest9, "supabaseRequest");
+async function supabaseSelect11(env, query) {
+  return await supabaseRequest9(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect11, "supabaseSelect");
+async function getUserById8(env, userId) {
+  const rows = await supabaseSelect11(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById8, "getUserById");
+async function getSessionByToken2(env, token) {
+  const rows = await supabaseSelect11(env, `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,metodo,created_at,expires_at,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getSessionByToken2, "getSessionByToken");
+async function resolveAuthUser4(env, request) {
+  const bearer = getBearerToken6(request);
+  if (!bearer) return null;
+  const session = await getSessionByToken2(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById8(env, session.user_id);
+  }
+  return await getUserById8(env, bearer);
+}
+__name(resolveAuthUser4, "resolveAuthUser");
+async function getPlanByCode7(env, planCode) {
+  const code = canonicalPlanCode9(planCode);
+  const rows = await supabaseSelect11(env, `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,public_visible,mercadopago_plan_id,feature_flags,sort_order&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode7, "getPlanByCode");
+async function getRecurringSubscriptionsBatch2(env, limit = REPRICE_BATCH_LIMIT) {
+  const rows = await supabaseSelect11(env, `user_subscriptions?mercadopago_preapproval_id=not.is.null&status=in.(ACTIVE,AUTHORIZED,PENDING,PAUSED,BETA)&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || REPRICE_BATCH_LIMIT)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getRecurringSubscriptionsBatch2, "getRecurringSubscriptionsBatch");
+async function getCurrentRecurringSubscription(env, userId) {
+  const rows = await supabaseSelect11(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&mercadopago_preapproval_id=not.is.null&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,external_reference,created_at&order=created_at.desc&limit=10`).catch(() => []);
+  const items = Array.isArray(rows) ? rows : [];
+  return items.find(isCurrentOrUpcomingRecurring) || items[0] || null;
+}
+__name(getCurrentRecurringSubscription, "getCurrentRecurringSubscription");
+async function getRecentSubscriptionsAdmin2(env, limit = 200) {
+  const rows = await supabaseSelect11(env, `user_subscriptions?select=id,user_id,plan_code,status,source,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,mercadopago_payer_email,external_reference,created_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || 200)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getRecentSubscriptionsAdmin2, "getRecentSubscriptionsAdmin");
+async function getRecentCheckoutSessionsAdmin2(env, limit = 200) {
+  const rows = await supabaseSelect11(env, `mercadopago_checkout_sessions?select=id,user_id,plan_code,status,provider,checkout_url,external_reference,provider_payload,created_at,updated_at&order=created_at.desc&limit=${Math.max(1, Number(limit) || 200)}`).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getRecentCheckoutSessionsAdmin2, "getRecentCheckoutSessionsAdmin");
+async function mercadoPagoRequest4(env, path, init = {}) {
+  const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
+  if (!accessToken) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
+  const res = await fetch(`https://api.mercadopago.com${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(data?.message || data?.cause?.[0]?.description || `Mercado Pago error ${res.status}`);
+  return data;
+}
+__name(mercadoPagoRequest4, "mercadoPagoRequest");
+async function fetchMercadoPagoPreapproval2(env, preapprovalId) {
+  return await mercadoPagoRequest4(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "GET" });
+}
+__name(fetchMercadoPagoPreapproval2, "fetchMercadoPagoPreapproval");
+async function updateMercadoPagoPreapprovalAmount2(env, preapprovalId, amount, reason) {
+  return await mercadoPagoRequest4(env, `/preapproval/${encodeURIComponent(preapprovalId)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      reason,
+      auto_recurring: {
+        transaction_amount: Number(amount),
+        currency_id: env.MERCADOPAGO_CURRENCY_ID || "ARS"
+      }
+    })
+  });
+}
+__name(updateMercadoPagoPreapprovalAmount2, "updateMercadoPagoPreapprovalAmount");
+function buildPricePolicyInfo(subscription, plan, remotePreapproval, repriced) {
+  const currentPlanCode = canonicalPlanCode9(subscription?.plan_code || plan?.code || "");
+  const planName = String(plan?.nombre || currentPlanCode || "tu plan").trim() || currentPlanCode || "tu plan";
+  const dbPrice = plan?.price_ars != null ? Number(plan.price_ars) : null;
+  const remoteAmount = remotePreapproval?.auto_recurring?.transaction_amount != null ? Number(remotePreapproval.auto_recurring.transaction_amount) : null;
+  const nextDate = remotePreapproval?.next_payment_date || subscription?.current_period_ends_at || null;
+  return {
+    mode: PRICE_POLICY_MODE,
+    canonical_plan_code: currentPlanCode,
+    plan_name: planName,
+    current_price_ars: dbPrice,
+    recurring_amount_ars: remoteAmount,
+    next_renewal_date: nextDate,
+    next_renewal_label: formatDateAr7(nextDate),
+    will_use_current_price_on_next_renewal: dbPrice != null,
+    repriced_for_next_cycle: !!repriced,
+    pricing_note: dbPrice == null ? `El precio vigente de ${planName} no est\xE1 cargado todav\xEDa en la base, as\xED que no se puede reprogramar la pr\xF3xima renovaci\xF3n autom\xE1ticamente.` : repriced ? `La pr\xF3xima renovaci\xF3n de ${planName} ya qued\xF3 actualizada al precio vigente de $${dbPrice.toLocaleString("es-AR")}.` : `La pr\xF3xima renovaci\xF3n de ${planName} usa el precio vigente que tengas cargado en la base al momento de renovar.`
+  };
+}
+__name(buildPricePolicyInfo, "buildPricePolicyInfo");
+async function syncRecurringAmountToCurrentPrice(env, subscription, options = {}) {
+  if (!subscription?.mercadopago_preapproval_id) {
+    return { checked: false, reason: "no_preapproval" };
+  }
+  const plan = await getPlanByCode7(env, subscription.plan_code);
+  const targetPrice = plan?.price_ars != null ? Number(plan.price_ars) : null;
+  const remote = await fetchMercadoPagoPreapproval2(env, subscription.mercadopago_preapproval_id);
+  const remoteAmount = remote?.auto_recurring?.transaction_amount != null ? Number(remote.auto_recurring.transaction_amount) : null;
+  if (targetPrice == null || !Number.isFinite(targetPrice) || targetPrice < 0) {
+    return {
+      checked: true,
+      repriced: false,
+      reason: "missing_plan_price",
+      price_policy: buildPricePolicyInfo(subscription, plan, remote, false)
+    };
+  }
+  if (remoteAmount != null && Math.abs(remoteAmount - targetPrice) < 0.01) {
+    return {
+      checked: true,
+      repriced: false,
+      reason: "already_current_price",
+      price_policy: buildPricePolicyInfo(subscription, plan, remote, false)
+    };
+  }
+  if (options.read_only) {
+    return {
+      checked: true,
+      repriced: false,
+      reason: "read_only",
+      price_policy: buildPricePolicyInfo(subscription, plan, remote, false)
+    };
+  }
+  const updatedRemote = await updateMercadoPagoPreapprovalAmount2(
+    env,
+    subscription.mercadopago_preapproval_id,
+    targetPrice,
+    `APDocentePBA \xB7 ${String(plan?.nombre || canonicalPlanCode9(subscription.plan_code || "")).trim()} \xB7 Precio vigente para pr\xF3xima renovaci\xF3n`
+  );
+  return {
+    checked: true,
+    repriced: true,
+    reason: "repriced_for_next_cycle",
+    previous_amount_ars: remoteAmount,
+    new_amount_ars: targetPrice,
+    price_policy: buildPricePolicyInfo(subscription, plan, updatedRemote || remote, true)
+  };
+}
+__name(syncRecurringAmountToCurrentPrice, "syncRecurringAmountToCurrentPrice");
+function buildAdminPaymentsSummary(subscriptions, checkouts) {
+  const planCounts = {};
+  for (const row of Array.isArray(subscriptions) ? subscriptions : []) {
+    const code = canonicalPlanCode9(row?.plan_code || "") || "SIN_PLAN";
+    planCounts[code] = (planCounts[code] || 0) + 1;
+  }
+  return {
+    subscriptions_total: subscriptions.length,
+    subscriptions_active: subscriptions.filter(isSubscriptionCurrent7).length,
+    subscriptions_trial: subscriptions.filter((row) => canonicalPlanCode9(row?.plan_code) === "TRIAL_7D").length,
+    subscriptions_recurring: subscriptions.filter((row) => hasRecurringPreapproval7(row)).length,
+    subscriptions_cancelled: subscriptions.filter((row) => normalizeSubscriptionStatus6(row?.status) === "CANCELLED").length,
+    checkout_total: checkouts.length,
+    checkout_ready: checkouts.filter((row) => ["ready", "pending_config"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_pending: checkouts.filter((row) => ["pending", "scheduled"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_approved: checkouts.filter((row) => ["approved", "authorized"].includes(String(row?.status || "").toLowerCase())).length,
+    checkout_rejected: checkouts.filter((row) => ["rejected", "refunded"].includes(String(row?.status || "").toLowerCase())).length,
+    by_plan: planCounts
+  };
+}
+__name(buildAdminPaymentsSummary, "buildAdminPaymentsSummary");
+async function handleAdminPagos2(request, env) {
+  const user = await resolveAuthUser4(env, request);
+  if (!user) return json11({ ok: false, error: "No autenticado" }, 401);
+  if (!user.es_admin) return json11({ ok: false, error: "No autorizado" }, 403);
+  const [subscriptions, checkouts] = await Promise.all([
+    getRecentSubscriptionsAdmin2(env, 200),
+    getRecentCheckoutSessionsAdmin2(env, 200)
+  ]);
+  return json11({
+    ok: true,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+    summary: buildAdminPaymentsSummary(subscriptions, checkouts),
+    recent_subscriptions: subscriptions.slice(0, 60),
+    recent_checkouts: checkouts.slice(0, 60)
+  });
+}
+__name(handleAdminPagos2, "handleAdminPagos");
+async function delegateJson8(request, env, ctx) {
+  const response = await worker_plan_catalog_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJson8, "delegateJson");
+function attachPricePolicyToResponse(data, pricePolicy) {
+  if (!data || typeof data !== "object") {
+    return { price_policy_version: PRICE_POLICY_VERSION, price_policy: pricePolicy || null };
+  }
+  let billingNote = String(data?.billing_note || "").trim();
+  if (pricePolicy?.pricing_note) {
+    billingNote = `${billingNote ? `${billingNote} ` : ""}${pricePolicy.pricing_note}`.trim();
+  }
+  return {
+    ...data,
+    billing_note: billingNote,
+    price_policy_version: PRICE_POLICY_VERSION,
+    price_policy: pricePolicy || null
+  };
+}
+__name(attachPricePolicyToResponse, "attachPricePolicyToResponse");
+async function handleMiPlanWithPricePolicy(request, env, ctx) {
+  const delegated = await delegateJson8(request, env, ctx);
+  const url = new URL(request.url);
+  const userId = String(url.searchParams.get("user_id") || delegated.data?.user_id || "").trim();
+  if (!delegated.response.ok || !delegated.data?.ok || !userId) {
+    return json11(attachPricePolicyToResponse(delegated.data, null), delegated.response.status || 200);
+  }
+  const currentRecurring = await getCurrentRecurringSubscription(env, userId);
+  if (!currentRecurring) {
+    return json11(attachPricePolicyToResponse(delegated.data, {
+      mode: PRICE_POLICY_MODE,
+      will_use_current_price_on_next_renewal: true,
+      pricing_note: "Los cambios de precio impactan en la pr\xF3xima renovaci\xF3n de los planes recurrentes."
+    }), delegated.response.status || 200);
+  }
+  const sync = await syncRecurringAmountToCurrentPrice(env, currentRecurring).catch((err) => ({
+    checked: false,
+    repriced: false,
+    reason: "price_policy_sync_failed",
+    price_policy: {
+      mode: PRICE_POLICY_MODE,
+      will_use_current_price_on_next_renewal: true,
+      pricing_note: err?.message || "No se pudo verificar el precio de la pr\xF3xima renovaci\xF3n."
+    }
+  }));
+  let finalData = delegated.data;
+  if (sync?.repriced) {
+    const refreshed = await delegateJson8(request, env, ctx);
+    if (refreshed.response.ok && refreshed.data?.ok) {
+      finalData = refreshed.data;
+    }
+  }
+  return json11(attachPricePolicyToResponse(finalData, sync?.price_policy || null), delegated.response.status || 200);
+}
+__name(handleMiPlanWithPricePolicy, "handleMiPlanWithPricePolicy");
+async function runRecurringRepricingSweep(env) {
+  const rows = await getRecurringSubscriptionsBatch2(env, REPRICE_BATCH_LIMIT);
+  let checked = 0;
+  let repriced = 0;
+  const results = [];
+  for (const row of rows) {
+    try {
+      const sync = await syncRecurringAmountToCurrentPrice(env, row);
+      checked += 1;
+      if (sync?.repriced) repriced += 1;
+      results.push({ user_id: row.user_id, subscription_id: row.id, sync });
+    } catch (err) {
+      results.push({ user_id: row.user_id, subscription_id: row.id, error: err?.message || "repricing error" });
+    }
+  }
+  return { ok: true, checked, repriced, results };
+}
+__name(runRecurringRepricingSweep, "runRecurringRepricingSweep");
+var worker_plan_price_policy_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders11() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === `${API_URL_PREFIX11}/admin/pagos` && request.method === "GET") {
+      try {
+        return await handleAdminPagos2(request, env);
+      } catch (err) {
+        return json11({ ok: false, error: err?.message || "No se pudieron leer los pagos" }, 500);
+      }
+    }
+    if (path === "/api/mi-plan" && request.method === "GET") {
+      try {
+        return await handleMiPlanWithPricePolicy(request, env, ctx);
+      } catch (err) {
+        return json11({ ok: false, message: err?.message || "No se pudo aplicar la pol\xEDtica de precios", price_policy_version: PRICE_POLICY_VERSION }, 500);
+      }
+    }
+    const delegated = await delegateJson8(request, env, ctx);
+    return json11(attachPricePolicyToResponse(delegated.data, {
+      mode: PRICE_POLICY_MODE,
+      will_use_current_price_on_next_renewal: true
+    }), delegated.response.status || 200);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_plan_catalog_hotfix_default?.scheduled === "function") {
+      await worker_plan_catalog_hotfix_default.scheduled(controller, env, ctx);
+    }
+    ctx.waitUntil(runRecurringRepricingSweep(env).catch((err) => {
+      console.error("PRICE POLICY SWEEP ERROR:", err);
+    }));
+  }
+};
+
+// worker_pid_lookup_hotfix.js
+var API_URL_PREFIX12 = "/api";
+var PID_LOOKUP_VERSION = "2026-04-11-pid-live-3";
+var TEST_DIGEST_VERSION = "2026-04-11-test-digest-1";
+var PID_LISTADOS = [
+  { value: "oficial", label: "Listado Oficial" },
+  { value: "108a", label: "108 A" },
+  { value: "108b", label: "108 B" },
+  { value: "fines", label: "FINES Listado 1" },
+  { value: "108bfines", label: "FINES Listado 2" },
+  { value: "s108a", label: "108 A Terciario" },
+  { value: "s108b", label: "108 B Terciario" },
+  { value: "108ainfine", label: "108 A In Fine" },
+  { value: "108bEncierro", label: "108 B Contextos de Encierro" },
+  { value: "formacionProfesionalPrincipalPreceptores", label: "FP Principal Preceptores" },
+  { value: "formacionProfesionalComplementoPreceptores", label: "FP Complementario Preceptores" },
+  { value: "formacionProfesionalPrincipalPanol", label: "FP Principal Pa\xF1ol" },
+  { value: "formacionProfesionalComplementarioPanol", label: "FP Complementario Pa\xF1ol" },
+  { value: "formacionProfesionalPrincipalFp", label: "Formaci\xF3n Profesional Principal" },
+  { value: "formacionProfesionalComplementarioFp", label: "Formaci\xF3n Profesional Complementario" }
+];
+var PID_ALLOWED_LISTADOS = new Set(PID_LISTADOS.map((item) => item.value));
+function corsHeaders12() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders12, "corsHeaders");
+function json12(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders12() });
+}
+__name(json12, "json");
+function normalizeDni(value) {
+  return String(value || "").replace(/\D+/g, "").trim();
+}
+__name(normalizeDni, "normalizeDni");
+function normalizeYear(value) {
+  const year = Number(String(value || "").trim());
+  return Number.isInteger(year) && year >= 2015 && year <= 2100 ? year : null;
+}
+__name(normalizeYear, "normalizeYear");
+function normalizeListado(value) {
+  return String(value || "").trim();
+}
+__name(normalizeListado, "normalizeListado");
+function normalizeEmail3(value) {
+  return String(value || "").trim().toLowerCase();
+}
+__name(normalizeEmail3, "normalizeEmail");
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail3(value));
+}
+__name(isValidEmail, "isValidEmail");
+function b64(value) {
+  return btoa(String(value || "").trim());
+}
+__name(b64, "b64");
+function buildPidUrl(dni, anio, listado) {
+  return `http://servicios2.abc.gov.ar/servaddo/puntaje.ingreso.docencia/ingreso.servaddo.cfm?documento=${encodeURIComponent(b64(dni))}&anio=${encodeURIComponent(b64(anio))}&listado=${encodeURIComponent(b64(listado))}&tipo=`;
+}
+__name(buildPidUrl, "buildPidUrl");
+function cleanText(value) {
+  return String(value || "").replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#34;/gi, '"').replace(/&#39;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&iacute;/gi, "\xED").replace(/&eacute;/gi, "\xE9").replace(/&aacute;/gi, "\xE1").replace(/&oacute;/gi, "\xF3").replace(/&uacute;/gi, "\xFA").replace(/&ntilde;/gi, "\xF1").replace(/\s+/g, " ").trim();
+}
+__name(cleanText, "cleanText");
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+__name(escapeRegExp, "escapeRegExp");
+function escapeHtml2(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+}
+__name(escapeHtml2, "escapeHtml");
+function extractLabelValue(html, label) {
+  const rx = new RegExp(`<label[^>]*>\\s*<b>\\s*${escapeRegExp(label)}\\s*<\\/b>\\s*([^<]*)<\\/label>`, "i");
+  const match = html.match(rx);
+  return cleanText(match?.[1] || "");
+}
+__name(extractLabelValue, "extractLabelValue");
+function parsePidHtml(html) {
+  const raw = String(html || "");
+  const legend = cleanText((raw.match(/<legend[^>]*>([\s\S]*?)<\/legend>/i) || [])[1] || "").replace(/<[^>]+>/g, " ");
+  const apellido_nombre = extractLabelValue(raw, "Apellido y Nombre");
+  const distrito_residencia = extractLabelValue(raw, "Distrito de Residencia");
+  const distritos_solicitados = extractLabelValue(raw, "Distritos Solicitados");
+  const items = [];
+  const tdRx = /<td[^>]*title=['"]([^'"]*Puntaje Total[^'"]*)['"][^>]*>\s*([^<]+)\s*<\/td>/gi;
+  for (const match of raw.matchAll(tdRx)) {
+    const title = cleanText(match[1] || "");
+    const codigo = cleanText((title.match(/\(([^,\)]+)\s*,\s*Puntaje Total/i) || [])[1] || "");
+    const rama = cleanText((title.match(/Rama\s*:\s*([A-Z])/i) || [])[1] || "");
+    const fecha = cleanText((title.match(/Fecha\s*:\s*([0-9:\-\. ]+)/i) || [])[1] || "");
+    const puntaje = cleanText(match[2] || "");
+    items.push({ codigo, rama, puntaje, fecha });
+  }
+  return {
+    oblea: legend,
+    apellido_nombre,
+    distrito_residencia,
+    distritos_solicitados,
+    items
+  };
+}
+__name(parsePidHtml, "parsePidHtml");
+function resolveBrevoConfig2(env) {
+  const apiKey = String(
+    env.BREVO_API_KEY || env.SENDINBLUE_API_KEY || env.BREVO_TRANSACTIONAL_API_KEY || ""
+  ).trim();
+  const senderEmail = String(
+    env.BREVO_FROM_EMAIL || env.BREVO_SENDER_EMAIL || env.ALERT_FROM_EMAIL || env.EMAIL_FROM || ""
+  ).trim();
+  const senderName = String(
+    env.BREVO_FROM_NAME || env.BREVO_SENDER_NAME || env.ALERT_FROM_NAME || env.EMAIL_FROM_NAME || "APDocentePBA"
+  ).trim() || "APDocentePBA";
+  const appUrl = String(
+    env.MERCADOPAGO_SUCCESS_URL || env.APP_PUBLIC_URL || "https://apdocentepba-hub.github.io/apdocentepba-v2/"
+  ).trim();
+  return { apiKey, senderEmail, senderName, appUrl };
+}
+__name(resolveBrevoConfig2, "resolveBrevoConfig");
+async function sendBrevoEmail2(env, payload) {
+  const config = resolveBrevoConfig2(env);
+  if (!config.apiKey || !config.senderEmail) {
+    return { ok: false, reason: "brevo_not_configured" };
+  }
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": config.apiKey
+    },
+    body: JSON.stringify({
+      sender: { email: config.senderEmail, name: config.senderName },
+      to: [{ email: payload.to.email, name: payload.to.name || "" }],
+      subject: payload.subject,
+      htmlContent: payload.htmlContent,
+      textContent: payload.textContent || void 0,
+      tags: payload.tags || ["apdocentepba", "test-digest"]
+    })
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    return { ok: false, reason: "brevo_request_failed", status: res.status, error: data };
+  }
+  return { ok: true, messageId: data && data.messageId || null };
+}
+__name(sendBrevoEmail2, "sendBrevoEmail");
+function resolveTestRecipient(url, env) {
+  const fixed = normalizeEmail3(env.BREVO_TEST_TO || env.ALERT_TEST_TO || env.EMAIL_TEST_TO || "");
+  const requested = normalizeEmail3(url.searchParams.get("to") || "");
+  const secret = String(env.TEST_DIGEST_KEY || "").trim();
+  const provided = String(url.searchParams.get("key") || "").trim();
+  if (requested) {
+    if (!isValidEmail(requested)) {
+      return { error: "Email destino inv\xE1lido.", status: 400 };
+    }
+    if (secret) {
+      if (provided !== secret) {
+        return { error: "Key inv\xE1lida para env\xEDo manual.", status: 403 };
+      }
+      return { to: requested };
+    }
+    if (fixed && requested === fixed) {
+      return { to: requested };
+    }
+    return {
+      error: fixed ? `Sin key, el test solo puede enviarse a ${fixed}.` : "Falta configurar BREVO_TEST_TO o TEST_DIGEST_KEY para habilitar destinatario manual.",
+      status: 400
+    };
+  }
+  if (fixed && isValidEmail(fixed)) {
+    return { to: fixed };
+  }
+  return {
+    error: "Falta configurar BREVO_TEST_TO/ALERT_TEST_TO o usar ?to=...&key=...",
+    status: 400
+  };
+}
+__name(resolveTestRecipient, "resolveTestRecipient");
+function buildTestDigestHtml(to, subject, appUrl) {
+  const sentAt = new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "full",
+    timeStyle: "medium",
+    timeZone: "America/Argentina/Buenos_Aires"
+  }).format(/* @__PURE__ */ new Date());
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#14213d;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;padding:28px;">
+        <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:12px;">APDocentePBA \xB7 Test digest</div>
+        <h1 style="font-size:24px;line-height:1.3;margin:0 0 14px 0;">${escapeHtml2(subject)}</h1>
+        <p style="font-size:15px;line-height:1.6;margin:0 0 16px 0;">Este es un mail de prueba disparado manualmente desde el worker actual de APDocentePBA.</p>
+        <ul style="padding-left:20px;margin:0 0 18px 0;font-size:14px;line-height:1.6;">
+          <li>Destino: ${escapeHtml2(to)}</li>
+          <li>Enviado: ${escapeHtml2(sentAt)}</li>
+          <li>Versi\xF3n: ${escapeHtml2(TEST_DIGEST_VERSION)}</li>
+        </ul>
+        <p style="font-size:14px;line-height:1.6;margin:0 0 16px 0;">Si te lleg\xF3 este correo, el canal transaccional qued\xF3 operativo.</p>
+        <p style="margin:0;"><a href="${escapeHtml2(appUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Abrir APDocentePBA</a></p>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+__name(buildTestDigestHtml, "buildTestDigestHtml");
+async function handlePidListados() {
+  return json12({ ok: true, version: PID_LOOKUP_VERSION, listados: PID_LISTADOS });
+}
+__name(handlePidListados, "handlePidListados");
+async function handlePidConsultar(request) {
+  const body = await request.json().catch(() => ({}));
+  const dni = normalizeDni(body?.dni);
+  const anio = normalizeYear(body?.anio || (/* @__PURE__ */ new Date()).getFullYear());
+  const listado = normalizeListado(body?.listado);
+  if (!/^\d{7,8}$/.test(dni)) return json12({ ok: false, error: "DNI inv\xE1lido. Us\xE1 7 u 8 d\xEDgitos." }, 400);
+  if (!anio) return json12({ ok: false, error: "A\xF1o inv\xE1lido." }, 400);
+  if (!PID_ALLOWED_LISTADOS.has(listado)) return json12({ ok: false, error: "Listado no permitido." }, 400);
+  const upstream_url = buildPidUrl(dni, anio, listado);
+  const res = await fetch(upstream_url, {
+    method: "GET",
+    redirect: "follow",
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "User-Agent": "Mozilla/5.0 APDocentePBA PID Lookup"
+    }
+  });
+  const html = await res.text();
+  if (!res.ok) {
+    return json12({ ok: false, error: `PID devolvi\xF3 HTTP ${res.status}.`, upstream_status: res.status, upstream_url }, 502);
+  }
+  if (!/PUNTAJE INGRESO A LA DOCENCIA|Apellido y Nombre/i.test(html)) {
+    return json12({ ok: false, error: "La respuesta del PID no parece una oblea v\xE1lida.", upstream_status: res.status, upstream_url }, 502);
+  }
+  return json12({
+    ok: true,
+    version: PID_LOOKUP_VERSION,
+    dni,
+    anio,
+    listado,
+    upstream_url,
+    result: parsePidHtml(html)
+  });
+}
+__name(handlePidConsultar, "handlePidConsultar");
+async function handleTestDigest(request, env) {
+  const url = new URL(request.url);
+  const recipient = resolveTestRecipient(url, env);
+  if (recipient.error) {
+    return json12({ ok: false, error: recipient.error, version: TEST_DIGEST_VERSION }, recipient.status || 400);
+  }
+  const subject = String(url.searchParams.get("subject") || "APDocentePBA \xB7 Mail de prueba").trim().slice(0, 160) || "APDocentePBA \xB7 Mail de prueba";
+  const config = resolveBrevoConfig2(env);
+  const htmlContent = buildTestDigestHtml(recipient.to, subject, config.appUrl);
+  const textContent = `Mail de prueba APDocentePBA
+Destino: ${recipient.to}
+Versi\xF3n: ${TEST_DIGEST_VERSION}
+${config.appUrl}`;
+  const result = await sendBrevoEmail2(env, {
+    to: { email: recipient.to, name: "Prueba APDocentePBA" },
+    subject,
+    htmlContent,
+    textContent,
+    tags: ["apdocentepba", "test-digest"]
+  });
+  if (!result.ok) {
+    return json12({
+      ok: false,
+      error: "No se pudo enviar el mail de prueba.",
+      details: result,
+      version: TEST_DIGEST_VERSION
+    }, result.reason === "brevo_not_configured" ? 500 : 502);
+  }
+  return json12({
+    ok: true,
+    message: "Mail de prueba enviado.",
+    to: recipient.to,
+    subject,
+    message_id: result.messageId || null,
+    version: TEST_DIGEST_VERSION,
+    usable_paths: ["/test-digest", "/api/test-digest"]
+  });
+}
+__name(handleTestDigest, "handleTestDigest");
+var worker_pid_lookup_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders12() });
+    const url = new URL(request.url);
+    if (url.pathname === `${API_URL_PREFIX12}/pid-listados` && request.method === "GET") return handlePidListados();
+    if (url.pathname === `${API_URL_PREFIX12}/pid-consultar` && request.method === "POST") return handlePidConsultar(request);
+    if ((url.pathname === "/test-digest" || url.pathname === `${API_URL_PREFIX12}/test-digest`) && request.method === "GET") return handleTestDigest(request, env);
+    return worker_plan_price_policy_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_plan_price_policy_hotfix_default?.scheduled === "function") return worker_plan_price_policy_hotfix_default.scheduled(controller, env, ctx);
+  }
+};
+
+// worker_telegram_hotfix.js
+var API_URL_PREFIX13 = "/api";
+var TELEGRAM_VERSION = "2026-04-11-telegram-alerts-3";
+var TELEGRAM_SWEEP_LIMIT = 200;
+var TELEGRAM_MESSAGE_ALERTS_LIMIT = 5;
+var TELEGRAM_SENT_TTL_SECONDS = 60 * 60 * 24 * 30;
+function corsHeaders13() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Telegram-Bot-Api-Secret-Token"
+  };
+}
+__name(corsHeaders13, "corsHeaders");
+function json13(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders13() });
+}
+__name(json13, "json");
+function norm10(value) {
+  return String(value || "").trim();
+}
+__name(norm10, "norm");
+function normUpper(value) {
+  return norm10(value).toUpperCase();
+}
+__name(normUpper, "normUpper");
+function getBearerToken7(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken7, "getBearerToken");
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(norm10(value));
+}
+__name(isUuid, "isUuid");
+function parseFechaFlexible10(value) {
+  const raw = norm10(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible10, "parseFechaFlexible");
+function formatDateAr8(value) {
+  const d = parseFechaFlexible10(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(d);
+}
+__name(formatDateAr8, "formatDateAr");
+function canonicalPlanCode10(code) {
+  const raw = normUpper(code);
+  if (!raw) return "";
+  if (["FREE", "TRIAL", "PRUEBA", "PRUEBA_7D"].includes(raw)) return "TRIAL_7D";
+  if (raw === "PRO") return "PREMIUM";
+  if (raw === "SIGNATURE") return "INSIGNE";
+  if (raw === "BASIC") return "PLUS";
+  return raw;
+}
+__name(canonicalPlanCode10, "canonicalPlanCode");
+function isSubscriptionCurrent8(subscription) {
+  if (!subscription) return false;
+  const status = normUpper(subscription.status);
+  if (["CANCELLED", "CANCELED"].includes(status)) return false;
+  const now = Date.now();
+  const planCode = canonicalPlanCode10(subscription.plan_code);
+  const end = parseFechaFlexible10(
+    planCode === "TRIAL_7D" ? subscription.trial_ends_at || "" : subscription.current_period_ends_at || ""
+  )?.getTime() || 0;
+  if (!end) return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status);
+  return end > now;
+}
+__name(isSubscriptionCurrent8, "isSubscriptionCurrent");
+function safeJsonParse5(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse5, "safeJsonParse");
+async function supabaseRequest10(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest10, "supabaseRequest");
+async function supabaseSelect12(env, query) {
+  return await supabaseRequest10(env, query, {
+    method: "GET",
+    headers: { Prefer: "return=representation" }
+  });
+}
+__name(supabaseSelect12, "supabaseSelect");
+async function supabaseInsert2(env, table, rows) {
+  return await supabaseRequest10(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(Array.isArray(rows) ? rows : [rows])
+  });
+}
+__name(supabaseInsert2, "supabaseInsert");
+async function supabasePatchReturning2(env, table, filter, payload) {
+  const rows = await supabaseRequest10(env, `${table}?${filter}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+__name(supabasePatchReturning2, "supabasePatchReturning");
+async function getUserById9(env, userId) {
+  const rows = await supabaseSelect12(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById9, "getUserById");
+async function getSessionByToken3(env, token) {
+  const rows = await supabaseSelect12(
+    env,
+    `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,expires_at,activo&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getSessionByToken3, "getSessionByToken");
+async function resolveAuthUser5(env, request) {
+  const bearer = getBearerToken7(request);
+  if (!bearer) return null;
+  const session = await getSessionByToken3(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById9(env, session.user_id);
+  }
+  return await getUserById9(env, bearer);
+}
+__name(resolveAuthUser5, "resolveAuthUser");
+async function getUserSubscriptions7(env, userId) {
+  const rows = await supabaseSelect12(
+    env,
+    `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,mercadopago_preapproval_id,created_at&order=created_at.desc`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions7, "getUserSubscriptions");
+async function getPlanByCode8(env, planCode) {
+  const code = canonicalPlanCode10(planCode);
+  if (!code) return null;
+  const rows = await supabaseSelect12(
+    env,
+    `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,feature_flags&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode8, "getPlanByCode");
+async function resolveTelegramEntitlement(env, userId) {
+  const subscriptions = await getUserSubscriptions7(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent8) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode10(current?.plan_code || "TRIAL_7D");
+  const plan = await getPlanByCode8(env, planCode);
+  const flags = safeJsonParse5(plan?.feature_flags) || {};
+  return {
+    plan_code: planCode,
+    plan_name: norm10(plan?.nombre) || planCode || "TRIAL_7D",
+    allowed: true,
+    source: "global_opt_in_policy",
+    flags
+  };
+}
+__name(resolveTelegramEntitlement, "resolveTelegramEntitlement");
+async function resolveWhatsAppEntitlement(env, userId) {
+  const subscriptions = await getUserSubscriptions7(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent8) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode10(current?.plan_code || "TRIAL_7D");
+  const plan = await getPlanByCode8(env, planCode);
+  const flags = safeJsonParse5(plan?.feature_flags) || {};
+  return {
+    plan_code: planCode,
+    plan_name: norm10(plan?.nombre) || planCode || "TRIAL_7D",
+    allowed: flags.whatsapp !== false && planCode === "INSIGNE",
+    source: "plan_feature_flag",
+    flags
+  };
+}
+__name(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
+function telegramStateKey(userId) {
+  return `telegram:user:${normUpper(userId)}`;
+}
+__name(telegramStateKey, "telegramStateKey");
+function telegramSentKey(userId, offerKey) {
+  return `telegram:sent:${normUpper(userId)}:${normUpper(offerKey)}`;
+}
+__name(telegramSentKey, "telegramSentKey");
+function telegramChatKey(chatId) {
+  return `telegram:chat:${norm10(chatId)}`;
+}
+__name(telegramChatKey, "telegramChatKey");
+
+async function saveTelegramChatLink(env, chatId, userId) {
+  const kv = getKv(env);
+  if (!kv || !chatId || !userId) return;
+  await kv.put(telegramChatKey(chatId), normUpper(userId));
+}
+__name(saveTelegramChatLink, "saveTelegramChatLink");
+
+async function findTelegramUserIdByChatId(env, chatId) {
+  const kv = getKv(env);
+  const normalizedChatId = norm10(chatId);
+
+  if (!normalizedChatId) return "";
+
+  if (kv) {
+    const direct = await kv.get(telegramChatKey(normalizedChatId)).catch(() => "");
+    if (direct) return normUpper(direct);
+  }
+
+  const rows = await supabaseSelect12(
+    env,
+    `user_preferences?alertas_activas=eq.true&alertas_telegram=eq.true&select=user_id&limit=500`
+  ).catch(() => []);
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const userId = normUpper(row?.user_id);
+    if (!userId) continue;
+
+    const state = await getTelegramState(env, userId);
+    if (norm10(state?.chat_id) === normalizedChatId) {
+      await saveTelegramChatLink(env, normalizedChatId, userId).catch(() => {});
+      return userId;
+    }
+  }
+
+  return "";
+}
+__name(findTelegramUserIdByChatId, "findTelegramUserIdByChatId");
+
+function buildTelegramNoAlertsMessage(user) {
+  return [
+    `🔔 APDocentePBA`,
+    ``,
+    `Hola ${norm10(user?.nombre) || "Docente"}.`,
+    `No hay alertas compatibles con tus filtros en este momento.`,
+    ``,
+    `Escribí ALERTAS más tarde para volver a consultar.`,
+    ``,
+    `Panel: https://alertasapd.com.ar`
+  ].join("\n");
+}
+__name(buildTelegramNoAlertsMessage, "buildTelegramNoAlertsMessage");
+function getKv(env) {
+  return env.EMAIL_SWEEP_STATE || null;
+}
+__name(getKv, "getKv");
+async function getTelegramState(env, userId) {
+  const kv = getKv(env);
+  if (!kv || !userId) return null;
+  const raw = await kv.get(telegramStateKey(userId));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+__name(getTelegramState, "getTelegramState");
+async function saveTelegramState(env, userId, patch) {
+  const kv = getKv(env);
+  if (!kv || !userId) throw new Error("Falta EMAIL_SWEEP_STATE para guardar estado de Telegram");
+  const current = await getTelegramState(env, userId) || {};
+  const next = {
+    ...current,
+    ...patch,
+    user_id: normUpper(userId),
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await kv.put(telegramStateKey(userId), JSON.stringify(next));
+  return next;
+}
+__name(saveTelegramState, "saveTelegramState");
+function maskChatId(chatId) {
+  const raw = norm10(chatId);
+  if (!raw) return "";
+  if (raw.length <= 4) return raw;
+  return `${"\u2022".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+}
+__name(maskChatId, "maskChatId");
+function buildTelegramBotLink(env, userId) {
+  const username = norm10(env.TELEGRAM_BOT_USERNAME).replace(/^@+/, "");
+  if (!username || !userId) return "";
+  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(norm10(userId))}`;
+}
+__name(buildTelegramBotLink, "buildTelegramBotLink");
+async function insertNotificationDeliveryLogs(env, logs) {
+  const rows = (Array.isArray(logs) ? logs : [logs]).filter(Boolean);
+  if (!rows.length) return;
+  try {
+    await supabaseInsert2(env, "notification_delivery_logs", rows);
+  } catch (err) {
+    console.error("NOTIFICATION DELIVERY LOG INSERT ERROR:", err);
+  }
+}
+__name(insertNotificationDeliveryLogs, "insertNotificationDeliveryLogs");
+function baseLogRow({ userId, channel = "telegram", eventType, deliveryKey = null, status, provider = "telegram", providerMessageId = null, planCode = null, payload = null, errorMessage = null }) {
+  return {
+    user_id: userId || null,
+    channel,
+    event_type: eventType,
+    delivery_key: deliveryKey,
+    status,
+    provider,
+    provider_message_id: providerMessageId,
+    plan_code: planCode || null,
+    payload: payload || {},
+    error_message: errorMessage || null
+  };
+}
+__name(baseLogRow, "baseLogRow");
+function buildTelegramStatusPayload(env, state, entitlement) {
+  const connected = !!state?.connected && !!norm10(state?.chat_id);
+  const allowedByPlan = !!entitlement?.allowed;
+  return {
+    ok: true,
+    version: TELEGRAM_VERSION,
+    connected,
+    alerts_enabled: allowedByPlan ? !!state?.alerts_enabled : false,
+    allowed_by_plan: allowedByPlan,
+    channel_policy: entitlement?.source || "default_policy",
+    plan_code: entitlement?.plan_code || "",
+    plan_name: entitlement?.plan_name || "",
+    chat_id_masked: connected ? maskChatId(state?.chat_id) : "",
+    username: norm10(state?.username),
+    first_name: norm10(state?.first_name),
+    connected_at: norm10(state?.connected_at),
+    connected_at_label: state?.connected_at ? formatDateAr8(state.connected_at) : "",
+    bot_username: norm10(env.TELEGRAM_BOT_USERNAME).replace(/^@+/, ""),
+    bot_link: buildTelegramBotLink(env, state?.user_id || entitlement?.user_id || ""),
+    feature_flags: entitlement?.flags || {}
+  };
+}
+__name(buildTelegramStatusPayload, "buildTelegramStatusPayload");
+function normalizeWhatsAppPhone(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("549")) return digits;
+  if (digits.startsWith("54")) return `549${digits.slice(2)}`;
+  if (digits.startsWith("9") && digits.length >= 11) return `54${digits}`;
+  if (digits.startsWith("15") && digits.length > 8) digits = digits.slice(2);
+  return `549${digits}`;
+}
+__name(normalizeWhatsAppPhone, "normalizeWhatsAppPhone");
+function whatsappPhoneVariants(value) {
+  const normalized = normalizeWhatsAppPhone(value);
+  if (!normalized) return [];
+  const local = normalized.startsWith("549") ? normalized.slice(3) : normalized;
+  const withoutMobileNine = normalized.startsWith("549") ? `54${normalized.slice(3)}` : normalized;
+  return [...new Set([
+    normalized,
+    `+${normalized}`,
+    withoutMobileNine,
+    `+${withoutMobileNine}`,
+    local,
+    `0${local}`,
+    local.length > 8 ? `15${local}` : ""
+  ].filter(Boolean))];
+}
+__name(whatsappPhoneVariants, "whatsappPhoneVariants");
+async function findUserByWhatsAppPhone(env, fromPhone) {
+  const variants = whatsappPhoneVariants(fromPhone);
+  for (const candidate of variants) {
+    const rows = await supabaseSelect12(
+      env,
+      `users?celular=eq.${encodeURIComponent(candidate)}&select=id,nombre,apellido,email,celular,activo&limit=1`
+    ).catch(() => []);
+    if (Array.isArray(rows) && rows[0]) return rows[0];
+  }
+  const tail = normalizeWhatsAppPhone(fromPhone).slice(-8);
+  if (tail) {
+    const rows = await supabaseSelect12(
+      env,
+      `users?celular=ilike.*${encodeURIComponent(tail)}*&select=id,nombre,apellido,email,celular,activo&limit=5`
+    ).catch(() => []);
+    const hit = (Array.isArray(rows) ? rows : []).find((row) => normalizeWhatsAppPhone(row?.celular || "") === normalizeWhatsAppPhone(fromPhone));
+    if (hit) return hit;
+  }
+  return null;
+}
+__name(findUserByWhatsAppPhone, "findUserByWhatsAppPhone");
+function buildWhatsAppStatusPayload(user, prefs, entitlement) {
+  const connected = !!normalizeWhatsAppPhone(user?.celular || "");
+  const requested = !!prefs?.alertas_whatsapp;
+  return {
+    ok: true,
+    version: TELEGRAM_VERSION,
+    connected,
+    alerts_enabled: entitlement.allowed ? requested : false,
+    alerts_requested: requested,
+    allowed_by_plan: !!entitlement.allowed,
+    channel_mode: "query_only",
+    channel_policy: entitlement.source || "default_policy",
+    plan_code: entitlement.plan_code || "",
+    plan_name: entitlement.plan_name || "",
+    phone_masked: connected ? `\u2022\u2022\u2022\u2022${normalizeWhatsAppPhone(user?.celular || "").slice(-4)}` : "",
+    connect_hint: connected ? "Escrib\xED ALERTAS en el chat de WhatsApp para pedir tus alertas del momento." : "Guard\xE1 un celular v\xE1lido y escrib\xED ALERTAS desde ese n\xFAmero para usar WhatsApp.",
+    feature_flags: entitlement.flags || {}
+  };
+}
+__name(buildWhatsAppStatusPayload, "buildWhatsAppStatusPayload");
+async function sendTelegramText(env, chatId, text) {
+  const token = norm10(env.TELEGRAM_BOT_TOKEN);
+  if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
+  if (!chatId) throw new Error("Falta chat_id de Telegram");
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || `Telegram HTTP ${res.status}`);
+  }
+  return data;
+}
+__name(sendTelegramText, "sendTelegramText");
+async function sendWhatsAppText(env, to, body) {
+  const phoneNumberId = norm10(env.WHATSAPP_PHONE_NUMBER_ID);
+  const accessToken = norm10(env.WHATSAPP_ACCESS_TOKEN);
+  if (!phoneNumberId || !accessToken) throw new Error("Faltan credenciales de WhatsApp");
+  const rawDestination = String(to || "").replace(/\s+/g, "");
+  const normalizedDestination = normalizeWhatsAppPhone(rawDestination);
+  const destination = /^\d{8,}$/.test(rawDestination) ? rawDestination : normalizedDestination;
+  const payload = {
+    messaging_product: "whatsapp",
+    to: destination,
+    type: "text",
+    text: {
+      preview_url: false,
+      body: String(body || "")
+    }
+  };
+  const res = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error?.message || `WhatsApp HTTP ${res.status}`);
+  return data;
+}
+__name(sendWhatsAppText, "sendWhatsAppText");
+async function trySendWhatsAppText(env, to, body, context = "unknown") {
+  try {
+    return await sendWhatsAppText(env, to, body);
+  } catch (err) {
+    console.error("WHATSAPP SEND ERROR:", {
+      context,
+      to,
+      error: err?.message || String(err || "send_failed")
+    });
+    return null;
+  }
+}
+__name(trySendWhatsAppText, "trySendWhatsAppText");
+function requireWebhookSecret(request, env) {
+  const configured = norm10(env.TELEGRAM_WEBHOOK_SECRET);
+  if (!configured) {
+    throw new Error("Falta TELEGRAM_WEBHOOK_SECRET");
+  }
+  const provided = norm10(request.headers.get("X-Telegram-Bot-Api-Secret-Token"));
+  if (!provided || provided !== configured) {
+    const err = new Error("Webhook Telegram no autorizado");
+    err.status = 401;
+    throw err;
+  }
+}
+__name(requireWebhookSecret, "requireWebhookSecret");
+function extractTelegramStartPayload(update) {
+  const message = update?.message;
+  const text = norm10(message?.text);
+  if (!text.startsWith("/start")) return null;
+  const payload = text.replace(/^\/start\s*/i, "").trim();
+  return payload || null;
+}
+__name(extractTelegramStartPayload, "extractTelegramStartPayload");
+function extractWhatsAppMessages(payload) {
+  const out = [];
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  for (const entry of entries) {
+    for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+      const value = change?.value || {};
+      for (const msg of Array.isArray(value?.messages) ? value.messages : []) {
+        const rawFrom = norm10(msg?.from || "");
+        const normalizedFrom = normalizeWhatsAppPhone(rawFrom);
+        const rawText = msg?.text?.body || msg?.button?.text || msg?.interactive?.button_reply?.title || "";
+        out.push({
+          from: rawFrom || normalizedFrom,
+          normalized_from: normalizedFrom,
+          text: normUpper(rawText),
+          id: norm10(msg?.id),
+          raw: msg,
+          metadata: value?.metadata || {}
+        });
+      }
+    }
+  }
+  return out;
+}
+__name(extractWhatsAppMessages, "extractWhatsAppMessages");
+function buildWhatsAppDigestMessage(user, alerts) {
+  const items = Array.isArray(alerts) ? alerts : [];
+
+  const lines = [
+    `APDocentePBA`,
+    ``,
+    `Hola ${norm10(user?.nombre) || "Docente"}.`
+  ];
+
+  if (!items.length) {
+    lines.push(`No hay alertas compatibles con tus filtros en este momento.`);
+    lines.push(``);
+    lines.push(`Escribí ALERTAS más tarde para volver a consultar.`);
+    lines.push(``);
+    lines.push(`Panel: https://alertasapd.com.ar`);
+    return lines.join("\n");
+  }
+
+  lines.push(`Se encontraron ${items.length} alerta(s) compatible(s) actual(es).`);
+  lines.push(``);
+
+  items.forEach((item, idx) => {
+    const cargo = norm10(item?.cargo || item?.area || "Oferta APD") || "Oferta APD";
+    const distrito = norm10(item?.distrito || "-") || "-";
+    const escuela = norm10(item?.escuela || "-") || "-";
+    const curso = norm10(item?.curso_division || item?.cursodivision || "0") || "0";
+    const modulos = item?.modulos ?? item?.hsmodulos ?? "-";
+    const diasHorarios = norm10(item?.dias_horarios || item?.horario || "-") || "-";
+    const vigenciaDesde = norm10(item?.desde || item?.supl_desde || "-") || "-";
+    const vigenciaHasta = norm10(item?.hasta || item?.supl_hasta || "-") || "-";
+    const cierre = norm10(item?.finoferta_label || item?.fecha_cierre || item?.cierre || "-") || "-";
+
+    const postulados = item?.postulados ?? item?.total_postulantes ?? item?.postulantes ?? "-";
+    const puntajeMasAlto = item?.primero_puntaje ?? item?.puntaje_primero ?? item?.puntaje_mas_alto ?? "-";
+    const listadoMasAlto = norm10(item?.listado_origen_primero || item?.listado_mas_alto || "-") || "-";
+
+    const pidCompatible = item?.pid_compatible === true || item?.pid_match === true;
+    const pidReason = norm10(item?.pid_reason || item?.motivo_pid || "");
+    const pidArea = norm10(item?.pid_area || "-") || "-";
+    const pidBloque = norm10(item?.pid_bloque || "-") || "-";
+    const pidPuntajeBase = item?.pid_puntaje_total_base ?? item?.pid_puntaje_base ?? item?.pid_puntaje_total ?? "-";
+    const pidBonus = item?.pid_residencia_bonus_aplicado ? "Sí" : "No";
+    const pidPuntajeTotal = item?.pid_puntaje_total_final ?? item?.pid_puntaje_total ?? "-";
+    const pidListado = norm10(item?.pid_listado || item?.listado_pid || "-") || "-";
+    const diferencia = item?.diferencia_puntaje ?? item?.pid_diferencia ?? item?.diferencia_vs_mas_alto ?? "-";
+
+    const estadoActual = norm10(item?.estado_actual || item?.estado || "");
+    const abcUrl = norm10(item?.abc_url || item?.abc_postulantes_url || item?.link || "") || "";
+
+    lines.push(`${idx + 1}) ${cargo}`);
+    lines.push(`📍 Distrito: ${distrito}`);
+    lines.push(`🏫 Escuela: ${escuela}`);
+    lines.push(`📚 Curso/división: ${curso}`);
+    lines.push(`🔢 Módulos: ${modulos}`);
+    lines.push(`🗓️ Días/horarios: ${diasHorarios}`);
+    lines.push(`🗓️ Vigencia: ${vigenciaDesde} / ${vigenciaHasta}`);
+    lines.push(`⏰ Cierre: ${cierre}`);
+    lines.push(``);
+
+    lines.push(`📌 Referencia de postulantes`);
+    lines.push(`👥 Postulados visibles: ${postulados}`);
+    lines.push(`📈 Puntaje más alto: ${puntajeMasAlto}`);
+    lines.push(`📋 Listado del más alto: ${listadoMasAlto}`);
+    lines.push(``);
+
+    if (estadoActual) {
+      lines.push(`🧠 Estado actual: ${estadoActual}`);
+    }
+
+    lines.push(`🧾 Motivo PID: ${pidCompatible ? "Compatible con tu PID" : pidReason || "No compatible con tu PID"}`);
+    lines.push(`🧩 Área PID: ${pidArea}`);
+    lines.push(`📚 Bloque PID: ${pidBloque}`);
+    lines.push(`📊 Puntaje PID base: ${pidPuntajeBase}`);
+    lines.push(`➕ Bonus residencia: ${pidBonus}`);
+    lines.push(`⭐ Tu puntaje total: ${pidPuntajeTotal}`);
+    lines.push(`🧾 Listado/año PID: ${pidListado}`);
+    lines.push(`📉 Diferencia vs más alto: ${diferencia}`);
+    lines.push(`ℹ️ Tu puntaje puede quedar por debajo del mejor visible según ABC.`);
+    lines.push(``);
+
+    if (abcUrl) {
+      lines.push(`🔗 Postulate / Leer más:`);
+      lines.push(`${abcUrl}`);
+    }
+
+    if (idx < items.length - 1) {
+      lines.push(``);
+      lines.push(`--------------------`);
+      lines.push(``);
+    }
+  });
+
+  lines.push(``);
+  lines.push(`Panel: https://alertasapd.com.ar`);
+  lines.push(`Escribí ALERTAS para refrescar.`);
+
+  return lines.join("\n");
+}
+__name(buildWhatsAppDigestMessage, "buildWhatsAppDigestMessage");
+async function handleTelegramWebhook(request, env) {
+  requireWebhookSecret(request, env);
+
+  const update = await request.json().catch(() => ({}));
+  const message = update?.message || update?.edited_message || {};
+  const chatId = norm10(message?.chat?.id);
+  const chatType = norm10(message?.chat?.type || "private");
+  const rawText = norm10(message?.text || message?.caption || "");
+  const upperText = normUpper(rawText);
+
+  if (!chatId || chatType && chatType !== "private") {
+    return json13({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: "invalid_chat" });
+  }
+
+  const payload = extractTelegramStartPayload(update);
+
+  if (payload && isUuid(payload)) {
+    const entitlement = await resolveTelegramEntitlement(env, payload);
+    const prev = await getTelegramState(env, payload) || {};
+
+    const next = await saveTelegramState(env, payload, {
+      connected: true,
+      chat_id: chatId,
+      username: norm10(message?.from?.username),
+      first_name: norm10(message?.from?.first_name),
+      connected_at: prev.connected_at || (/* @__PURE__ */ new Date()).toISOString(),
+      alerts_enabled: entitlement.allowed ? typeof prev.alerts_enabled === "boolean" ? prev.alerts_enabled : true : false,
+      last_update_id: update?.update_id ?? null
+    });
+
+    await saveTelegramChatLink(env, chatId, payload).catch(() => {});
+
+    const confirmText = [
+      "✅ APDocentePBA conectó este chat con tu cuenta.",
+      "",
+      "Ya podés activar o pausar Telegram desde “Editar preferencias reales” en el panel.",
+      "Cuando haya alertas nuevas compatibles, te van a llegar por acá.",
+      "",
+      "También podés escribir ALERTAS para consultar tus alertas compatibles actuales."
+    ].join("\n");
+
+    const sent = await sendTelegramText(env, chatId, confirmText).catch((err) => {
+      console.error("TELEGRAM CONFIRM SEND ERROR:", err);
+      return null;
+    });
+
+    await insertNotificationDeliveryLogs(env, baseLogRow({
+      userId: payload,
+      eventType: "telegram_connect",
+      deliveryKey: `telegram_connect:${payload}:${chatId}`,
+      status: sent ? "sent" : "error",
+      providerMessageId: sent?.result?.message_id ? String(sent.result.message_id) : null,
+      planCode: entitlement.plan_code,
+      payload: {
+        connected: true,
+        chat_id_masked: maskChatId(chatId),
+        allowed_by_plan: entitlement.allowed,
+        channel_policy: entitlement.source
+      },
+      errorMessage: sent ? null : "No se pudo enviar confirmación de conexión"
+    }));
+
+    return json13({
+      ok: true,
+      version: TELEGRAM_VERSION,
+      connected: true,
+      user_id: payload,
+      state: buildTelegramStatusPayload(env, next, entitlement)
+    });
+  }
+
+  if (upperText.includes("ALERTA")) {
+    const userId = await findTelegramUserIdByChatId(env, chatId);
+
+    if (!userId) {
+      const text = [
+        "No pude reconocer este chat de Telegram.",
+        "",
+        "Entrá al panel de APDocentePBA, vinculá Telegram nuevamente y después escribí ALERTAS."
+      ].join("\n");
+
+      const sent = await sendTelegramText(env, chatId, text).catch(() => null);
+
+      return json13({
+        ok: true,
+        version: TELEGRAM_VERSION,
+        handled: true,
+        reason: "telegram_chat_not_linked",
+        sent: !!sent
+      });
+    }
+
+    const user = await getUserById9(env, userId);
+    const entitlement = await resolveTelegramEntitlement(env, userId);
+    const state = await getTelegramState(env, userId);
+
+    const prefsRows = await supabaseSelect12(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=alertas_activas,alertas_telegram&limit=1`
+    ).catch(() => []);
+
+    const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
+
+    if (!user?.id || user.activo === false) {
+      const text = "No pude vincular este Telegram con una cuenta activa de APDocentePBA.";
+      const sent = await sendTelegramText(env, chatId, text).catch(() => null);
+
+      return json13({
+        ok: true,
+        version: TELEGRAM_VERSION,
+        handled: true,
+        reason: "telegram_user_not_found",
+        sent: !!sent
+      });
+    }
+
+    if (!prefs?.alertas_activas) {
+      const text = "Tus alertas generales están apagadas en preferencias. Activá alertas en el panel y después escribí ALERTAS otra vez.";
+      const sent = await sendTelegramText(env, chatId, text).catch(() => null);
+
+      return json13({
+        ok: true,
+        version: TELEGRAM_VERSION,
+        handled: true,
+        reason: "alerts_inactive",
+        sent: !!sent
+      });
+    }
+
+    if (!state?.connected || !norm10(state?.chat_id)) {
+      const text = "Telegram no está vinculado correctamente. Entrá al panel y vinculá Telegram nuevamente.";
+      const sent = await sendTelegramText(env, chatId, text).catch(() => null);
+
+      return json13({
+        ok: true,
+        version: TELEGRAM_VERSION,
+        handled: true,
+        reason: "telegram_not_connected",
+        sent: !!sent
+      });
+    }
+
+    const alerts = await getUserAlertsFromBase(env, userId);
+
+    const text = alerts.length
+      ? buildTelegramDigestMessage(alerts)
+      : buildTelegramNoAlertsMessage(user);
+
+    const sent = await sendTelegramText(env, chatId, text).catch((err) => {
+      console.error("TELEGRAM MANUAL ALERTAS SEND ERROR:", err);
+      return null;
+    });
+
+    await insertNotificationDeliveryLogs(env, baseLogRow({
+      userId,
+      eventType: "telegram_manual_alertas",
+      deliveryKey: `telegram_manual_alertas:${userId}:${(/* @__PURE__ */ new Date()).toISOString()}`,
+      status: sent ? "sent" : "error",
+      providerMessageId: sent?.result?.message_id ? String(sent.result.message_id) : null,
+      planCode: entitlement.plan_code,
+      payload: {
+        alerts_count: alerts.length,
+        source: "mis-alertas",
+        manual_query: true
+      },
+      errorMessage: sent ? null : "No se pudo enviar consulta manual por Telegram"
+    }));
+
+    return json13({
+      ok: true,
+      version: TELEGRAM_VERSION,
+      handled: true,
+      reason: alerts.length ? "telegram_manual_alertas_sent" : "telegram_manual_no_alerts",
+      alerts: alerts.length,
+      sent: !!sent
+    });
+  }
+
+  const helpText = [
+    "Escribí ALERTAS para consultar tus alertas compatibles actuales.",
+    "",
+    "Si todavía no vinculaste Telegram, hacelo desde el panel de APDocentePBA."
+  ].join("\n");
+
+  const sent = await sendTelegramText(env, chatId, helpText).catch(() => null);
+
+  return json13({
+    ok: true,
+    version: TELEGRAM_VERSION,
+    handled: true,
+    reason: "telegram_help_sent",
+    sent: !!sent
+  });
+}
+__name(handleTelegramWebhook, "handleTelegramWebhook");
+async function handleTelegramStatus(request, env) {
+  const authUser = await resolveAuthUser5(env, request);
+  if (!authUser) return json13({ ok: false, error: "No autenticado" }, 401);
+  const url = new URL(request.url);
+  const requestedUserId = normUpper(url.searchParams.get("user_id")) || authUser.id;
+  if (requestedUserId !== authUser.id && !authUser.es_admin) {
+    return json13({ ok: false, error: "No autorizado" }, 403);
+  }
+  const state = await getTelegramState(env, requestedUserId) || {
+    user_id: requestedUserId,
+    alerts_enabled: false,
+    connected: false
+  };
+  const entitlement = await resolveTelegramEntitlement(env, requestedUserId);
+  return json13(buildTelegramStatusPayload(env, { ...state, user_id: requestedUserId }, entitlement));
+}
+__name(handleTelegramStatus, "handleTelegramStatus");
+async function handleWhatsAppStatus(request, env) {
+  const authUser = await resolveAuthUser5(env, request);
+  if (!authUser) return json13({ ok: false, error: "No autenticado" }, 401);
+  const url = new URL(request.url);
+  const requestedUserId = normUpper(url.searchParams.get("user_id")) || authUser.id;
+  if (requestedUserId !== authUser.id && !authUser.es_admin) {
+    return json13({ ok: false, error: "No autorizado" }, 403);
+  }
+  const user = await getUserById9(env, requestedUserId);
+  const prefsRows = await supabaseSelect12(
+    env,
+    `user_preferences?user_id=eq.${encodeURIComponent(requestedUserId)}&select=alertas_activas,alertas_whatsapp&limit=1`
+  ).catch(() => []);
+  const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
+  const entitlement = await resolveWhatsAppEntitlement(env, requestedUserId);
+  return json13(buildWhatsAppStatusPayload(user, prefs, entitlement));
+}
+__name(handleWhatsAppStatus, "handleWhatsAppStatus");
+async function handleWhatsAppWebhookVerify(request, env) {
+  const url = new URL(request.url);
+  const mode = url.searchParams.get("hub.mode");
+  const token = url.searchParams.get("hub.verify_token");
+  const challenge = url.searchParams.get("hub.challenge");
+  const expectedToken = norm10(env.WHATSAPP_VERIFY_TOKEN || "apdocente_token");
+  if (mode === "subscribe" && token === expectedToken) {
+    return new Response(challenge || "", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
+  }
+  return new Response("Forbidden", {
+    status: 403,
+    headers: { "Content-Type": "text/plain; charset=utf-8" }
+  });
+}
+__name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
+async function delegateJsonByRequest(request, env, ctx) {
+  const response = await worker_pid_lookup_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJsonByRequest, "delegateJsonByRequest");
+async function handleGuardarPreferenciasTelegramAware(request, env, ctx) {
+  const rawText = await request.text();
+  let payload = {};
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = {};
+  }
+  const delegatedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: rawText
+  });
+  const delegated = await delegateJsonByRequest(delegatedRequest, env, ctx);
+  if (!delegated.response.ok || !delegated.data?.ok) {
+    return json13(delegated.data || { ok: false, error: "No se pudieron guardar las preferencias" }, delegated.response.status || 500);
+  }
+  const userId = normUpper(payload?.user_id);
+  const requestedTelegram = !!payload?.preferencias?.alertas_telegram;
+  const requestedWhatsApp = !!payload?.preferencias?.alertas_whatsapp;
+  let telegramStatus = null;
+  let whatsappStatus = null;
+  if (userId) {
+    const entitlement = await resolveTelegramEntitlement(env, userId);
+    const currentState = await getTelegramState(env, userId);
+    const effectiveEnabled = requestedTelegram && !!currentState?.connected;
+    const state = await saveTelegramState(env, userId, {
+      alerts_enabled: effectiveEnabled,
+      connected: !!currentState?.connected
+    });
+    telegramStatus = buildTelegramStatusPayload(env, { ...state, user_id: userId }, entitlement);
+    await supabasePatchReturning2(
+      env,
+      "user_preferences",
+      `user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        alertas_whatsapp: requestedWhatsApp,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }
+    ).catch((err) => {
+      console.error("WHATSAPP PREF PERSIST ERROR:", err);
+      return null;
+    });
+    const user = await getUserById9(env, userId);
+    const waEntitlement = await resolveWhatsAppEntitlement(env, userId);
+    whatsappStatus = buildWhatsAppStatusPayload(user, { alertas_whatsapp: requestedWhatsApp }, waEntitlement);
+    if (delegated.data?.preferencias && typeof delegated.data.preferencias === "object") {
+      delegated.data.preferencias.alertas_whatsapp = requestedWhatsApp;
+    }
+    await insertNotificationDeliveryLogs(env, baseLogRow({
+      userId,
+      eventType: "telegram_preferences_update",
+      deliveryKey: `telegram_preferences_update:${userId}:${(/* @__PURE__ */ new Date()).toISOString()}`,
+      status: "updated",
+      planCode: entitlement.plan_code,
+      payload: {
+        requested_alerts_enabled: requestedTelegram,
+        effective_alerts_enabled: effectiveEnabled,
+        connected: !!currentState?.connected,
+        allowed_by_plan: entitlement.allowed,
+        channel_policy: entitlement.source,
+        requested_whatsapp_enabled: requestedWhatsApp
+      },
+      errorMessage: null
+    }));
+  }
+  let message = delegated.data?.message || "Preferencias guardadas";
+  if (telegramStatus && requestedTelegram && !telegramStatus.connected) {
+    message = `${message}. Para activar Telegram, primero ten\xE9s que vincular el bot.`;
+  }
+  return json13({
+    ...typeof delegated.data === "object" && delegated.data ? delegated.data : { ok: true },
+    message,
+    telegram_status: telegramStatus,
+    whatsapp_status: whatsappStatus,
+    telegram_version: TELEGRAM_VERSION
+  }, delegated.response.status || 200);
+}
+__name(handleGuardarPreferenciasTelegramAware, "handleGuardarPreferenciasTelegramAware");
+async function handleWhatsAppWebhook(request, env, ctx) {
+  if (!norm10(env.WHATSAPP_PHONE_NUMBER_ID) || !norm10(env.WHATSAPP_ACCESS_TOKEN)) {
+    return json13({ ok: true, version: TELEGRAM_VERSION, skipped: true, reason: "missing_config" });
+  }
+
+  const payload = await request.json().catch(() => ({}));
+  const messages = extractWhatsAppMessages(payload);
+
+  if (!messages.length) {
+    return json13({ ok: true, version: TELEGRAM_VERSION, ignored: true, reason: "no_messages" });
+  }
+
+  const results = [];
+
+  for (const message of messages) {
+    const lookupPhone = norm10(message.normalized_from || message.from);
+    const replyTo = norm10(message.from || message.normalized_from);
+
+    if (!lookupPhone || !replyTo) continue;
+
+    const user = await findUserByWhatsAppPhone(env, lookupPhone);
+
+    if (!user?.id || user.activo === false) {
+      const text = "No pude vincular este número con una cuenta activa de APDocentePBA. Revisá tu celular en el panel y volvé a escribir ALERTAS.";
+      const sent2 = await trySendWhatsAppText(env, replyTo, text, "user_not_found");
+      results.push({ from: replyTo, ok: false, reason: "user_not_found", sent: !!sent2 });
+      continue;
+    }
+
+    const prefsRows = await supabaseSelect12(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(user.id)}&select=alertas_activas,alertas_whatsapp&limit=1`
+    ).catch(() => []);
+
+    const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
+    const entitlement = await resolveWhatsAppEntitlement(env, user.id);
+
+    if (!message.text.includes("ALERTA")) {
+      const text = "Escribí ALERTAS para recibir tus alertas compatibles actuales por WhatsApp.";
+      const sent2 = await trySendWhatsAppText(env, replyTo, text, "help_sent");
+      results.push({ from: replyTo, ok: true, reason: "help_sent", sent: !!sent2 });
+      continue;
+    }
+
+    if (!entitlement.allowed) {
+      const text = `Tu plan actual no tiene WhatsApp habilitado. Con ${entitlement.plan_name || "tu plan"} podés usar email y Telegram.`;
+      const sent2 = await trySendWhatsAppText(env, replyTo, text, "not_allowed_by_plan");
+      results.push({ from: replyTo, ok: false, reason: "not_allowed_by_plan", sent: !!sent2 });
+      continue;
+    }
+
+    if (!prefs?.alertas_activas) {
+      const text = "Tus alertas generales están apagadas en preferencias. Activá alertas en el panel y después escribí ALERTAS otra vez.";
+      const sent2 = await trySendWhatsAppText(env, replyTo, text, "alerts_inactive");
+      results.push({ from: replyTo, ok: false, reason: "alerts_inactive", sent: !!sent2 });
+      continue;
+    }
+
+    const internalRequest = new Request(`https://internal.apdocentepba.dev/api/mis-alertas?user_id=${encodeURIComponent(user.id)}`, {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-store"
+      }
+    });
+
+    const delegated = await delegateJsonByRequest(internalRequest, env, ctx);
+
+    const alerts = delegated.response.ok && delegated.data?.ok && Array.isArray(delegated.data?.resultados)
+      ? delegated.data.resultados
+      : [];
+
+    /*
+      REGLA CENTRAL:
+      Si /api/mis-alertas no devuelve alertas compatibles actuales,
+      WhatsApp NO debe buscar historial, logs, caché ni últimas alertas viejas.
+      Debe responder que no hay alertas compatibles en este momento.
+    */
+    if (!alerts.length) {
+      const reply = [
+        "APDocentePBA",
+        "",
+        `Hola ${norm10(user?.nombre) || "Docente"}.`,
+        "No hay alertas compatibles con tus filtros en este momento.",
+        "",
+        "Escribí ALERTAS más tarde para volver a consultar.",
+        "",
+        "Panel: https://alertasapd.com.ar"
+      ].join("\n");
+
+      const sent = await sendWhatsAppText(env, replyTo, reply).catch(async (err) => {
+        await insertNotificationDeliveryLogs(env, baseLogRow({
+          userId: user.id,
+          channel: "whatsapp",
+          eventType: "whatsapp_query_only_alertas",
+          deliveryKey: `whatsapp_alertas:${user.id}:${message.id || (/* @__PURE__ */ new Date()).toISOString()}`,
+          status: "error",
+          provider: "whatsapp",
+          planCode: entitlement.plan_code,
+          payload: {
+            from: replyTo,
+            alerts_count: 0,
+            requested_flag: !!prefs?.alertas_whatsapp,
+            source: "mis-alertas",
+            reason: "no_current_compatible_alerts"
+          },
+          errorMessage: err?.message || "whatsapp_send_failed"
+        }));
+        return null;
+      });
+
+      await insertNotificationDeliveryLogs(env, baseLogRow({
+        userId: user.id,
+        channel: "whatsapp",
+        eventType: "whatsapp_query_only_alertas",
+        deliveryKey: `whatsapp_alertas:${user.id}:${message.id || (/* @__PURE__ */ new Date()).toISOString()}`,
+        status: sent ? "sent" : "error",
+        provider: "whatsapp",
+        providerMessageId: sent?.messages?.[0]?.id ? String(sent.messages[0].id) : null,
+        planCode: entitlement.plan_code,
+        payload: {
+          from: replyTo,
+          alerts_count: 0,
+          requested_flag: !!prefs?.alertas_whatsapp,
+          source: "mis-alertas",
+          reason: "no_current_compatible_alerts"
+        },
+        errorMessage: sent ? null : "No se pudo enviar respuesta por WhatsApp"
+      }));
+
+      results.push({
+        from: replyTo,
+        ok: !!sent,
+        alerts: 0,
+        user_id: user.id,
+        reason: "no_current_compatible_alerts"
+      });
+
+      continue;
+    }
+
+    const reply = buildWhatsAppDigestMessage(user, alerts);
+
+    const sent = await sendWhatsAppText(env, replyTo, reply).catch(async (err) => {
+      await insertNotificationDeliveryLogs(env, baseLogRow({
+        userId: user.id,
+        channel: "whatsapp",
+        eventType: "whatsapp_query_only_alertas",
+        deliveryKey: `whatsapp_alertas:${user.id}:${message.id || (/* @__PURE__ */ new Date()).toISOString()}`,
+        status: "error",
+        provider: "whatsapp",
+        planCode: entitlement.plan_code,
+        payload: {
+          from: replyTo,
+          alerts_count: alerts.length,
+          requested_flag: !!prefs?.alertas_whatsapp,
+          source: "mis-alertas"
+        },
+        errorMessage: err?.message || "whatsapp_send_failed"
+      }));
+      return null;
+    });
+
+    await insertNotificationDeliveryLogs(env, baseLogRow({
+      userId: user.id,
+      channel: "whatsapp",
+      eventType: "whatsapp_query_only_alertas",
+      deliveryKey: `whatsapp_alertas:${user.id}:${message.id || (/* @__PURE__ */ new Date()).toISOString()}`,
+      status: sent ? "sent" : "error",
+      provider: "whatsapp",
+      providerMessageId: sent?.messages?.[0]?.id ? String(sent.messages[0].id) : null,
+      planCode: entitlement.plan_code,
+      payload: {
+        from: replyTo,
+        alerts_count: alerts.length,
+        requested_flag: !!prefs?.alertas_whatsapp,
+        source: "mis-alertas"
+      },
+      errorMessage: sent ? null : "No se pudo enviar respuesta por WhatsApp"
+    }));
+
+    results.push({
+      from: replyTo,
+      ok: !!sent,
+      alerts: alerts.length,
+      user_id: user.id,
+      source: "mis-alertas"
+    });
+  }
+
+  return json13({ ok: true, version: TELEGRAM_VERSION, results });
+}
+__name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
+async function getActivePreferenceUserIds(env, limit = TELEGRAM_SWEEP_LIMIT) {
+  const rows = await supabaseSelect12(
+    env,
+    `user_preferences?alertas_activas=eq.true&select=user_id&limit=${Math.max(1, Number(limit) || TELEGRAM_SWEEP_LIMIT)}`
+  ).catch(() => []);
+  const unique2 = /* @__PURE__ */ new Set();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const userId = normUpper(row?.user_id);
+    if (userId) unique2.add(userId);
+  });
+  return [...unique2];
+}
+__name(getActivePreferenceUserIds, "getActivePreferenceUserIds");
+async function getUserAlertsFromBase(env, userId) {
+  const request = new Request(`https://internal.apdocentepba.dev/api/mis-alertas?user_id=${encodeURIComponent(userId)}`, {
+    method: "GET"
+  });
+  const delegated = await delegateJsonByRequest(request, env, {});
+  if (!delegated.response.ok || !delegated.data?.ok) return [];
+  return Array.isArray(delegated.data?.resultados) ? delegated.data.resultados : [];
+}
+__name(getUserAlertsFromBase, "getUserAlertsFromBase");
+function alertOfferKey(alert) {
+  const direct = [
+    alert?.source_offer_key,
+    alert?.offer_id,
+    alert?.idoferta,
+    alert?.iddetalle,
+    alert?.id
+  ].map(norm10).find(Boolean);
+  if (direct) return direct;
+  return [
+    norm10(alert?.cargo),
+    norm10(alert?.area),
+    norm10(alert?.escuela),
+    norm10(alert?.distrito),
+    norm10(alert?.finoferta || alert?.fecha_cierre || alert?.fecha_cierre_fmt)
+  ].filter(Boolean).join("|");
+}
+__name(alertOfferKey, "alertOfferKey");
+function alertSummaryLine(alert) {
+  const title = [norm10(alert?.cargo), norm10(alert?.area)].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" \xB7 ") || "Oferta APD";
+  const escuela = norm10(alert?.escuela) || "Sin escuela";
+  const distrito = norm10(alert?.distrito) || "-";
+  const turno = norm10(alert?.turno) || "-";
+  const cierre = norm10(alert?.finoferta_label || alert?.fecha_cierre_fmt || alert?.fecha_cierre || alert?.finoferta);
+  return [
+    `\u2022 ${title}`,
+    `  ${escuela}`,
+    `  ${distrito} \xB7 turno ${turno}${cierre ? ` \xB7 cierre ${cierre}` : ""}`
+  ].join("\n");
+}
+__name(alertSummaryLine, "alertSummaryLine");
+function buildTelegramDigestMessage(alerts) {
+  const items = Array.isArray(alerts) ? alerts : [];
+
+  if (!items.length) {
+    return [
+      `🔔 APDocentePBA`,
+      ``,
+      `No hay alertas compatibles con tus filtros en este momento.`,
+      ``,
+      `Si querés, revisá o ajustá tus preferencias en el panel.`,
+      `https://alertasapd.com.ar`
+    ].join("\n");
+  }
+
+  const visible = items.slice(0, TELEGRAM_MESSAGE_ALERTS_LIMIT);
+  const hiddenCount = Math.max(0, items.length - visible.length);
+
+  return [
+    `🔔 APDocentePBA detectó ${items.length} alerta(s) nueva(s) compatible(s).`,
+    "",
+    ...visible.map(alertSummaryLine),
+    hiddenCount ? `
++ ${hiddenCount} alerta(s) más en tu panel.` : "",
+    "",
+    "Entrá al panel para ver el detalle completo y decidir rápido."
+  ].filter(Boolean).join("\n");
+}
+__name(buildTelegramDigestMessage, "buildTelegramDigestMessage");
+async function wasTelegramAlertSent(env, userId, offerKey) {
+  const kv = getKv(env);
+  if (!kv) return false;
+  const raw = await kv.get(telegramSentKey(userId, offerKey));
+  return !!raw;
+}
+__name(wasTelegramAlertSent, "wasTelegramAlertSent");
+async function markTelegramAlertSent(env, userId, offerKey) {
+  const kv = getKv(env);
+  if (!kv) return;
+  await kv.put(telegramSentKey(userId, offerKey), (/* @__PURE__ */ new Date()).toISOString(), {
+    expirationTtl: TELEGRAM_SENT_TTL_SECONDS
+  });
+}
+__name(markTelegramAlertSent, "markTelegramAlertSent");
+async function runTelegramAlertsSweep(env) {
+  if (!norm10(env.TELEGRAM_BOT_TOKEN)) {
+    return { ok: true, version: TELEGRAM_VERSION, skipped: true, reason: "missing_bot_token" };
+  }
+  const userIds = await getActivePreferenceUserIds(env, TELEGRAM_SWEEP_LIMIT);
+  const results = [];
+  let checked = 0;
+  let sentUsers = 0;
+  for (const userId of userIds) {
+    checked += 1;
+    try {
+      const entitlement = await resolveTelegramEntitlement(env, userId);
+      const state = await getTelegramState(env, userId);
+      if (!state?.connected || !state?.alerts_enabled || !norm10(state?.chat_id)) {
+        results.push({ user_id: userId, skipped: true, reason: "telegram_not_ready" });
+        await insertNotificationDeliveryLogs(env, baseLogRow({
+          userId,
+          eventType: "telegram_alert_sweep",
+          deliveryKey: `telegram_sweep:${userId}:${(/* @__PURE__ */ new Date()).toISOString()}`,
+          status: "skipped",
+          planCode: entitlement.plan_code,
+          payload: {
+            reason: "telegram_not_ready",
+            connected: !!state?.connected,
+            alerts_enabled: !!state?.alerts_enabled
+          }
+        }));
+        continue;
+      }
+      const alerts = await getUserAlertsFromBase(env, userId);
+      const unseen = [];
+      for (const alert of alerts) {
+        const offerKey = alertOfferKey(alert);
+        if (!offerKey) continue;
+        if (await wasTelegramAlertSent(env, userId, offerKey)) {
+          await insertNotificationDeliveryLogs(env, baseLogRow({
+            userId,
+            eventType: "telegram_alert",
+            deliveryKey: offerKey,
+            status: "deduped",
+            planCode: entitlement.plan_code,
+            payload: { source_offer_key: offerKey }
+          }));
+          continue;
+        }
+        unseen.push({ ...alert, __offer_key: offerKey });
+      }
+      if (!unseen.length) {
+        results.push({ user_id: userId, sent: false, unseen: 0 });
+        continue;
+      }
+      const message = buildTelegramDigestMessage(unseen);
+      try {
+        const sent = await sendTelegramText(env, state.chat_id, message);
+        sentUsers += 1;
+        for (const alert of unseen) {
+          await markTelegramAlertSent(env, userId, alert.__offer_key);
+        }
+        await insertNotificationDeliveryLogs(env, unseen.map((alert) => baseLogRow({
+          userId,
+          eventType: "telegram_alert",
+          deliveryKey: alert.__offer_key,
+          status: "sent",
+          providerMessageId: sent?.result?.message_id ? String(sent.result.message_id) : null,
+          planCode: entitlement.plan_code,
+          payload: {
+            source_offer_key: alert.__offer_key,
+            cargo: norm10(alert?.cargo),
+            area: norm10(alert?.area),
+            escuela: norm10(alert?.escuela),
+            distrito: norm10(alert?.distrito),
+            digest_size: unseen.length
+          }
+        })));
+        results.push({ user_id: userId, sent: true, unseen: unseen.length });
+      } catch (err) {
+        await insertNotificationDeliveryLogs(env, unseen.map((alert) => baseLogRow({
+          userId,
+          eventType: "telegram_alert",
+          deliveryKey: alert.__offer_key,
+          status: "error",
+          planCode: entitlement.plan_code,
+          payload: {
+            source_offer_key: alert.__offer_key,
+            digest_size: unseen.length
+          },
+          errorMessage: err?.message || "telegram_send_failed"
+        })));
+        throw err;
+      }
+    } catch (err) {
+      console.error("TELEGRAM SWEEP USER ERROR:", userId, err);
+      results.push({ user_id: userId, error: err?.message || "telegram_sweep_error" });
+    }
+  }
+  return {
+    ok: true,
+    version: TELEGRAM_VERSION,
+    checked,
+    sent_users: sentUsers,
+    results
+  };
+}
+__name(runTelegramAlertsSweep, "runTelegramAlertsSweep");
+var worker_telegram_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders13() });
+    const url = new URL(request.url);
+    const path = url.pathname;
+    try {
+      if (path === `${API_URL_PREFIX13}/telegram/status` && request.method === "GET") {
+        return await handleTelegramStatus(request, env);
+      }
+      if (path === `${API_URL_PREFIX13}/whatsapp/status` && request.method === "GET") {
+        return await handleWhatsAppStatus(request, env);
+      }
+      if (path === `${API_URL_PREFIX13}/whatsapp/webhook` && request.method === "GET") {
+        return await handleWhatsAppWebhookVerify(request, env);
+      }
+      if (path === `${API_URL_PREFIX13}/telegram/webhook` && request.method === "POST") {
+        return await handleTelegramWebhook(request, env);
+      }
+      if (path === `${API_URL_PREFIX13}/whatsapp/webhook` && request.method === "POST") {
+        return await handleWhatsAppWebhook(request, env, ctx);
+      }
+      if (path === `${API_URL_PREFIX13}/guardar-preferencias` && request.method === "POST") {
+        return await handleGuardarPreferenciasTelegramAware(request, env, ctx);
+      }
+    } catch (err) {
+      const status = Number(err?.status || 500) || 500;
+      return json13({ ok: false, error: err?.message || "Telegram wrapper error", telegram_version: TELEGRAM_VERSION }, status);
+    }
+    return worker_pid_lookup_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_pid_lookup_hotfix_default?.scheduled === "function") {
+      await worker_pid_lookup_hotfix_default.scheduled(controller, env, ctx);
+    }
+    ctx.waitUntil(runTelegramAlertsSweep(env).catch((err) => {
+      console.error("TELEGRAM SWEEP ERROR:", err);
+    }));
+  }
+};
+
+// email_queue_hotfix.js
+var EMAIL_QUEUE_HOTFIX_VERSION = "2026-04-11-email-queue-1";
+function corsHeaders14() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+  };
+}
+__name(corsHeaders14, "corsHeaders");
+function json14(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders14() });
+}
+__name(json14, "json");
+function normalizeText4(value) {
+  return String(value || "").trim();
+}
+__name(normalizeText4, "normalizeText");
+function getBearerToken8(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken8, "getBearerToken");
+async function supabaseRequest11(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest11, "supabaseRequest");
+async function supabaseSelect13(env, query) {
+  return await supabaseRequest11(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
+}
+__name(supabaseSelect13, "supabaseSelect");
+async function supabaseInsert3(env, table, data) {
+  await supabaseRequest11(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(data)
+  });
+  return true;
+}
+__name(supabaseInsert3, "supabaseInsert");
+async function supabasePatchById4(env, table, id, payload) {
+  return await supabaseRequest11(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(payload)
+  });
+}
+__name(supabasePatchById4, "supabasePatchById");
+async function getSessionByToken4(env, token) {
+  const rows = await supabaseSelect13(env, `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,expires_at,activo&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getSessionByToken4, "getSessionByToken");
+async function getUserById10(env, userId) {
+  const rows = await supabaseSelect13(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById10, "getUserById");
+async function getUserPreferences(env, userId) {
+  const rows = await supabaseSelect13(env, `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=user_id,alertas_activas,alertas_email,alertas_whatsapp&limit=1`).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserPreferences, "getUserPreferences");
+async function resolveAuthUser6(env, request) {
+  const bearer = getBearerToken8(request);
+  if (!bearer) return null;
+  const session = await getSessionByToken4(env, bearer);
+  if (session?.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+  const userId = session?.user_id || bearer;
+  const user = await getUserById10(env, userId);
+  if (!user || user.activo === false) return null;
+  return user;
+}
+__name(resolveAuthUser6, "resolveAuthUser");
+function summarizeBy(items, keyFn) {
+  const map = /* @__PURE__ */ new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const key = String(keyFn(item) || "").trim() || "(vac\xEDo)";
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return Array.from(map.entries()).map(([key, total]) => ({ key, total })).sort((a, b) => b.total - a.total || a.key.localeCompare(b.key, "es"));
+}
+__name(summarizeBy, "summarizeBy");
+function escapeHtml3(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+}
+__name(escapeHtml3, "escapeHtml");
+function resolveBrevoConfig3(env) {
+  const apiKey = String(env.BREVO_API_KEY || env.SENDINBLUE_API_KEY || env.BREVO_TRANSACTIONAL_API_KEY || "").trim();
+  const senderEmail = String(env.BREVO_FROM_EMAIL || env.BREVO_SENDER_EMAIL || env.ALERT_FROM_EMAIL || env.EMAIL_FROM || "").trim();
+  const senderName = String(env.BREVO_FROM_NAME || env.BREVO_SENDER_NAME || env.ALERT_FROM_NAME || env.EMAIL_FROM_NAME || "APDocentePBA").trim() || "APDocentePBA";
+  const appUrl = String(env.MERCADOPAGO_SUCCESS_URL || env.APP_PUBLIC_URL || "https://alertasapd.com.ar").trim();
+  return { apiKey, senderEmail, senderName, appUrl };
+}
+__name(resolveBrevoConfig3, "resolveBrevoConfig");
+async function sendBrevoEmail3(env, payload) {
+  const config = resolveBrevoConfig3(env);
+  if (!config.apiKey || !config.senderEmail) {
+    return { ok: false, reason: "brevo_not_configured" };
+  }
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": config.apiKey
+    },
+    body: JSON.stringify({
+      sender: { email: config.senderEmail, name: config.senderName },
+      to: [{ email: payload.to.email, name: payload.to.name || "" }],
+      subject: payload.subject,
+      htmlContent: payload.htmlContent,
+      textContent: payload.textContent || void 0,
+      tags: payload.tags || ["apdocentepba", "email-queue-hotfix"]
+    })
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    return { ok: false, reason: "brevo_request_failed", status: res.status, error: data };
+  }
+  return { ok: true, messageId: data?.messageId || null, provider: data };
+}
+__name(sendBrevoEmail3, "sendBrevoEmail");
+function normalizeQueuedAlert(payload) {
+  const raw = payload?.alert || payload?.offer_payload || payload || {};
+  return {
+    source_offer_key: normalizeText4(raw.source_offer_key || payload?.alert_key || ""),
+    distrito: normalizeText4(raw.distrito || ""),
+    cargo: normalizeText4(raw.cargo || raw.title || "Oferta APD"),
+    escuela: normalizeText4(raw.escuela || ""),
+    turno: normalizeText4(raw.turno || ""),
+    nivel: normalizeText4(raw.nivel || raw.nivel_modalidad || raw.modalidad || ""),
+    jornada: normalizeText4(raw.jornada || ""),
+    modulos: normalizeText4(raw.modulos || raw.hsmodulos || ""),
+    desde: normalizeText4(raw.desde || raw.supl_desde || ""),
+    hasta: normalizeText4(raw.hasta || raw.supl_hasta || ""),
+    fecha_cierre: normalizeText4(raw.fecha_cierre || raw.finoferta_label || raw.cierre || ""),
+    observaciones: normalizeText4(raw.observaciones || ""),
+    total_postulantes: raw.total_postulantes ?? null,
+    puntaje_primero: raw.puntaje_primero ?? null,
+    listado_origen_primero: normalizeText4(raw.listado_origen_primero || ""),
+    link: normalizeText4(raw.abc_url || raw.link || "")
+  };
+}
+__name(normalizeQueuedAlert, "normalizeQueuedAlert");
+function buildQueuedDigestHtml(user, alerts, appUrl) {
+  const cards = (Array.isArray(alerts) ? alerts : []).map((alert) => `
+    <div style="padding:14px 0;border-bottom:1px solid #e5e7eb;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#0f3460;">${escapeHtml3(alert.cargo || "Oferta APD")}</div>
+      ${alert.distrito ? `<div><b>Distrito:</b> ${escapeHtml3(alert.distrito)}</div>` : ""}
+      ${alert.escuela ? `<div><b>Escuela:</b> ${escapeHtml3(alert.escuela)}</div>` : ""}
+      ${alert.turno ? `<div><b>Turno:</b> ${escapeHtml3(alert.turno)}</div>` : ""}
+      ${alert.nivel ? `<div><b>Nivel:</b> ${escapeHtml3(alert.nivel)}</div>` : ""}
+      ${alert.jornada ? `<div><b>Jornada:</b> ${escapeHtml3(alert.jornada)}</div>` : ""}
+      ${alert.modulos ? `<div><b>M\xF3dulos:</b> ${escapeHtml3(alert.modulos)}</div>` : ""}
+      ${alert.desde ? `<div><b>Desde:</b> ${escapeHtml3(alert.desde)}</div>` : ""}
+      ${alert.hasta ? `<div><b>Hasta:</b> ${escapeHtml3(alert.hasta)}</div>` : ""}
+      ${alert.fecha_cierre ? `<div><b>Cierre:</b> ${escapeHtml3(alert.fecha_cierre)}</div>` : ""}
+      ${alert.total_postulantes != null ? `<div><b>Postulados:</b> ${escapeHtml3(String(alert.total_postulantes))}</div>` : ""}
+      ${alert.puntaje_primero != null ? `<div><b>Puntaje m\xE1s alto:</b> ${escapeHtml3(String(alert.puntaje_primero))}</div>` : ""}
+      ${alert.listado_origen_primero ? `<div><b>Listado del m\xE1s alto:</b> ${escapeHtml3(alert.listado_origen_primero)}</div>` : ""}
+      ${alert.observaciones ? `<div><b>Observaciones:</b> ${escapeHtml3(alert.observaciones)}</div>` : ""}
+      ${alert.link ? `<div style="margin-top:10px;"><a href="${escapeHtml3(alert.link)}" target="_blank" style="display:inline-block;background:#1f66ff;color:#ffffff;padding:10px 14px;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;">Ir a ABC</a></div>` : ""}
+    </div>
+  `).join("");
+  return `<!doctype html>
+<html>
+  <body style="background:#f0f2f7;padding:20px 0;font-family:Arial,Helvetica,sans-serif;color:#222;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center">
+      <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:620px;max-width:620px;">
+        <tr><td style="background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%);color:#ffffff;padding:22px;border-radius:16px 16px 0 0;">
+          <div style="font-size:24px;font-weight:700;line-height:1.2;">APDocentePBA</div>
+          <div style="font-size:13px;line-height:1.4;opacity:.9;margin-top:4px;">Hotfix de alertas por mail</div>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:18px;border:1px solid #dbe3f0;border-top:none;border-radius:0 0 16px 16px;">
+          <div style="font-size:21px;font-weight:700;line-height:1.25;color:#0f3460;margin:0 0 10px 0;">Ten\xE9s ${alerts.length} alerta${alerts.length === 1 ? "" : "s"} nueva${alerts.length === 1 ? "" : "s"}</div>
+          <div style="font-size:14px;line-height:1.5;color:#374151;margin:0 0 16px 0;">Hola ${escapeHtml3(user?.nombre || "")}, este env\xEDo sali\xF3 desde la cola pendiente para no perder avisos.</div>
+          ${cards}
+          <div style="margin-top:16px;text-align:center;"><a href="${escapeHtml3(appUrl)}" target="_blank" style="display:inline-block;background:#0f3460;color:#ffffff;padding:10px 14px;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;">Ir a mi panel</a></div>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </body>
+</html>`;
+}
+__name(buildQueuedDigestHtml, "buildQueuedDigestHtml");
+async function loadPendingEmailNotifications(env, targetUserId = null, limit = 200) {
+  const base = `pending_notifications?channel=eq.email&status=eq.pending&select=id,user_id,alert_key,payload,status,created_at&order=created_at.asc&limit=${limit}`;
+  const query = targetUserId ? `${base}&user_id=eq.${encodeURIComponent(String(targetUserId).trim())}` : base;
+  const rows = await supabaseSelect13(env, query).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(loadPendingEmailNotifications, "loadPendingEmailNotifications");
+async function loadRecentEmailLogs(env, targetUserId = null, limit = 200) {
+  const base = `notification_delivery_logs?channel=eq.email&select=id,user_id,destination,status,template_code,created_at,payload,provider_response&order=created_at.desc&limit=${limit}`;
+  const query = targetUserId ? `${base}&user_id=eq.${encodeURIComponent(String(targetUserId).trim())}` : base;
+  const rows = await supabaseSelect13(env, query).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(loadRecentEmailLogs, "loadRecentEmailLogs");
+async function markPendingRows(env, ids, status) {
+  for (const id of Array.isArray(ids) ? ids : []) {
+    if (!id) continue;
+    await supabasePatchById4(env, "pending_notifications", id, { status }).catch(() => null);
+  }
+}
+__name(markPendingRows, "markPendingRows");
+async function insertEmailQueueLog(env, userId, destination, status, payload, providerResponse) {
+  await supabaseInsert3(env, "notification_delivery_logs", {
+    user_id: userId || null,
+    channel: "email",
+    template_code: "apd_queue_digest",
+    destination: destination || null,
+    status,
+    provider_message_id: providerResponse?.messageId || null,
+    payload,
+    provider_response: providerResponse || null
+  }).catch(() => null);
+}
+__name(insertEmailQueueLog, "insertEmailQueueLog");
+async function processPendingEmailQueue(env, options = {}) {
+  const rows = await loadPendingEmailNotifications(env, options.target_user_id || null, 250);
+  if (!rows.length) {
+    return { ok: true, version: EMAIL_QUEUE_HOTFIX_VERSION, pending_found: 0, processed_users: 0, sent_users: 0, failed_users: 0, marked_sent: 0, marked_failed: 0, message: "No hay pendientes en pending_notifications" };
+  }
+  const groups = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const userId = String(row?.user_id || "").trim();
+    if (!userId) continue;
+    if (!groups.has(userId)) groups.set(userId, []);
+    groups.get(userId).push(row);
+  }
+  let processedUsers = 0;
+  let sentUsers = 0;
+  let failedUsers = 0;
+  let markedSent = 0;
+  let markedFailed = 0;
+  const results = [];
+  for (const [userId, userRows] of groups.entries()) {
+    processedUsers += 1;
+    const user = await getUserById10(env, userId).catch(() => null);
+    const prefs = await getUserPreferences(env, userId).catch(() => null);
+    const rowIds = userRows.map((row) => row.id).filter(Boolean);
+    if (!user?.email) {
+      await markPendingRows(env, rowIds, "failed_no_email");
+      markedFailed += rowIds.length;
+      failedUsers += 1;
+      await insertEmailQueueLog(env, userId, null, "failed_queue_no_email", { source: options.source || "hotfix", total_pending: rowIds.length }, { message: "Usuario sin email v\xE1lido" });
+      results.push({ user_id: userId, ok: false, reason: "missing_email", total_pending: rowIds.length });
+      continue;
+    }
+    if (prefs && (!prefs.alertas_activas || !prefs.alertas_email)) {
+      await markPendingRows(env, rowIds, "skipped_email_disabled");
+      markedFailed += rowIds.length;
+      results.push({ user_id: userId, ok: true, skipped: true, reason: "email_disabled", total_pending: rowIds.length });
+      continue;
+    }
+    const alerts = userRows.map((row) => normalizeQueuedAlert(row?.payload || {})).filter((item) => item.cargo || item.distrito || item.escuela);
+    if (!alerts.length) {
+      await markPendingRows(env, rowIds, "failed_empty_payload");
+      markedFailed += rowIds.length;
+      failedUsers += 1;
+      await insertEmailQueueLog(env, userId, user.email, "failed_queue_empty", { source: options.source || "hotfix", total_pending: rowIds.length }, { message: "No hab\xEDa alertas v\xE1lidas en la cola" });
+      results.push({ user_id: userId, ok: false, reason: "empty_payload", total_pending: rowIds.length });
+      continue;
+    }
+    const config = resolveBrevoConfig3(env);
+    const subject = `APDocentePBA: ${alerts.length} alerta${alerts.length === 1 ? "" : "s"} nueva${alerts.length === 1 ? "" : "s"}`;
+    const htmlContent = buildQueuedDigestHtml(user, alerts, config.appUrl);
+    const textContent = `APDocentePBA
+Ten\xE9s ${alerts.length} alerta(s) nueva(s).
+${config.appUrl}`;
+    const send = await sendBrevoEmail3(env, { to: { email: user.email, name: user.nombre || "" }, subject, htmlContent, textContent, tags: ["apdocentepba", "email-queue-hotfix"] });
+    if (send.ok) {
+      await markPendingRows(env, rowIds, "sent");
+      markedSent += rowIds.length;
+      sentUsers += 1;
+      await insertEmailQueueLog(env, userId, user.email, "sent_queue_digest", { source: options.source || "hotfix", total_alerts: alerts.length, pending_ids: rowIds }, send);
+      results.push({ user_id: userId, ok: true, total_alerts: alerts.length, pending_ids: rowIds.length });
+    } else {
+      await markPendingRows(env, rowIds, "failed_send");
+      markedFailed += rowIds.length;
+      failedUsers += 1;
+      await insertEmailQueueLog(env, userId, user.email, "failed_queue_digest", { source: options.source || "hotfix", total_alerts: alerts.length, pending_ids: rowIds }, send);
+      results.push({ user_id: userId, ok: false, reason: send.reason || "send_failed", total_alerts: alerts.length, pending_ids: rowIds.length });
+    }
+  }
+  return { ok: true, version: EMAIL_QUEUE_HOTFIX_VERSION, pending_found: rows.length, processed_users: processedUsers, sent_users: sentUsers, failed_users: failedUsers, marked_sent: markedSent, marked_failed: markedFailed, results };
+}
+__name(processPendingEmailQueue, "processPendingEmailQueue");
+async function handleEmailAlertsHealth(request, env, adminMode = false) {
+  const authUser = await resolveAuthUser6(env, request);
+  if (!authUser) return json14({ ok: false, error: "No autenticado" }, 401);
+  if (adminMode && !authUser.es_admin) return json14({ ok: false, error: "No autorizado" }, 403);
+  const targetUserId = adminMode ? normalizeText4(new URL(request.url).searchParams.get("user_id") || "") || null : authUser.id;
+  const pending = await loadPendingEmailNotifications(env, targetUserId, 200);
+  const logs = await loadRecentEmailLogs(env, targetUserId, 200);
+  const prefs = targetUserId ? await getUserPreferences(env, targetUserId).catch(() => null) : null;
+  const config = resolveBrevoConfig3(env);
+  return json14({
+    ok: true,
+    version: EMAIL_QUEUE_HOTFIX_VERSION,
+    scope: adminMode ? targetUserId ? "admin_user" : "admin_global" : "self",
+    target_user_id: targetUserId,
+    auth_user_id: authUser.id,
+    email_config: {
+      brevo_api_key_ready: !!config.apiKey,
+      sender_ready: !!config.senderEmail,
+      sender_email: config.senderEmail || null
+    },
+    preferences: prefs ? { alertas_activas: !!prefs.alertas_activas, alertas_email: !!prefs.alertas_email, alertas_whatsapp: !!prefs.alertas_whatsapp } : null,
+    pending_summary: { total: pending.length, by_status: summarizeBy(pending, (row) => row.status), by_user: summarizeBy(pending, (row) => row.user_id).slice(0, 20) },
+    log_summary: { total: logs.length, by_status: summarizeBy(logs, (row) => row.status), by_template: summarizeBy(logs, (row) => row.template_code) },
+    pending_preview: pending.slice(0, 20),
+    recent_logs: logs.slice(0, 40)
+  });
+}
+__name(handleEmailAlertsHealth, "handleEmailAlertsHealth");
+async function handleEmailAlertsRun(request, env, adminMode = false) {
+  const authUser = await resolveAuthUser6(env, request);
+  if (!authUser) return json14({ ok: false, error: "No autenticado" }, 401);
+  if (adminMode && !authUser.es_admin) return json14({ ok: false, error: "No autorizado" }, 403);
+  const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
+  const targetUserId = adminMode ? normalizeText4(body?.user_id || new URL(request.url).searchParams.get("user_id") || "") || null : authUser.id;
+  const result = await processPendingEmailQueue(env, { source: adminMode ? "manual_admin_run" : "manual_self_run", target_user_id: targetUserId });
+  return json14({ ok: true, version: EMAIL_QUEUE_HOTFIX_VERSION, scope: adminMode ? targetUserId ? "admin_user" : "admin_global" : "self", target_user_id: targetUserId, result });
+}
+__name(handleEmailAlertsRun, "handleEmailAlertsRun");
+
+// worker_email_queue_hotfix.js
+var API_URL_PREFIX14 = "/api";
+var EMAIL_QUEUE_WRAPPER_VERSION = "2026-04-18-email-wrapper-2-whatsapp-manual";
+function corsHeaders15() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Telegram-Bot-Api-Secret-Token"
+  };
+}
+__name(corsHeaders15, "corsHeaders");
+function json15(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders15() });
+}
+__name(json15, "json");
+function norm11(value) {
+  return String(value || "").trim();
+}
+__name(norm11, "norm");
+function normUpper2(value) {
+  return norm11(value).toUpperCase();
+}
+__name(normUpper2, "normUpper");
+function getBearerToken9(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+__name(getBearerToken9, "getBearerToken");
+function canonicalPlanCode11(code) {
+  const raw = normUpper2(code);
+  if (!raw) return "";
+  if (["FREE", "TRIAL", "PRUEBA", "PRUEBA_7D"].includes(raw)) return "TRIAL_7D";
+  if (raw === "PRO") return "PREMIUM";
+  if (raw === "SIGNATURE") return "INSIGNE";
+  if (raw === "BASIC") return "PLUS";
+  return raw;
+}
+__name(canonicalPlanCode11, "canonicalPlanCode");
+function parseFechaFlexible11(value) {
+  const raw = norm11(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+__name(parseFechaFlexible11, "parseFechaFlexible");
+function isSubscriptionCurrent9(subscription) {
+  if (!subscription) return false;
+  const status = normUpper2(subscription.status);
+  if (["CANCELLED", "CANCELED"].includes(status)) return false;
+  const now = Date.now();
+  const planCode = canonicalPlanCode11(subscription.plan_code);
+  const end = parseFechaFlexible11(
+    planCode === "TRIAL_7D" ? subscription.trial_ends_at || "" : subscription.current_period_ends_at || ""
+  )?.getTime() || 0;
+  if (!end) return ["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED", "BETA", "TRIALING"].includes(status);
+  return end > now;
+}
+__name(isSubscriptionCurrent9, "isSubscriptionCurrent");
+function safeJsonParse6(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+__name(safeJsonParse6, "safeJsonParse");
+function normalizeWhatsAppPhone2(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("549")) return digits;
+  if (digits.startsWith("54")) return `549${digits.slice(2)}`;
+  if (digits.startsWith("9") && digits.length >= 11) return `54${digits}`;
+  if (digits.startsWith("15") && digits.length > 8) digits = digits.slice(2);
+  return `549${digits}`;
+}
+__name(normalizeWhatsAppPhone2, "normalizeWhatsAppPhone");
+async function supabaseRequest12(env, path, init = {}) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...init.headers || {}
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) throw new Error(typeof data === "string" ? data : JSON.stringify(data));
+  return data;
+}
+__name(supabaseRequest12, "supabaseRequest");
+async function supabaseSelect14(env, query) {
+  return await supabaseRequest12(env, query, {
+    method: "GET",
+    headers: { Prefer: "return=representation" }
+  });
+}
+__name(supabaseSelect14, "supabaseSelect");
+async function supabaseInsert4(env, table, rows) {
+  return await supabaseRequest12(env, table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(Array.isArray(rows) ? rows : [rows])
+  });
+}
+__name(supabaseInsert4, "supabaseInsert");
+async function getUserById11(env, userId) {
+  const rows = await supabaseSelect14(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,es_admin&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getUserById11, "getUserById");
+async function getSessionByToken5(env, token) {
+  const rows = await supabaseSelect14(
+    env,
+    `sessions?token=eq.${encodeURIComponent(token)}&activo=eq.true&select=token,user_id,expires_at,activo&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getSessionByToken5, "getSessionByToken");
+async function resolveAuthUser7(env, request) {
+  const bearer = getBearerToken9(request);
+  if (!bearer) return null;
+  const session = await getSessionByToken5(env, bearer);
+  if (session) {
+    if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) return null;
+    return await getUserById11(env, session.user_id);
+  }
+  return await getUserById11(env, bearer);
+}
+__name(resolveAuthUser7, "resolveAuthUser");
+async function getUserSubscriptions8(env, userId) {
+  const rows = await supabaseSelect14(
+    env,
+    `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,plan_code,status,started_at,trial_ends_at,current_period_ends_at,created_at&order=created_at.desc`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+__name(getUserSubscriptions8, "getUserSubscriptions");
+async function getPlanByCode9(env, planCode) {
+  const code = canonicalPlanCode11(planCode);
+  if (!code) return null;
+  const rows = await supabaseSelect14(
+    env,
+    `subscription_plans?code=eq.${encodeURIComponent(code)}&select=code,nombre,feature_flags&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+__name(getPlanByCode9, "getPlanByCode");
+async function resolveWhatsAppEntitlement2(env, userId) {
+  const subscriptions = await getUserSubscriptions8(env, userId);
+  const current = subscriptions.find(isSubscriptionCurrent9) || subscriptions[0] || null;
+  const planCode = canonicalPlanCode11(current?.plan_code || "TRIAL_7D");
+  const plan = await getPlanByCode9(env, planCode);
+  const flags = safeJsonParse6(plan?.feature_flags) || {};
+  return {
+    plan_code: planCode,
+    plan_name: norm11(plan?.nombre) || planCode || "TRIAL_7D",
+    allowed: flags.whatsapp !== false && planCode === "INSIGNE"
+  };
+}
+__name(resolveWhatsAppEntitlement2, "resolveWhatsAppEntitlement");
+async function delegateJsonByRequest2(request, env, ctx) {
+  const response = await worker_telegram_hotfix_default.fetch(request, env, ctx);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data, text };
+}
+__name(delegateJsonByRequest2, "delegateJsonByRequest");
+async function sendWhatsAppText2(env, to, body) {
+  const phoneNumberId = norm11(env.WHATSAPP_PHONE_NUMBER_ID);
+  const accessToken = norm11(env.WHATSAPP_ACCESS_TOKEN);
+  if (!phoneNumberId || !accessToken) throw new Error("Faltan credenciales de WhatsApp");
+  const payload = {
+    messaging_product: "whatsapp",
+    to: normalizeWhatsAppPhone2(to),
+    type: "text",
+    text: {
+      preview_url: false,
+      body: String(body || "")
+    }
+  };
+  const res = await fetch(`https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error?.message || `WhatsApp HTTP ${res.status}`);
+  return data;
+}
+__name(sendWhatsAppText2, "sendWhatsAppText");
+function buildWhatsAppDigestMessage2(user, alerts) {
+  const items = Array.isArray(alerts) ? alerts : [];
+  const lines = [
+    `APDocentePBA`,
+    ``,
+    `Hola ${norm11(user?.nombre) || "Docente"}.`
+  ];
+  if (!items.length) {
+    lines.push(`No hay alertas compatibles con tus filtros en este momento.`);
+    lines.push(``);
+    lines.push(`Escrib\xED ALERTAS m\xE1s tarde para volver a consultar.`);
+    return lines.join("\n");
+  }
+  lines.push(`Se encontraron ${items.length} alerta(s).`);
+  lines.push(``);
+  items.forEach((item, idx) => {
+    const cargo = norm11(item?.cargo || item?.area || "Oferta APD") || "Oferta APD";
+    const distrito = norm11(item?.distrito || "-") || "-";
+    const escuela = norm11(item?.escuela || "-") || "-";
+    const turno = norm11(item?.turno || "-") || "-";
+    const nivel = norm11(item?.nivel || item?.nivel_modalidad || item?.modalidad || "-") || "-";
+    const cierre = norm11(item?.finoferta_label || item?.fecha_cierre || item?.cierre || "-") || "-";
+    const postulados = item?.postulados ?? item?.total_postulantes ?? "-";
+    const puntajeMasAlto = item?.primero_puntaje ?? item?.puntaje_primero ?? "-";
+    const listadoMasAlto = norm11(item?.listado_origen_primero || "-") || "-";
+    const abcUrl = norm11(item?.abc_url || item?.abc_postulantes_url || item?.link || "") || "";
+    lines.push(`${idx + 1}) ${cargo}`);
+    lines.push(`Distrito: ${distrito}`);
+    lines.push(`Escuela: ${escuela}`);
+    lines.push(`Turno: ${turno}`);
+    lines.push(`Nivel: ${nivel}`);
+    lines.push(`Cierre: ${cierre}`);
+    lines.push(`Postulados: ${postulados}`);
+    lines.push(`Puntaje m\xE1s alto: ${puntajeMasAlto}`);
+    lines.push(`Listado del m\xE1s alto: ${listadoMasAlto}`);
+    if (abcUrl) {
+      lines.push(`Link: ${abcUrl}`);
+    }
+    if (idx < items.length - 1) {
+      lines.push(``);
+      lines.push(`--------------------`);
+      lines.push(``);
+    }
+  });
+  lines.push(``);
+  lines.push(`Panel: https://alertasapd.com.ar`);
+  lines.push(`Escrib\xED ALERTAS para refrescar.`);
+  return lines.join("\n");
+}
+__name(buildWhatsAppDigestMessage2, "buildWhatsAppDigestMessage");
+async function handleManualWhatsAppAlerts(request, env, ctx) {
+  const authUser = await resolveAuthUser7(env, request);
+  if (!authUser) return json15({ ok: false, error: "No autenticado" }, 401);
+  const body = await request.json().catch(() => ({}));
+  const requestedUserId = normUpper2(body?.user_id) || authUser.id;
+  if (requestedUserId !== authUser.id && !authUser.es_admin) {
+    return json15({ ok: false, error: "No autorizado" }, 403);
+  }
+  const user = await getUserById11(env, requestedUserId);
+  if (!user?.id || user.activo === false) {
+    return json15({ ok: false, error: "Usuario no encontrado" }, 404);
+  }
+  const entitlement = await resolveWhatsAppEntitlement2(env, requestedUserId);
+  if (!entitlement.allowed) {
+    return json15({ ok: false, error: `WhatsApp no est\xE1 habilitado para ${entitlement.plan_name || "tu plan"}` }, 400);
+  }
+  const prefsRows = await supabaseSelect14(
+    env,
+    `user_preferences?user_id=eq.${encodeURIComponent(requestedUserId)}&select=alertas_activas,alertas_whatsapp&limit=1`
+  ).catch(() => []);
+  const prefs = Array.isArray(prefsRows) ? prefsRows[0] || {} : {};
+  if (!prefs?.alertas_activas) {
+    return json15({ ok: false, error: "Alertas generales apagadas" }, 400);
+  }
+  const phone = normalizeWhatsAppPhone2(user?.celular || "");
+  if (!phone) {
+    return json15({ ok: false, error: "El usuario no tiene celular v\xE1lido" }, 400);
+  }
+  const delegated = await delegateJsonByRequest2(
+    new Request(`https://internal.apdocentepba.dev/api/mis-alertas?user_id=${encodeURIComponent(requestedUserId)}`, { method: "GET" }),
+    env,
+    ctx
+  );
+  const alerts = delegated.response.ok && delegated.data?.ok && Array.isArray(delegated.data?.resultados) ? delegated.data.resultados : [];
+  const reply = buildWhatsAppDigestMessage2(user, alerts);
+  const sent = await sendWhatsAppText2(env, phone, reply);
+  await supabaseInsert4(env, "notification_delivery_logs", {
+    user_id: requestedUserId,
+    channel: "whatsapp",
+    template_code: "manual_alerts",
+    destination: phone,
+    status: "sent_manual",
+    provider_message_id: sent?.messages?.[0]?.id || null,
+    payload: {
+      alerts_count: alerts.length,
+      requested_flag: !!prefs?.alertas_whatsapp
+    },
+    provider_response: sent
+  }).catch(() => null);
+  return json15({
+    ok: true,
+    sent: true,
+    to: phone,
+    alerts_count: alerts.length,
+    provider_message_id: sent?.messages?.[0]?.id || null
+  });
+}
+__name(handleManualWhatsAppAlerts, "handleManualWhatsAppAlerts");
+var worker_email_queue_hotfix_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders15() });
+    }
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === `${API_URL_PREFIX14}/email-alerts-health` && request.method === "GET") {
+        return await handleEmailAlertsHealth(request, env, false);
+      }
+      if (url.pathname === `${API_URL_PREFIX14}/email-alerts-run` && request.method === "POST") {
+        return await handleEmailAlertsRun(request, env, false);
+      }
+      if (url.pathname === `${API_URL_PREFIX14}/admin/email-alerts-health` && request.method === "GET") {
+        return await handleEmailAlertsHealth(request, env, true);
+      }
+      if (url.pathname === `${API_URL_PREFIX14}/admin/email-alerts-run` && request.method === "POST") {
+        return await handleEmailAlertsRun(request, env, true);
+      }
+      if (url.pathname === `${API_URL_PREFIX14}/whatsapp/manual-alerts` && request.method === "POST") {
+        return await handleManualWhatsAppAlerts(request, env, ctx);
+      }
+      if (url.pathname === `${API_URL_PREFIX14}/version` && request.method === "GET") {
+        const delegated = await worker_telegram_hotfix_default.fetch(request, env, ctx);
+        const text = await delegated.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = {};
+        }
+        return json15({ ...data || {}, email_queue_wrapper_version: EMAIL_QUEUE_WRAPPER_VERSION }, 200);
+      }
+    } catch (err) {
+      return json15({ ok: false, error: err?.message || "Email queue wrapper error", email_queue_wrapper_version: EMAIL_QUEUE_WRAPPER_VERSION }, Number(err?.status || 500) || 500);
+    }
+    return worker_telegram_hotfix_default.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof worker_telegram_hotfix_default?.scheduled === "function") {
+      await worker_telegram_hotfix_default.scheduled(controller, env, ctx);
+    }
+    ctx.waitUntil(
+      processPendingEmailQueue(env, { source: "cron_queue_hotfix" }).catch((err) => {
+        console.error("EMAIL QUEUE WRAPPER ERROR:", err);
+      })
+    );
+  }
+};
+export {
+  worker_email_queue_hotfix_default as default
+};
+//# sourceMappingURL=worker_email_queue_hotfix.js.map
