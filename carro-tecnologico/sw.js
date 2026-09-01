@@ -1,8 +1,8 @@
-const CACHE_NAME = 'carro-tecnologico-v3-series';
+const CACHE_NAME = 'carro-tecnologico-v4-ui-draftfix';
 const APP_SHELL = [
   './',
   './index.html',
-  './tema-lindo.css?v=1',
+  './tema-lindo.css?v=2',
   './manifest.webmanifest?v=1'
 ];
 
@@ -13,6 +13,10 @@ const SERIAL_TO_ID = {
 };
 
 function patchIndexHtml(html) {
+  html = html
+    .replace('./tema-lindo.css?v=1', './tema-lindo.css?v=2')
+    .replace("const DRAFT_KEY='carroTecnologico_borrador_v1';", "const DRAFT_KEY='carroTecnologico_borrador_v2';");
+
   const serialCode = `
 const CARRO_SERIAL_TO_ID = ${JSON.stringify(SERIAL_TO_ID)};
 const normalizarBaseCarro = normalizar;
@@ -27,7 +31,66 @@ agregarCodigo = function(codigo){
   agregarCodigoBaseCarro(codigo);
   if(id){mensaje('Serie física detectada: '+raw+' → '+id+'. Se agregó el código escolar.','ok')}
 };
+
+try{localStorage.removeItem('carroTecnologico_borrador_v1')}catch(e){}
+
+function limpiarLoteLocalCarro_(){
+  try{nuevoLote(false)}catch(e){
+    try{
+      codigos=[];
+      localStorage.removeItem(DRAFT_KEY);
+      actualizarLista();
+      actualizarDraftBox(null);
+    }catch(_){}
+  }
+}
+
+const guardarLoteBaseCarro = guardarLote;
+guardarLote = function(){
+  const tipoAntes = tipoMovimiento;
+  let popupAbierto = false;
+  const openOriginal = window.open;
+
+  window.open = function(){
+    const w = openOriginal.apply(window, arguments);
+    popupAbierto = !!w;
+    return w;
+  };
+
+  try{
+    guardarLoteBaseCarro();
+  }finally{
+    window.open = openOriginal;
+  }
+
+  if(tipoAntes === 'Salida'){
+    const hayConfirmacion = !!document.querySelector('#mensaje .linksave');
+    if(popupAbierto && hayConfirmacion){
+      setTimeout(function(){
+        limpiarLoteLocalCarro_();
+        mensaje('Lote enviado. El formulario quedó limpio para el próximo retiro.','ok');
+      }, 1200);
+    }
+    return;
+  }
+
+  if(tipoAntes === 'Devolución'){
+    setTimeout(function(){
+      document.querySelectorAll('#mensaje a.linksave').forEach(function(a){
+        if(a.dataset.limpiaLote === '1') return;
+        a.dataset.limpiaLote = '1';
+        a.addEventListener('click', function(){
+          setTimeout(function(){
+            limpiarLoteLocalCarro_();
+            mensaje('Devolución enviada. El formulario quedó limpio para el próximo lote.','ok');
+          }, 500);
+        }, {once:true});
+      });
+    }, 0);
+  }
+};
 `;
+
   return html.replace(
     'prepararAutosave();\nactualizarLista();',
     serialCode + "\nprepararAutosave();\nmostrarValidaciones();\ntry{const raw=localStorage.getItem(DRAFT_KEY);if(raw)actualizarDraftBox(JSON.parse(raw))}catch(e){}"
