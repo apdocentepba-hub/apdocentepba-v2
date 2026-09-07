@@ -2,7 +2,7 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  const DATA = () => window.AP_DOCENTE_HABERES_CARGOS_SUTEBA_2026_4 || {};
+  const DATA = () => window.AP_DOCENTE_HABERES_CARGOS_PBA_2026_04 || window.AP_DOCENTE_HABERES_CARGOS_SUTEBA_2026_4 || {};
   const LIQ = {
     nombre: "Abril 2026",
     basicoCargo: 392179.20,
@@ -20,13 +20,22 @@
     gremial: 0.039
   };
 
+  const ALIAS_CARGO = [
+    { patron: "encargado de medios", extra: "ematp encargado medios apoyo tecnico pedagogico informática informatica medios técnicos medios tecnicos" },
+    { patron: "jefe de medios", extra: "jmatp jefe medios apoyo tecnico pedagogico informática informatica" },
+    { patron: "hora catedra del profesor", extra: "horas catedra profesor hc" },
+    { patron: "hora catedra del ayudante", extra: "ayudante horas catedra hc" },
+    { patron: "modulos", extra: "módulos profesor secundaria materias horas modulos" },
+    { patron: "maestro de grado", extra: "mg primaria maestra maestro" },
+    { patron: "maestro de sala", extra: "mi jm inicial jardin jardín sala" },
+    { patron: "preceptor", extra: "preceptora preceptores" },
+    { patron: "bibliotecario", extra: "bibliotecaria biblioteca" }
+  ];
+
   let ultimo = null;
 
   function money(n) {
-    return "$ " + Number(n || 0).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
+    return "$ " + Number(n || 0).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function num(v) {
@@ -77,16 +86,11 @@
 
   function cargoActual() {
     const opt = $("cargo").selectedOptions[0];
-    return {
-      id: opt?.value || "",
-      nombre: opt?.textContent || "Sin seleccionar",
-      tipo: opt?.dataset.tipo || "CARGO"
-    };
+    return { id: opt?.value || "", nombre: opt?.textContent || "Sin seleccionar", tipo: opt?.dataset.tipo || "CARGO" };
   }
 
   function listarCargos() {
-    const nivel = $("nivel").value;
-    return DATA()[nivel] || [];
+    return DATA()[$("nivel").value] || [];
   }
 
   function cargarNiveles() {
@@ -97,33 +101,30 @@
 
   function cargarAntiguedad() {
     let html = "";
-    for (let i = 0; i <= 30; i++) {
-      const p = Math.round(antigPct(i) * 100);
-      html += `<option value="${i}">${i} año${i === 1 ? "" : "s"} · ${p}%</option>`;
-    }
+    for (let i = 0; i <= 30; i++) html += `<option value="${i}">${i} año${i === 1 ? "" : "s"} · ${Math.round(antigPct(i) * 100)}%</option>`;
     $("ant").innerHTML = html;
+  }
+
+  function textoBusquedaCargo(c) {
+    const base = norm(`${c.nombre} ${c.id} ${c.tipoBloque} ${tipoTexto(c.tipoBloque)}`);
+    const extra = ALIAS_CARGO.filter((a) => base.includes(norm(a.patron))).map((a) => a.extra).join(" ");
+    return `${base} ${norm(extra)}`;
   }
 
   function cargarCargos() {
     const q = norm($("buscarCargo").value);
     const todos = listarCargos();
     const prev = $("cargo").value;
-    const rows = todos.filter((c) => {
-      const hay = `${c.nombre} ${c.id} ${c.tipoBloque} ${tipoTexto(c.tipoBloque)}`;
-      return !q || norm(hay).includes(q);
-    });
+    const rows = todos.filter((c) => !q || textoBusquedaCargo(c).includes(q));
 
     if (!rows.length) {
       $("cargo").innerHTML = '<option value="">Sin resultados</option>';
-      $("cargoInfo").textContent = `0 de ${todos.length} cargos encontrados.`;
+      $("cargoInfo").textContent = `0 de ${todos.length} cargos encontrados. Probá con el nombre completo, abreviatura o tipo de cargo.`;
       $("bloque").value = "";
       return;
     }
 
-    $("cargo").innerHTML = rows.map((c) =>
-      `<option value="${esc(c.id)}" data-tipo="${esc(c.tipoBloque || "CARGO")}">${esc(c.nombre)} · #${esc(c.id)}</option>`
-    ).join("");
-
+    $("cargo").innerHTML = rows.map((c) => `<option value="${esc(c.id)}" data-tipo="${esc(c.tipoBloque || "CARGO")}">${esc(c.nombre)} · #${esc(c.id)}</option>`).join("");
     if (rows.some((c) => String(c.id) === String(prev))) $("cargo").value = prev;
     $("cargoInfo").textContent = `${rows.length} de ${todos.length} cargos visibles en ${$("nivel").value}.`;
     actualizarTipo();
@@ -143,25 +144,16 @@
     let base = LIQ.basicoCargo;
     let factor = 1;
 
-    if (t === "MODULOS") {
-      base = LIQ.moduloBase * cantidad;
-      factor = 1;
-    } else if (t === "HORAS") {
-      base = LIQ.horaBase * cantidad;
-      factor = 1;
-    } else if (t === "QUINTA_HORA") {
-      base = LIQ.quintaHoraBase;
-    } else if (t === "CUATRO_Y_MEDIA_HORAS") {
-      factor = LIQ.cuatroYMediaFactor;
-    } else if (t === "DOBLE_BONIFICACION") {
-      factor = LIQ.dobleBonificacionFactor;
-    }
+    if (t === "MODULOS") base = LIQ.moduloBase * cantidad;
+    else if (t === "HORAS") base = LIQ.horaBase * cantidad;
+    else if (t === "QUINTA_HORA") base = LIQ.quintaHoraBase;
+    else if (t === "CUATRO_Y_MEDIA_HORAS") factor = LIQ.cuatroYMediaFactor;
+    else if (t === "DOBLE_BONIFICACION") factor = LIQ.dobleBonificacionFactor;
 
     if (nombre.includes("director") || nombre.includes("inspector")) factor *= 1.18;
     if (nombre.includes("secretario") || nombre.includes("regente") || nombre.includes("jefe")) factor *= 1.08;
     if (nombre.includes("preceptor")) factor *= 0.92;
     if (nombre.includes("bibliotecario")) factor *= 0.96;
-
     return base * factor;
   }
 
@@ -171,12 +163,11 @@
 
     let cantidad = Math.max(num($("cantidad").value), 1);
     if (!["MODULOS", "HORAS"].includes(c.tipo)) cantidad = Math.max(1, Math.round(cantidad));
+
     const base = basePorCargo(c, cantidad);
     const ant = base * antigPct($("ant").value);
     const bonif = LIQ.bonificacionBase * (base / LIQ.basicoCargo);
-    const media = (c.tipo === "MODULOS" || c.tipo === "HORAS" || $("nivel").value === "SECUNDARIA" || $("nivel").value === "SUPERIOR")
-      ? LIQ.adicionalMedia * (base / LIQ.basicoCargo)
-      : 0;
+    const media = (c.tipo === "MODULOS" || c.tipo === "HORAS" || $("nivel").value === "SECUNDARIA" || $("nivel").value === "SUPERIOR") ? LIQ.adicionalMedia * (base / LIQ.basicoCargo) : 0;
     const rural = base * num($("ruralidad").value);
     const zona = $("zonaFria").value === "1" ? (base + ant + bonif + media + rural) * 0.30 : 0;
     const extra = num($("extra").value);
@@ -186,7 +177,6 @@
     const remunerativo = base + ant + bonif + media + rural + zona + extra;
     const noRem = conectividad + garantia;
     const bruto = remunerativo + noRem;
-
     const ips = remunerativo * LIQ.ips;
     const ioma = remunerativo * LIQ.ioma;
     const gremial = $("afiliacion").value === "1" ? remunerativo * LIQ.gremial : 0;
@@ -217,9 +207,7 @@
   }
 
   function tabla(titulo, rows) {
-    const body = rows.map((r) =>
-      `<tr><td>${esc(r.codigo)}</td><td>${esc(r.descripcion)}</td><td class="num">${money(r.importe)}</td></tr>`
-    ).join("");
+    const body = rows.map((r) => `<tr><td>${esc(r.codigo)}</td><td>${esc(r.descripcion)}</td><td class="num">${money(r.importe)}</td></tr>`).join("");
     return `<h3>${esc(titulo)}</h3><div class="tablewrap"><table><thead><tr><th>Código</th><th>Concepto</th><th class="num">Importe</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
@@ -228,56 +216,31 @@
     $("bruto").textContent = money(res.bruto);
     $("descuentos").textContent = money(res.descuentos);
     $("neto").textContent = money(res.neto);
-    $("estado").textContent =
-      `Resultado orientativo para ${res.c.nombre}\n` +
-      `Nivel/modalidad: ${$("nivel").value}\n` +
-      `Tipo: ${tipoTexto(res.c.tipo)} · Cantidad: ${res.cantidad}\n` +
-      `Liquidación de referencia: ${LIQ.nombre}\n` +
-      `Remunerativo estimado: ${money(res.remunerativo)}\n` +
-      `No remunerativo estimado: ${money(res.noRem)}`;
+    $("estado").textContent = `Resultado orientativo para ${res.c.nombre}\nNivel/modalidad: ${$("nivel").value}\nTipo: ${tipoTexto(res.c.tipo)} · Cantidad: ${res.cantidad}\nLiquidación de referencia: ${LIQ.nombre}\nRemunerativo estimado: ${money(res.remunerativo)}\nNo remunerativo estimado: ${money(res.noRem)}`;
     $("tablas").innerHTML = tabla("Ingresos estimados", res.conceptos) + tabla("Descuentos estimados", res.descuentosRows);
     comparar(false);
   }
 
   function calcular() {
-    try {
-      render(calcularModelo());
-    } catch (e) {
-      $("estado").textContent = e.message || "No se pudo calcular.";
-    }
+    try { render(calcularModelo()); }
+    catch (e) { $("estado").textContent = e.message || "No se pudo calcular."; }
   }
 
   function comparar(actualizar = true) {
-    if (!ultimo) {
-      $("comparacion").textContent = "Primero calculá una estimación.";
-      return;
-    }
+    if (!ultimo) { $("comparacion").textContent = "Primero calculá una estimación."; return; }
     const real = num($("netoReal").value);
-    if (!real) {
-      $("comparacion").textContent = "Todavía no hay comparación con recibo real.";
-      return;
-    }
+    if (!real) { $("comparacion").textContent = "Todavía no hay comparación con recibo real."; return; }
     const dif = ultimo.neto - real;
     const pct = real ? Math.abs(dif / real * 100) : 0;
     const lectura = Math.abs(dif) < 1000 ? "Diferencia mínima." : dif > 0 ? "La estimación da más que el recibo real." : "El recibo real da más que la estimación.";
-    $("comparacion").textContent =
-      `Neto estimado: ${money(ultimo.neto)}\n` +
-      `Neto real cargado: ${money(real)}\n` +
-      `Diferencia: ${money(Math.abs(dif))} (${pct.toFixed(2)}%)\n` +
-      `Lectura: ${lectura}\n` +
-      `Observaciones: ${$("obs").value || "sin observaciones"}`;
+    $("comparacion").textContent = `Neto estimado: ${money(ultimo.neto)}\nNeto real cargado: ${money(real)}\nDiferencia: ${money(Math.abs(dif))} (${pct.toFixed(2)}%)\nLectura: ${lectura}\nObservaciones: ${$("obs").value || "sin observaciones"}`;
     if (actualizar) $("comparacion").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   async function copiarInforme() {
     if (!ultimo) calcular();
     if (!ultimo) return;
-    const texto =
-      `CALCULADORA DE HABERES DOCENTES PBA - APDOCENTEPBA\n\n` +
-      `Liquidación: ${LIQ.nombre}\nNivel/modalidad: ${$("nivel").value}\nCargo: ${ultimo.c.nombre}\n` +
-      `Tipo: ${tipoTexto(ultimo.c.tipo)}\nCantidad: ${ultimo.cantidad}\nAntigüedad: ${$("ant").value} años\n` +
-      `Ingresos: ${money(ultimo.bruto)}\nDescuentos: ${money(ultimo.descuentos)}\nNeto estimado: ${money(ultimo.neto)}\n\n` +
-      `${$("estado").innerText}\n\n${$("tablas").innerText}\n\n${$("comparacion").innerText}`;
+    const texto = `CALCULADORA DE HABERES DOCENTES PBA - APDOCENTEPBA\n\nLiquidación: ${LIQ.nombre}\nNivel/modalidad: ${$("nivel").value}\nCargo: ${ultimo.c.nombre}\nTipo: ${tipoTexto(ultimo.c.tipo)}\nCantidad: ${ultimo.cantidad}\nAntigüedad: ${$("ant").value} años\nIngresos: ${money(ultimo.bruto)}\nDescuentos: ${money(ultimo.descuentos)}\nNeto estimado: ${money(ultimo.neto)}\n\n${$("estado").innerText}\n\n${$("tablas").innerText}\n\n${$("comparacion").innerText}`;
     await navigator.clipboard.writeText(texto);
     $("estado").textContent += "\n\nInforme copiado al portapapeles.";
   }
@@ -311,11 +274,9 @@
     cargarNiveles();
     cargarAntiguedad();
     cargarCargos();
-
     const preferido = Array.from($("cargo").options).find((o) => norm(o.textContent).includes("encargado de medios"));
     if (preferido) $("cargo").value = preferido.value;
     actualizarTipo();
-
     $("nivel").addEventListener("change", () => { $("buscarCargo").value = ""; cargarCargos(); });
     $("buscarCargo").addEventListener("input", cargarCargos);
     $("cargo").addEventListener("change", actualizarTipo);
