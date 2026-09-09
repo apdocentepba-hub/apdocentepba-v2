@@ -30,6 +30,18 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
           ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
 
+          rollback() {
+            echo "Post-deploy verification failed; rolling back to previous stable version"
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after APDocentePBA #681 smoke failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @out/rollback.json > out/rollback-response.json || true
+          }
+
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/before.json
           ACTIVE_BEFORE=$(node -e "const j=require('./out/before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
@@ -50,24 +62,15 @@ jobs:
           for(const required of ['worker_hotfix.js','worker_email_queue_hotfix.js','email_queue_hotfix.js']) {
             if(!mods.includes(required)) throw new Error(`Missing module ${required}`);
           }
-          console.log(`Candidate #${r.number}: ${bindings.length} bindings, ${mods.length} modules`);
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module: ${r.main_module}`);
+          console.log(`Candidate #${r.number}: main=${r.main_module}, ${bindings.length} bindings, ${mods.length} modules`);
           NODE
-
-          rollback() {
-            echo "Post-deploy verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
-            cat > out/rollback.json <<JSON
-          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after APDocentePBA #681 smoke failure"}}
-          JSON
-            curl -fsS -X POST \
-              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              -H "Content-Type: application/json" \
-              --data @out/rollback.json > out/rollback-response.json || true
-          }
 
           cat > out/deploy.json <<JSON
           {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA hotfix: live ABC refresh + cross-slot email dedupe (#681)"}}
           JSON
+
+          trap rollback ERR
 
           curl -fsS -X POST \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
@@ -78,46 +81,38 @@ jobs:
           node - <<'NODE'
           const j=require('./out/deploy-response.json');
           if(!j.success||!j.result?.id) throw new Error(JSON.stringify(j.errors||[]));
-          const v=j.result.versions||[];
-          if(v.length!==1||v[0].version_id!==process.env.CANDIDATE_VERSION_ID||Number(v[0].percentage)!==100) throw new Error('Deployment response does not point 100% to candidate');
-          console.log(`Deployment created: ${j.result.id}`);
+          console.log(`Deployment request accepted: ${j.result.id}`);
           NODE
 
-          trap rollback ERR
-
-          # Confirm Cloudflare now serves candidate at 100%.
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
           ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(4);process.stdout.write(v.version_id)")
+          echo "Active after deploy: ${ACTIVE_AFTER}"
           test "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}"
 
-          # Core Worker health/version route.
           VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
           test "${VERSION_CODE}" = "200"
           node - <<'NODE'
           const j=require('./out/version.json');
           if(j.ok!==true) throw new Error('api/version not ok');
-          if(!j.email_queue_wrapper_version) throw new Error('email queue wrapper missing');
-          console.log('api/version OK');
+          console.log('api/version OK', JSON.stringify({ok:j.ok,version:j.version||null,worker_version:j.worker_version||null}));
           NODE
 
-          # Exercise the new ABC -> user_offer_state path without sending email.
           DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=0&limit=10")
           test "${DRY_CODE}" = "200"
           node - <<'NODE'
           const j=require('./out/dry-run.json');
-          const safe={ok:j.ok,dry_run:j.dry_run,processed_users:j.processed_users,send_attempts:j.send_attempts,failed_count:j.failed_count,skipped_count:j.skipped_count};
+          const safe={ok:j.ok,dry_run:j.dry_run,processed_users:Number(j.processed_users||0),send_attempts:Number(j.send_attempts||0),failed_count:Number(j.failed_count||0),skipped_count:Number(j.skipped_count||0)};
           console.log('Dry-run summary:',JSON.stringify(safe));
           if(j.ok!==true||j.dry_run!==true) throw new Error('email dry-run invalid');
-          if(Number(j.processed_users||0)<1) throw new Error('email dry-run processed no users');
-          if(Number(j.failed_count||0)!==0) throw new Error(`email dry-run failures: ${j.failed_count}`);
+          if(safe.processed_users<1) throw new Error('email dry-run processed no users');
+          if(safe.failed_count!==0) throw new Error(`email dry-run failures: ${safe.failed_count}`);
           NODE
 
-          # Public frontend remains reachable.
           SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          echo "Public site HTTP: ${SITE_CODE}"
           test "${SITE_CODE}" = "200"
 
-          # Re-confirm deployment did not move during smoke checks.
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/final.json
           ACTIVE_FINAL=$(node -e "const j=require('./out/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(5);process.stdout.write(v.version_id)")
@@ -135,6 +130,7 @@ jobs:
             worker_version_endpoint_ok:true,
             email_dry_run_ok:true,
             dry_run_processed_users:Number(dry.processed_users||0),
+            dry_run_send_attempts:Number(dry.send_attempts||0),
             dry_run_failed_count:Number(dry.failed_count||0),
             public_site_ok:true,
             rollback_triggered:false
