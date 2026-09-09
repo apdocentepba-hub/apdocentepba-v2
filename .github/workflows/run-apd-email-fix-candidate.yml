@@ -1,0 +1,139 @@
+name: Run safe APD email fix candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/run-apd-email-fix-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/email-abc-live-refresh-20260909
+
+      - name: Build candidate and verify binding safety
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?per_page=1" > tmp/version-list.json
+          LATEST_VERSION_ID=$(node -e "const j=require('./tmp/version-list.json');const v=j.result?.[0];if(!v?.id)process.exit(4);process.stdout.write(v.id)")
+          echo "LATEST_VERSION_ID=${LATEST_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${LATEST_VERSION_ID}?include=modules" > tmp/latest.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const active=JSON.parse(fs.readFileSync('tmp/active.json','utf8')).result;
+          const latest=JSON.parse(fs.readFileSync('tmp/latest.json','utf8')).result;
+          if(!active?.id||!latest?.id) throw new Error('Version detail missing');
+          const shape=r=>(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          const a=shape(active), l=shape(latest);
+          if(JSON.stringify(a)!==JSON.stringify(l)) {
+            console.error('Binding mismatch; aborting before upload');
+            console.error('Only active:',a.filter(x=>!l.includes(x)));
+            console.error('Only latest:',l.filter(x=>!a.includes(x)));
+            process.exit(5);
+          }
+          for(const m of active.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const metadata={
+            main_module:active.main_module,
+            compatibility_date:active.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA email live ABC fix candidate','workers/tag':'email-abc-refresh-20260909'},
+            bindings:(active.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
+          };
+          if(Array.isArray(active.compatibility_flags)&&active.compatibility_flags.length) metadata.compatibility_flags=active.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          fs.writeFileSync('tmp/safety.json',JSON.stringify({active:{id:active.id,number:active.number},latest:{id:latest.id,number:latest.number},binding_count:a.length,binding_shapes_match:true},null,2));
+          console.log(`Binding safety OK: ${a.length}; active #${active.number}; latest #${latest.number}`);
+          NODE
+
+          python scripts/apply-email-abc-live-refresh.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
+          python scripts/test-email-abc-live-refresh.py tmp/candidate/worker_hotfix.js
+          node --check tmp/candidate/worker_hotfix.js
+          cp tmp/modules/email_queue_hotfix.js tmp/candidate/
+          cp tmp/modules/worker_email_queue_hotfix.js tmp/candidate/
+
+      - name: Verify live ABC Publicada for active-user districts
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          const API='https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
+          const districts=['AVELLANEDA','GENERAL SAN MARTIN','NECOCHEA','PARTIDO DE LA COSTA'];
+          const results=[];
+          for(const district of districts){
+            const u=new URL(API); u.searchParams.set('q',`descdistrito:"${district}" AND estado:"Publicada"`); u.searchParams.set('rows','1'); u.searchParams.set('wt','json');
+            const r=await fetch(u); if(!r.ok) throw new Error(`${district}: HTTP ${r.status}`);
+            const j=JSON.parse(new TextDecoder('latin1').decode(await r.arrayBuffer())||'{}');
+            const n=Number(j?.response?.numFound??-1); if(n<0) throw new Error(`${district}: invalid ABC response`); results.push({district,numFound:n});
+          }
+          console.log(results);
+          NODE
+
+      - name: Upload version only; assert production stays unchanged
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare upload HTTP ${HTTP_CODE}"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/upload.json','utf8'));
+          console.log(JSON.stringify({success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null},null,2));
+          if(!j.success||!j.result?.id) process.exit(1);
+          fs.writeFileSync('tmp/partial.json',JSON.stringify({candidate_version_id:j.result.id,candidate_number:j.result.number||null},null,2));
+          NODE
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-after.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const getId=j=>{const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];return v?.version_id||null};
+          const before=getId(JSON.parse(fs.readFileSync('tmp/deployments-before.json','utf8')));
+          const after=getId(JSON.parse(fs.readFileSync('tmp/deployments-after.json','utf8')));
+          if(!before||before!==after) throw new Error(`Production changed unexpectedly: ${before} -> ${after}`);
+          const partial=JSON.parse(fs.readFileSync('tmp/partial.json','utf8'));
+          const summary={...partial,active_version_id:before,deployed:false,traffic_changed:false,safety:JSON.parse(fs.readFileSync('tmp/safety.json','utf8'))};
+          fs.writeFileSync('tmp/summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apd-email-fix-candidate-validation
+          path: tmp/summary.json
+          if-no-files-found: error
