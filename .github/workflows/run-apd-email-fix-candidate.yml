@@ -41,8 +41,8 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?per_page=1" > tmp/version-list.json
-          LATEST_VERSION_ID=$(node -e "const j=require('./tmp/version-list.json');const v=j.result?.[0];if(!v?.id)process.exit(4);process.stdout.write(v.id)")
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=100" > tmp/version-list.json
+          LATEST_VERSION_ID=$(node -e "const j=require('./tmp/version-list.json');const rows=Array.isArray(j.result)?j.result:[];const v=rows.sort((a,b)=>Number(b.number||0)-Number(a.number||0))[0];if(!v?.id)process.exit(4);process.stdout.write(v.id)")
           echo "LATEST_VERSION_ID=${LATEST_VERSION_ID}" >> "$GITHUB_ENV"
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
