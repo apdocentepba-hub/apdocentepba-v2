@@ -1,0 +1,82 @@
+name: Diagnose APD email fix version upload
+
+on:
+  push:
+    branches:
+      - fix/email-abc-live-refresh-20260909
+    paths:
+      - .github/workflows/diagnose-email-fix-version-upload.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild tested candidate from active version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8'));
+          for (const m of j.result.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const r=j.result;
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA email live ABC fix candidate','workers/tag':'email-abc-refresh-20260909'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:r.id}))
+          };
+          if (Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          NODE
+          python scripts/apply-email-abc-live-refresh.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
+          python scripts/test-email-abc-live-refresh.py tmp/candidate/worker_hotfix.js
+          node --check tmp/candidate/worker_hotfix.js
+          cp tmp/modules/email_queue_hotfix.js tmp/candidate/
+          cp tmp/modules/worker_email_queue_hotfix.js tmp/candidate/
+
+      - name: Attempt Version Upload and show Cloudflare errors
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/upload-response.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "HTTP ${HTTP_CODE}"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/upload-response.json','utf8'));
+          console.log(JSON.stringify({success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null},null,2));
+          if (!j.success || !j.result?.id) process.exit(1);
+          fs.writeFileSync('tmp/upload-summary.json',JSON.stringify({candidate_version_id:j.result.id,active_version_id:process.env.ACTIVE_VERSION_ID,deployed:false},null,2));
+          NODE
+
+      - name: Safe upload summary
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-email-fix-upload-summary
+          path: tmp/upload-summary.json
