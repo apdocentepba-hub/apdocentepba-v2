@@ -1,0 +1,118 @@
+name: Audit ABC capture coverage
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/audit-abc-capture.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compare district capture vs cargo-prefilter capture
+        run: |
+          mkdir -p artifacts
+          cat > /tmp/audit.mjs <<'NODE'
+          const API = 'https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
+          const district = 'AVELLANEDA';
+          const cargos = ['MATEMATICA', 'PRECEPTOR', 'NTICX', 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.'];
+          const rows = 150;
+          const maxPages = 25;
+
+          const norm = (v='') => String(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+          const escapeSolr = (v='') => String(v).replace(/(["\\])/g, '\\$1');
+          const keyOf = (d) => String(d?.iddetalle || d?.id || d?.idoferta || JSON.stringify(d));
+
+          function buildCargoVariants(raw) {
+            const base = norm(raw);
+            const out = new Set();
+            const add = v => { const x = norm(v); if (x && x.length >= 2) out.add(x); };
+            add(base);
+            const rawText = String(raw || '');
+            for (const m of rawText.matchAll(/\(([^)]+)\)/g)) add(m[1]);
+            add(rawText.replace(/\([^)]*\)/g, ' '));
+            for (const t of norm(rawText).replace(/[()]/g,' ').split(/[^A-Z0-9/]+/).map(x => norm(x.replace(/^\/+/,''))).filter(x => x && x.length >= 2)) add(t);
+            if (base.includes('NTICX') || base.includes('NTI')) { add('NTICX'); add('NTI'); }
+            if (base.includes('PRECEPTOR') || base.includes('/PR') || base.includes(' PR')) { add('PRECEPTOR'); add('/PR'); add('PR'); }
+            if (base.includes('ELI') || base.includes('ENCARGADO MEDIOS')) { add('ELI'); add('ENCARGADO MEDIOS'); add('INFORMATICA'); add('COMPUTACION'); }
+            return [...out];
+          }
+
+          function cargoCompatible(doc, cargoMateria) {
+            const texto = norm([doc?.descripcioncargo,doc?.descripcionarea,doc?.cargo,doc?.materia,doc?.asignatura,doc?.areaincumbencia,doc?.area].filter(Boolean).join(' '));
+            if (!texto) return false;
+            const cargoNorm = norm(cargoMateria);
+            for (const variante of buildCargoVariants(cargoMateria)) {
+              const v = norm(variante);
+              const plain = norm(v.replace(/[^A-Z0-9]+/g,' '));
+              const tokensTexto = new Set(texto.replace(/[^A-Z0-9]+/g,' ').split(/\s+/).filter(Boolean));
+              if (plain.length <= 3) { if (tokensTexto.has(plain)) return true; continue; }
+              if (texto.includes(v) || texto.includes(plain)) return true;
+            }
+            return !!cargoNorm && (texto.includes(cargoNorm) || cargoNorm.includes(texto));
+          }
+
+          async function fetchQuery(q) {
+            const docs = [];
+            for (let page=0; page<maxPages; page++) {
+              const u = new URL(API);
+              u.searchParams.set('q', q);
+              u.searchParams.set('rows', String(rows));
+              u.searchParams.set('start', String(page*rows));
+              u.searchParams.set('wt','json');
+              u.searchParams.set('sort','ult_movimiento desc');
+              const r = await fetch(u);
+              if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+              const j = await r.json();
+              const batch = Array.isArray(j?.response?.docs) ? j.response.docs : [];
+              docs.push(...batch);
+              if (batch.length < rows) break;
+            }
+            return docs;
+          }
+
+          const districtQ = `descdistrito:"${escapeSolr(district)}"`;
+          const districtDocsRaw = await fetchQuery(districtQ);
+          const districtDocs = districtDocsRaw.filter(d => norm(d?.descdistrito) === norm(district));
+          const report = { generated_at: new Date().toISOString(), district, district_total: districtDocs.length, cargos: [] };
+
+          for (const cargo of cargos) {
+            const exactQ = [
+              `descdistrito:"${escapeSolr(district)}"`,
+              `(${[`descripcioncargo:"${escapeSolr(cargo)}"`,`descripcionarea:"${escapeSolr(cargo)}"`,`cargo:"${escapeSolr(cargo)}"`].join(' OR ')})`
+            ].join(' AND ');
+            const exactDocsRaw = await fetchQuery(exactQ);
+            const exactDocs = exactDocsRaw.filter(d => norm(d?.descdistrito) === norm(district) && cargoCompatible(d,cargo));
+            const localCompatible = districtDocs.filter(d => cargoCompatible(d,cargo));
+            const exactKeys = new Set(exactDocs.map(keyOf));
+            const missed = localCompatible.filter(d => !exactKeys.has(keyOf(d)));
+            report.cargos.push({
+              cargo,
+              exact_total: exactDocs.length,
+              district_local_compatible_total: localCompatible.length,
+              missed_by_exact_prefilter: missed.length,
+              missed_preview: missed.slice(0,8).map(d => ({iddetalle:d?.iddetalle||d?.id||null,idoferta:d?.idoferta||null,cargo:d?.descripcioncargo||d?.cargo||'',area:d?.descripcionarea||'',escuela:d?.escuela||d?.nombreestablecimiento||'',finoferta:d?.finoferta||''}))
+            });
+          }
+          console.log(JSON.stringify(report,null,2));
+          await import('node:fs').then(fs => fs.writeFileSync('artifacts/abc-capture-audit.json', JSON.stringify(report,null,2)));
+          NODE
+          node /tmp/audit.mjs
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: abc-capture-audit
+          path: artifacts/abc-capture-audit.json
+          if-no-files-found: error
