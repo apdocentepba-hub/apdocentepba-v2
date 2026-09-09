@@ -26,45 +26,41 @@ jobs:
           cat > /tmp/audit.mjs <<'NODE'
           const API = 'https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
           const district = 'AVELLANEDA';
-          const cargos = ['MATEMATICA', 'PRECEPTOR', 'NTICX', 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.'];
+          const cargos = [
+            { query: 'MATEMATICA', code: 'MTM' },
+            { query: 'PRECEPTOR', code: 'PR' },
+            { query: 'NTICX', code: 'NTI' },
+            { query: 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.', code: 'ELI' }
+          ];
           const rows = 150;
-          const maxPages = 25;
+          const workerMaxPages = 25;
+          const auditMaxPages = 120;
+          const now = Date.now();
 
           const norm = (v='') => String(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
           const escapeSolr = (v='') => String(v).replace(/(["\\])/g, '\\$1');
           const keyOf = (d) => String(d?.iddetalle || d?.id || d?.idoferta || JSON.stringify(d));
+          const isActive = (d) => {
+            const end = Date.parse(d?.finoferta || '');
+            if (Number.isFinite(end)) return end >= now;
+            const estado = norm(d?.estado || '');
+            return !/(ANUL|CERR|FINAL|DESIGN|DESIER)/.test(estado);
+          };
 
-          function buildCargoVariants(raw) {
-            const base = norm(raw);
-            const out = new Set();
-            const add = v => { const x = norm(v); if (x && x.length >= 2) out.add(x); };
-            add(base);
-            const rawText = String(raw || '');
-            for (const m of rawText.matchAll(/\(([^)]+)\)/g)) add(m[1]);
-            add(rawText.replace(/\([^)]*\)/g, ' '));
-            for (const t of norm(rawText).replace(/[()]/g,' ').split(/[^A-Z0-9/]+/).map(x => norm(x.replace(/^\/+/,''))).filter(x => x && x.length >= 2)) add(t);
-            if (base.includes('NTICX') || base.includes('NTI')) { add('NTICX'); add('NTI'); }
-            if (base.includes('PRECEPTOR') || base.includes('/PR') || base.includes(' PR')) { add('PRECEPTOR'); add('/PR'); add('PR'); }
-            if (base.includes('ELI') || base.includes('ENCARGADO MEDIOS')) { add('ELI'); add('ENCARGADO MEDIOS'); add('INFORMATICA'); add('COMPUTACION'); }
-            return [...out];
-          }
-
-          function cargoCompatible(doc, cargoMateria) {
-            const texto = norm([doc?.descripcioncargo,doc?.descripcionarea,doc?.cargo,doc?.materia,doc?.asignatura,doc?.areaincumbencia,doc?.area].filter(Boolean).join(' '));
-            if (!texto) return false;
-            const cargoNorm = norm(cargoMateria);
-            for (const variante of buildCargoVariants(cargoMateria)) {
-              const v = norm(variante);
-              const plain = norm(v.replace(/[^A-Z0-9]+/g,' '));
-              const tokensTexto = new Set(texto.replace(/[^A-Z0-9]+/g,' ').split(/\s+/).filter(Boolean));
-              if (plain.length <= 3) { if (tokensTexto.has(plain)) return true; continue; }
-              if (texto.includes(v) || texto.includes(plain)) return true;
+          function codesInDoc(doc) {
+            const text = [doc?.descripcioncargo, doc?.descripcionarea, doc?.cargo, doc?.materia, doc?.asignatura, doc?.area]
+              .filter(Boolean).join(' ');
+            const codes = new Set();
+            for (const m of text.matchAll(/\(([^)]+)\)/g)) {
+              const c = norm(m[1]).replace(/[^A-Z0-9]/g, '');
+              if (c) codes.add(c);
             }
-            return !!cargoNorm && (texto.includes(cargoNorm) || cargoNorm.includes(texto));
+            return codes;
           }
 
-          async function fetchQuery(q) {
+          async function fetchQuery(q, maxPages) {
             const docs = [];
+            let numFound = null;
             for (let page=0; page<maxPages; page++) {
               const u = new URL(API);
               u.searchParams.set('q', q);
@@ -75,36 +71,63 @@ jobs:
               const r = await fetch(u);
               if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
               const j = await r.json();
+              if (numFound == null) numFound = Number(j?.response?.numFound ?? 0);
               const batch = Array.isArray(j?.response?.docs) ? j.response.docs : [];
               docs.push(...batch);
-              if (batch.length < rows) break;
+              if (batch.length < rows || docs.length >= numFound) break;
             }
-            return docs;
+            return { docs, numFound };
           }
 
           const districtQ = `descdistrito:"${escapeSolr(district)}"`;
-          const districtDocsRaw = await fetchQuery(districtQ);
-          const districtDocs = districtDocsRaw.filter(d => norm(d?.descdistrito) === norm(district));
-          const report = { generated_at: new Date().toISOString(), district, district_total: districtDocs.length, cargos: [] };
+          const districtAll = await fetchQuery(districtQ, auditMaxPages);
+          const districtWorkerWindow = districtAll.docs.slice(0, workerMaxPages * rows);
+          const districtDocs = districtAll.docs.filter(d => norm(d?.descdistrito) === norm(district));
+          const workerWindowDocs = districtWorkerWindow.filter(d => norm(d?.descdistrito) === norm(district));
+          const activeAll = districtDocs.filter(isActive);
+          const activeWorkerWindow = workerWindowDocs.filter(isActive);
+
+          const report = {
+            generated_at: new Date().toISOString(),
+            district,
+            abc_num_found: districtAll.numFound,
+            audit_fetched: districtDocs.length,
+            worker_window_limit: workerMaxPages * rows,
+            active_all: activeAll.length,
+            active_inside_worker_window: activeWorkerWindow.length,
+            active_missed_by_worker_page_cap: activeAll.filter(d => !new Set(workerWindowDocs.map(keyOf)).has(keyOf(d))).length,
+            cargos: []
+          };
 
           for (const cargo of cargos) {
             const exactQ = [
               `descdistrito:"${escapeSolr(district)}"`,
-              `(${[`descripcioncargo:"${escapeSolr(cargo)}"`,`descripcionarea:"${escapeSolr(cargo)}"`,`cargo:"${escapeSolr(cargo)}"`].join(' OR ')})`
+              `(${[`descripcioncargo:"${escapeSolr(cargo.query)}"`,`descripcionarea:"${escapeSolr(cargo.query)}"`,`cargo:"${escapeSolr(cargo.query)}"`].join(' OR ')})`
             ].join(' AND ');
-            const exactDocsRaw = await fetchQuery(exactQ);
-            const exactDocs = exactDocsRaw.filter(d => norm(d?.descdistrito) === norm(district) && cargoCompatible(d,cargo));
-            const localCompatible = districtDocs.filter(d => cargoCompatible(d,cargo));
-            const exactKeys = new Set(exactDocs.map(keyOf));
-            const missed = localCompatible.filter(d => !exactKeys.has(keyOf(d)));
+            const exact = await fetchQuery(exactQ, auditMaxPages);
+            const exactActiveByCode = exact.docs.filter(d => norm(d?.descdistrito) === norm(district) && isActive(d) && codesInDoc(d).has(cargo.code));
+            const districtActiveByCode = activeAll.filter(d => codesInDoc(d).has(cargo.code));
+            const exactKeys = new Set(exactActiveByCode.map(keyOf));
+            const missed = districtActiveByCode.filter(d => !exactKeys.has(keyOf(d)));
             report.cargos.push({
-              cargo,
-              exact_total: exactDocs.length,
-              district_local_compatible_total: localCompatible.length,
-              missed_by_exact_prefilter: missed.length,
-              missed_preview: missed.slice(0,8).map(d => ({iddetalle:d?.iddetalle||d?.id||null,idoferta:d?.idoferta||null,cargo:d?.descripcioncargo||d?.cargo||'',area:d?.descripcionarea||'',escuela:d?.escuela||d?.nombreestablecimiento||'',finoferta:d?.finoferta||''}))
+              query: cargo.query,
+              code: cargo.code,
+              exact_num_found: exact.numFound,
+              exact_active_code_matches: exactActiveByCode.length,
+              district_active_code_matches: districtActiveByCode.length,
+              active_missed_by_exact_prefilter: missed.length,
+              missed_preview: missed.slice(0,12).map(d => ({
+                iddetalle:d?.iddetalle||d?.id||null,
+                idoferta:d?.idoferta||null,
+                cargo:d?.descripcioncargo||d?.cargo||'',
+                area:d?.descripcionarea||'',
+                escuela:d?.escuela||d?.nombreestablecimiento||'',
+                finoferta:d?.finoferta||'',
+                estado:d?.estado||''
+              }))
             });
           }
+
           console.log(JSON.stringify(report,null,2));
           await import('node:fs').then(fs => fs.writeFileSync('artifacts/abc-capture-audit.json', JSON.stringify(report,null,2)));
           NODE
