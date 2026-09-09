@@ -1,0 +1,78 @@
+name: Audit live Worker source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/audit-live-worker-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-live-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Fetch deployed Worker metadata and source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/live-worker
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            > artifacts/live-worker/accounts.json
+
+          ACCOUNT_ID=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('artifacts/live-worker/accounts.json','utf8'));if(!j.success||!Array.isArray(j.result)||!j.result.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}" \
+            > artifacts/live-worker/deployed-worker.raw
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/script-settings" \
+            > artifacts/live-worker/script-settings.json
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            > artifacts/live-worker/deployments.json
+
+          npx wrangler versions list --name "${WORKER_NAME}" --json \
+            > artifacts/live-worker/versions.json
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = 'artifacts/live-worker/accounts.json';
+          const j = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (Array.isArray(j.result)) {
+            j.result = j.result.map((x) => ({ id: x.id, name: x.name }));
+          }
+          fs.writeFileSync(path, JSON.stringify(j, null, 2));
+          NODE
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-worker-source-audit
+          path: artifacts/live-worker/
+          if-no-files-found: error
