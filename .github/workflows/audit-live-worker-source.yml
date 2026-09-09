@@ -26,13 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Fetch deployed Worker metadata and source
+      - name: Fetch deployed Worker metadata and sources
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
         run: |
           set -euo pipefail
-          mkdir -p artifacts/live-worker
+          mkdir -p artifacts/live-worker/sources
 
           curl -fsS \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
@@ -47,20 +47,25 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts" \
             > artifacts/live-worker/scripts.json
 
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}" \
-            > artifacts/live-worker/deployed-worker.raw
+          node -e "const j=require('./artifacts/live-worker/scripts.json'); for (const x of (j.result||[])) console.log(x.id)" > artifacts/live-worker/script-names.txt
+
+          while IFS= read -r SCRIPT_NAME; do
+            [ -n "$SCRIPT_NAME" ] || continue
+            SAFE_NAME=$(printf '%s' "$SCRIPT_NAME" | tr -c 'A-Za-z0-9._-' '_')
+            curl -fsS \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}" \
+              > "artifacts/live-worker/sources/${SAFE_NAME}.raw"
+            curl -fsS \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/deployments" \
+              > "artifacts/live-worker/sources/${SAFE_NAME}.deployments.json"
+          done < artifacts/live-worker/script-names.txt
 
           curl -fsS \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/script-settings" \
             > artifacts/live-worker/script-settings.json
-
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
-            > artifacts/live-worker/deployments.json
 
           npx wrangler versions list --name "${WORKER_NAME}" --json \
             > artifacts/live-worker/versions.json
