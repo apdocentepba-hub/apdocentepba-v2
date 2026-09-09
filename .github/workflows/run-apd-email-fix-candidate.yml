@@ -55,12 +55,12 @@ jobs:
           if(!active?.id||!latest?.id) throw new Error('Version detail missing');
           const shape=r=>(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
           const a=shape(active), l=shape(latest);
-          if(JSON.stringify(a)!==JSON.stringify(l)) {
-            console.error('Binding mismatch; aborting before upload');
-            console.error('Only active:',a.filter(x=>!l.includes(x)));
-            console.error('Only latest:',l.filter(x=>!a.includes(x)));
+          const missingOrChanged=a.filter(x=>!l.includes(x));
+          if(missingOrChanged.length) {
+            console.error('Latest cannot safely provide all active bindings:', missingOrChanged);
             process.exit(5);
           }
+          const latestExtras=l.filter(x=>!a.includes(x));
           for(const m of active.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
           const metadata={
             main_module:active.main_module,
@@ -70,8 +70,15 @@ jobs:
           };
           if(Array.isArray(active.compatibility_flags)&&active.compatibility_flags.length) metadata.compatibility_flags=active.compatibility_flags;
           fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
-          fs.writeFileSync('tmp/safety.json',JSON.stringify({active:{id:active.id,number:active.number},latest:{id:latest.id,number:latest.number},binding_count:a.length,binding_shapes_match:true},null,2));
-          console.log(`Binding safety OK: ${a.length}; active #${active.number}; latest #${latest.number}`);
+          fs.writeFileSync('tmp/active-binding-shape.json',JSON.stringify(a));
+          fs.writeFileSync('tmp/safety.json',JSON.stringify({
+            active:{id:active.id,number:active.number},
+            latest:{id:latest.id,number:latest.number},
+            active_binding_count:a.length,
+            active_bindings_available_in_latest:true,
+            latest_extra_bindings:latestExtras
+          },null,2));
+          console.log(`Inheritance safety OK: all ${a.length} active bindings exist in latest; extras excluded from candidate: ${latestExtras.length}`);
           NODE
 
           python scripts/apply-email-abc-live-refresh.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
@@ -96,7 +103,7 @@ jobs:
           console.log(results);
           NODE
 
-      - name: Upload version only; assert production stays unchanged
+      - name: Upload version only; verify candidate bindings and production unchanged
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
@@ -110,12 +117,26 @@ jobs:
             -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
             -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
           echo "Cloudflare upload HTTP ${HTTP_CODE}"
+          CANDIDATE_VERSION_ID=$(node -e "const j=require('./tmp/upload.json');console.error(JSON.stringify({success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null}));if(!j.success||!j.result?.id)process.exit(1);process.stdout.write(j.result.id)")
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/candidate-detail.json
+
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
-          const j=JSON.parse(fs.readFileSync('tmp/upload.json','utf8'));
-          console.log(JSON.stringify({success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null},null,2));
-          if(!j.success||!j.result?.id) process.exit(1);
-          fs.writeFileSync('tmp/partial.json',JSON.stringify({candidate_version_id:j.result.id,candidate_number:j.result.number||null},null,2));
+          const expected=JSON.parse(fs.readFileSync('tmp/active-binding-shape.json','utf8'));
+          const candidate=JSON.parse(fs.readFileSync('tmp/candidate-detail.json','utf8')).result;
+          if(!candidate?.id) throw new Error('Candidate version detail missing');
+          const actual=(candidate.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expected)!==JSON.stringify(actual)) {
+            console.error('Candidate binding shape differs from active');
+            console.error('Missing:',expected.filter(x=>!actual.includes(x)));
+            console.error('Unexpected:',actual.filter(x=>!expected.includes(x)));
+            process.exit(6);
+          }
+          fs.writeFileSync('tmp/partial.json',JSON.stringify({candidate_version_id:candidate.id,candidate_number:candidate.number||null,candidate_binding_count:actual.length,candidate_bindings_match_active:true},null,2));
+          console.log(`Candidate binding shape verified exactly: ${actual.length}`);
           NODE
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
