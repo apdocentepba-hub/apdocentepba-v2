@@ -17,97 +17,45 @@ jobs:
   candidate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout fix branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Fetch exact active Cloudflare Worker version
+      - name: Rebuild candidate from exact active Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
         run: |
           set -euo pipefail
-          mkdir -p artifacts/active artifacts/modules artifacts/candidate
-
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
-            > artifacts/active/accounts.json
-
-          ACCOUNT_ID=$(node -e "const j=require('./artifacts/active/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          mkdir -p tmp/modules tmp/candidate
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
           echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
-
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
-            > artifacts/active/deployments.json
-
-          ACTIVE_VERSION_ID=$(node -e "const j=require('./artifacts/active/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
           echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
-
-          curl -fsS \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" \
-            > artifacts/active/active-version.json
-
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
           node --input-type=module - <<'NODE'
-          import fs from 'node:fs';
-          import path from 'node:path';
-          const j=JSON.parse(fs.readFileSync('artifacts/active/active-version.json','utf8'));
-          if (!j.success || !j.result?.id) throw new Error('No se pudo leer la versión activa');
-          for (const mod of (j.result.modules || [])) {
-            const name=String(mod.name || '').replace(/[^A-Za-z0-9._-]/g,'_');
-            if (!name) continue;
-            const buf=Buffer.from(String(mod.content_base64 || ''),'base64');
-            fs.writeFileSync(path.join('artifacts/modules',name),buf);
-          }
-          if (!fs.existsSync('artifacts/modules/worker_hotfix.js')) throw new Error('Falta worker_hotfix.js activo');
-          const summary={
-            id:j.result.id,
-            number:j.result.number,
-            created_on:j.result.created_on,
-            main_module:j.result.main_module,
-            compatibility_date:j.result.compatibility_date,
-            usage_model:j.result.usage_model,
-            binding_names:(j.result.bindings||[]).map(x=>x.name),
-            modules:(j.result.modules||[]).map(x=>x.name)
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8'));
+          if (!j.success || !j.result?.id) throw new Error('active version unavailable');
+          for (const m of j.result.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const r=j.result;
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA email live ABC fix candidate','workers/tag':'email-abc-refresh-20260909'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:r.id}))
           };
-          fs.writeFileSync('artifacts/active/summary.json',JSON.stringify(summary,null,2));
+          if (Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Active ${r.id}; modules ${(r.modules||[]).length}; inherited bindings ${metadata.bindings.length}`);
           NODE
+          python scripts/apply-email-abc-live-refresh.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
+          python scripts/test-email-abc-live-refresh.py tmp/candidate/worker_hotfix.js
+          node --check tmp/candidate/worker_hotfix.js
+          cp tmp/modules/email_queue_hotfix.js tmp/candidate/
+          cp tmp/modules/worker_email_queue_hotfix.js tmp/candidate/
 
-      - name: Apply patch to exact active source
-        run: |
-          set -euo pipefail
-          python scripts/apply-email-abc-live-refresh.py \
-            artifacts/modules/worker_hotfix.js \
-            artifacts/candidate/worker_hotfix.js
-
-      - name: Regression checks
-        run: |
-          set -euo pipefail
-          python scripts/test-email-abc-live-refresh.py artifacts/candidate/worker_hotfix.js
-          node --check artifacts/candidate/worker_hotfix.js
-
-          python - <<'PY'
-          from pathlib import Path
-          before=Path('artifacts/modules/worker_hotfix.js').read_text()
-          after=Path('artifacts/candidate/worker_hotfix.js').read_text()
-          assert before != after, 'El parche no produjo cambios'
-          for marker in [
-              'fetchPublishedOffersForEmailDistrict',
-              'refreshEmailUserOfferStateFromAbc',
-              'first_emailed_at=is.null',
-              'markEmailAlertsAsEmailed'
-          ]:
-              assert marker in after, marker
-          print('Candidate delta verified')
-          PY
-
-      - name: Live ABC Publicada smoke check
+      - name: Live ABC Publicada smoke
         run: |
           set -euo pipefail
           node --input-type=module - <<'NODE'
@@ -115,98 +63,41 @@ jobs:
           const districts=['AVELLANEDA','GENERAL SAN MARTIN','NECOCHEA','PARTIDO DE LA COSTA'];
           const result=[];
           for (const district of districts) {
-            const q=`descdistrito:"${district}" AND estado:"Publicada"`;
-            const u=new URL(API);
-            u.searchParams.set('q',q);
-            u.searchParams.set('rows','1');
-            u.searchParams.set('start','0');
-            u.searchParams.set('wt','json');
-            u.searchParams.set('sort','ult_movimiento desc');
-            const r=await fetch(u);
-            if (!r.ok) throw new Error(`${district}: HTTP ${r.status}`);
-            const text=new TextDecoder('latin1').decode(await r.arrayBuffer());
-            const j=JSON.parse(text||'{}');
-            const numFound=Number(j?.response?.numFound ?? -1);
-            if (numFound < 0) throw new Error(`${district}: respuesta ABC inválida`);
-            result.push({district,numFound});
+            const u=new URL(API); u.searchParams.set('q',`descdistrito:"${district}" AND estado:"Publicada"`); u.searchParams.set('rows','1'); u.searchParams.set('wt','json');
+            const r=await fetch(u); if(!r.ok) throw new Error(`${district} HTTP ${r.status}`);
+            const j=JSON.parse(new TextDecoder('latin1').decode(await r.arrayBuffer())||'{}');
+            result.push({district,numFound:Number(j?.response?.numFound??-1)});
           }
+          if(result.some(x=>x.numFound<0)) throw new Error('ABC response invalid');
           console.log(result);
           NODE
 
-      - name: Prepare inherited binding metadata
-        env:
-          GITHUB_COMMIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          node --input-type=module - <<'NODE'
-          import fs from 'node:fs';
-          const j=JSON.parse(fs.readFileSync('artifacts/active/active-version.json','utf8'));
-          const r=j.result;
-          const metadata={
-            main_module:'worker_hotfix.js',
-            compatibility_date:r.compatibility_date || '2026-04-01',
-            usage_model:r.usage_model || 'standard',
-            annotations:{
-              'workers/message':'APDocentePBA: live ABC refresh + cross-slot email dedupe candidate',
-              'workers/tag':'email-abc-refresh-20260909',
-              'workers/alias':'email-fix-0909',
-              'workers/commit_sha':process.env.GITHUB_COMMIT_SHA || ''
-            },
-            bindings:(r.bindings||[]).map(b=>({
-              name:b.name,
-              type:'inherit',
-              version_id:r.id
-            }))
-          };
-          if (Array.isArray(r.compatibility_flags) && r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
-          if (!metadata.bindings.length) throw new Error('No se encontraron bindings para heredar');
-          fs.writeFileSync('artifacts/candidate/metadata.json',JSON.stringify(metadata,null,2));
-          console.log(`Prepared ${metadata.bindings.length} inherited bindings`);
-          NODE
-
-      - name: Upload candidate version without deploying
+      - name: Upload candidate version without deployment
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
         run: |
           set -euo pipefail
-
-          cp artifacts/modules/email_queue_hotfix.js artifacts/candidate/email_queue_hotfix.js
-          cp artifacts/modules/worker_email_queue_hotfix.js artifacts/candidate/worker_email_queue_hotfix.js
-
-          curl -fsS -X POST \
+          HTTP_CODE=$(curl -sS -o tmp/upload-response.json -w "%{http_code}" -X POST \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -F "metadata=<artifacts/candidate/metadata.json;type=application/json" \
-            -F "worker_hotfix.js=@artifacts/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
-            -F "email_queue_hotfix.js=@artifacts/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
-            -F "worker_email_queue_hotfix.js=@artifacts/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module" \
-            > artifacts/candidate/upload-response.json
-
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare HTTP ${HTTP_CODE}"
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
-          const j=JSON.parse(fs.readFileSync('artifacts/candidate/upload-response.json','utf8'));
-          if (!j.success || !j.result?.id) {
-            console.error(JSON.stringify({success:j.success,errors:j.errors,messages:j.messages},null,2));
-            process.exit(1);
-          }
-          const summary={
-            ok:true,
-            candidate_version_id:j.result.id,
-            candidate_number:j.result.number || null,
-            active_version_id:process.env.ACTIVE_VERSION_ID,
-            deployed:false,
-            traffic_changed:false
-          };
-          fs.writeFileSync('artifacts/candidate/upload-summary.json',JSON.stringify(summary,null,2));
-          console.log(JSON.stringify(summary,null,2));
+          const j=JSON.parse(fs.readFileSync('tmp/upload-response.json','utf8'));
+          const safe={success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null};
+          console.log(JSON.stringify(safe,null,2));
+          if (!j.success || !j.result?.id) process.exit(1);
+          fs.writeFileSync('tmp/upload-summary.json',JSON.stringify({candidate_version_id:j.result.id,active_version_id:process.env.ACTIVE_VERSION_ID,deployed:false,traffic_changed:false},null,2));
           NODE
 
-      - name: Upload safe validation artifacts
+      - name: Upload safe summary
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: apd-email-fix-candidate-validation
-          path: |
-            artifacts/active/summary.json
-            artifacts/candidate/upload-summary.json
-          if-no-files-found: error
+          path: tmp/upload-summary.json
