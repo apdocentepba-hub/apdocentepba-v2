@@ -1,0 +1,87 @@
+name: Verify APD 681 live
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-apd-681-live.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production and rollback on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+          CANDIDATE_VERSION_ID: e7753327-5979-497e-bb59-82f5e0fd600e
+          ROLLBACK_VERSION_ID: 33a3feb1-633b-4dab-89d4-85438f417267
+          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+          SITE_URL: https://alertasapd.com.ar
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');process.stdout.write(j.result[0].id)")
+
+          rollback() {
+            echo "Smoke failed: rolling back to previous stable version"
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${ROLLBACK_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after APDocentePBA #681 live smoke failure"}}
+          JSON
+            curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @out/rollback.json > out/rollback-response.json || true
+          }
+          trap rollback ERR
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/deployments.json
+          ACTIVE=$(node -e "const j=require('./out/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(2);process.stdout.write(v.version_id)")
+          echo "Active version: ${ACTIVE}"
+          test "${ACTIVE}" = "${CANDIDATE_VERSION_ID}"
+
+          VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          test "${VERSION_CODE}" = "200"
+          node - <<'NODE'
+          const j=require('./out/version.json');
+          if(j.ok!==true) throw new Error('api/version not ok');
+          if(!j.email_queue_wrapper_version) throw new Error('email wrapper not present');
+          console.log(JSON.stringify({ok:j.ok,version:j.version||null,email_queue_wrapper_version:j.email_queue_wrapper_version},null,2));
+          NODE
+
+          DRY_CODE=$(curl -sS -o out/dry.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=0&limit=10")
+          test "${DRY_CODE}" = "200"
+          node - <<'NODE'
+          const j=require('./out/dry.json');
+          const safe={ok:j.ok,dry_run:j.dry_run,processed_users:Number(j.processed_users||0),send_attempts:Number(j.send_attempts||0),failed_count:Number(j.failed_count||0),skipped_count:Number(j.skipped_count||0)};
+          console.log(JSON.stringify(safe,null,2));
+          if(j.ok!==true||j.dry_run!==true) throw new Error('dry run invalid');
+          if(safe.processed_users<1) throw new Error('dry run processed no users');
+          if(safe.failed_count!==0) throw new Error(`dry run failures ${safe.failed_count}`);
+          NODE
+
+          SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          echo "Site HTTP: ${SITE_CODE}"
+          test "${SITE_CODE}" = "200"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/final-deployments.json
+          ACTIVE_FINAL=$(node -e "const j=require('./out/final-deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          test "${ACTIVE_FINAL}" = "${CANDIDATE_VERSION_ID}"
+
+          trap - ERR
+          node - <<'NODE'
+          const fs=require('fs'); const d=require('./out/dry.json');
+          const summary={active_version_id:process.env.CANDIDATE_VERSION_ID,worker_health:true,email_live_abc_dry_run:true,processed_users:Number(d.processed_users||0),failed_count:Number(d.failed_count||0),public_site:true,rollback:false};
+          fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2)); console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload verification summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-681-live-verification
+          path: out/summary.json
+          if-no-files-found: ignore
