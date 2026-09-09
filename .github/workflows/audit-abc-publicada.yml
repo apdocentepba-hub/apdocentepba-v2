@@ -16,7 +16,8 @@ jobs:
     steps:
       - name: Query ABC Publicada
         run: |
-          node - <<'NODE'
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
           const API='https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
           const queries=[
             'descdistrito:"AVELLANEDA"',
@@ -27,10 +28,14 @@ jobs:
           for (const q of queries) {
             const u=new URL(API);
             u.searchParams.set('q',q);u.searchParams.set('rows','20');u.searchParams.set('start','0');u.searchParams.set('wt','json');u.searchParams.set('sort','ult_movimiento desc');
-            const r=await fetch(u); const buf=await r.arrayBuffer(); const text=new TextDecoder('latin1').decode(buf); const j=JSON.parse(text||'{}');
+            const r=await fetch(u);
+            const buf=await r.arrayBuffer();
+            const text=new TextDecoder('latin1').decode(buf);
+            let j={};
+            try { j=JSON.parse(text||'{}'); } catch { j={parse_error:true,raw:text.slice(0,500)}; }
             out.push({q,status:r.status,numFound:j?.response?.numFound??null,docs:(j?.response?.docs||[]).slice(0,20).map(d=>({id:d?.iddetalle||d?.id||null,estado:d?.estado||'',cargo:d?.descripcioncargo||d?.cargo||'',finoferta:d?.finoferta||'',ult_movimiento:d?.ult_movimiento||''}))});
           }
-          require('fs').writeFileSync('abc-publicada.json',JSON.stringify(out,null,2));
+          fs.writeFileSync('abc-publicada.json',JSON.stringify(out,null,2));
           console.log(JSON.stringify(out,null,2));
           NODE
       - uses: actions/upload-artifact@v4
