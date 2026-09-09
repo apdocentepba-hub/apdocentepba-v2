@@ -1,0 +1,69 @@
+name: Audit active Worker version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/audit-active-worker-version.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch currently deployed version with modules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            > /tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('/tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            > /tmp/deployments.json
+          VERSION_ID=$(node -e "const j=require('/tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VERSION_ID}?include=modules" \
+            > artifacts/active-version.json
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync('artifacts/active-version.json','utf8'));
+          const r = j.result || j;
+          const modules = Array.isArray(r.modules) ? r.modules : [];
+          const summary = {
+            id: r.id,
+            number: r.number,
+            created_on: r.created_on,
+            annotations: r.annotations || {},
+            module_names: modules.map(m => m.name || m.path || ''),
+            module_count: modules.length
+          };
+          fs.writeFileSync('artifacts/active-version-summary.json', JSON.stringify(summary,null,2));
+          for (let i=0;i<modules.length;i++) {
+            const m=modules[i];
+            const name=(m.name||m.path||`module-${i}`).replace(/[^A-Za-z0-9._-]/g,'_');
+            const content=m.content ?? m.code ?? m.source ?? '';
+            if (typeof content === 'string') fs.writeFileSync(`artifacts/${String(i).padStart(2,'0')}-${name}`, content);
+          }
+          NODE
+
+      - name: Upload audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: active-worker-version-audit
+          path: artifacts/
+          if-no-files-found: error
