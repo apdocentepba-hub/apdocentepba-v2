@@ -26,29 +26,74 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p tmp/modules tmp/candidate
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
           ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
           echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
-          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
           echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?per_page=1" > tmp/version-list.json
+          LATEST_VERSION_ID=$(node -e "const j=require('./tmp/version-list.json');const v=j.result?.[0];if(!v?.id)process.exit(4);process.stdout.write(v.id)")
+          echo "LATEST_VERSION_ID=${LATEST_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${LATEST_VERSION_ID}?include=modules" > tmp/latest.json
+
           node --input-type=module - <<'NODE'
-          import fs from 'node:fs'; import path from 'node:path';
-          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8'));
-          if (!j.success || !j.result?.id) throw new Error('active version unavailable');
-          for (const m of j.result.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
-          const r=j.result;
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const activeEnvelope=JSON.parse(fs.readFileSync('tmp/active.json','utf8'));
+          const latestEnvelope=JSON.parse(fs.readFileSync('tmp/latest.json','utf8'));
+          if (!activeEnvelope.success || !activeEnvelope.result?.id) throw new Error('active version unavailable');
+          if (!latestEnvelope.success || !latestEnvelope.result?.id) throw new Error('latest version unavailable');
+
+          const active=activeEnvelope.result;
+          const latest=latestEnvelope.result;
+          const bindingShape=(r)=>(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          const activeShape=bindingShape(active);
+          const latestShape=bindingShape(latest);
+          if (JSON.stringify(activeShape) !== JSON.stringify(latestShape)) {
+            console.error('Active/latest binding shapes differ');
+            console.error('Only active:', activeShape.filter(x=>!latestShape.includes(x)));
+            console.error('Only latest:', latestShape.filter(x=>!activeShape.includes(x)));
+            process.exit(5);
+          }
+
+          for (const m of active.modules||[]) {
+            fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          }
+          if (!fs.existsSync('tmp/modules/worker_hotfix.js')) throw new Error('worker_hotfix.js missing');
+
           const metadata={
-            main_module:r.main_module,
-            compatibility_date:r.compatibility_date,
-            annotations:{'workers/message':'APDocentePBA email live ABC fix candidate','workers/tag':'email-abc-refresh-20260909'},
-            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:r.id}))
+            main_module:active.main_module,
+            compatibility_date:active.compatibility_date,
+            annotations:{
+              'workers/message':'APDocentePBA email live ABC fix candidate',
+              'workers/tag':'email-abc-refresh-20260909'
+            },
+            bindings:(active.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
           };
-          if (Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          if (Array.isArray(active.compatibility_flags)&&active.compatibility_flags.length) metadata.compatibility_flags=active.compatibility_flags;
           fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
-          console.log(`Active ${r.id}; modules ${(r.modules||[]).length}; inherited bindings ${metadata.bindings.length}`);
+          fs.writeFileSync('tmp/binding-check.json',JSON.stringify({
+            active_version:{id:active.id,number:active.number},
+            latest_before_upload:{id:latest.id,number:latest.number},
+            binding_count:activeShape.length,
+            binding_shapes_match:true
+          },null,2));
+          console.log(`Binding safety OK: ${activeShape.length} bindings; active #${active.number}; latest #${latest.number}`);
           NODE
+
           python scripts/apply-email-abc-live-refresh.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
           python scripts/test-email-abc-live-refresh.py tmp/candidate/worker_hotfix.js
           node --check tmp/candidate/worker_hotfix.js
@@ -63,8 +108,12 @@ jobs:
           const districts=['AVELLANEDA','GENERAL SAN MARTIN','NECOCHEA','PARTIDO DE LA COSTA'];
           const result=[];
           for (const district of districts) {
-            const u=new URL(API); u.searchParams.set('q',`descdistrito:"${district}" AND estado:"Publicada"`); u.searchParams.set('rows','1'); u.searchParams.set('wt','json');
-            const r=await fetch(u); if(!r.ok) throw new Error(`${district} HTTP ${r.status}`);
+            const u=new URL(API);
+            u.searchParams.set('q',`descdistrito:"${district}" AND estado:"Publicada"`);
+            u.searchParams.set('rows','1');
+            u.searchParams.set('wt','json');
+            const r=await fetch(u);
+            if(!r.ok) throw new Error(`${district} HTTP ${r.status}`);
             const j=JSON.parse(new TextDecoder('latin1').decode(await r.arrayBuffer())||'{}');
             result.push({district,numFound:Number(j?.response?.numFound??-1)});
           }
@@ -86,18 +135,42 @@ jobs:
             -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
             -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
           echo "Cloudflare HTTP ${HTTP_CODE}"
+
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
           const j=JSON.parse(fs.readFileSync('tmp/upload-response.json','utf8'));
           const safe={success:j.success,errors:j.errors,messages:j.messages,result:j.result?.id?{id:j.result.id,number:j.result.number}:null};
           console.log(JSON.stringify(safe,null,2));
           if (!j.success || !j.result?.id) process.exit(1);
-          fs.writeFileSync('tmp/upload-summary.json',JSON.stringify({candidate_version_id:j.result.id,active_version_id:process.env.ACTIVE_VERSION_ID,deployed:false,traffic_changed:false},null,2));
+          fs.writeFileSync('tmp/upload-summary.partial.json',JSON.stringify({candidate_version_id:j.result.id,candidate_number:j.result.number||null},null,2));
+          NODE
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-after.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const before=JSON.parse(fs.readFileSync('tmp/deployments-before.json','utf8'));
+          const after=JSON.parse(fs.readFileSync('tmp/deployments-after.json','utf8'));
+          const partial=JSON.parse(fs.readFileSync('tmp/upload-summary.partial.json','utf8'));
+          const deployed=(j)=>{const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];return v?.version_id||null};
+          const beforeId=deployed(before);
+          const afterId=deployed(after);
+          if (!beforeId || beforeId !== afterId) throw new Error(`Production deployment changed unexpectedly: ${beforeId} -> ${afterId}`);
+          const summary={
+            ...partial,
+            active_version_id:beforeId,
+            deployed:false,
+            traffic_changed:false,
+            binding_safety:JSON.parse(fs.readFileSync('tmp/binding-check.json','utf8'))
+          };
+          fs.writeFileSync('tmp/upload-summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
           NODE
 
       - name: Upload safe summary
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: apd-email-fix-candidate-validation
           path: tmp/upload-summary.json
+          if-no-files-found: error
