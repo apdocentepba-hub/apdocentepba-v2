@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 
+# Regression contract for the live-ABC email refresh candidate.
 src = Path(sys.argv[1]).read_text()
 checks = {
     'cron_refreshes_abc_before_reading_state': 'refreshEmailUserOfferStateFromAbc' in src and src.find('refreshEmailUserOfferStateFromAbc(env, userId') < src.find('const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);'),
