@@ -7,6 +7,7 @@ import sys
 # - keep per-slot dedupe and email history;
 # - use canonical ABC idoferta as state identity;
 # - compute PID with the same evaluation/build path used by the web alert view;
+# - preserve the official ABC offer state (e.g. Publicada) in the mail payload;
 # - expose canonical state id + PID evidence in dry-run debug so deploy smoke can
 #   prove the rendered email is using the correct row, not stale D_<iddetalle>.
 src = Path(sys.argv[1]).read_text()
@@ -67,6 +68,9 @@ checks = {
         'listado: pidData.result.listado || ""' in refresh
         and 'anio: pidData.result.anio || ""' in refresh
     ),
+    'email_refresh_preserves_official_offer_state': (
+        'item.estado = String(oferta.estado || item.estado || "").trim();' in refresh
+    ),
     'dry_run_debug_exposes_state_offer_id': (
         'state_offer_id: String(item?.offer_id || p.offer_id || "").trim()' in src
     ),
@@ -77,6 +81,9 @@ checks = {
         and 'pid_puntaje_total_base: p.pid_puntaje_total_base' in src
         and 'pid_listado: p.pid_listado || ""' in src
         and 'pid_anio: p.pid_anio || ""' in src
+    ),
+    'dry_run_debug_exposes_offer_state': (
+        'estado: p.estado || ""' in src
     ),
     'abc_refresh_failure_skips_stale_send': (
         'reason: "abc_refresh_failed"' in src
@@ -92,4 +99,4 @@ for name, ok in checks.items():
 if failed:
     print('FAILED:', ', '.join(failed))
     sys.exit(1)
-print('ALL ACTIVE-PER-SLOT + CANONICAL-ID + PID-PARITY REGRESSION CHECKS PASS')
+print('ALL ACTIVE-PER-SLOT + CANONICAL-ID + PID-PARITY + STATE REGRESSION CHECKS PASS')
