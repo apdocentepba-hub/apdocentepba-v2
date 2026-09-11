@@ -9,7 +9,8 @@ s = src_path.read_text()
 # - active offers may repeat across 14/18/22 slots;
 # - canonical state identity is ABC idoferta, not D_<iddetalle>;
 # - email refresh computes PID through the same functions as the web view;
-# - dry-run exposes actual state identity + PID evidence for deploy verification.
+# - preserve official ABC state such as Publicada in the rendered payload;
+# - dry-run exposes actual state identity + PID/state evidence for verification.
 required = [
     'async function refreshEmailUserOfferStateFromAbc',
     'async function markEmailAlertsAsEmailed',
@@ -119,8 +120,13 @@ new_item = '''    const pidEvalBase = evaluatePidCompatibility(
     item.motivo_match = evaluacion?.motivo || "Coincide con preferencias";'''
 s = replace_in_refresh(s, old_item, new_item, 'PID-rich item builder')
 
-# Debug must identify the real user_offer_state row and PID payload. The D_ key
-# remains useful traceability but is no longer treated as the state identity.
+# buildAlertItem historically omitted ABC's publication state. Preserve it here
+# so the email card keeps ESTADO: Publicada while using the PID-rich builder.
+state_anchor = '    item.offer_id = String(item.idoferta || item.offer_id || item.source_offer_key || "").trim();\n'
+state_with_line = state_anchor + '    item.estado = String(oferta.estado || item.estado || "").trim();\n'
+s = replace_in_refresh(s, state_anchor, state_with_line, 'offer state assignment')
+
+# Debug must identify the real user_offer_state row and PID/state payload.
 old_debug = '''      return {
         offer_id: String(
           p.source_offer_key ||
@@ -146,11 +152,33 @@ new_debug = '''      return {
         pid_puntaje_total_final: p.pid_puntaje_total_final,
         pid_listado: p.pid_listado || "",
         pid_anio: p.pid_anio || "",
+        estado: p.estado || "",
         total_postulantes: p.total_postulantes,
         puntaje_primero: p.puntaje_primero,
         listado_origen_primero: p.listado_origen_primero || ""
       };'''
-s = replace_once(s, old_debug, new_debug, 'enrichedSamples debug block')
+existing_debug = '''      return {
+        state_offer_id: String(item?.offer_id || p.offer_id || "").trim(),
+        source_offer_key: String(p.source_offer_key || "").trim(),
+        idoferta: String(p.idoferta || "").trim(),
+        iddetalle: String(p.iddetalle || "").trim(),
+        pid_compatible: !!p.pid_compatible,
+        pid_reason: p.pid_reason || "",
+        pid_area: p.pid_area || "",
+        pid_bloque: p.pid_bloque || "",
+        pid_puntaje_total_base: p.pid_puntaje_total_base,
+        pid_puntaje_total_final: p.pid_puntaje_total_final,
+        pid_listado: p.pid_listado || "",
+        pid_anio: p.pid_anio || "",
+        total_postulantes: p.total_postulantes,
+        puntaje_primero: p.puntaje_primero,
+        listado_origen_primero: p.listado_origen_primero || ""
+      };'''
+if new_debug not in s:
+    if existing_debug in s:
+        s = replace_once(s, existing_debug, new_debug, 'existing enrichedSamples debug block')
+    else:
+        s = replace_once(s, old_debug, new_debug, 'legacy enrichedSamples debug block')
 
 # Final safety assertions.
 if 'first_emailed_at=is.null' in s:
@@ -164,6 +192,10 @@ if 'const item = adaptOffer(oferta);' in refresh:
     raise SystemExit('email refresh still builds PID-empty adaptOffer payload')
 if 'buildAlertItem(oferta, evaluacion, pidInfo)' not in refresh:
     raise SystemExit('email refresh missing web PID-rich alert builder')
+if 'item.estado = String(oferta.estado || item.estado || "").trim();' not in refresh:
+    raise SystemExit('email refresh missing ABC offer state preservation')
+if 'estado: p.estado || ""' not in s:
+    raise SystemExit('dry-run debug missing offer state evidence')
 
 out_path.write_text(s)
 print(out_path)
