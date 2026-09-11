@@ -1,0 +1,143 @@
+name: Build safe APD email format candidate
+
+on:
+  push:
+    branches:
+      - fix/email-template-unified-20260910
+    paths:
+      - .github/workflows/build-email-format-candidate.yml
+      - scripts/apply-email-format-live.py
+      - scripts/test-email-format-live.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+
+      - name: Read active Worker and extract modules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+          EXPECTED_ACTIVE_VERSION: e7753327-5979-497e-bb59-82f5e0fd600e
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Active version: ${ACTIVE_VERSION_ID}"
+          test "${ACTIVE_VERSION_ID}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8'));
+          const r=j.result;
+          if(!j.success||!r?.id) throw new Error('Active version detail missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
+          const required=['worker_hotfix.js','email_queue_hotfix.js','worker_email_queue_hotfix.js'];
+          const names=(r.modules||[]).map(m=>m.name);
+          for(const name of required) if(!names.includes(name)) throw new Error(`Missing live module ${name}`);
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          fs.writeFileSync('tmp/active-binding-shape.json',JSON.stringify(shape));
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA email format candidate','workers/tag':'email-format-20260910'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
+          };
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Live shape OK: main=${r.main_module}; modules=${names.length}; bindings=${shape.length}`);
+          NODE
+
+      - name: Apply format patch and run contract
+        run: |
+          set -euo pipefail
+          python scripts/apply-email-format-live.py \
+            --main-in tmp/modules/worker_hotfix.js \
+            --main-out tmp/candidate/worker_hotfix.js \
+            --queue-in tmp/modules/email_queue_hotfix.js \
+            --queue-out tmp/candidate/email_queue_hotfix.js
+          cp tmp/modules/worker_email_queue_hotfix.js tmp/candidate/worker_email_queue_hotfix.js
+
+          node --check tmp/candidate/worker_hotfix.js
+          node --check tmp/candidate/email_queue_hotfix.js
+          node --check tmp/candidate/worker_email_queue_hotfix.js
+          node scripts/test-email-format-live.mjs \
+            tmp/candidate/worker_hotfix.js \
+            tmp/candidate/email_queue_hotfix.js
+
+      - name: Upload candidate version without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare upload HTTP ${HTTP_CODE}"
+          CANDIDATE_VERSION_ID=$(node -e "const j=require('./tmp/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/candidate-detail.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const expected=JSON.parse(fs.readFileSync('tmp/active-binding-shape.json','utf8'));
+          const r=JSON.parse(fs.readFileSync('tmp/candidate-detail.json','utf8')).result;
+          if(!r?.id) throw new Error('Candidate detail missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected candidate main ${r.main_module}`);
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          for(const name of ['worker_hotfix.js','email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(!names.includes(name)) throw new Error(`Candidate missing ${name}`);
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expected)!==JSON.stringify(actual)) throw new Error('Candidate binding shape differs from live');
+          fs.writeFileSync('tmp/candidate-id.txt',r.id+'\n');
+          console.log(`Candidate #${r.number}: ${r.id}; bindings=${actual.length}; modules=${names.length}`);
+          NODE
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-after.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const getId=j=>{const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];return v?.version_id||null};
+          const before=getId(JSON.parse(fs.readFileSync('tmp/deployments-before.json','utf8')));
+          const after=getId(JSON.parse(fs.readFileSync('tmp/deployments-after.json','utf8')));
+          if(!before||before!==after) throw new Error(`Production changed unexpectedly: ${before} -> ${after}`);
+          const candidate=fs.readFileSync('tmp/candidate-id.txt','utf8').trim();
+          const summary={ok:true,candidate_version_id:candidate,active_version_id:before,traffic_changed:false,contract_passed:true,binding_shape_preserved:true};
+          fs.writeFileSync('tmp/summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload candidate verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-email-format-candidate
+          path: |
+            tmp/summary.json
+            tmp/candidate-id.txt
+          if-no-files-found: ignore
