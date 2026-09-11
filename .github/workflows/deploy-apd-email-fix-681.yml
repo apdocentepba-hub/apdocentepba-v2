@@ -1,4 +1,4 @@
-name: Deploy APD email fix 681
+name: Deploy APD active offers per slot 683
 
 on:
   push:
@@ -14,12 +14,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Promote candidate 681 with automatic rollback
+      - name: Promote candidate 683 with automatic rollback
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
-          CANDIDATE_VERSION_ID: e7753327-5979-497e-bb59-82f5e0fd600e
-          EXPECTED_OLD_VERSION_ID: 33a3feb1-633b-4dab-89d4-85438f417267
+          CANDIDATE_VERSION_ID: a3b3dad2-a50b-4dd2-b7fc-a61560b89df7
+          EXPECTED_OLD_VERSION_ID: 3e26319d-8e9a-4bdf-81dd-c9e78b15fbf0
+          MARTIN_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
           WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
           SITE_URL: https://alertasapd.com.ar
         run: |
@@ -31,9 +32,9 @@ jobs:
           ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
 
           rollback() {
-            echo "Post-deploy verification failed; rolling back to previous stable version"
+            echo "Post-deploy verification failed; rolling back to #682"
             cat > out/rollback.json <<JSON
-          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after APDocentePBA #681 smoke failure"}}
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after active-offers-per-slot smoke failure"}}
           JSON
             curl -sS -X POST \
               "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
@@ -58,16 +59,25 @@ jobs:
           if(r.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate ID mismatch');
           const bindings=(r.bindings||[]).map(x=>`${x.name}:${x.type}`).sort();
           if(bindings.length!==27) throw new Error(`Unexpected candidate bindings: ${bindings.length}`);
-          const mods=(r.modules||[]).map(x=>x.name).sort();
-          for(const required of ['worker_hotfix.js','worker_email_queue_hotfix.js','email_queue_hotfix.js']) {
-            if(!mods.includes(required)) throw new Error(`Missing module ${required}`);
-          }
+          const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')]));
+          for(const required of ['worker_hotfix.js','worker_email_queue_hotfix.js','email_queue_hotfix.js']) if(!(required in mods)) throw new Error(`Missing module ${required}`);
           if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module: ${r.main_module}`);
-          console.log(`Candidate #${r.number}: main=${r.main_module}, ${bindings.length} bindings, ${mods.length} modules`);
+          const main=mods['worker_hotfix.js'];
+          if(main.includes('first_emailed_at=is.null')) throw new Error('Candidate still permanently excludes previously emailed offers');
+          if(main.includes('if (item.first_emailed_at) return false;')) throw new Error('Candidate still post-filters previously emailed offers');
+          for(const marker of [
+            '&is_active=eq.true&select=id,offer_id,offer_payload,last_seen_at,first_emailed_at,last_emailed_at',
+            '`email:slot:${slotKey}:user:${userId}:sent`',
+            'already_sent_for_user_in_slot',
+            'DATOS DE LA OFERTA',
+            'SUPLENCIA',
+            'Resumen APD compatible con tus preferencias'
+          ]) if(!main.includes(marker)) throw new Error(`Candidate missing marker: ${marker}`);
+          console.log(`Candidate #${r.number}: active-per-slot contract OK; bindings=${bindings.length}`);
           NODE
 
           cat > out/deploy.json <<JSON
-          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA hotfix: live ABC refresh + cross-slot email dedupe (#681)"}}
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA: include all currently active matches in each 14/18/22 digest; keep per-slot dedupe"}}
           JSON
 
           trap rollback ERR
@@ -77,36 +87,36 @@ jobs:
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             -H "Content-Type: application/json" \
             --data @out/deploy.json > out/deploy-response.json
-
           node - <<'NODE'
           const j=require('./out/deploy-response.json');
           if(!j.success||!j.result?.id) throw new Error(JSON.stringify(j.errors||[]));
-          console.log(`Deployment request accepted: ${j.result.id}`);
+          console.log(`Deployment accepted: ${j.result.id}`);
           NODE
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
           ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(4);process.stdout.write(v.version_id)")
-          echo "Active after deploy: ${ACTIVE_AFTER}"
           test "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}"
 
           VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
           test "${VERSION_CODE}" = "200"
-          node - <<'NODE'
-          const j=require('./out/version.json');
-          if(j.ok!==true) throw new Error('api/version not ok');
-          console.log('api/version OK', JSON.stringify({ok:j.ok,version:j.version||null,worker_version:j.worker_version||null}));
-          NODE
+          node -e "const j=require('./out/version.json');if(j.ok!==true)throw new Error('api/version not ok');console.log('api/version OK')"
 
-          DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=0&limit=10")
+          DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=10")
           test "${DRY_CODE}" = "200"
           node - <<'NODE'
           const j=require('./out/dry-run.json');
-          const safe={ok:j.ok,dry_run:j.dry_run,processed_users:Number(j.processed_users||0),send_attempts:Number(j.send_attempts||0),failed_count:Number(j.failed_count||0),skipped_count:Number(j.skipped_count||0)};
-          console.log('Dry-run summary:',JSON.stringify(safe));
           if(j.ok!==true||j.dry_run!==true) throw new Error('email dry-run invalid');
-          if(safe.processed_users<1) throw new Error('email dry-run processed no users');
-          if(safe.failed_count!==0) throw new Error(`email dry-run failures: ${safe.failed_count}`);
+          if(Number(j.failed_count||0)!==0) throw new Error(`email dry-run failures: ${j.failed_count}`);
+          const rows=Array.isArray(j.debug_users)?j.debug_users:[];
+          const martin=rows.filter(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID);
+          if(!martin.length) throw new Error('Martin not present in dry-run debug');
+          if(martin.some(x=>x.reason==='no_stored_alerts')) throw new Error('Martin still hits no_stored_alerts');
+          const eligible=martin.find(x=>x.stage==='dry_run');
+          if(!eligible || Number(eligible.total_alerts||0)<1 || Number(eligible.shown_alerts||0)<1) {
+            throw new Error(`Martin has no active digest after fix: ${JSON.stringify(martin)}`);
+          }
+          console.log('Martin active digest OK',JSON.stringify({total_alerts:eligible.total_alerts,shown_alerts:eligible.shown_alerts,subject:eligible.subject}));
           NODE
 
           SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
@@ -122,16 +132,15 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const dry=JSON.parse(fs.readFileSync('out/dry-run.json','utf8'));
+          const martin=(dry.debug_users||[]).find(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID && x.stage==='dry_run');
           const summary={
             deployed:true,
             candidate_version_id:process.env.CANDIDATE_VERSION_ID,
             old_version_id:process.env.EXPECTED_OLD_VERSION_ID,
             active_final:process.env.CANDIDATE_VERSION_ID,
+            martin_total_alerts:Number(martin?.total_alerts||0),
+            martin_shown_alerts:Number(martin?.shown_alerts||0),
             worker_version_endpoint_ok:true,
-            email_dry_run_ok:true,
-            dry_run_processed_users:Number(dry.processed_users||0),
-            dry_run_send_attempts:Number(dry.send_attempts||0),
-            dry_run_failed_count:Number(dry.failed_count||0),
             public_site_ok:true,
             rollback_triggered:false
           };
@@ -143,6 +152,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apd-email-fix-681-deploy-verification
-          path: out/summary.json
+          name: apd-active-offers-per-slot-683-deploy-verification
+          path: |
+            out/summary.json
+            out/rollback-response.json
           if-no-files-found: ignore
