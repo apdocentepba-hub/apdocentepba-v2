@@ -98,10 +98,19 @@ jobs:
           console.log(`Deployment accepted: ${j.result.id}`);
           NODE
 
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
-          ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(4);process.stdout.write(v.version_id)")
-          test "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}"
+          deployment_visible=0
+          for attempt in 1 2 3 4 5 6; do
+            sleep 3
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
+            ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+            echo "Deployment visibility ${attempt}/6: ${ACTIVE_AFTER}"
+            if [ "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}" ]; then
+              deployment_visible=1
+              break
+            fi
+          done
+          test "$deployment_visible" = "1"
 
           VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
           test "${VERSION_CODE}" = "200"
