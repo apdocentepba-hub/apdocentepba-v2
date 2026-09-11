@@ -3,6 +3,9 @@ import sys
 
 # Regression contract: refresh ABC live, then include every currently active
 # matching offer in each digest slot, even if it was emailed in an older slot.
+# The email refresh must also use the same canonical offer identity as the web
+# sync: idoferta (e.g. 4294581), while preserving source_offer_key (D_4278473)
+# only as source traceability. This prevents duplicate rows with conflicting PID.
 src = Path(sys.argv[1]).read_text()
 checks = {
     'cron_refreshes_abc_before_reading_state': (
@@ -26,8 +29,14 @@ checks = {
     'fresh_fetch_restricts_to_published': (
         'estado:"Publicada"' in src and 'fetchPublishedOffersForEmailDistrict' in src
     ),
-    'fresh_matches_have_syncable_offer_id': (
-        'item.offer_id = item.offer_id || item.source_offer_key || "";' in src
+    'fresh_matches_use_canonical_abc_offer_id': (
+        'item.offer_id = String(item.idoferta || item.offer_id || item.source_offer_key || "").trim();' in src
+    ),
+    'fresh_matches_do_not_promote_source_key_over_idoferta': (
+        'item.offer_id = item.offer_id || item.source_offer_key || "";' not in src
+    ),
+    'source_offer_key_is_preserved_for_traceability': (
+        'source_offer_key: buildSourceOfferKeyFromOferta2(oferta)' in src
     ),
     'abc_refresh_failure_skips_stale_send': (
         'reason: "abc_refresh_failed"' in src
@@ -43,4 +52,4 @@ for name, ok in checks.items():
 if failed:
     print('FAILED:', ', '.join(failed))
     sys.exit(1)
-print('ALL ACTIVE-PER-SLOT REGRESSION CHECKS PASS')
+print('ALL ACTIVE-PER-SLOT + CANONICAL-IDENTITY REGRESSION CHECKS PASS')
