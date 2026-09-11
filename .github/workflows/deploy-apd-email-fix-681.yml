@@ -107,27 +107,40 @@ jobs:
           test "${VERSION_CODE}" = "200"
           node -e "const j=require('./out/version.json');if(j.ok!==true)throw new Error('api/version not ok');console.log('api/version OK')"
 
-          DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=10")
-          test "${DRY_CODE}" = "200"
+          canonical_ok=0
+          for attempt in 1 2 3 4; do
+            echo "Canonical identity smoke attempt ${attempt}/4"
+            if [ "$attempt" -gt 1 ]; then sleep 10; else sleep 15; fi
+            DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=10")
+            test "${DRY_CODE}" = "200"
+            if node - <<'NODE'
+          const j=require('./out/dry-run.json');
+          if(j.ok!==true||j.dry_run!==true) process.exit(2);
+          if(Number(j.failed_count||0)!==0) process.exit(3);
+          const rows=Array.isArray(j.debug_users)?j.debug_users:[];
+          const target=rows.filter(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID);
+          const eligible=target.find(x=>x.stage==='dry_run');
+          const ids=Array.isArray(eligible?.visible_offer_ids)?eligible.visible_offer_ids.map(String):[];
+          console.log(JSON.stringify({ids,subject:eligible?.subject||null,total:eligible?.total_alerts||0,shown:eligible?.shown_alerts||0}));
+          if(!eligible || Number(eligible.total_alerts||0)<1 || Number(eligible.shown_alerts||0)<1) process.exit(4);
+          if(!ids.includes(process.env.EXPECTED_CANONICAL_OFFER_ID)) process.exit(5);
+          if(ids.includes(process.env.STALE_SOURCE_OFFER_ID)) process.exit(6);
+          NODE
+            then
+              canonical_ok=1
+              break
+            fi
+          done
+          test "$canonical_ok" = "1"
+
           node - <<'NODE'
           const j=require('./out/dry-run.json');
-          if(j.ok!==true||j.dry_run!==true) throw new Error('email dry-run invalid');
-          if(Number(j.failed_count||0)!==0) throw new Error(`email dry-run failures: ${j.failed_count}`);
           const rows=Array.isArray(j.debug_users)?j.debug_users:[];
-          const martin=rows.filter(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID);
-          if(!martin.length) throw new Error('Target user not present in dry-run debug');
-          if(martin.some(x=>x.reason==='no_stored_alerts')) throw new Error('Target user still hits no_stored_alerts');
-          const eligible=martin.find(x=>x.stage==='dry_run');
-          if(!eligible || Number(eligible.total_alerts||0)<1 || Number(eligible.shown_alerts||0)<1) {
-            throw new Error(`Target user has no active digest after fix: ${JSON.stringify(martin)}`);
-          }
-          const ids=Array.isArray(eligible.visible_offer_ids)?eligible.visible_offer_ids.map(String):[];
-          if(!ids.includes(process.env.EXPECTED_CANONICAL_OFFER_ID)) {
-            throw new Error(`Canonical offer id missing from digest: ${JSON.stringify(ids)}`);
-          }
-          if(ids.includes(process.env.STALE_SOURCE_OFFER_ID)) {
-            throw new Error(`Stale D_ identity still visible in digest: ${JSON.stringify(ids)}`);
-          }
+          const target=rows.filter(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID);
+          if(!target.length) throw new Error('Target user not present in dry-run debug');
+          if(target.some(x=>x.reason==='no_stored_alerts')) throw new Error('Target user still hits no_stored_alerts');
+          const eligible=target.find(x=>x.stage==='dry_run');
+          const ids=Array.isArray(eligible?.visible_offer_ids)?eligible.visible_offer_ids.map(String):[];
           console.log('Canonical digest identity OK',JSON.stringify({total_alerts:eligible.total_alerts,shown_alerts:eligible.shown_alerts,visible_offer_ids:ids,subject:eligible.subject}));
           NODE
 
@@ -144,15 +157,15 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const dry=JSON.parse(fs.readFileSync('out/dry-run.json','utf8'));
-          const martin=(dry.debug_users||[]).find(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID && x.stage==='dry_run');
+          const target=(dry.debug_users||[]).find(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID && x.stage==='dry_run');
           const summary={
             deployed:true,
             candidate_version_id:process.env.CANDIDATE_VERSION_ID,
             old_version_id:process.env.EXPECTED_OLD_VERSION_ID,
             active_final:process.env.CANDIDATE_VERSION_ID,
-            target_total_alerts:Number(martin?.total_alerts||0),
-            target_shown_alerts:Number(martin?.shown_alerts||0),
-            target_visible_offer_ids:Array.isArray(martin?.visible_offer_ids)?martin.visible_offer_ids:[],
+            target_total_alerts:Number(target?.total_alerts||0),
+            target_shown_alerts:Number(target?.shown_alerts||0),
+            target_visible_offer_ids:Array.isArray(target?.visible_offer_ids)?target.visible_offer_ids:[],
             canonical_identity_verified:true,
             worker_version_endpoint_ok:true,
             public_site_ok:true,
