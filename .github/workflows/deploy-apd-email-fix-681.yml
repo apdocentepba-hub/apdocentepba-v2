@@ -1,4 +1,4 @@
-name: Deploy APD active offers per slot 683
+name: Deploy APD canonical offer identity 684
 
 on:
   push:
@@ -14,13 +14,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Promote candidate 683 with automatic rollback
+      - name: Promote candidate 684 with automatic rollback
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           WORKER_NAME: ancient-wildflower-cd37
-          CANDIDATE_VERSION_ID: a3b3dad2-a50b-4dd2-b7fc-a61560b89df7
-          EXPECTED_OLD_VERSION_ID: 3e26319d-8e9a-4bdf-81dd-c9e78b15fbf0
+          CANDIDATE_VERSION_ID: d9089ee9-dcb6-45a3-aa06-7c99db6e11e8
+          EXPECTED_OLD_VERSION_ID: a3b3dad2-a50b-4dd2-b7fc-a61560b89df7
           MARTIN_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
+          EXPECTED_CANONICAL_OFFER_ID: "4294581"
+          STALE_SOURCE_OFFER_ID: "D_4278473"
           WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
           SITE_URL: https://alertasapd.com.ar
         run: |
@@ -32,9 +34,9 @@ jobs:
           ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
 
           rollback() {
-            echo "Post-deploy verification failed; rolling back to #682"
+            echo "Post-deploy verification failed; rolling back to #683"
             cat > out/rollback.json <<JSON
-          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after active-offers-per-slot smoke failure"}}
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after canonical APD identity smoke failure"}}
           JSON
             curl -sS -X POST \
               "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
@@ -65,7 +67,10 @@ jobs:
           const main=mods['worker_hotfix.js'];
           if(main.includes('first_emailed_at=is.null')) throw new Error('Candidate still permanently excludes previously emailed offers');
           if(main.includes('if (item.first_emailed_at) return false;')) throw new Error('Candidate still post-filters previously emailed offers');
+          if(main.includes('item.offer_id = item.offer_id || item.source_offer_key || "";')) throw new Error('Candidate still promotes source key over canonical idoferta');
           for(const marker of [
+            'item.offer_id = String(item.idoferta || item.offer_id || item.source_offer_key || "").trim();',
+            'source_offer_key: buildSourceOfferKeyFromOferta2(oferta)',
             '&is_active=eq.true&select=id,offer_id,offer_payload,last_seen_at,first_emailed_at,last_emailed_at',
             '`email:slot:${slotKey}:user:${userId}:sent`',
             'already_sent_for_user_in_slot',
@@ -73,11 +78,11 @@ jobs:
             'SUPLENCIA',
             'Resumen APD compatible con tus preferencias'
           ]) if(!main.includes(marker)) throw new Error(`Candidate missing marker: ${marker}`);
-          console.log(`Candidate #${r.number}: active-per-slot contract OK; bindings=${bindings.length}`);
+          console.log(`Candidate #${r.number}: canonical-identity contract OK; bindings=${bindings.length}`);
           NODE
 
           cat > out/deploy.json <<JSON
-          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA: include all currently active matches in each 14/18/22 digest; keep per-slot dedupe"}}
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA: unify email refresh offer_id with canonical ABC idoferta; preserve D_ source key"}}
           JSON
 
           trap rollback ERR
@@ -110,13 +115,20 @@ jobs:
           if(Number(j.failed_count||0)!==0) throw new Error(`email dry-run failures: ${j.failed_count}`);
           const rows=Array.isArray(j.debug_users)?j.debug_users:[];
           const martin=rows.filter(x=>String(x.user_id||'')===process.env.MARTIN_USER_ID);
-          if(!martin.length) throw new Error('Martin not present in dry-run debug');
-          if(martin.some(x=>x.reason==='no_stored_alerts')) throw new Error('Martin still hits no_stored_alerts');
+          if(!martin.length) throw new Error('Target user not present in dry-run debug');
+          if(martin.some(x=>x.reason==='no_stored_alerts')) throw new Error('Target user still hits no_stored_alerts');
           const eligible=martin.find(x=>x.stage==='dry_run');
           if(!eligible || Number(eligible.total_alerts||0)<1 || Number(eligible.shown_alerts||0)<1) {
-            throw new Error(`Martin has no active digest after fix: ${JSON.stringify(martin)}`);
+            throw new Error(`Target user has no active digest after fix: ${JSON.stringify(martin)}`);
           }
-          console.log('Martin active digest OK',JSON.stringify({total_alerts:eligible.total_alerts,shown_alerts:eligible.shown_alerts,subject:eligible.subject}));
+          const ids=Array.isArray(eligible.visible_offer_ids)?eligible.visible_offer_ids.map(String):[];
+          if(!ids.includes(process.env.EXPECTED_CANONICAL_OFFER_ID)) {
+            throw new Error(`Canonical offer id missing from digest: ${JSON.stringify(ids)}`);
+          }
+          if(ids.includes(process.env.STALE_SOURCE_OFFER_ID)) {
+            throw new Error(`Stale D_ identity still visible in digest: ${JSON.stringify(ids)}`);
+          }
+          console.log('Canonical digest identity OK',JSON.stringify({total_alerts:eligible.total_alerts,shown_alerts:eligible.shown_alerts,visible_offer_ids:ids,subject:eligible.subject}));
           NODE
 
           SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
@@ -138,8 +150,10 @@ jobs:
             candidate_version_id:process.env.CANDIDATE_VERSION_ID,
             old_version_id:process.env.EXPECTED_OLD_VERSION_ID,
             active_final:process.env.CANDIDATE_VERSION_ID,
-            martin_total_alerts:Number(martin?.total_alerts||0),
-            martin_shown_alerts:Number(martin?.shown_alerts||0),
+            target_total_alerts:Number(martin?.total_alerts||0),
+            target_shown_alerts:Number(martin?.shown_alerts||0),
+            target_visible_offer_ids:Array.isArray(martin?.visible_offer_ids)?martin.visible_offer_ids:[],
+            canonical_identity_verified:true,
             worker_version_endpoint_ok:true,
             public_site_ok:true,
             rollback_triggered:false
@@ -152,7 +166,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apd-active-offers-per-slot-683-deploy-verification
+          name: apd-canonical-offer-identity-684-deploy-verification
           path: |
             out/summary.json
             out/rollback-response.json
