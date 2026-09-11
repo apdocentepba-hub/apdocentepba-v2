@@ -1,0 +1,86 @@
+name: Audit live APD email renderer
+
+on:
+  push:
+    branches:
+      - fix/email-template-unified-20260910
+    paths:
+      - .github/workflows/audit-email-renderer-live.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-email-renderer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate active renderer in deployed Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/email-renderer
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            > artifacts/email-renderer/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./artifacts/email-renderer/accounts.json'); if(!j.success||!j.result?.length) process.exit(2); process.stdout.write(j.result[0].id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            > artifacts/email-renderer/deployments.json
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}" \
+            > artifacts/email-renderer/live-worker.raw
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const d = require('./artifacts/email-renderer/deployments.json');
+          const active = d.result?.deployments?.[0] || null;
+          const summary = {
+            deployment_id: active?.id || null,
+            source: active?.source || null,
+            versions: (active?.versions || []).map(v => ({ version_id: v.version_id, percentage: v.percentage }))
+          };
+          fs.writeFileSync('artifacts/email-renderer/deployment-summary.json', JSON.stringify(summary, null, 2));
+          console.log(JSON.stringify(summary, null, 2));
+          NODE
+
+          python3 - <<'PY'
+          from pathlib import Path
+          raw = Path('artifacts/email-renderer/live-worker.raw').read_text(errors='replace')
+          needles = [
+              'Resumen personalizado',
+              'Resumen APD compatible con tus preferencias',
+              'DÍAS / HORA.PROB',
+              'BONUS RESIDENCIA',
+              'LISTADO / AÑO PID',
+              'Hotfix de alertas por mail',
+              'Ofertas APD para vos',
+          ]
+          lines = raw.splitlines()
+          out = []
+          for needle in needles:
+              matches = [i for i, line in enumerate(lines) if needle in line]
+              out.append(f'### {needle}: {len(matches)} match(es)')
+              for i in matches[:5]:
+                  lo = max(0, i-3); hi = min(len(lines), i+4)
+                  out.extend(f'{j+1}: {lines[j]}' for j in range(lo, hi))
+          Path('artifacts/email-renderer/matches.txt').write_text('\n'.join(out), encoding='utf-8')
+          print('\n'.join(out))
+          if not any('match(es)' in x and not x.endswith('0 match(es)') for x in out):
+              raise SystemExit('No known email renderer markers found in live Worker source')
+          PY
+
+      - name: Upload renderer audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-email-renderer-audit
+          path: artifacts/email-renderer/
+          if-no-files-found: error
