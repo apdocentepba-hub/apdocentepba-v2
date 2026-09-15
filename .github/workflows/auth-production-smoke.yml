@@ -1,0 +1,92 @@
+name: Production auth smoke
+
+on:
+  pull_request:
+    paths:
+      - 'auth_session_patch.js'
+      - 'worker_hotfix.js'
+      - '.github/workflows/auth-production-smoke.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'auth_session_patch.js'
+      - 'worker_hotfix.js'
+      - '.github/workflows/auth-production-smoke.yml'
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-auth-contract:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - name: Verify protected routes reject caller-supplied identity
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/auth-production-smoke
+
+          check_401() {
+            NAME="$1"; shift
+            CODE=$(curl --retry 2 --retry-delay 2 -sS -o "tmp/auth-production-smoke/${NAME}.json" -w "%{http_code}" "$@")
+            echo "${NAME}: HTTP ${CODE}"
+            test "${CODE}" = "401"
+            NAME="${NAME}" node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('tmp/auth-production-smoke/'+process.env.NAME+'.json','utf8'));if(j.ok!==false)throw new Error(process.env.NAME+': expected ok=false');const m=String(j.message||j.error||'');if(!/autenticado|sesión|session/i.test(m))throw new Error(process.env.NAME+': unexpected response '+m);"
+          }
+
+          check_401 mis-alertas \
+            "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          check_401 mi-plan \
+            "${WORKER_URL}/api/mi-plan?user_id=${FAKE_USER_ID}"
+          check_401 historico-resumen \
+            "${WORKER_URL}/api/historico-resumen?user_id=${FAKE_USER_ID}"
+
+          check_401 guardar-preferencias \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/guardar-preferencias"
+          check_401 capturar-historico \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/capturar-historico-apd"
+          check_401 checkout \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/mercadopago/create-checkout-link"
+          check_401 whatsapp-test \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/whatsapp/test-send"
+
+          check_401 uuid-as-bearer \
+            -H "Authorization: Bearer ${FAKE_USER_ID}" \
+            "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+
+      - name: Verify public controls remain healthy
+        run: |
+          set -euo pipefail
+          VERSION_CODE=$(curl --retry 2 --retry-delay 2 -sS -o /tmp/apd-version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          test "${VERSION_CODE}" = "200"
+          node -e "const j=require('/tmp/apd-version.json');if(j.ok!==true)throw new Error('api/version not ok')"
+
+          PLANES_CODE=$(curl --retry 2 --retry-delay 2 -sS -o /tmp/apd-planes.json -w "%{http_code}" "${WORKER_URL}/api/planes")
+          test "${PLANES_CODE}" = "200"
+
+          OPTIONS_CODE=$(curl --retry 2 --retry-delay 2 -sS -o /dev/null -w "%{http_code}" -X OPTIONS \
+            -H "Origin: https://alertasapd.com.ar" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization" \
+            "${WORKER_URL}/api/mis-alertas")
+          test "${OPTIONS_CODE}" = "200"
+
+          SITE_CODE=$(curl --retry 2 --retry-delay 2 -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          test "${SITE_CODE}" = "200"
+
+          echo "production auth smoke: OK"
