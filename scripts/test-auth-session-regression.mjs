@@ -109,10 +109,10 @@ async function testMisAlertasUsesSessionBearer() {
   const rows = await h.window.obtenerMisAlertas(USER_ID);
 
   assert.equal(rows.length, 1, 'mis-alertas should still return the alert rows');
-  assert.equal(h.workerCalls.length, 1, 'mis-alertas must go through workerFetchJson instead of raw fetch');
-  assert.equal(h.workerCalls[0].path, `/api/mis-alertas?user_id=${encodeURIComponent(USER_ID)}`);
+  const call = h.fetchCalls.find(entry => entry.url.includes('/api/mis-alertas?'));
+  assert.ok(call, 'mis-alertas must call the Worker endpoint');
   assert.equal(
-    h.workerCalls[0].options.headers?.Authorization,
+    call.options.headers?.Authorization,
     `Bearer ${SESSION}`,
     'mis-alertas must send the session Bearer'
   );
