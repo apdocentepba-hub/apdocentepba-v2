@@ -1,0 +1,113 @@
+name: Verify live auth session candidate
+
+on:
+  push:
+    branches:
+      - audit/live-auth-worker-2026-09-15
+    paths:
+      - .github/workflows/verify-live-auth-session-candidate.yml
+      - scripts/test-live-auth-session-bundle.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a629d728-a987-4fda-9fea-64ce58e3370b
+      CANDIDATE_VERSION_ID: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify candidate and unchanged production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/verify-auth-candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/verify-auth-candidate/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/verify-auth-candidate/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/verify-auth-candidate/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/verify-auth-candidate/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "Active production version: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${EXPECTED_ACTIVE_VERSION}?include=modules" > tmp/verify-auth-candidate/active.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/verify-auth-candidate/candidate.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto'; import path from 'node:path';
+          const activeJ=JSON.parse(fs.readFileSync('tmp/verify-auth-candidate/active.json','utf8'));
+          const candJ=JSON.parse(fs.readFileSync('tmp/verify-auth-candidate/candidate.json','utf8'));
+          if(!activeJ.success||!activeJ.result?.id) throw new Error('Active detail unavailable');
+          if(!candJ.success||candJ.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error(`Candidate unavailable/mismatched: ${candJ.result?.id||'none'}`);
+          const active=activeJ.result, cand=candJ.result;
+          if(active.main_module!=='worker_hotfix.js'||cand.main_module!=='worker_hotfix.js') throw new Error('Unexpected main module');
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=x=>(x.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names(active))!==JSON.stringify(expected)) throw new Error('Active module shape changed');
+          if(JSON.stringify(names(cand))!==JSON.stringify(expected)) throw new Error('Candidate module shape changed');
+          const shape=x=>(x.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(shape(active))!==JSON.stringify(shape(cand))) throw new Error('Binding shape differs');
+          const decode=x=>Object.fromEntries((x.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64')]));
+          const a=decode(active), c=decode(cand);
+          const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+          const comparison={};
+          for(const name of expected) comparison[name]={active:hash(a[name]),candidate:hash(c[name]),same:hash(a[name])===hash(c[name])};
+          if(comparison['worker_hotfix.js'].same) throw new Error('Candidate worker_hotfix.js unexpectedly matches active');
+          for(const name of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(!comparison[name].same) throw new Error(`${name} differs unexpectedly`);
+          for(const [name,buf] of Object.entries(c)) fs.writeFileSync(path.join('tmp/verify-auth-candidate','candidate-'+name),buf);
+          fs.writeFileSync('tmp/verify-auth-candidate/comparison.json',JSON.stringify(comparison,null,2));
+          console.log(JSON.stringify({candidate:cand.id,main:cand.main_module,modules:names(cand),bindings:shape(cand).length,comparison},null,2));
+          NODE
+
+          node --check tmp/verify-auth-candidate/candidate-worker_hotfix.js
+          node --check tmp/verify-auth-candidate/candidate-email_queue_hotfix.js
+          node --check tmp/verify-auth-candidate/candidate-worker_email_queue_hotfix.js
+          node scripts/test-live-auth-session-bundle.mjs tmp/verify-auth-candidate/candidate-worker_hotfix.js
+
+          PUBLIC_CODE=$(curl -sS -o tmp/verify-auth-candidate/public-current.json -w "%{http_code}" \
+            "https://ancient-wildflower-cd37.apdocentepba.workers.dev/api/mis-alertas?user_id=00000000-0000-4000-8000-000000000000")
+          echo "Current production unauthenticated status: ${PUBLIC_CODE}"
+          test "${PUBLIC_CODE}" = "404"
+
+          cat > tmp/verify-auth-candidate/summary.json <<JSON
+          {
+            "ok": true,
+            "candidate_version_id": "${CANDIDATE_VERSION_ID}",
+            "active_version_id": "${ACTIVE}",
+            "traffic_changed": false,
+            "candidate_contract_green": true,
+            "syntax_green": true,
+            "module_shape_preserved": true,
+            "binding_shape_preserved": true,
+            "production_still_old_behavior": true
+          }
+          JSON
+          cat tmp/verify-auth-candidate/summary.json
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-live-auth-session-candidate
+          path: |
+            tmp/verify-auth-candidate/summary.json
+            tmp/verify-auth-candidate/comparison.json
+            tmp/verify-auth-candidate/public-current.json
+          if-no-files-found: ignore
