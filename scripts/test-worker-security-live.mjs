@@ -10,23 +10,25 @@ assert(!/else\s*\{\s*userId\s*=\s*token\s*;\s*\}/m.test(src), 'SECURITY BUG: get
 assert(/SENSITIVE_TEST_PATHS/.test(src), 'security guard for mutating test routes is missing');
 assert(/requireSecureAdmin/.test(src), 'secure admin guard is missing');
 assert(/email-alerts-health/.test(src), 'safe email health endpoint is missing');
-assert(/2026-09-15-session-security-2/.test(src), 'security version marker missing');
+assert(/2026-09-15-session-security-3/.test(src), 'security version marker missing');
 
 const finalStart = src.lastIndexOf('var worker_hotfix_default = {');
 assert(finalStart >= 0, 'final worker_hotfix_default router not found');
 const final = src.slice(finalStart);
-const guardPos = final.indexOf('SENSITIVE_TEST_PATHS.has(securityPath)');
-const hotfixPos = final.indexOf('handleHotfixRoute(request, env, ctx)');
+const guardPos = final.indexOf('SENSITIVE_TEST_PATHS.has(path)');
+const versionRoutePos = final.indexOf('/version`');
+const manualSweepPos = final.indexOf('path === "/test-email-sweep"');
 const oldDelegatePos = final.indexOf('worker_default.fetch(request, env, ctx)');
 const healthPos = final.indexOf('/email-alerts-health');
 assert(guardPos >= 0, 'test route guard is not wired into final fetch');
-assert(hotfixPos >= 0 && guardPos < hotfixPos, 'SECURITY BUG: sensitive test guard runs after handleHotfixRoute');
-assert(oldDelegatePos < 0 || guardPos < oldDelegatePos, 'SECURITY BUG: sensitive test guard runs after legacy delegation');
-assert(healthPos >= 0, 'email health route is not wired into final fetch');
+assert(versionRoutePos >= 0 && guardPos < versionRoutePos, 'SECURITY BUG: sensitive guard is not before first normal route');
+assert(manualSweepPos < 0 || guardPos < manualSweepPos, 'SECURITY BUG: sensitive guard runs after manual email sweep');
+assert(oldDelegatePos < 0 || guardPos < oldDelegatePos, 'SECURITY BUG: sensitive guard runs after legacy delegation');
+assert(healthPos >= 0 && guardPos < healthPos, 'email health route is not wired after security guard');
 
 for (const route of ['/test-email-sweep', '/test-mail', '/test-digest']) {
   assert(src.includes(route), `expected ${route} route missing from source`);
   assert(/SENSITIVE_TEST_PATHS/.test(final), `${route} is not covered by final-router guard`);
 }
 
-console.log('PASS: final Worker requires real sessions and guards test routes before every router');
+console.log('PASS: final Worker requires real sessions and guards test routes before every production route');
