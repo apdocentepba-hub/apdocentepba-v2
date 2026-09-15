@@ -1,0 +1,21 @@
+name: RED - frontend session auth contract
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - scripts/test-auth-session-frontend.mjs
+      - .github/workflows/test-auth-session-red.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce current frontend auth bug
+        run: node scripts/test-auth-session-frontend.mjs index.html auth_session_patch.js
