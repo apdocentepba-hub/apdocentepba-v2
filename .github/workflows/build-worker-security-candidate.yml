@@ -1,0 +1,108 @@
+name: Build Worker session-security candidate
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - scripts/apply-worker-security-live.py
+      - scripts/test-worker-security-live.mjs
+      - scripts/test-email-slot-dedupe-live.mjs
+      - .github/workflows/build-worker-security-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read active Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+          EXPECTED_ACTIVE_VERSION: aaf3e360-fad4-4445-aab3-c9977f4b0cb5
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate out
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+          test "$ACTIVE_VERSION_ID" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8')); const r=j.result;
+          if(!j.success||!r?.id) throw new Error('active version missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`unexpected main ${r.main_module}`);
+          const names=(r.modules||[]).map(m=>m.name);
+          for(const name of ['worker_hotfix.js','worker_email_queue_hotfix.js','email_queue_hotfix.js']) if(!names.includes(name)) throw new Error(`missing ${name}`);
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          fs.writeFileSync('tmp/binding-shape.json',JSON.stringify(shape));
+          const metadata={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'AlertasAPD session security candidate','workers/tag':'session-security-20260915'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Active #${r.number}: ${r.id}; modules=${names.length}; bindings=${shape.length}`);
+          NODE
+      - name: Apply security patch and verify GREEN
+        run: |
+          set -euo pipefail
+          python scripts/apply-worker-security-live.py tmp/modules/worker_hotfix.js tmp/candidate/worker_hotfix.js
+          cp tmp/modules/worker_email_queue_hotfix.js tmp/candidate/worker_email_queue_hotfix.js
+          cp tmp/modules/email_queue_hotfix.js tmp/candidate/email_queue_hotfix.js
+          node --check tmp/candidate/worker_hotfix.js
+          node --check tmp/candidate/worker_email_queue_hotfix.js
+          node --check tmp/candidate/email_queue_hotfix.js
+          node scripts/test-worker-security-live.mjs tmp/candidate/worker_hotfix.js
+          node scripts/test-email-slot-dedupe-live.mjs tmp/candidate/worker_hotfix.js
+      - name: Upload candidate without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module")
+          test "$HTTP_CODE" = "200"
+          CANDIDATE_VERSION_ID=$(node -e "const j=require('./tmp/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "$CANDIDATE_VERSION_ID" > out/candidate-id.txt
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/candidate-detail.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const expected=JSON.parse(fs.readFileSync('tmp/binding-shape.json','utf8'));
+          const r=JSON.parse(fs.readFileSync('tmp/candidate-detail.json','utf8')).result;
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error('binding shape changed');
+          const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')]));
+          fs.writeFileSync('tmp/candidate-live-main.js',mods['worker_hotfix.js']||'');
+          console.log(`Candidate #${r.number}: ${r.id}; bindings=${actual.length}`);
+          fs.writeFileSync('out/summary.json',JSON.stringify({ok:true,candidate_version_id:r.id,candidate_number:r.number,active_version_id:process.env.ACTIVE_VERSION_ID,traffic_changed:false,binding_shape_preserved:true},null,2));
+          NODE
+          node scripts/test-worker-security-live.mjs tmp/candidate-live-main.js
+          node scripts/test-email-slot-dedupe-live.mjs tmp/candidate-live-main.js
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-after.json
+          ACTIVE_AFTER=$(node -e "const j=require('./tmp/deployments-after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          test "$ACTIVE_AFTER" = "$ACTIVE_VERSION_ID"
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-session-security-candidate
+          path: out/
+          if-no-files-found: error
