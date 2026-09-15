@@ -41,14 +41,28 @@
     localStorage.removeItem(SESSION_TOKEN_KEY);
   }
 
+  function clearUserToken() {
+    if (typeof window.borrarToken === 'function') window.borrarToken();
+    else localStorage.removeItem(USER_TOKEN_KEY);
+  }
+
+  function invalidateAuthSession() {
+    clearAuthSession();
+    clearUserToken();
+    if (typeof window.actualizarNav === 'function') window.actualizarNav();
+    if (typeof window.mostrarSeccion === 'function') window.mostrarSeccion('login');
+    if (typeof window.showMsg === 'function') {
+      window.showMsg('login-msg', 'Tu sesión venció. Ingresá nuevamente.', 'info');
+    }
+  }
+
   function clearLegacyAuthIfNeeded() {
     const userId = getUserToken();
     const session = getSessionToken();
     if (!userId || session) return false;
 
     clearAuthSession();
-    if (typeof window.borrarToken === 'function') window.borrarToken();
-    else localStorage.removeItem(USER_TOKEN_KEY);
+    clearUserToken();
     return true;
   }
 
@@ -65,9 +79,8 @@
     };
   }
 
-  const originalWorkerFetchJson = window.workerFetchJson;
-  if (typeof originalWorkerFetchJson === 'function') {
-    window.workerFetchJson = function patchedWorkerFetchJson(path, options = {}) {
+  if (typeof window.workerFetchJson === 'function') {
+    window.workerFetchJson = async function patchedWorkerFetchJson(path, options = {}) {
       const headers = { ...(options.headers || {}) };
       const bearer = getAuthBearer();
 
@@ -79,10 +92,45 @@
         headers['Content-Type'] = 'application/json';
       }
 
-      return originalWorkerFetchJson(path, {
+      const res = await fetch(`${WORKER_URL}${path}`, {
         ...options,
         headers
       });
+      const text = await res.text();
+      let data = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        if (res.status === 401) {
+          invalidateAuthSession();
+          throw new Error('Tu sesión venció. Ingresá nuevamente.');
+        }
+        throw new Error('El Worker no devolvió JSON válido');
+      }
+
+      if (res.status === 401) {
+        invalidateAuthSession();
+        throw new Error(data?.message || data?.error || 'Tu sesión venció. Ingresá nuevamente.');
+      }
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.message || data?.error || `Worker ${res.status}`);
+      }
+
+      return data;
+    };
+  }
+
+  if (typeof window.obtenerMisAlertas === 'function' && typeof window.workerFetchJson === 'function') {
+    window.obtenerMisAlertas = async function patchedObtenerMisAlertas(userId) {
+      const data = await window.workerFetchJson(
+        `/api/mis-alertas?user_id=${encodeURIComponent(userId)}`
+      );
+      const rows = Array.isArray(data?.resultados) ? data.resultados : [];
+      return typeof window.filtrarAlertasVigentes === 'function'
+        ? window.filtrarAlertasVigentes(rows)
+        : rows;
     };
   }
 
@@ -97,6 +145,10 @@
     });
 
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      invalidateAuthSession();
+      throw new Error(data.error || data.message || 'Tu sesión venció. Ingresá nuevamente.');
+    }
     if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
     return data;
   };
