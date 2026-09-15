@@ -1,0 +1,167 @@
+name: Full AlertasAPD project audit
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - scripts/full-project-audit.mjs
+      - .github/workflows/full-project-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+
+      - name: Inventory and syntax checks
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p audit-out tmp/live-modules
+          find . -type f -not -path './.git/*' -not -path './node_modules/*' | sort > audit-out/file-list.txt
+          printf 'files=' > audit-out/inventory.txt
+          wc -l < audit-out/file-list.txt >> audit-out/inventory.txt
+          : > audit-out/js-syntax.txt
+          failures=0
+          while IFS= read -r f; do
+            case "$f" in
+              *.js|*.mjs)
+                if ! node --check "$f" >> audit-out/js-syntax.txt 2>&1; then
+                  echo "SYNTAX_FAIL $f" >> audit-out/js-syntax.txt
+                  failures=$((failures+1))
+                fi
+                ;;
+            esac
+          done < audit-out/file-list.txt
+          echo "syntax_failures=$failures" >> audit-out/inventory.txt
+
+      - name: Fetch live Cloudflare production state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+          SITE_URL: https://alertasapd.com.ar
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VERSION_ID}?include=modules" > tmp/live-version.json
+          curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" > tmp/schedules.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/live-version.json','utf8'));
+          const r=j.result||j;
+          for(const m of r.modules||[]){
+            const name=(m.name||m.path||'module').replace(/[^A-Za-z0-9._-]/g,'_');
+            fs.writeFileSync(path.join('tmp/live-modules',name),Buffer.from(m.content_base64||'','base64'));
+          }
+          const schedules=JSON.parse(fs.readFileSync('tmp/schedules.json','utf8'));
+          const summary={
+            version_id:r.id||null,
+            version_number:r.number||null,
+            created_on:r.created_on||null,
+            main_module:r.main_module||null,
+            modules:(r.modules||[]).map(m=>m.name||m.path||null),
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:b.type})),
+            schedules:schedules.result||null
+          };
+          fs.writeFileSync('audit-out/live-cloudflare-summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify({version_number:summary.version_number,version_id:summary.version_id,main_module:summary.main_module,schedules:summary.schedules},null,2));
+          NODE
+
+          for spec in \
+            "worker-version|${WORKER_URL}/api/version" \
+            "worker-health|${WORKER_URL}/api/email-alerts-health" \
+            "site-version|${SITE_URL}/api/version" \
+            "site-health|${SITE_URL}/api/email-alerts-health" \
+            "site-root|${SITE_URL}/"
+          do
+            name="${spec%%|*}"; url="${spec#*|}"
+            code=$(curl -L -sS -o "audit-out/${name}.body" -w "%{http_code}" "$url" || true)
+            printf '%s\n' "$code" > "audit-out/${name}.status"
+          done
+
+          code=$(curl -sS -o audit-out/email-dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=10" || true)
+          printf '%s\n' "$code" > audit-out/email-dry-run.status
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          let j={}; try{j=JSON.parse(fs.readFileSync('audit-out/email-dry-run.json','utf8'))}catch{}
+          const rows=Array.isArray(j.debug_users)?j.debug_users:[];
+          const safe={
+            http_status:fs.readFileSync('audit-out/email-dry-run.status','utf8').trim(),
+            ok:j.ok??null,dry_run:j.dry_run??null,
+            processed_users:j.processed_users??null,send_attempts:j.send_attempts??null,
+            failed_count:j.failed_count??null,skipped_count:j.skipped_count??null,
+            debug_user_count:rows.length,
+            debug_user_field_names:[...new Set(rows.flatMap(r=>Object.keys(r||{})))].sort()
+          };
+          fs.writeFileSync('audit-out/email-dry-run-safe-summary.json',JSON.stringify(safe,null,2));
+          fs.rmSync('audit-out/email-dry-run.json',{force:true});
+          NODE
+
+      - name: Run full static/live analyzer
+        shell: bash
+        run: |
+          set +e
+          node scripts/full-project-audit.mjs
+          rc=$?
+          echo "$rc" > audit-out/static-audit-exit-code.txt
+          exit 0
+
+      - name: Dependency audit
+        shell: bash
+        run: |
+          set +e
+          if [ -f package-lock.json ]; then
+            npm audit --json > audit-out/npm-audit.json 2>audit-out/npm-audit.stderr
+            echo "$?" > audit-out/npm-audit.exit
+          else
+            echo '{"skipped":true,"reason":"package-lock.json missing"}' > audit-out/npm-audit.json
+            echo 0 > audit-out/npm-audit.exit
+          fi
+          exit 0
+
+      - name: Production contract checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const live=JSON.parse(fs.readFileSync('audit-out/live-cloudflare-summary.json','utf8'));
+          const statuses={};
+          for(const name of ['worker-version','worker-health','site-version','site-health','site-root']) statuses[name]=fs.readFileSync(`audit-out/${name}.status`,'utf8').trim();
+          const dry=JSON.parse(fs.readFileSync('audit-out/email-dry-run-safe-summary.json','utf8'));
+          const checks={
+            active_version_687_or_newer:Number(live.version_number||0)>=687,
+            has_three_crons:Array.isArray(live.schedules)&&live.schedules.length===3,
+            worker_version_200:statuses['worker-version']==='200',
+            site_root_200:statuses['site-root']==='200',
+            dry_run_200:dry.http_status==='200',
+            dry_run_ok:dry.ok===true&&dry.dry_run===true&&Number(dry.failed_count||0)===0
+          };
+          fs.writeFileSync('audit-out/production-contract.json',JSON.stringify({checks,statuses,dry},null,2));
+          if(Object.values(checks).some(x=>x!==true)) process.exit(1);
+          NODE
+
+      - name: Upload full audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-alertasapd-project-audit
+          path: audit-out/
+          if-no-files-found: error
