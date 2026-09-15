@@ -9,7 +9,7 @@ inp, out = map(Path, sys.argv[1:])
 s = inp.read_text()
 original = s
 
-# 1) Legacy inner auth resolver must never treat a bearer token as a user UUID.
+# 1) The legacy resolver must never treat an unknown Bearer as a user UUID.
 inner_pattern = re.compile(r'else\s*\{\s*userId\s*=\s*token\s*;\s*\}')
 s, inner_count = inner_pattern.subn('else {\n    return null;\n  }', s, count=1)
 if inner_count != 1:
@@ -17,73 +17,80 @@ if inner_count != 1:
 if inner_pattern.search(s):
     raise SystemExit('another legacy token->user fallback remains after patch')
 
-# 2) Some live generations had a second user-id fallback in the hotfix wrapper.
-# Remove it if present; zero matches is valid when a previous live hotfix already removed it.
-hotfix_pattern = re.compile(
-    r'\s*const legacyUser = await getUserById\(env, bearer\)\.catch\(\(\) => null\);\s*'
-    r'if \(legacyUser\?\.activo !== false && legacyUser\?\.id\) return \{ bearer, user: legacyUser, mode: "legacy_user_id" \};\s*'
-    r'return \{ bearer, user: null, mode: "invalid" \};'
-)
-s, hotfix_count = hotfix_pattern.subn('\n  return { bearer, user: null, mode: "invalid" };', s, count=1)
-if hotfix_count not in (0, 1):
-    raise SystemExit(f'unexpected hotfix legacy user-id fallback count {hotfix_count}')
+# A newer source variant used a separate legacy_user_id mode. Production #687
+# does not currently contain it, but fail closed if it ever reappears.
 if 'legacy_user_id' in s:
-    raise SystemExit('legacy_user_id marker remains after patch')
+    raise SystemExit('unexpected legacy_user_id fallback exists in live Worker')
 
-# 3) Add a safe health endpoint and protect all mutating/debug email routes with secure admin auth.
-anchor = 'const REWRITE_GET_PATHS = new Set(['
-if s.count(anchor) != 1:
-    raise SystemExit(f'rewrite-path anchor count is {s.count(anchor)}')
-helpers = r'''const SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest"]);
+# 2) Locate the actual final router from the bundled production module.
+final_marker = 'var worker_hotfix_default = {'
+final_start = s.rfind(final_marker)
+if final_start < 0:
+    raise SystemExit('final worker_hotfix_default router not found')
+final = s[final_start:]
+path_anchor = '    const path = url.pathname;'
+if final.count(path_anchor) != 1:
+    raise SystemExit(f'expected one final-router path anchor, found {final.count(path_anchor)}')
 
+helpers = r'''
+var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest"]);
 async function requireSecureAdmin(env, request) {
-  const auth = await resolveAuthUser(env, request);
-  if (!auth.user?.id) return json({ ok: false, message: "No autenticado" }, 401);
-  if (auth.user.es_admin !== true) return json({ ok: false, message: "No autorizado" }, 403);
+  const user = await getSessionUserByBearer(env, request);
+  if (!user) return adminJson({ ok: false, error: "No autenticado" }, 401);
+  if (user.es_admin !== true) return adminJson({ ok: false, error: "No autorizado" }, 403);
   return null;
 }
-
 async function handleEmailAlertsHealth(env) {
   const latest = await supabaseSelect(
     env,
-    "notification_delivery_logs?channel=eq.email&select=created_at,status,provider&order=created_at.desc&limit=1"
+    "notification_delivery_logs?channel=eq.email&select=created_at,status&order=created_at.desc&limit=1"
   ).catch(() => []);
   const pending = await supabaseSelect(
     env,
     "pending_notifications?channel=eq.email&status=eq.pending&select=id&limit=101"
   ).catch(() => []);
   const last = Array.isArray(latest) ? latest[0] || null : null;
-  return json({
+  return json2({
     ok: true,
     service: "email-alerts",
     version: HOTFIX_VERSION,
     provider_configured: !!env.BREVO_API_KEY,
     pending_email_count: Array.isArray(pending) ? pending.length : 0,
+    pending_count_capped: Array.isArray(pending) && pending.length >= 101,
     latest_delivery_at: last?.created_at || null,
     latest_delivery_status: last?.status || null
   });
 }
-
 '''
-s = s.replace(anchor, helpers + anchor, 1)
 
-route_anchor = '''    if (path === `${API_URL_PREFIX}/version` && request.method === "GET") return json({ ok: true, version: HOTFIX_VERSION, worker_version: env.WORKER_URL || "worker-hotfix" });'''
-if s.count(route_anchor) != 1:
-    raise SystemExit(f'version-route anchor count is {s.count(route_anchor)}')
-route_block = route_anchor + '''
-    if (path === `${API_URL_PREFIX}/email-alerts-health` && request.method === "GET") return await handleEmailAlertsHealth(env);
+if 'var SENSITIVE_TEST_PATHS = new Set(' in s:
+    raise SystemExit('security helpers already present unexpectedly')
+s = s[:final_start] + helpers + '\n' + s[final_start:]
+
+# Re-locate after helper insertion, then wire the guard before every delegated route.
+final_start = s.rfind(final_marker)
+final = s[final_start:]
+guard = r'''    const path = url.pathname;
     if (SENSITIVE_TEST_PATHS.has(path)) {
-      const blocked = await requireSecureAdmin(env, request);
-      if (blocked) return blocked;
+      const denied = await requireSecureAdmin(env, request);
+      if (denied) return denied;
+    }
+    if (path === `${API_URL_PREFIX3}/email-alerts-health` && request.method === "GET") {
+      return await handleEmailAlertsHealth(env);
     }'''
-s = s.replace(route_anchor, route_block, 1)
+if final.count(path_anchor) != 1:
+    raise SystemExit('final router path anchor changed unexpectedly')
+final = final.replace(path_anchor, guard, 1)
+s = s[:final_start] + final
 
-# Version marker is useful in safe health/version output.
-s, n = re.subn(r'const HOTFIX_VERSION = "[^"]+";', 'const HOTFIX_VERSION = "2026-09-15-session-security-1";', s, count=1)
-if n != 1:
-    raise SystemExit('HOTFIX_VERSION marker not found')
+# 3) Give this candidate an explicit observable version marker.
+version_pattern = re.compile(r'\b(?:const|let|var)\s+HOTFIX_VERSION\s*=\s*"[^"]+"\s*;')
+matches = list(version_pattern.finditer(s))
+if len(matches) != 1:
+    raise SystemExit(f'expected exactly one HOTFIX_VERSION declaration, found {len(matches)}')
+s = version_pattern.sub('var HOTFIX_VERSION = "2026-09-15-session-security-1";', s, count=1)
 
 if s == original:
     raise SystemExit('patch made no changes')
 out.write_text(s)
-print(f'patched Worker security: inner_fallback={inner_count}, hotfix_fallback={hotfix_count}, guarded test routes, health endpoint')
+print('patched exact live Worker: session-only bearer, guarded test routes, email health endpoint')
