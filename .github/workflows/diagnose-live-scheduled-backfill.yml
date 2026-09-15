@@ -1,0 +1,52 @@
+name: Diagnose live scheduled and backfill path
+
+on:
+  push:
+    branches: [audit/full-project-2026-09-15]
+    paths: [.github/workflows/diagnose-live-scheduled-backfill.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch active Worker and extract safe structure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VERSION_ID}?include=modules" > tmp/live.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const r=JSON.parse(fs.readFileSync('tmp/live.json','utf8')).result;
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m.content_base64||'','base64').toString('utf8');
+          const lines=s.split(/\r?\n/);
+          const needles=['scheduled(', 'async scheduled', 'runProvinciaBackfillStep', 'runProvinciaBackfillAutorun', 'PROVINCIA_RUNNING_STALE_MS', 'isStaleProvinciaBackfill', 'worker_runs', 'errores_sistema'];
+          const hits=[];
+          for(const needle of needles){
+            for(let i=0;i<lines.length;i++) if(lines[i].includes(needle)){
+              hits.push({needle,line:i+1,excerpt:lines.slice(Math.max(0,i-5),Math.min(lines.length,i+13)).join('\n')});
+            }
+          }
+          const safe={version_number:r.number,version_id:r.id,hits};
+          fs.writeFileSync('out/scheduled-backfill-structure.json',JSON.stringify(safe,null,2));
+          console.log(JSON.stringify(safe,null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-backfill-structure
+          path: out/scheduled-backfill-structure.json
