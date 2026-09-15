@@ -1,0 +1,50 @@
+name: Apply frontend auth session fix on audit branch
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - .github/workflows/apply-auth-frontend-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/full-project-2026-09-15
+          fetch-depth: 0
+      - name: Inject session patch and verify GREEN
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          tag='<script src="auth_session_patch.js?v=2"></script>'
+          if tag not in s:
+              anchor='<script src="visual_last_patch.js?v=1"></script>'
+              if anchor not in s:
+                  raise SystemExit('index anchor not found')
+              s=s.replace(anchor, anchor+'\n'+tag, 1)
+              p.write_text(s)
+          PY
+          node --check auth_session_patch.js
+          node scripts/test-auth-session-frontend.mjs index.html auth_session_patch.js
+      - name: Commit branch fix
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html auth_session_patch.js; then
+            echo 'No uncommitted auth changes to commit'
+            exit 0
+          fi
+          git config user.name 'apdocentepba-hub'
+          git config user.email 'apdocentepba@gmail.com'
+          git add index.html auth_session_patch.js
+          git commit -m 'fix: enable secure browser session auth'
+          git push origin HEAD:audit/full-project-2026-09-15
