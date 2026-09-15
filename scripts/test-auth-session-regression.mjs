@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const PATCH_PATH = new URL('../auth_session_patch.js', import.meta.url);
+const INDEX_PATH = new URL('../index.html', import.meta.url);
 const patchSource = fs.readFileSync(PATCH_PATH, 'utf8');
+const indexSource = fs.readFileSync(INDEX_PATH, 'utf8');
 const WORKER_URL = 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const SESSION = 'session-token-abc';
@@ -104,6 +106,14 @@ function createHarness({ workerStatus = 200, workerBody = { ok: true, resultados
   };
 }
 
+function testIndexBustsAuthPatchCache() {
+  assert.match(
+    indexSource,
+    /auth_session_patch\.js\?v=3/,
+    'index.html must request auth_session_patch.js?v=3 so production cannot reuse the cached v=2 asset'
+  );
+}
+
 async function testMisAlertasUsesSessionBearer() {
   const h = createHarness();
   const rows = await h.window.obtenerMisAlertas(USER_ID);
@@ -136,6 +146,7 @@ async function test401ClearsSessionAndReturnsToLogin() {
   assert.ok(h.navRefreshes >= 1, '401 must refresh logged-in/logged-out navigation');
 }
 
+testIndexBustsAuthPatchCache();
 await testMisAlertasUsesSessionBearer();
 await test401ClearsSessionAndReturnsToLogin();
 console.log('auth session regression contract: OK');
