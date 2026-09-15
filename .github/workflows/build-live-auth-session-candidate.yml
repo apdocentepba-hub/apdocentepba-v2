@@ -1,0 +1,201 @@
+name: Build live auth session candidate
+
+on:
+  push:
+    branches:
+      - audit/live-auth-worker-2026-09-15
+    paths:
+      - .github/workflows/build-live-auth-session-candidate.yml
+      - scripts/test-live-auth-session-bundle.mjs
+      - scripts/patch-live-auth-session-bundle.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a629d728-a987-4fda-9fea-64ce58e3370b
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read active Worker and preserve deployment shape
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/live-auth-candidate/live tmp/live-auth-candidate/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/live-auth-candidate/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/live-auth-candidate/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-auth-candidate/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/live-auth-candidate/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Active version: ${ACTIVE_VERSION_ID}"
+          test "${ACTIVE_VERSION_ID}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/live-auth-candidate/active.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/live-auth-candidate/active.json','utf8'));
+          const r=j.result;
+          if(!j.success||!r?.id) throw new Error('Active version detail missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected live main ${r.main_module}`);
+          const expectedModules=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expectedModules)) throw new Error(`Unexpected live module set ${JSON.stringify(names)}`);
+          for(const m of r.modules||[]) {
+            const content=Buffer.from(m.content_base64||'','base64');
+            fs.writeFileSync(path.join('tmp/live-auth-candidate/live',m.name),content);
+            fs.writeFileSync(path.join('tmp/live-auth-candidate/candidate',m.name),content);
+          }
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          fs.writeFileSync('tmp/live-auth-candidate/binding-shape.json',JSON.stringify(shape));
+          const hashes=Object.fromEntries(names.map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join('tmp/live-auth-candidate/live',name))).digest('hex')]));
+          fs.writeFileSync('tmp/live-auth-candidate/live-hashes.json',JSON.stringify(hashes,null,2));
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA auth session gate candidate','workers/tag':'auth-session-gate-20260915'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
+          };
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/live-auth-candidate/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Live shape locked: main=${r.main_module}; modules=${names.length}; bindings=${shape.length}`);
+          console.log(JSON.stringify(hashes,null,2));
+          NODE
+
+      - name: Verify RED against active live bundle
+        run: |
+          set -euo pipefail
+          if node scripts/test-live-auth-session-bundle.mjs tmp/live-auth-candidate/live/worker_hotfix.js > tmp/live-auth-candidate/red.log 2>&1; then
+            cat tmp/live-auth-candidate/red.log
+            echo "Expected live auth contract to be RED before patch"
+            exit 1
+          fi
+          cat tmp/live-auth-candidate/red.log
+          grep -q "LIVE_SESSION_AUTH_GATE_V1" tmp/live-auth-candidate/red.log
+          echo "RED confirmed: live bundle lacks mandatory top-level session gate"
+
+      - name: Apply one surgical auth gate patch
+        run: |
+          set -euo pipefail
+          node scripts/patch-live-auth-session-bundle.mjs \
+            tmp/live-auth-candidate/live/worker_hotfix.js \
+            tmp/live-auth-candidate/candidate/worker_hotfix.js
+
+          node --check tmp/live-auth-candidate/candidate/worker_hotfix.js
+          node --check tmp/live-auth-candidate/candidate/email_queue_hotfix.js
+          node --check tmp/live-auth-candidate/candidate/worker_email_queue_hotfix.js
+          node scripts/test-live-auth-session-bundle.mjs tmp/live-auth-candidate/candidate/worker_hotfix.js
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const live=JSON.parse(fs.readFileSync('tmp/live-auth-candidate/live-hashes.json','utf8'));
+          const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+          const after={
+            'worker_hotfix.js':hash('tmp/live-auth-candidate/candidate/worker_hotfix.js'),
+            'email_queue_hotfix.js':hash('tmp/live-auth-candidate/candidate/email_queue_hotfix.js'),
+            'worker_email_queue_hotfix.js':hash('tmp/live-auth-candidate/candidate/worker_email_queue_hotfix.js')
+          };
+          if(after['worker_hotfix.js']===live['worker_hotfix.js']) throw new Error('worker_hotfix.js did not change');
+          for(const name of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) {
+            if(after[name]!==live[name]) throw new Error(`${name} changed unexpectedly`);
+          }
+          fs.writeFileSync('tmp/live-auth-candidate/candidate-hashes.json',JSON.stringify(after,null,2));
+          console.log('GREEN confirmed; only worker_hotfix.js changed');
+          NODE
+
+      - name: Upload candidate version without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/live-auth-candidate/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/live-auth-candidate/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/live-auth-candidate/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/live-auth-candidate/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/live-auth-candidate/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare candidate upload HTTP ${HTTP_CODE}"
+          CANDIDATE_VERSION_ID=$(node -e "const j=require('./tmp/live-auth-candidate/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Candidate version: ${CANDIDATE_VERSION_ID}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/live-auth-candidate/candidate-detail.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const expectedShape=JSON.parse(fs.readFileSync('tmp/live-auth-candidate/binding-shape.json','utf8'));
+          const j=JSON.parse(fs.readFileSync('tmp/live-auth-candidate/candidate-detail.json','utf8'));
+          const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate detail missing or mismatched');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected candidate main ${r.main_module}`);
+          const expectedModules=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expectedModules)) throw new Error(`Candidate module set changed: ${JSON.stringify(names)}`);
+          const actualShape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expectedShape)!==JSON.stringify(actualShape)) throw new Error('Candidate binding shape differs from active');
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('tmp/live-auth-candidate','uploaded-'+m.name),Buffer.from(m.content_base64||'','base64'));
+          console.log(`Candidate shape OK: modules=${names.length}; bindings=${actualShape.length}`);
+          NODE
+
+          node --check tmp/live-auth-candidate/uploaded-worker_hotfix.js
+          node scripts/test-live-auth-session-bundle.mjs tmp/live-auth-candidate/uploaded-worker_hotfix.js
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-auth-candidate/deployments-after.json
+          ACTIVE_AFTER=$(node -e "const j=require('./tmp/live-auth-candidate/deployments-after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(4);process.stdout.write(v.version_id)")
+          echo "Active after candidate upload: ${ACTIVE_AFTER}"
+          test "${ACTIVE_AFTER}" = "${ACTIVE_VERSION_ID}"
+
+          CANDIDATE_VERSION_ID="${CANDIDATE_VERSION_ID}" ACTIVE_VERSION_ID="${ACTIVE_VERSION_ID}" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const summary={
+            ok:true,
+            candidate_version_id:process.env.CANDIDATE_VERSION_ID,
+            active_version_id:process.env.ACTIVE_VERSION_ID,
+            traffic_changed:false,
+            red_verified:true,
+            green_verified:true,
+            syntax_checked:true,
+            binding_shape_preserved:true,
+            module_shape_preserved:true,
+            changed_module:'worker_hotfix.js'
+          };
+          fs.writeFileSync('tmp/live-auth-candidate/summary.json',JSON.stringify(summary,null,2));
+          fs.writeFileSync('tmp/live-auth-candidate/candidate-id.txt',process.env.CANDIDATE_VERSION_ID+'\n');
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload candidate verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-auth-session-candidate
+          path: |
+            tmp/live-auth-candidate/summary.json
+            tmp/live-auth-candidate/candidate-id.txt
+            tmp/live-auth-candidate/red.log
+            tmp/live-auth-candidate/live-hashes.json
+            tmp/live-auth-candidate/candidate-hashes.json
+          if-no-files-found: ignore
