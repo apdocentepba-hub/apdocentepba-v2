@@ -1,0 +1,50 @@
+name: Audit production frontend origin
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - .github/workflows/audit-frontend-origin.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect headers and production asset fingerprints
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -sSIL https://alertasapd.com.ar/ > out/root-headers.txt
+          curl -fsS https://alertasapd.com.ar/ > /tmp/live-index.html
+          curl -fsS https://raw.githubusercontent.com/apdocentepba-hub/apdocentepba-v2/main/index.html > /tmp/repo-index.html
+          curl -fsS 'https://alertasapd.com.ar/app_v2.js?v=17' > /tmp/live-app.js
+          curl -fsS https://raw.githubusercontent.com/apdocentepba-hub/apdocentepba-v2/main/app_v2.js > /tmp/repo-app.js
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const sha=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+          const liveIndex=fs.readFileSync('/tmp/live-index.html','utf8');
+          const safeHeaders=fs.readFileSync('out/root-headers.txt','utf8')
+            .split(/\r?\n/)
+            .filter(l=>/^(HTTP\/|server:|x-github-|via:|cf-|etag:|last-modified:|content-type:)/i.test(l))
+            .join('\n');
+          const summary={
+            index_matches_main:sha('/tmp/live-index.html')===sha('/tmp/repo-index.html'),
+            app_matches_main:sha('/tmp/live-app.js')===sha('/tmp/repo-app.js'),
+            live_index_sha256:sha('/tmp/live-index.html'),repo_index_sha256:sha('/tmp/repo-index.html'),
+            live_app_sha256:sha('/tmp/live-app.js'),repo_app_sha256:sha('/tmp/repo-app.js'),
+            loads_auth_session_patch:/auth_session_patch\.js/i.test(liveIndex),
+            headers:safeHeaders
+          };
+          fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+          rm -f /tmp/live-index.html /tmp/repo-index.html /tmp/live-app.js /tmp/repo-app.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-origin-audit
+          path: out/
