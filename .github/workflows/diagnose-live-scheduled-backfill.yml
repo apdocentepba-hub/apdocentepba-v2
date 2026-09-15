@@ -35,14 +35,13 @@ jobs:
           const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
           const s=Buffer.from(m.content_base64||'','base64').toString('utf8');
           const lines=s.split(/\r?\n/);
-          const needles=['scheduled(', 'async scheduled', 'runProvinciaBackfillStep', 'runProvinciaBackfillAutorun', 'PROVINCIA_RUNNING_STALE_MS', 'isStaleProvinciaBackfill', 'worker_runs', 'errores_sistema'];
-          const hits=[];
-          for(const needle of needles){
-            for(let i=0;i<lines.length;i++) if(lines[i].includes(needle)){
-              hits.push({needle,line:i+1,excerpt:lines.slice(Math.max(0,i-5),Math.min(lines.length,i+13)).join('\n')});
-            }
-          }
-          const safe={version_number:r.number,version_id:r.id,hits};
+          const scheduledLine=lines.findIndex(x=>x.includes('async scheduled(event, env, ctx)'));
+          if(scheduledLine<0) throw new Error('scheduled handler missing');
+          const scheduledExcerpt=lines.slice(Math.max(0,scheduledLine-6),Math.min(lines.length,scheduledLine+220)).join('\n');
+          const needles=['runProvinciaBackfillStep','runWhatsAppAlertsSweep','runEmailAlertsSweep','sendPendingEmailDigests','processPendingEmailQueue','worker_runs','errores_sistema','scheduled('];
+          const counts=Object.fromEntries(needles.map(n=>[n,lines.filter(x=>x.includes(n)).length]));
+          const scheduledCalls=Object.fromEntries(needles.map(n=>[n,scheduledExcerpt.includes(n)]));
+          const safe={version_number:r.number,version_id:r.id,scheduled_line:scheduledLine+1,counts,scheduledCalls,scheduledExcerpt};
           fs.writeFileSync('out/scheduled-backfill-structure.json',JSON.stringify(safe,null,2));
           console.log(JSON.stringify(safe,null,2));
           NODE
