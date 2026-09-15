@@ -1,0 +1,20 @@
+name: Auth session regression
+
+on:
+  pull_request:
+    paths:
+      - 'auth_session_patch.js'
+      - 'scripts/test-auth-session-regression.mjs'
+      - '.github/workflows/auth-session-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  auth-session-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run auth session regression contract
+        run: node scripts/test-auth-session-regression.mjs
