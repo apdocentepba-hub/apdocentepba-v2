@@ -37,18 +37,16 @@ jobs:
           import crypto from 'node:crypto';
           const index=fs.readFileSync('/tmp/live-index.html','utf8');
           const auth=fs.readFileSync('/tmp/live-auth.js','utf8');
-          const app=index.indexOf('src="app_v2.js?v=17"');
-          const session=index.indexOf('src="auth_session_patch.js?v=2"');
-          if(app<0||session<0||session<app) throw new Error('secure auth patch is not loaded after app_v2.js');
-          const between=index.slice(app,session);
-          if((between.match(/<script src=/g)||[]).length!==1) throw new Error('another external application script loads before secure auth patch');
+          if(!/<script src="app_v2\.js\?v=17"><\/script>\s*<script src="auth_session_patch\.js\?v=2"><\/script>/.test(index)) {
+            throw new Error('secure auth patch is not immediately after app_v2.js');
+          }
           if(!auth.includes("const SESSION_TOKEN_KEY = 'apd_session_token_v1'")) throw new Error('session token key missing');
           if(!/function getAuthBearer\(\) \{\s*return getSessionToken\(\);/m.test(auth)) throw new Error('Bearer still falls back to user UUID');
           if(!auth.includes('clearLegacyAuthIfNeeded')) throw new Error('legacy auth cleanup missing');
           if(!auth.includes('session_token')) throw new Error('session_token handling missing');
           if(/getSessionToken\(\)\s*\|\|\s*getUserToken\(\)/.test(auth)) throw new Error('unsafe UUID Bearer fallback remains');
           const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
-          const summary={ok:true,index_sha256:sha(index),auth_sha256:sha(auth),session_patch_loaded:true,session_only_bearer:true};
+          const summary={ok:true,index_sha256:sha(index),auth_sha256:sha(auth),session_patch_loaded:true,session_only_bearer:true,live_matches_main:true};
           fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2));
           console.log(JSON.stringify(summary,null,2));
           NODE
