@@ -1,0 +1,128 @@
+name: Final live auth session smoke
+
+on:
+  push:
+    branches:
+      - audit/live-auth-worker-2026-09-15
+    paths:
+      - .github/workflows/smoke-live-auth-session-final.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      EXPECTED_ACTIVE_VERSION: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify active version and public behavior
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/final-auth-smoke
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/final-auth-smoke/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/final-auth-smoke/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/final-auth-smoke/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/final-auth-smoke/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "Active version: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          check_json_false_401() {
+            NAME="$1"; shift
+            CODE=$(curl -sS -o "tmp/final-auth-smoke/${NAME}.json" -w "%{http_code}" "$@")
+            echo "${NAME}: HTTP ${CODE}"
+            test "${CODE}" = "401"
+            NAME="${NAME}" node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('tmp/final-auth-smoke/'+process.env.NAME+'.json','utf8'));if(j.ok!==false)throw new Error(process.env.NAME+': expected ok=false');const m=String(j.message||j.error||'');if(!/autenticado|sesión|session/i.test(m))throw new Error(process.env.NAME+': unexpected message '+m);console.log(process.env.NAME+': '+m)"
+          }
+
+          check_json_false_401 mis-alertas \
+            "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          check_json_false_401 mi-plan \
+            "${WORKER_URL}/api/mi-plan?user_id=${FAKE_USER_ID}"
+          check_json_false_401 historico-resumen \
+            "${WORKER_URL}/api/historico-resumen?user_id=${FAKE_USER_ID}"
+
+          check_json_false_401 guardar-preferencias \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/guardar-preferencias"
+          check_json_false_401 capturar-historico \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/capturar-historico-apd"
+          check_json_false_401 checkout \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\",\"plan_code\":\"PRO\"}" \
+            "${WORKER_URL}/api/mercadopago/create-checkout-link"
+          check_json_false_401 whatsapp-test \
+            -X POST -H "Content-Type: application/json" \
+            --data "{\"user_id\":\"${FAKE_USER_ID}\"}" \
+            "${WORKER_URL}/api/whatsapp/test-send"
+
+          check_json_false_401 invalid-bearer \
+            -H "Authorization: Bearer ${FAKE_USER_ID}" \
+            "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+
+          VERSION_CODE=$(curl -sS -o tmp/final-auth-smoke/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          echo "api/version: HTTP ${VERSION_CODE}"
+          test "${VERSION_CODE}" = "200"
+          node -e "const j=require('./tmp/final-auth-smoke/version.json');if(j.ok!==true)throw new Error('api/version not ok')"
+
+          PLANES_CODE=$(curl -sS -o tmp/final-auth-smoke/planes.json -w "%{http_code}" "${WORKER_URL}/api/planes")
+          echo "api/planes: HTTP ${PLANES_CODE}"
+          test "${PLANES_CODE}" = "200"
+
+          OPTIONS_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X OPTIONS \
+            -H "Origin: https://alertasapd.com.ar" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization" \
+            "${WORKER_URL}/api/mis-alertas")
+          echo "CORS OPTIONS: HTTP ${OPTIONS_CODE}"
+          test "${OPTIONS_CODE}" = "200"
+
+          INVALID_LOGIN_CODE=$(curl -sS -o tmp/final-auth-smoke/invalid-login.json -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"email":"nonexistent-auth-smoke@example.invalid","password":"invalid-password"}' \
+            "${WORKER_URL}/api/login")
+          echo "invalid login control: HTTP ${INVALID_LOGIN_CODE}"
+          test "${INVALID_LOGIN_CODE}" = "401"
+
+          SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          echo "public site: HTTP ${SITE_CODE}"
+          test "${SITE_CODE}" = "200"
+
+          cat > tmp/final-auth-smoke/summary.json <<JSON
+          {
+            "ok": true,
+            "active_version": "${ACTIVE}",
+            "protected_routes_unauthenticated_401": 7,
+            "uuid_as_bearer_rejected_401": true,
+            "version_endpoint_ok": true,
+            "planes_endpoint_ok": true,
+            "cors_ok": true,
+            "invalid_login_control_ok": true,
+            "public_site_ok": true
+          }
+          JSON
+          cat tmp/final-auth-smoke/summary.json
+
+      - name: Upload final smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-live-auth-session-smoke
+          path: tmp/final-auth-smoke/
+          if-no-files-found: error
