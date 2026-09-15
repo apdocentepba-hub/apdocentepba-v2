@@ -1,0 +1,66 @@
+name: Prepare secure frontend auth release
+
+on:
+  push:
+    branches: [audit/full-project-2026-09-15]
+    paths: [.github/workflows/prepare-session-auth-release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/session-auth-production-2026-09-15
+          fetch-depth: 0
+      - name: Copy audited auth patch and wire it immediately after app_v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin audit/full-project-2026-09-15
+          git show origin/audit/full-project-2026-09-15:auth_session_patch.js > auth_session_patch.js
+          git show origin/audit/full-project-2026-09-15:scripts/test-auth-session-frontend.mjs > /tmp/test-auth-session-frontend.mjs
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          import re
+          s=re.sub(r'\n?<script src="auth_session_patch\.js\?v=[^"]+"></script>\n?', '\n', s)
+          anchor='<script src="app_v2.js?v=17"></script>'
+          if s.count(anchor)!=1:
+              raise SystemExit(f'app_v2 anchor count={s.count(anchor)}')
+          s=s.replace(anchor, anchor+'\n<script src="auth_session_patch.js?v=2"></script>',1)
+          p.write_text(s)
+          PY
+          node --check auth_session_patch.js
+          node /tmp/test-auth-session-frontend.mjs index.html auth_session_patch.js
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text()
+          a=s.index('src="app_v2.js')
+          b=s.index('src="auth_session_patch.js')
+          next_script=s.find('<script src=', a+1)
+          if b != next_script + len('<script '):
+              # Simpler invariant: no other external script tag begins between app and auth.
+              between=s[a:b]
+              if between.count('<script src=')!=1:
+                  raise SystemExit('auth_session_patch.js is not immediately after app_v2.js')
+          print('PASS: auth session patch loads before all later application patches')
+          PY
+      - name: Commit release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name apdocentepba-hub
+          git config user.email apdocentepba@gmail.com
+          git add index.html auth_session_patch.js
+          if git diff --cached --quiet; then
+            echo 'No release changes needed'
+            exit 0
+          fi
+          git commit -m 'fix: enable secure session bearer in frontend'
+          git push origin HEAD:fix/session-auth-production-2026-09-15
