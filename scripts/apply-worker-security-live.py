@@ -16,9 +16,6 @@ if inner_count != 1:
     raise SystemExit(f'expected exactly one legacy token->user fallback, found {inner_count}')
 if inner_pattern.search(s):
     raise SystemExit('another legacy token->user fallback remains after patch')
-
-# A newer source variant used a separate legacy_user_id mode. Production #687
-# does not currently contain it, but fail closed if it ever reappears.
 if 'legacy_user_id' in s:
     raise SystemExit('unexpected legacy_user_id fallback exists in live Worker')
 
@@ -28,7 +25,11 @@ final_start = s.rfind(final_marker)
 if final_start < 0:
     raise SystemExit('final worker_hotfix_default router not found')
 final = s[final_start:]
+fetch_anchor = '''  async fetch(request, env, ctx) {
+    const hotfix = await handleHotfixRoute(request, env, ctx);'''
 path_anchor = '    const path = url.pathname;'
+if final.count(fetch_anchor) != 1:
+    raise SystemExit(f'expected one final fetch anchor, found {final.count(fetch_anchor)}')
 if final.count(path_anchor) != 1:
     raise SystemExit(f'expected one final-router path anchor, found {final.count(path_anchor)}')
 
@@ -67,20 +68,30 @@ if 'var SENSITIVE_TEST_PATHS = new Set(' in s:
     raise SystemExit('security helpers already present unexpectedly')
 s = s[:final_start] + helpers + '\n' + s[final_start:]
 
-# Re-locate after helper insertion, then wire the guard before every delegated route.
+# Re-locate after helper insertion. The security prelude runs BEFORE handleHotfixRoute,
+# so no current or future delegated router can bypass it.
 final_start = s.rfind(final_marker)
 final = s[final_start:]
-guard = r'''    const path = url.pathname;
-    if (SENSITIVE_TEST_PATHS.has(path)) {
+prelude = '''  async fetch(request, env, ctx) {
+    const securityUrl = new URL(request.url);
+    const securityPath = securityUrl.pathname;
+    if (SENSITIVE_TEST_PATHS.has(securityPath)) {
       const denied = await requireSecureAdmin(env, request);
       if (denied) return denied;
     }
+    const hotfix = await handleHotfixRoute(request, env, ctx);'''
+if final.count(fetch_anchor) != 1:
+    raise SystemExit('final fetch anchor changed unexpectedly')
+final = final.replace(fetch_anchor, prelude, 1)
+
+# Safe read-only health route can use the normal final router path after hotfix delegation.
+health_block = '''    const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/email-alerts-health` && request.method === "GET") {
       return await handleEmailAlertsHealth(env);
     }'''
 if final.count(path_anchor) != 1:
     raise SystemExit('final router path anchor changed unexpectedly')
-final = final.replace(path_anchor, guard, 1)
+final = final.replace(path_anchor, health_block, 1)
 s = s[:final_start] + final
 
 # 3) Give this candidate an explicit observable version marker.
@@ -88,9 +99,9 @@ version_pattern = re.compile(r'\b(?:const|let|var)\s+HOTFIX_VERSION\s*=\s*"[^"]+
 matches = list(version_pattern.finditer(s))
 if len(matches) != 1:
     raise SystemExit(f'expected exactly one HOTFIX_VERSION declaration, found {len(matches)}')
-s = version_pattern.sub('var HOTFIX_VERSION = "2026-09-15-session-security-1";', s, count=1)
+s = version_pattern.sub('var HOTFIX_VERSION = "2026-09-15-session-security-2";', s, count=1)
 
 if s == original:
     raise SystemExit('patch made no changes')
 out.write_text(s)
-print('patched exact live Worker: session-only bearer, guarded test routes, email health endpoint')
+print('patched exact live Worker: session-only bearer, pre-router test guard, email health endpoint')
