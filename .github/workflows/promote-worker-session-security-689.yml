@@ -1,0 +1,154 @@
+name: Promote Worker session security 689
+
+on:
+  push:
+    branches: [audit/full-project-2026-09-15]
+    paths: [.github/workflows/promote-worker-session-security-689.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      EXPECTED_OLD_VERSION_ID: aaf3e360-fad4-4445-aab3-c9977f4b0cb5
+      CANDIDATE_VERSION_ID: e070ba13-252d-4985-8db7-70133afe8c97
+      EXPECTED_MARKER: 2026-09-15-session-security-3
+    steps:
+      - name: Preflight, promote and smoke with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          rollback() {
+            echo 'Smoke failed: rolling back to Worker #687'
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after AlertasAPD session-security smoke failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @out/rollback.json > out/rollback-response.json || true
+          }
+
+          # Production must still be the exact version audited as the base.
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/before.json
+          ACTIVE_BEFORE=$(node -e "const j=require('./out/before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          test "${ACTIVE_BEFORE}" = "${EXPECTED_OLD_VERSION_ID}"
+
+          # Candidate must still be exactly the audited #689 with all bindings/modules and guards.
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('out/candidate.json','utf8')); const r=j.result;
+          if(!j.success||!r?.id) throw new Error('candidate unavailable');
+          if(r.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('candidate id mismatch');
+          if(Number(r.number)!==689) throw new Error(`unexpected candidate number ${r.number}`);
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`unexpected main module ${r.main_module}`);
+          const bindings=(r.bindings||[]).map(x=>`${x.name}:${x.type}`).sort();
+          if(bindings.length!==27) throw new Error(`unexpected binding count ${bindings.length}`);
+          const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')]));
+          for(const name of ['worker_hotfix.js','worker_email_queue_hotfix.js','email_queue_hotfix.js']) if(!(name in mods)) throw new Error(`missing ${name}`);
+          const s=mods['worker_hotfix.js'];
+          if(!s.includes(process.env.EXPECTED_MARKER)) throw new Error('security marker missing');
+          if(/else\s*\{\s*userId\s*=\s*token\s*;\s*\}/m.test(s)) throw new Error('legacy UUID bearer fallback remains');
+          const final=s.slice(s.lastIndexOf('var worker_hotfix_default = {'));
+          const guard=final.indexOf('SENSITIVE_TEST_PATHS.has(path)');
+          const firstRoute=final.indexOf('/version`');
+          const sweep=final.indexOf('path === "/test-email-sweep"');
+          const delegate=final.indexOf('worker_default.fetch(request, env, ctx)');
+          if(guard<0||firstRoute<0||guard>firstRoute) throw new Error('guard is not before first route');
+          if(sweep>=0&&guard>sweep) throw new Error('guard is after manual sweep');
+          if(delegate>=0&&guard>delegate) throw new Error('guard is after legacy delegate');
+          for(const route of ['/test-mail','/test-email-sweep','/test-digest']) if(!s.includes(route)) throw new Error(`route missing ${route}`);
+          console.log(`Candidate #${r.number} preflight OK; bindings=${bindings.length}`);
+          NODE
+
+          # The secure browser frontend must already be live before strict Worker auth is promoted.
+          curl -fsS -H 'Cache-Control: no-cache' "${SITE_URL}/?security-promote=${GITHUB_RUN_ID}" > out/live-index.html
+          curl -fsS -H 'Cache-Control: no-cache' "${SITE_URL}/auth_session_patch.js?v=2&security-promote=${GITHUB_RUN_ID}" > out/live-auth.js
+          node - <<'NODE'
+          const fs=require('fs'); const index=fs.readFileSync('out/live-index.html','utf8'); const auth=fs.readFileSync('out/live-auth.js','utf8');
+          if(!/<script src="app_v2\.js\?v=17"><\/script>\s*<script src="auth_session_patch\.js\?v=2"><\/script>/.test(index)) throw new Error('secure frontend patch not live in correct order');
+          if(!/function getAuthBearer\(\) \{\s*return getSessionToken\(\);/m.test(auth)) throw new Error('frontend Bearer is not session-only');
+          if(/getSessionToken\(\)\s*\|\|\s*getUserToken\(\)/.test(auth)) throw new Error('frontend UUID bearer fallback remains');
+          NODE
+
+          cat > out/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"AlertasAPD: strict session Bearer + protected diagnostic email routes"}}
+          JSON
+
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @out/deploy.json > out/deploy-response.json
+          node -e "const j=require('./out/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));"
+
+          visible=0
+          for attempt in 1 2 3 4 5 6; do
+            sleep 3
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
+            ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+            if [ "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}" ]; then visible=1; break; fi
+          done
+          test "$visible" = 1
+
+          VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          test "$VERSION_CODE" = 200
+          node -e "const j=require('./out/version.json');if(j.ok!==true||j.version!==process.env.EXPECTED_MARKER)throw new Error(JSON.stringify(j));"
+
+          HEALTH_CODE=$(curl -sS -o out/health.json -w "%{http_code}" "${WORKER_URL}/api/email-alerts-health")
+          test "$HEALTH_CODE" = 200
+          node -e "const j=require('./out/health.json');if(j.ok!==true||j.service!=='email-alerts'||j.version!==process.env.EXPECTED_MARKER)throw new Error(JSON.stringify(j));if(j.provider_configured!==true)throw new Error('email provider not configured');"
+
+          # A random UUID must no longer authenticate as a user. Read-only endpoint only.
+          FAKE_UUID=$(node -e "console.log(crypto.randomUUID())")
+          AUTH_CODE=$(curl -sS -o out/fake-auth.json -w "%{http_code}" -H "Authorization: Bearer ${FAKE_UUID}" "${WORKER_URL}/api/admin/me")
+          test "$AUTH_CODE" = 401
+
+          # Only the dry-run email route is called dynamically. If the guard regressed, dry_run prevents delivery.
+          TEST_CODE=$(curl -sS -o out/test-sweep.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&limit=1")
+          test "$TEST_CODE" = 401
+          node -e "const j=require('./out/test-sweep.json');if(!['No autenticado','No autorizado'].includes(j.error))throw new Error(JSON.stringify(j));"
+
+          SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          test "$SITE_CODE" = 200
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/final.json
+          ACTIVE_FINAL=$(node -e "const j=require('./out/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(5);process.stdout.write(v.version_id)")
+          test "$ACTIVE_FINAL" = "$CANDIDATE_VERSION_ID"
+
+          trap - ERR
+          node - <<'NODE'
+          const fs=require('fs'); const health=JSON.parse(fs.readFileSync('out/health.json','utf8'));
+          const summary={deployed:true,candidate_number:689,candidate_version_id:process.env.CANDIDATE_VERSION_ID,rollback_version_id:process.env.EXPECTED_OLD_VERSION_ID,active_final:process.env.CANDIDATE_VERSION_ID,frontend_secure:true,version_endpoint_ok:true,email_health_ok:true,email_pending_count:health.pending_email_count,latest_delivery_at:health.latest_delivery_at,uuid_bearer_rejected:true,test_email_sweep_unauthenticated_rejected:true,public_site_ok:true,rollback_triggered:false};
+          fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2)); console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload production security verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-session-security-689-production
+          path: |
+            out/summary.json
+            out/rollback-response.json
+          if-no-files-found: ignore
