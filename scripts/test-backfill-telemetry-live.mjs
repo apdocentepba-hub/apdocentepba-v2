@@ -38,9 +38,13 @@ assert(!/runWhatsAppAlertsSweep\s*\(/.test(scheduledPrefix), 'WhatsApp cron must
 assert(!/sendPendingEmailDigests\s*\(/.test(scheduledPrefix), 'legacy digest queue must remain disabled');
 assert(!/processPendingEmailQueue\s*\(/.test(scheduledPrefix), 'pending queue cron must remain disabled');
 
-// Security invariants from #689 must survive.
+// Security invariants from #689 must survive and backfill kick must become admin-only.
 assert(!/else\s*\{\s*userId\s*=\s*token\s*;\s*\}/m.test(s), 'UUID bearer fallback returned');
-assert(final.includes('SENSITIVE_TEST_PATHS.has(path)'), 'sensitive test route guard missing');
+assert(final.includes('SENSITIVE_TEST_PATHS.has(path)'), 'sensitive route guard missing');
 assert(final.indexOf('SENSITIVE_TEST_PATHS.has(path)') < final.indexOf('/version`'), 'security guard moved behind routes');
+const guardedSet=s.match(/SENSITIVE_TEST_PATHS\s*=\s*new Set\(\[([^\]]+)\]\)/)?.[1] || '';
+assert(guardedSet.includes('/test-mail') && guardedSet.includes('/test-email-sweep') && guardedSet.includes('/test-digest'), 'email test routes lost guard coverage');
+assert(guardedSet.includes('/api/provincia/backfill-kick'), 'RED: province backfill kick is still publicly mutable');
+assert(s.includes('2026-09-15-backfill-telemetry-2'), 'backfill telemetry v2 marker missing');
 
-console.log('PASS: bounded province backfill + telemetry are wired without changing outbound-channel policy');
+console.log('PASS: bounded province backfill + telemetry are wired, email is unchanged, and manual backfill kick is admin-only');
