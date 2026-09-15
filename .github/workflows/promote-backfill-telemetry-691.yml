@@ -1,0 +1,148 @@
+name: Promote hardened backfill telemetry 691
+
+on:
+  push:
+    branches: [audit/full-project-2026-09-15]
+    paths: [.github/workflows/promote-backfill-telemetry-691.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      EXPECTED_OLD_VERSION_ID: e070ba13-252d-4985-8db7-70133afe8c97
+      CANDIDATE_VERSION_ID: a629d728-a987-4fda-9fea-64ce58e3370b
+      EXPECTED_MARKER: 2026-09-15-backfill-telemetry-2
+      EMAIL_SWEEP_SHA: 6a40683a8a3e8e4ab09d4209030320068cada9cfc7110e66b45a8db7b7bbfedd
+    steps:
+      - name: Preflight, promote and smoke with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          rollback() {
+            echo 'Smoke failed: rolling back to Worker #689'
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after AlertasAPD backfill-telemetry smoke failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" --data @out/rollback.json > out/rollback-response.json || true
+          }
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/before.json
+          ACTIVE_BEFORE=$(node -e "const j=require('./out/before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          test "$ACTIVE_BEFORE" = "$EXPECTED_OLD_VERSION_ID"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('out/candidate.json','utf8')); const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('candidate unavailable/mismatch');
+          if(Number(r.number)!==691) throw new Error(`unexpected candidate #${r.number}`);
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`unexpected main ${r.main_module}`);
+          const bindings=(r.bindings||[]).map(x=>`${x.name}:${x.type}`).sort(); if(bindings.length!==27) throw new Error(`bindings=${bindings.length}`);
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js'); if(!main) throw new Error('worker_hotfix.js missing');
+          const s=Buffer.from(main.content_base64||'','base64').toString('utf8');
+          if(!s.includes(process.env.EXPECTED_MARKER)) throw new Error('marker missing');
+          if(/else\s*\{\s*userId\s*=\s*token\s*;\s*\}/m.test(s)) throw new Error('legacy UUID bearer fallback returned');
+          const guardSet=s.match(/SENSITIVE_TEST_PATHS\s*=\s*new Set\(\[([^\]]+)\]\)/)?.[1]||'';
+          for(const route of ['/test-mail','/test-email-sweep','/test-digest','/api/provincia/backfill-kick']) if(!guardSet.includes(route)) throw new Error(`unguarded ${route}`);
+          for(const marker of ['async function runObservedProvinciaBackfill','ctx.waitUntil(runObservedProvinciaBackfill(env, event))','recordObservedEmailCron','worker_runs','errores_sistema','source: "cron_maintenance"']) if(!s.includes(marker)) throw new Error(`backfill/telemetry marker missing: ${marker}`);
+          const scheduled=s.slice(s.indexOf('async scheduled(event, env, ctx)'));
+          if(/runWhatsAppAlertsSweep\s*\(/.test(scheduled.split('};\nasync function handleTestMail')[0])) throw new Error('WhatsApp cron unexpectedly enabled');
+          if(/sendPendingEmailDigests\s*\(/.test(scheduled.split('};\nasync function handleTestMail')[0])) throw new Error('legacy digest queue unexpectedly enabled');
+          const a=s.indexOf('async function runEmailAlertsSweep'); const b=s.indexOf('function getArgentinaDigestSlotInfo',a);
+          const hash=crypto.createHash('sha256').update(s.slice(a,b)).digest('hex');
+          if(hash!==process.env.EMAIL_SWEEP_SHA) throw new Error(`email sweep changed ${hash}`);
+          console.log(`Candidate #${r.number} preflight OK; bindings=${bindings.length}; emailSHA=${hash}`);
+          NODE
+
+          curl -fsS -H 'Cache-Control: no-cache' "${SITE_URL}/?backfill-promote=${GITHUB_RUN_ID}" > out/live-index.html
+          curl -fsS -H 'Cache-Control: no-cache' "${SITE_URL}/auth_session_patch.js?v=2&backfill-promote=${GITHUB_RUN_ID}" > out/live-auth.js
+          node - <<'NODE'
+          const fs=require('fs'); const i=fs.readFileSync('out/live-index.html','utf8'); const a=fs.readFileSync('out/live-auth.js','utf8');
+          if(!/<script src="app_v2\.js\?v=17"><\/script>\s*<script src="auth_session_patch\.js\?v=2"><\/script>/.test(i)) throw new Error('secure frontend not live');
+          if(!/function getAuthBearer\(\) \{\s*return getSessionToken\(\);/m.test(a)) throw new Error('frontend bearer not session-only');
+          NODE
+
+          cat > out/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"AlertasAPD: bounded province backfill + cron telemetry + admin-only manual kick"}}
+          JSON
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @out/deploy.json > out/deploy-response.json
+          node -e "const j=require('./out/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));"
+
+          visible=0
+          for attempt in 1 2 3 4 5 6; do
+            sleep 3
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
+            ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+            if [ "$ACTIVE_AFTER" = "$CANDIDATE_VERSION_ID" ]; then visible=1; break; fi
+          done
+          test "$visible" = 1
+
+          VERSION_CODE=$(curl -sS -o out/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          test "$VERSION_CODE" = 200
+          node -e "const j=require('./out/version.json');if(j.ok!==true||j.version!==process.env.EXPECTED_MARKER)throw new Error(JSON.stringify(j));"
+
+          HEALTH_CODE=$(curl -sS -o out/health.json -w "%{http_code}" "${WORKER_URL}/api/email-alerts-health")
+          test "$HEALTH_CODE" = 200
+          node -e "const j=require('./out/health.json');if(j.ok!==true||j.service!=='email-alerts'||j.provider_configured!==true)throw new Error(JSON.stringify(j));"
+
+          FAKE_UUID=$(node -e "console.log(crypto.randomUUID())")
+          AUTH_CODE=$(curl -sS -o out/fake-auth.json -w "%{http_code}" -H "Authorization: Bearer ${FAKE_UUID}" "${WORKER_URL}/api/admin/me")
+          test "$AUTH_CODE" = 401
+
+          TEST_CODE=$(curl -sS -o out/test-sweep.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&limit=1")
+          test "$TEST_CODE" = 401
+
+          KICK_CODE=$(curl -sS -o out/backfill-kick.json -w "%{http_code}" -X POST "${WORKER_URL}/api/provincia/backfill-kick")
+          test "$KICK_CODE" = 401
+          node -e "const j=require('./out/backfill-kick.json');if(!['No autenticado','No autorizado'].includes(j.error))throw new Error(JSON.stringify(j));"
+
+          STATUS_CODE=$(curl -sS -o out/backfill-status.json -w "%{http_code}" "${WORKER_URL}/api/provincia/backfill-status")
+          test "$STATUS_CODE" = 200
+          node -e "const j=require('./out/backfill-status.json');if(j.ok!==true)throw new Error(JSON.stringify(j));"
+
+          SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          test "$SITE_CODE" = 200
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/final.json
+          ACTIVE_FINAL=$(node -e "const j=require('./out/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(5);process.stdout.write(v.version_id)")
+          test "$ACTIVE_FINAL" = "$CANDIDATE_VERSION_ID"
+          trap - ERR
+
+          node - <<'NODE'
+          const fs=require('fs'); const health=JSON.parse(fs.readFileSync('out/health.json','utf8')); const bs=JSON.parse(fs.readFileSync('out/backfill-status.json','utf8'));
+          const summary={deployed:true,candidate_number:691,candidate_version_id:process.env.CANDIDATE_VERSION_ID,rollback_version_id:process.env.EXPECTED_OLD_VERSION_ID,active_final:process.env.CANDIDATE_VERSION_ID,email_sweep_sha256:process.env.EMAIL_SWEEP_SHA,email_pending_count:health.pending_email_count,latest_delivery_at:health.latest_delivery_at,uuid_bearer_rejected:true,email_test_route_rejected:true,backfill_kick_anonymous_rejected:true,backfill_status_readable:true,backfill_status:bs.status||null,backfill_stale_running:bs.stale_running??null,public_site_ok:true,rollback_triggered:false};
+          fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2)); console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload production verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-backfill-telemetry-691-production
+          path: |
+            out/summary.json
+            out/rollback-response.json
+          if-no-files-found: ignore
