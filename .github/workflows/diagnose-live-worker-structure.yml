@@ -1,0 +1,78 @@
+name: Diagnose live Worker structure
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - .github/workflows/diagnose-live-worker-structure.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch live Worker and extract structural snippets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p out tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          VERSION_ID=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VERSION_ID}?include=modules" > tmp/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const r=JSON.parse(fs.readFileSync('tmp/active.json','utf8')).result;
+          const m=(r?.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          if(!m) throw new Error('worker_hotfix.js missing');
+          const src=Buffer.from(m.content_base64||'','base64').toString('utf8');
+          const markers=[
+            'async function getSessionUserByBearer',
+            'async function resolveAuthUser',
+            'export default',
+            'async fetch(request',
+            '/api/version',
+            'API_URL_PREFIX}/version',
+            '/test-email-sweep',
+            '/test-mail',
+            '/test-digest',
+            'originalWorker.fetch',
+            'runEmailAlertsSweep'
+          ];
+          const clips=[];
+          for(const marker of markers){
+            let from=0,occ=0;
+            while(true){
+              const i=src.indexOf(marker,from); if(i<0) break;
+              clips.push({marker,occurrence:++occ,index:i,excerpt:src.slice(Math.max(0,i-420),Math.min(src.length,i+1100))});
+              from=i+marker.length;
+              if(occ>=5) break;
+            }
+            if(occ===0) clips.push({marker,occurrence:0,index:-1,excerpt:null});
+          }
+          const lines=src.split('\n');
+          const structuralLines=[];
+          lines.forEach((line,idx)=>{
+            if(/export default|async fetch\(|new URL\(request\.url\)|url\.pathname|const path|test-email-sweep|test-mail|test-digest|originalWorker\.fetch|API_URL_PREFIX.*version|userId\s*=\s*token/.test(line)) {
+              structuralLines.push({line:idx+1,text:line.slice(0,1600)});
+            }
+          });
+          const out={version_id:r.id,version_number:r.number,main_module:r.main_module,bytes:Buffer.byteLength(src),clips,structuralLines};
+          fs.writeFileSync('out/structure.json',JSON.stringify(out,null,2));
+          console.log(JSON.stringify({version_number:r.number,bytes:out.bytes,structuralLines},null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-worker-structure
+          path: out/structure.json
+          if-no-files-found: error
