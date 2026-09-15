@@ -1,0 +1,118 @@
+name: Audit AlertasAPD email recovery
+
+on:
+  push:
+    branches:
+      - fix/alertas-email-2026-09-15
+    paths:
+      - .github/workflows/audit-alertas-email-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect live Cloudflare worker and email pipeline
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/modules
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            > artifacts/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./artifacts/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            > artifacts/deployments.json
+          VERSION_ID=$(node -e "const j=require('./artifacts/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VERSION_ID}?include=modules" \
+            > artifacts/active-version.json
+
+          curl -sS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" \
+            > artifacts/schedules.json
+
+          for spec in \
+            "version|/api/version" \
+            "email-health|/api/email-alerts-health" \
+            "email-dry-run|/test-email-sweep?dry_run=1&debug=1&limit=10"
+          do
+            name="${spec%%|*}"
+            path="${spec#*|}"
+            code=$(curl -sS -o "artifacts/${name}.json" -w "%{http_code}" "${WORKER_URL}${path}" || true)
+            printf '%s' "$code" > "artifacts/${name}.status"
+          done
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const readJson = p => { try { return JSON.parse(fs.readFileSync(p,'utf8')); } catch { return null; } };
+          const versionDoc = readJson('artifacts/active-version.json') || {};
+          const r = versionDoc.result || versionDoc;
+          const modules = Array.isArray(r.modules) ? r.modules : [];
+          const decoded = {};
+          for (const [i,m] of modules.entries()) {
+            const name = m.name || m.path || `module-${i}`;
+            const content = m.content_base64 ? Buffer.from(m.content_base64,'base64').toString('utf8') : (m.content ?? m.code ?? m.source ?? '');
+            decoded[name] = typeof content === 'string' ? content : '';
+            fs.writeFileSync(`artifacts/modules/${String(i).padStart(2,'0')}-${name.replace(/[^A-Za-z0-9._-]/g,'_')}`, decoded[name]);
+          }
+          const mainName = r.main_module || r.mainModule || null;
+          const main = mainName && decoded[mainName] ? decoded[mainName] : '';
+          const schedulesDoc = readJson('artifacts/schedules.json') || {};
+          const dry = readJson('artifacts/email-dry-run.json') || {};
+          const summary = {
+            active_version_id: r.id || null,
+            active_version_number: r.number || null,
+            active_created_on: r.created_on || null,
+            main_module: mainName,
+            module_names: modules.map(m => m.name || m.path || null),
+            bindings: (r.bindings || []).map(b => ({name:b.name,type:b.type})),
+            schedules_success: schedulesDoc.success ?? null,
+            schedules: schedulesDoc.result || null,
+            endpoint_status: {
+              version: fs.readFileSync('artifacts/version.status','utf8').trim(),
+              email_health: fs.readFileSync('artifacts/email-health.status','utf8').trim(),
+              email_dry_run: fs.readFileSync('artifacts/email-dry-run.status','utf8').trim()
+            },
+            dry_run: {
+              ok: dry.ok ?? null,
+              dry_run: dry.dry_run ?? null,
+              processed_users: dry.processed_users ?? null,
+              send_attempts: dry.send_attempts ?? null,
+              failed_count: dry.failed_count ?? null,
+              skipped_count: dry.skipped_count ?? null,
+              debug_user_count: Array.isArray(dry.debug_users) ? dry.debug_users.length : null
+            },
+            markers: {
+              has_scheduled: /async\s+scheduled\s*\(/.test(main),
+              has_run_email_sweep: main.includes('runEmailAlertsSweep'),
+              has_send_pending_digest: main.includes('sendPendingEmailDigests'),
+              has_email_slot_marker: main.includes('email:slot:${slotKey}:user:${userId}:sent'),
+              has_email_health_route: main.includes('/email-alerts-health'),
+              has_queue_processor: main.includes('processPendingEmailQueue')
+            }
+          };
+          fs.writeFileSync('artifacts/summary.json', JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: alertas-email-recovery-audit
+          path: artifacts/
+          if-no-files-found: error
