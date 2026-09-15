@@ -17,15 +17,16 @@ if inner_count != 1:
 if inner_pattern.search(s):
     raise SystemExit('another legacy token->user fallback remains after patch')
 
-# 2) Hotfix resolver must require a stored session too.
+# 2) Some live generations had a second user-id fallback in the hotfix wrapper.
+# Remove it if present; zero matches is valid when a previous live hotfix already removed it.
 hotfix_pattern = re.compile(
     r'\s*const legacyUser = await getUserById\(env, bearer\)\.catch\(\(\) => null\);\s*'
     r'if \(legacyUser\?\.activo !== false && legacyUser\?\.id\) return \{ bearer, user: legacyUser, mode: "legacy_user_id" \};\s*'
     r'return \{ bearer, user: null, mode: "invalid" \};'
 )
 s, hotfix_count = hotfix_pattern.subn('\n  return { bearer, user: null, mode: "invalid" };', s, count=1)
-if hotfix_count != 1:
-    raise SystemExit(f'expected exactly one hotfix legacy user-id fallback, found {hotfix_count}')
+if hotfix_count not in (0, 1):
+    raise SystemExit(f'unexpected hotfix legacy user-id fallback count {hotfix_count}')
 if 'legacy_user_id' in s:
     raise SystemExit('legacy_user_id marker remains after patch')
 
@@ -85,4 +86,4 @@ if n != 1:
 if s == original:
     raise SystemExit('patch made no changes')
 out.write_text(s)
-print('patched Worker security: session-only bearer + guarded test routes + health endpoint')
+print(f'patched Worker security: inner_fallback={inner_count}, hotfix_fallback={hotfix_count}, guarded test routes, health endpoint')
