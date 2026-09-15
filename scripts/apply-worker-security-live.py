@@ -19,19 +19,18 @@ if inner_pattern.search(s):
 if 'legacy_user_id' in s:
     raise SystemExit('unexpected legacy_user_id fallback exists in live Worker')
 
-# 2) Locate the actual final router from the bundled production module.
+# 2) Locate the actual final router from production #687 bundle.
 final_marker = 'var worker_hotfix_default = {'
 final_start = s.rfind(final_marker)
 if final_start < 0:
     raise SystemExit('final worker_hotfix_default router not found')
 final = s[final_start:]
-fetch_anchor = '''  async fetch(request, env, ctx) {
-    const hotfix = await handleHotfixRoute(request, env, ctx);'''
-path_anchor = '    const path = url.pathname;'
-if final.count(fetch_anchor) != 1:
-    raise SystemExit(f'expected one final fetch anchor, found {final.count(fetch_anchor)}')
-if final.count(path_anchor) != 1:
-    raise SystemExit(f'expected one final-router path anchor, found {final.count(path_anchor)}')
+fetch_prelude = '''  async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });
+    const url = new URL(request.url);
+    const path = url.pathname;'''
+if final.count(fetch_prelude) != 1:
+    raise SystemExit(f'expected exact final fetch prelude once, found {final.count(fetch_prelude)}')
 
 helpers = r'''
 var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest"]);
@@ -63,45 +62,35 @@ async function handleEmailAlertsHealth(env) {
   });
 }
 '''
-
 if 'var SENSITIVE_TEST_PATHS = new Set(' in s:
     raise SystemExit('security helpers already present unexpectedly')
 s = s[:final_start] + helpers + '\n' + s[final_start:]
 
-# Re-locate after helper insertion. The security prelude runs BEFORE handleHotfixRoute,
-# so no current or future delegated router can bypass it.
+# Re-locate after helper insertion and insert guards immediately after URL/path parsing,
+# before the first production route and before legacy fallback delegation.
 final_start = s.rfind(final_marker)
 final = s[final_start:]
-prelude = '''  async fetch(request, env, ctx) {
-    const securityUrl = new URL(request.url);
-    const securityPath = securityUrl.pathname;
-    if (SENSITIVE_TEST_PATHS.has(securityPath)) {
+secure_prelude = fetch_prelude + '''
+    if (SENSITIVE_TEST_PATHS.has(path)) {
       const denied = await requireSecureAdmin(env, request);
       if (denied) return denied;
     }
-    const hotfix = await handleHotfixRoute(request, env, ctx);'''
-if final.count(fetch_anchor) != 1:
-    raise SystemExit('final fetch anchor changed unexpectedly')
-final = final.replace(fetch_anchor, prelude, 1)
-
-# Safe read-only health route can use the normal final router path after hotfix delegation.
-health_block = '''    const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/email-alerts-health` && request.method === "GET") {
       return await handleEmailAlertsHealth(env);
     }'''
-if final.count(path_anchor) != 1:
-    raise SystemExit('final router path anchor changed unexpectedly')
-final = final.replace(path_anchor, health_block, 1)
+if final.count(fetch_prelude) != 1:
+    raise SystemExit('final fetch prelude changed unexpectedly')
+final = final.replace(fetch_prelude, secure_prelude, 1)
 s = s[:final_start] + final
 
-# 3) Give this candidate an explicit observable version marker.
+# 3) Explicit observable version marker.
 version_pattern = re.compile(r'\b(?:const|let|var)\s+HOTFIX_VERSION\s*=\s*"[^"]+"\s*;')
 matches = list(version_pattern.finditer(s))
 if len(matches) != 1:
     raise SystemExit(f'expected exactly one HOTFIX_VERSION declaration, found {len(matches)}')
-s = version_pattern.sub('var HOTFIX_VERSION = "2026-09-15-session-security-2";', s, count=1)
+s = version_pattern.sub('var HOTFIX_VERSION = "2026-09-15-session-security-3";', s, count=1)
 
 if s == original:
     raise SystemExit('patch made no changes')
 out.write_text(s)
-print('patched exact live Worker: session-only bearer, pre-router test guard, email health endpoint')
+print('patched exact bundled Worker: session-only bearer, pre-route test guard, email health endpoint')
