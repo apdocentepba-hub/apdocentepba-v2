@@ -123,8 +123,6 @@ async function resolveAuthUser(env, request) {
     const user = await getUserById(env, session.user_id);
     if (user?.activo !== false && user?.id) return { bearer, user, mode: "session" };
   }
-  const legacyUser = await getUserById(env, bearer).catch(() => null);
-  if (legacyUser?.activo !== false && legacyUser?.id) return { bearer, user: legacyUser, mode: "legacy_user_id" };
   return { bearer, user: null, mode: "invalid" };
 }
 async function rewriteRequestWithUserId(request, userId) {
@@ -244,13 +242,10 @@ export default {
       const routed = await handleProfileListadosRoute(request, env); if (routed) return routed;
     }
     if (REWRITE_GET_PATHS.has(path) || REWRITE_POST_PATHS.has(path)) {
-      const bearer = getBearerToken(request);
-      if (bearer) {
-        const auth = await resolveAuthUser(env, request);
-        if (!auth.user?.id) return json({ ok: false, message: "No autenticado" }, 401);
-        const rewritten = await rewriteRequestWithUserId(request, auth.user.id);
-        return await originalWorker.fetch(rewritten, env, ctx);
-      }
+      const auth = await resolveAuthUser(env, request);
+      if (!auth.user?.id) return json({ ok: false, message: "No autenticado" }, 401);
+      const rewritten = await rewriteRequestWithUserId(request, auth.user.id);
+      return await originalWorker.fetch(rewritten, env, ctx);
     }
     return await originalWorker.fetch(request, env, ctx);
   },

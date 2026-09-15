@@ -5,7 +5,9 @@ on:
     paths:
       - 'index.html'
       - 'auth_session_patch.js'
+      - 'worker_hotfix.js'
       - 'scripts/test-auth-session-regression.mjs'
+      - 'scripts/test-worker-session-required.mjs'
       - '.github/workflows/auth-session-regression.yml'
   workflow_dispatch:
 
@@ -17,5 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run auth session regression contract
+      - name: Run frontend auth session regression contract
         run: node scripts/test-auth-session-regression.mjs
+      - name: Run Worker session-required contract
+        run: node scripts/test-worker-session-required.mjs
