@@ -15,8 +15,6 @@ for marker in [
     '2026-09-15-session-security-3',
     'async function runProvinciaBackfillStep',
     'async function runEmailAlertsSweep',
-    'async function supabaseInsertReturning',
-    'async function supabasePatchReturning',
 ]:
     if marker not in s:
         raise SystemExit(f'required secured/base marker missing: {marker}')
@@ -29,12 +27,30 @@ if final_start < 0:
     raise SystemExit('final worker_hotfix_default router not found')
 
 helpers = r'''
+async function telemetrySupabaseRequest(env, path, method = "GET", payload = null, returnRepresentation = false) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: returnRepresentation ? "return=representation" : "return=minimal"
+    },
+    body: payload == null ? void 0 : JSON.stringify(payload)
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Supabase telemetry ${method} ${path}: ${res.status} ${text.slice(0, 700)}`);
+  if (!returnRepresentation || !text) return null;
+  const data = JSON.parse(text);
+  return Array.isArray(data) ? data[0] || null : data;
+}
+
 async function safeInsertSystemError(env, origin, err, detail = null) {
   try {
     const message = String(err?.message || err || "Error desconocido").slice(0, 900);
     const stack = String(err?.stack || "").slice(0, 3000);
     const extra = detail && typeof detail === "object" ? JSON.stringify(detail).slice(0, 1800) : String(detail || "").slice(0, 1800);
-    await supabaseInsert(env, "errores_sistema", {
+    await telemetrySupabaseRequest(env, "errores_sistema", "POST", {
       origen: String(origin || "worker_cron").slice(0, 120),
       mensaje: message,
       detalle: [stack, extra].filter(Boolean).join("\n").slice(0, 4800)
@@ -46,14 +62,14 @@ async function safeInsertSystemError(env, origin, err, detail = null) {
 
 async function safeStartWorkerRun(env, workerName) {
   try {
-    const row = await supabaseInsertReturning(env, "worker_runs", {
+    const row = await telemetrySupabaseRequest(env, "worker_runs", "POST", {
       worker_name: String(workerName || "worker_cron"),
       started_at: new Date().toISOString(),
       status: "running",
       usuarios_procesados: 0,
       alertas_enviadas: 0,
       errores: 0
-    });
+    }, true);
     return row?.id || null;
   } catch (err) {
     console.error("WORKER RUN START TELEMETRY FAILED", String(err?.message || err || ""));
@@ -64,7 +80,7 @@ async function safeStartWorkerRun(env, workerName) {
 async function safeFinishWorkerRun(env, runId, payload = {}) {
   if (!runId) return;
   try {
-    await supabasePatchReturning(env, "worker_runs", `id=eq.${encodeURIComponent(runId)}`, {
+    await telemetrySupabaseRequest(env, `worker_runs?id=eq.${encodeURIComponent(runId)}`, "PATCH", {
       finished_at: new Date().toISOString(),
       status: String(payload.status || "success"),
       usuarios_procesados: Number(payload.usuarios_procesados || 0),
@@ -131,7 +147,7 @@ async function recordObservedEmailCron(env, startedAt, result, slotKey) {
       failed_count: failed,
       skipped_count: Number(result?.skipped_count || 0)
     };
-    await supabaseInsert(env, "worker_runs", {
+    await telemetrySupabaseRequest(env, "worker_runs", "POST", {
       worker_name: "email_alerts_cron",
       started_at: startedAt || new Date().toISOString(),
       finished_at: new Date().toISOString(),
@@ -189,4 +205,4 @@ if n != 1:
 if s == original:
     raise SystemExit('patch made no changes')
 out.write_text(s)
-print('patched Worker: independent bounded province backfill + worker/error telemetry; email sweep function untouched')
+print('patched Worker: independent bounded province backfill + REST telemetry; email sweep function untouched')
