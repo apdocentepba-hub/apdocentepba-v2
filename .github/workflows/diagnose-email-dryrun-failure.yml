@@ -1,0 +1,70 @@
+name: Diagnose current email dry-run failure
+
+on:
+  push:
+    branches:
+      - audit/full-project-2026-09-15
+    paths:
+      - .github/workflows/diagnose-email-dryrun-failure.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run safe dry-run and sanitize failure evidence
+        env:
+          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          code=$(curl -sS -o /tmp/dry.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=50")
+          test "$code" = "200"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('/tmp/dry.json','utf8'));
+          const rows=Array.isArray(j.debug_users)?j.debug_users:[];
+          const selected=[];
+          rows.forEach((r,i)=>{
+            const failed = r?.error || r?.send_ok===false || r?.reason==='error' || r?.stage==='error' || r?.refresh?.ok===false;
+            if(!failed) return;
+            selected.push({
+              row_index:i,
+              stage:r.stage??null,
+              reason:r.reason??null,
+              error:r.error??null,
+              source:r.source??null,
+              dry_run:r.dry_run??null,
+              send_ok:r.send_ok??null,
+              send_status:r.send_status??null,
+              total_alerts:r.total_alerts??null,
+              shown_alerts:r.shown_alerts??null,
+              refresh: r.refresh && typeof r.refresh==='object' ? {
+                ok:r.refresh.ok??null,
+                error:r.refresh.error??null,
+                fetched:r.refresh.fetched??null,
+                active:r.refresh.active??null,
+                deactivated:r.refresh.deactivated??null,
+                stored:r.refresh.stored??null
+              } : null
+            });
+          });
+          const summary={
+            ok:j.ok??null,dry_run:j.dry_run??null,processed_users:j.processed_users??null,
+            send_attempts:j.send_attempts??null,failed_count:j.failed_count??null,skipped_count:j.skipped_count??null,
+            sanitized_failures:selected
+          };
+          fs.writeFileSync('out/diagnosis.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          if(Number(j.failed_count||0)!==selected.length) console.log(`NOTE failed_count=${j.failed_count} sanitized_failures=${selected.length}`);
+          NODE
+          rm -f /tmp/dry.json
+      - name: Upload diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-dryrun-failure-diagnosis
+          path: out/diagnosis.json
+          if-no-files-found: error
