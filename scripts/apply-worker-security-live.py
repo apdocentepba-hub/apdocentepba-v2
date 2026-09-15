@@ -10,28 +10,24 @@ s = inp.read_text()
 original = s
 
 # 1) Legacy inner auth resolver must never treat a bearer token as a user UUID.
-old_inner = '''  } else {
-    userId = token;
-  }
-
-  const users = await supabaseSelect('''
-new_inner = '''  } else {
-    return null;
-  }
-
-  const users = await supabaseSelect('''
-if s.count(old_inner) != 1:
-    raise SystemExit(f'expected exactly one legacy token->user fallback, found {s.count(old_inner)}')
-s = s.replace(old_inner, new_inner, 1)
+inner_pattern = re.compile(r'else\s*\{\s*userId\s*=\s*token\s*;\s*\}')
+s, inner_count = inner_pattern.subn('else {\n    return null;\n  }', s, count=1)
+if inner_count != 1:
+    raise SystemExit(f'expected exactly one legacy token->user fallback, found {inner_count}')
+if inner_pattern.search(s):
+    raise SystemExit('another legacy token->user fallback remains after patch')
 
 # 2) Hotfix resolver must require a stored session too.
-old_hotfix = '''  const legacyUser = await getUserById(env, bearer).catch(() => null);
-  if (legacyUser?.activo !== false && legacyUser?.id) return { bearer, user: legacyUser, mode: "legacy_user_id" };
-  return { bearer, user: null, mode: "invalid" };'''
-new_hotfix = '''  return { bearer, user: null, mode: "invalid" };'''
-if s.count(old_hotfix) != 1:
-    raise SystemExit(f'expected exactly one hotfix legacy user-id fallback, found {s.count(old_hotfix)}')
-s = s.replace(old_hotfix, new_hotfix, 1)
+hotfix_pattern = re.compile(
+    r'\s*const legacyUser = await getUserById\(env, bearer\)\.catch\(\(\) => null\);\s*'
+    r'if \(legacyUser\?\.activo !== false && legacyUser\?\.id\) return \{ bearer, user: legacyUser, mode: "legacy_user_id" \};\s*'
+    r'return \{ bearer, user: null, mode: "invalid" \};'
+)
+s, hotfix_count = hotfix_pattern.subn('\n  return { bearer, user: null, mode: "invalid" };', s, count=1)
+if hotfix_count != 1:
+    raise SystemExit(f'expected exactly one hotfix legacy user-id fallback, found {hotfix_count}')
+if 'legacy_user_id' in s:
+    raise SystemExit('legacy_user_id marker remains after patch')
 
 # 3) Add a safe health endpoint and protect all mutating/debug email routes with secure admin auth.
 anchor = 'const REWRITE_GET_PATHS = new Set(['
