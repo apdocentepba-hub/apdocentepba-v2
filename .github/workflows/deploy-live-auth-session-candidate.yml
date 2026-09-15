@@ -1,0 +1,217 @@
+name: Deploy verified live auth session candidate
+
+on:
+  push:
+    branches:
+      - audit/live-auth-worker-2026-09-15
+    paths:
+      - .github/workflows/deploy-live-auth-session-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-auth-candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      EXPECTED_OLD_VERSION_ID: a629d728-a987-4fda-9fea-64ce58e3370b
+      CANDIDATE_VERSION_ID: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Promote candidate and verify with automatic rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/deploy-live-auth
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/deploy-live-auth/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/deploy-live-auth/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          get_active() {
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$1"
+            node -e "const j=require('./$1');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)"
+          }
+
+          rollback() {
+            set +e
+            echo "Smoke verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
+            cat > tmp/deploy-live-auth/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after auth-session smoke failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @tmp/deploy-live-auth/rollback.json > tmp/deploy-live-auth/rollback-response.json
+            sleep 2
+            ROLLED_BACK=$(get_active tmp/deploy-live-auth/rollback-active.json)
+            echo "Active after rollback attempt: ${ROLLED_BACK}"
+            if [ "${ROLLED_BACK}" != "${EXPECTED_OLD_VERSION_ID}" ]; then
+              echo "ROLLBACK VERIFICATION FAILED"
+            fi
+          }
+
+          ACTIVE_BEFORE=$(get_active tmp/deploy-live-auth/before.json)
+          echo "Active before: ${ACTIVE_BEFORE}"
+          test "${ACTIVE_BEFORE}" = "${EXPECTED_OLD_VERSION_ID}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${EXPECTED_OLD_VERSION_ID}?include=modules" > tmp/deploy-live-auth/old-detail.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/deploy-live-auth/candidate-detail.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const oldJ=JSON.parse(fs.readFileSync('tmp/deploy-live-auth/old-detail.json','utf8'));
+          const candJ=JSON.parse(fs.readFileSync('tmp/deploy-live-auth/candidate-detail.json','utf8'));
+          if(!oldJ.success||oldJ.result?.id!==process.env.EXPECTED_OLD_VERSION_ID) throw new Error('Old version preflight failed');
+          if(!candJ.success||candJ.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate preflight failed');
+          const old=oldJ.result,cand=candJ.result;
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=x=>(x.modules||[]).map(m=>m.name).sort();
+          if(old.main_module!=='worker_hotfix.js'||cand.main_module!=='worker_hotfix.js') throw new Error('Main module drift');
+          if(JSON.stringify(names(old))!==JSON.stringify(expected)||JSON.stringify(names(cand))!==JSON.stringify(expected)) throw new Error('Module shape drift');
+          const shape=x=>(x.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(shape(old))!==JSON.stringify(shape(cand))) throw new Error('Binding shape drift');
+          const decode=x=>Object.fromEntries((x.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64')]));
+          const o=decode(old), c=decode(cand), hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+          if(hash(o['worker_hotfix.js'])===hash(c['worker_hotfix.js'])) throw new Error('Candidate main is unchanged');
+          for(const name of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(hash(o[name])!==hash(c[name])) throw new Error(`${name} changed unexpectedly`);
+          for(const [name,buf] of Object.entries(c)) fs.writeFileSync(path.join('tmp/deploy-live-auth','candidate-'+name),buf);
+          console.log(`Preflight shape OK: main=${cand.main_module}; modules=${names(cand).length}; bindings=${shape(cand).length}`);
+          NODE
+
+          node --check tmp/deploy-live-auth/candidate-worker_hotfix.js
+          node --check tmp/deploy-live-auth/candidate-email_queue_hotfix.js
+          node --check tmp/deploy-live-auth/candidate-worker_email_queue_hotfix.js
+          node scripts/test-live-auth-session-bundle.mjs tmp/deploy-live-auth/candidate-worker_hotfix.js
+
+          cat > tmp/deploy-live-auth/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Require active session on protected APDocentePBA user routes"}}
+          JSON
+
+          trap rollback ERR
+
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @tmp/deploy-live-auth/deploy.json > tmp/deploy-live-auth/deploy-response.json
+          node -e "const j=require('./tmp/deploy-live-auth/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));console.log('Deployment accepted:',j.result.id)"
+
+          sleep 2
+          ACTIVE_AFTER=$(get_active tmp/deploy-live-auth/after.json)
+          echo "Active after deploy: ${ACTIVE_AFTER}"
+          test "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}"
+
+          VERSION_CODE=$(curl -sS -o tmp/deploy-live-auth/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          echo "api/version HTTP ${VERSION_CODE}"
+          test "${VERSION_CODE}" = "200"
+          node -e "const j=require('./tmp/deploy-live-auth/version.json');if(j.ok!==true)throw new Error('api/version not ok')"
+
+          PLANES_CODE=$(curl -sS -o tmp/deploy-live-auth/planes.json -w "%{http_code}" "${WORKER_URL}/api/planes")
+          echo "api/planes HTTP ${PLANES_CODE}"
+          test "${PLANES_CODE}" = "200"
+
+          OPTIONS_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X OPTIONS \
+            -H "Origin: https://alertasapd.com.ar" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization" \
+            "${WORKER_URL}/api/mis-alertas")
+          echo "CORS OPTIONS HTTP ${OPTIONS_CODE}"
+          test "${OPTIONS_CODE}" = "200"
+
+          check_unauth_get() {
+            NAME="$1"; URL="$2"
+            CODE=$(curl -sS -o "tmp/deploy-live-auth/${NAME}.json" -w "%{http_code}" "${URL}")
+            echo "${NAME} unauth HTTP ${CODE}"
+            test "${CODE}" = "401"
+            node -e "const j=require('./tmp/deploy-live-auth/${NAME}.json');if(j.ok!==false)throw new Error('${NAME}: expected ok=false')"
+          }
+
+          check_unauth_post() {
+            NAME="$1"; PATHNAME="$2"; BODY="$3"
+            CODE=$(curl -sS -o "tmp/deploy-live-auth/${NAME}.json" -w "%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              --data "${BODY}" \
+              "${WORKER_URL}${PATHNAME}")
+            echo "${NAME} unauth HTTP ${CODE}"
+            test "${CODE}" = "401"
+            node -e "const j=require('./tmp/deploy-live-auth/${NAME}.json');if(j.ok!==false)throw new Error('${NAME}: expected ok=false')"
+          }
+
+          check_unauth_get mis-alertas "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          check_unauth_get mi-plan "${WORKER_URL}/api/mi-plan?user_id=${FAKE_USER_ID}"
+          check_unauth_get historico-resumen "${WORKER_URL}/api/historico-resumen?user_id=${FAKE_USER_ID}"
+          check_unauth_post guardar-preferencias "/api/guardar-preferencias" "{\"user_id\":\"${FAKE_USER_ID}\"}"
+          check_unauth_post capturar-historico "/api/capturar-historico-apd" "{\"user_id\":\"${FAKE_USER_ID}\"}"
+          check_unauth_post checkout "/api/mercadopago/create-checkout-link" "{\"user_id\":\"${FAKE_USER_ID}\",\"plan_code\":\"PRO\"}"
+          check_unauth_post whatsapp-test "/api/whatsapp/test-send" "{\"user_id\":\"${FAKE_USER_ID}\"}"
+
+          INVALID_LOGIN_CODE=$(curl -sS -o tmp/deploy-live-auth/invalid-login.json -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"email":"nonexistent-auth-smoke@example.invalid","password":"invalid-password"}' \
+            "${WORKER_URL}/api/login")
+          echo "Invalid login control HTTP ${INVALID_LOGIN_CODE}"
+          test "${INVALID_LOGIN_CODE}" = "401"
+
+          SITE_CODE=$(curl -L -sS -o /dev/null -w "%{http_code}" "${SITE_URL}/")
+          echo "Public site HTTP ${SITE_CODE}"
+          test "${SITE_CODE}" = "200"
+
+          ACTIVE_FINAL=$(get_active tmp/deploy-live-auth/final.json)
+          echo "Active final: ${ACTIVE_FINAL}"
+          test "${ACTIVE_FINAL}" = "${CANDIDATE_VERSION_ID}"
+
+          trap - ERR
+          cat > tmp/deploy-live-auth/summary.json <<JSON
+          {
+            "ok": true,
+            "deployed": true,
+            "old_version_id": "${EXPECTED_OLD_VERSION_ID}",
+            "candidate_version_id": "${CANDIDATE_VERSION_ID}",
+            "active_final": "${ACTIVE_FINAL}",
+            "rollback_triggered": false,
+            "protected_routes_unauth_401": 7,
+            "version_ok": true,
+            "planes_ok": true,
+            "cors_ok": true,
+            "invalid_login_control_ok": true,
+            "public_site_ok": true
+          }
+          JSON
+          cat tmp/deploy-live-auth/summary.json
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-auth-session-deployment
+          path: |
+            tmp/deploy-live-auth/summary.json
+            tmp/deploy-live-auth/deploy-response.json
+            tmp/deploy-live-auth/rollback-response.json
+            tmp/deploy-live-auth/final.json
+            tmp/deploy-live-auth/mis-alertas.json
+            tmp/deploy-live-auth/mi-plan.json
+            tmp/deploy-live-auth/historico-resumen.json
+            tmp/deploy-live-auth/guardar-preferencias.json
+            tmp/deploy-live-auth/capturar-historico.json
+            tmp/deploy-live-auth/checkout.json
+            tmp/deploy-live-auth/whatsapp-test.json
+          if-no-files-found: ignore
