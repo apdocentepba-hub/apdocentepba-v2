@@ -1,0 +1,110 @@
+name: Harden backfill candidate 690
+
+on:
+  push:
+    branches: [audit/full-project-2026-09-15]
+    paths: [.github/workflows/harden-backfill-candidate-690.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: e070ba13-252d-4985-8db7-70133afe8c97
+      BASE_CANDIDATE_ID: ae78826a-b06f-49bd-a212-93e4a4fd52a2
+      EXPECTED_MARKER: 2026-09-15-backfill-telemetry-2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harden exact zero-traffic candidate and upload new version
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/base tmp/new out
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${BASE_CANDIDATE_ID}?include=modules" > tmp/base.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/base.json','utf8')); const r=j.result;
+          if(!j.success||r?.id!==process.env.BASE_CANDIDATE_ID||Number(r.number)!==690) throw new Error('base candidate 690 unavailable/mismatch');
+          if(r.main_module!=='worker_hotfix.js') throw new Error('unexpected main module');
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort(); if(shape.length!==27) throw new Error(`bindings=${shape.length}`);
+          fs.writeFileSync('tmp/bindings.json',JSON.stringify(shape));
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('tmp/base',m.name),Buffer.from(m.content_base64||'','base64'));
+          const src=fs.readFileSync('tmp/base/worker_hotfix.js','utf8');
+          if(!src.includes('2026-09-15-backfill-telemetry-1')) throw new Error('v1 backfill marker missing');
+          const a=src.indexOf('async function runEmailAlertsSweep'); const b=src.indexOf('function getArgentinaDigestSlotInfo',a);
+          fs.writeFileSync('tmp/email.sha',crypto.createHash('sha256').update(src.slice(a,b)).digest('hex'));
+          const metadata={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'AlertasAPD backfill telemetry v2: admin-only manual kick','workers/tag':'backfill-telemetry-v2-20260915'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/new/metadata.json',JSON.stringify(metadata));
+          NODE
+          cp tmp/base/worker_email_queue_hotfix.js tmp/new/worker_email_queue_hotfix.js
+          cp tmp/base/email_queue_hotfix.js tmp/new/email_queue_hotfix.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tmp/base/worker_hotfix.js'); s=p.read_text()
+          old='var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest"]);'
+          new='var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest", "/api/provincia/backfill-kick"]);'
+          if s.count(old)!=1: raise SystemExit(f'guard set count={s.count(old)}')
+          s=s.replace(old,new,1)
+          oldv='2026-09-15-backfill-telemetry-1'; newv='2026-09-15-backfill-telemetry-2'
+          if s.count(oldv)!=1: raise SystemExit(f'version marker count={s.count(oldv)}')
+          s=s.replace(oldv,newv,1)
+          Path('tmp/new/worker_hotfix.js').write_text(s)
+          PY
+          node --check tmp/new/worker_hotfix.js
+          node scripts/test-backfill-telemetry-live.mjs tmp/new/worker_hotfix.js
+          node scripts/test-email-slot-dedupe-live.mjs tmp/new/worker_hotfix.js
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const s=fs.readFileSync('tmp/new/worker_hotfix.js','utf8');
+          const a=s.indexOf('async function runEmailAlertsSweep'); const b=s.indexOf('function getArgentinaDigestSlotInfo',a);
+          const hash=crypto.createHash('sha256').update(s.slice(a,b)).digest('hex'); const base=fs.readFileSync('tmp/email.sha','utf8').trim();
+          if(hash!==base) throw new Error('email sweep changed while hardening candidate');
+          console.log(`Email sweep unchanged: ${hash}`);
+          NODE
+          HTTP_CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/new/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/new/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/new/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/new/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module")
+          test "$HTTP_CODE" = 200
+          NEW_ID=$(node -e "const j=require('./tmp/upload.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));process.stdout.write(j.result.id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${NEW_ID}?include=modules" > tmp/new-detail.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const r=JSON.parse(fs.readFileSync('tmp/new-detail.json','utf8')).result; const expected=JSON.parse(fs.readFileSync('tmp/bindings.json','utf8'));
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort(); if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error('binding shape changed');
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js'); const s=Buffer.from(main.content_base64||'','base64').toString('utf8'); fs.writeFileSync('tmp/uploaded-main.js',s);
+          const a=s.indexOf('async function runEmailAlertsSweep'); const b=s.indexOf('function getArgentinaDigestSlotInfo',a); const hash=crypto.createHash('sha256').update(s.slice(a,b)).digest('hex');
+          if(hash!==fs.readFileSync('tmp/email.sha','utf8').trim()) throw new Error('uploaded email sweep changed');
+          fs.writeFileSync('out/summary.json',JSON.stringify({ok:true,candidate_number:r.number,candidate_version_id:r.id,base_candidate_number:690,active_version_id:process.env.EXPECTED_ACTIVE_VERSION,traffic_changed:false,binding_shape_preserved:true,email_sweep_unchanged:true,email_sweep_sha256:hash,manual_backfill_kick_admin_only:true},null,2));
+          console.log(`Hardened candidate #${r.number}: ${r.id}`);
+          NODE
+          node scripts/test-backfill-telemetry-live.mjs tmp/uploaded-main.js
+          node scripts/test-email-slot-dedupe-live.mjs tmp/uploaded-main.js
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/final-deployments.json
+          FINAL_ACTIVE=$(node -e "const j=require('./tmp/final-deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          test "$FINAL_ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hardened-backfill-candidate
+          path: out/
+          if-no-files-found: error
