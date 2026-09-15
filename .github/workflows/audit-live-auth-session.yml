@@ -48,6 +48,7 @@ jobs:
           const target = modules.find(m => m.name === 'worker_hotfix.js');
           if (!target?.content_base64) throw new Error('worker_hotfix.js module missing from active version');
           const source = Buffer.from(target.content_base64, 'base64').toString('utf8');
+          fs.writeFileSync('tmp/live-auth/worker_hotfix.live.js', source);
           const sha256 = crypto.createHash('sha256').update(source).digest('hex');
           const gateStart = source.indexOf('if (REWRITE_GET_PATHS.has(path) || REWRITE_POST_PATHS.has(path)) {');
           const gateEnd = source.indexOf('return await originalWorker.fetch(request, env, ctx);', gateStart);
@@ -55,6 +56,19 @@ jobs:
           const resolverStart = source.indexOf('async function resolveAuthUser(env, request) {');
           const resolverEnd = source.indexOf('async function rewriteRequestWithUserId', resolverStart);
           const resolver = resolverStart >= 0 && resolverEnd > resolverStart ? source.slice(resolverStart, resolverEnd) : '';
+          const needles = ['/mis-alertas', 'Usuario no encontrado', 'No autenticado', 'Authorization', 'Bearer ', 'user_id'];
+          const snippets = {};
+          for (const needle of needles) {
+            const positions = [];
+            let from = 0;
+            while (positions.length < 4) {
+              const i = source.indexOf(needle, from);
+              if (i < 0) break;
+              positions.push({ index: i, snippet: source.slice(Math.max(0, i - 350), Math.min(source.length, i + needle.length + 650)) });
+              from = i + needle.length;
+            }
+            snippets[needle] = positions;
+          }
           const summary = {
             ok: true,
             active_version_id: process.env.ACTIVE_VERSION_ID,
@@ -62,13 +76,21 @@ jobs:
             module_names: modules.map(m => m.name).sort(),
             binding_shape: (r.bindings || []).map(b => `${b.name}:${b.type}`).sort(),
             worker_hotfix_sha256: sha256,
+            worker_hotfix_bytes: Buffer.byteLength(source),
             protected_gate_found: Boolean(gate),
             optional_bearer_gate_present: /if \(bearer\)/.test(gate),
             legacy_uuid_bearer_fallback_present: /legacyUser|legacy_user_id|getUserById\(env, bearer\)/.test(resolver),
-            session_resolver_present: /resolveAuthUser\(env, request\)/.test(gate)
+            session_resolver_present: /resolveAuthUser\(env, request\)/.test(gate),
+            needle_counts: Object.fromEntries(Object.entries(snippets).map(([k,v]) => [k, v.length]))
           };
           fs.writeFileSync('tmp/live-auth/summary.json', JSON.stringify(summary, null, 2));
+          fs.writeFileSync('tmp/live-auth/snippets.json', JSON.stringify(snippets, null, 2));
           console.log(JSON.stringify(summary, null, 2));
+          console.log('--- AUTH SOURCE SNIPPETS ---');
+          for (const [needle, rows] of Object.entries(snippets)) {
+            console.log(`\n### ${needle}`);
+            for (const row of rows) console.log(row.snippet.replace(/\s+/g, ' ').slice(0, 1100));
+          }
           NODE
 
       - name: Probe current public unauthenticated behavior
