@@ -1,0 +1,86 @@
+name: Probe live auth after candidate deploy
+
+on:
+  push:
+    branches:
+      - audit/live-auth-worker-2026-09-15
+    paths:
+      - .github/workflows/probe-live-auth-after-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      OLD_VERSION_ID: a629d728-a987-4fda-9fea-64ce58e3370b
+      CANDIDATE_VERSION_ID: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probe active deployment and propagation without mutations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/probe-live-auth
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/probe-live-auth/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/probe-live-auth/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/probe-live-auth/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/probe-live-auth/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION=${ACTIVE}"
+          printf '%s\n' "${ACTIVE}" > tmp/probe-live-auth/active-version.txt
+
+          : > tmp/probe-live-auth/probes.tsv
+          for i in $(seq 1 12); do
+            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            BODY="tmp/probe-live-auth/body-${i}.json"
+            CODE=$(curl -sS -o "${BODY}" -w "%{http_code}" \
+              "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}")
+            MSG=$(node -e "const fs=require('fs');let j={};try{j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'))}catch{};process.stdout.write(String(j.message||j.error||''))" "${BODY}")
+            printf '%s\t%s\t%s\t%s\n' "${i}" "${TS}" "${CODE}" "${MSG}" | tee -a tmp/probe-live-auth/probes.tsv
+            if [ "${i}" -lt 12 ]; then sleep 5; fi
+          done
+
+          ACTIVE="${ACTIVE}" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const rows=fs.readFileSync('tmp/probe-live-auth/probes.tsv','utf8').trim().split(/\n+/).filter(Boolean).map(line=>{
+            const [attempt,time,code,...msg]=line.split('\t');
+            return {attempt:Number(attempt),time,code:Number(code),message:msg.join('\t')};
+          });
+          const counts={};
+          for(const r of rows) counts[r.code]=(counts[r.code]||0)+1;
+          const summary={
+            active_version:process.env.ACTIVE,
+            candidate_active:process.env.ACTIVE===process.env.CANDIDATE_VERSION_ID,
+            old_active:process.env.ACTIVE===process.env.OLD_VERSION_ID,
+            attempts:rows.length,
+            http_counts:counts,
+            all_401:rows.length>0&&rows.every(r=>r.code===401),
+            all_404:rows.length>0&&rows.every(r=>r.code===404),
+            rows
+          };
+          fs.writeFileSync('tmp/probe-live-auth/summary.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-live-auth-after-deploy
+          path: |
+            tmp/probe-live-auth/active-version.txt
+            tmp/probe-live-auth/probes.tsv
+            tmp/probe-live-auth/summary.json
+          if-no-files-found: error
