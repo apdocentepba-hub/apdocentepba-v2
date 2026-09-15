@@ -86,6 +86,18 @@
     };
   }
 
+  if (typeof window.obtenerMisAlertas === 'function' && typeof window.workerFetchJson === 'function') {
+    window.obtenerMisAlertas = async function patchedObtenerMisAlertas(userId) {
+      const data = await window.workerFetchJson(
+        `/api/mis-alertas?user_id=${encodeURIComponent(userId)}`
+      );
+      const rows = Array.isArray(data?.resultados) ? data.resultados : [];
+      return typeof window.filtrarAlertasVigentes === 'function'
+        ? window.filtrarAlertasVigentes(rows)
+        : rows;
+    };
+  }
+
   window.adminApiGet = async function patchedAdminApiGet(path) {
     const bearer = getAuthBearer();
     const res = await fetch(`${WORKER_URL}${path}`, {
