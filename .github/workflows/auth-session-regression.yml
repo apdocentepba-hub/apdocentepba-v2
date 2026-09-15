@@ -3,6 +3,7 @@ name: Auth session regression
 on:
   pull_request:
     paths:
+      - 'index.html'
       - 'auth_session_patch.js'
       - 'scripts/test-auth-session-regression.mjs'
       - '.github/workflows/auth-session-regression.yml'
