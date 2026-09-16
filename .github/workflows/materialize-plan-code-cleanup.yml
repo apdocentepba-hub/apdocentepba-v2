@@ -33,8 +33,8 @@ jobs:
           const workerPath = 'worker-live/worker_hotfix.js';
           const manifestPath = 'worker-live/manifest.json';
           const worker = fs.readFileSync(workerPath, 'utf8');
-          const duplicateBlock = `      plan_code: entitlement?.plan_code || null,\n      channel_mode: "query_only",\n      enriched_postulantes: true,\n      enriched_limit: Math.min(safeLimit, 30),\n      plan_code: entitlement?.plan_code || null,\n`;
-          const replacement = `      plan_code: entitlement?.plan_code || null,\n      channel_mode: "query_only",\n      enriched_postulantes: true,\n      enriched_limit: Math.min(safeLimit, 30),\n`;
+          const duplicateBlock = `      plan_code: entitlement?.plan_code || null,\n      channel_mode: "query_only",\n            enriched_postulantes: true,\n      enriched_limit: Math.min(safeLimit, 30),\n      plan_code: entitlement?.plan_code || null,\n`;
+          const replacement = `      plan_code: entitlement?.plan_code || null,\n      channel_mode: "query_only",\n            enriched_postulantes: true,\n      enriched_limit: Math.min(safeLimit, 30),\n`;
 
           const occurrences = worker.split(duplicateBlock).length - 1;
           if (occurrences !== 1) {
