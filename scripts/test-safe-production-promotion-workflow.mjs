@@ -7,8 +7,13 @@ const workflow = fs.readFileSync(path, 'utf8');
 
 assert.match(workflow, /ops\/promote-live-worker-b506502-20260916/, 'workflow must be scoped to the approved temporary branch');
 assert.match(workflow, /39b52f3c-faf6-4a15-8e93-7bbd2884b95d/, 'workflow must pin the currently active production version before promotion');
-assert.match(workflow, /wrangler\s+versions\s+upload/, 'workflow must upload a zero-traffic candidate first');
-assert.match(workflow, /--preview-alias\s+apd-promote/, 'workflow must expose an isolated preview before promotion');
+assert.doesNotMatch(workflow, /wrangler\s+versions\s+upload/, 'promotion must not rebuild the live bundle from wrangler.toml alone');
+assert.match(workflow, /versions\?bindings_inherit=strict/, 'candidate upload must inherit live bindings strictly');
+assert.match(workflow, /worker_hotfix\.js=@/, 'candidate upload must include the canonical main module');
+assert.match(workflow, /email_queue_hotfix\.js=@/, 'candidate upload must preserve the live email queue module');
+assert.match(workflow, /worker_email_queue_hotfix\.js=@/, 'candidate upload must preserve the live worker email queue module');
+assert.match(workflow, /version_id[^\n]*EXPECTED_OLD_VERSION_ID|EXPECTED_OLD_VERSION_ID[^\n]*version_id/, 'binding inheritance must pin the known active production version');
+assert.match(workflow, /CANDIDATE_VERSION_ID.*WORKER_NAME|WORKER_NAME.*CANDIDATE_VERSION_ID/s, 'workflow must smoke an isolated immutable candidate preview before promotion');
 assert.match(workflow, /bindings.*27|27.*bindings/s, 'workflow must validate the 27-binding production shape');
 assert.match(workflow, /module hash|sha256|createHash/i, 'workflow must verify module hashes before promotion');
 assert.match(workflow, /rollback\s*\(\)/, 'workflow must implement automatic rollback');
