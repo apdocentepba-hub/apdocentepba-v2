@@ -1,0 +1,188 @@
+name: Deploy verified live manual email dedupe candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/deploy-live-manual-email-dedupe-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      OLD_VERSION_ID: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+      CANDIDATE_VERSION_ID: f5d20499-781c-402f-822f-b1543b66dd6c
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Promote candidate and rollback automatically on any failed gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/deploy-manual-dedupe
+          PROMOTED=0
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/deploy-manual-dedupe/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/deploy-manual-dedupe/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          get_active() {
+            local OUT="$1"
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "${OUT}"
+            node -e "const j=require('./${OUT}');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)"
+          }
+
+          wait_active() {
+            local EXPECTED="$1" PREFIX="$2"
+            for I in $(seq 1 24); do
+              local NOW
+              NOW=$(get_active "tmp/deploy-manual-dedupe/${PREFIX}-${I}.json") || true
+              echo "${PREFIX} poll ${I}: ${NOW:-unknown}"
+              if [ "${NOW:-}" = "${EXPECTED}" ]; then return 0; fi
+              sleep 5
+            done
+            return 1
+          }
+
+          rollback() {
+            local STATUS=$?
+            trap - ERR
+            if [ "${PROMOTED}" != "1" ]; then exit "${STATUS}"; fi
+            set +e
+            echo "Validation failed; rolling back to ${OLD_VERSION_ID}"
+            cat > tmp/deploy-manual-dedupe/rollback-request.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after manual-email-dedupe validation failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @tmp/deploy-manual-dedupe/rollback-request.json > tmp/deploy-manual-dedupe/rollback-response.json
+            if wait_active "${OLD_VERSION_ID}" rollback; then echo "Rollback verified"; else echo "ROLLBACK VERIFICATION FAILED"; fi
+            exit "${STATUS}"
+          }
+
+          ACTIVE_BEFORE=$(get_active tmp/deploy-manual-dedupe/before.json)
+          echo "Active before: ${ACTIVE_BEFORE}"
+          test "${ACTIVE_BEFORE}" = "${OLD_VERSION_ID}"
+
+          for KIND in old candidate; do
+            if [ "$KIND" = old ]; then VID="${OLD_VERSION_ID}"; else VID="${CANDIDATE_VERSION_ID}"; fi
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VID}?include=modules" > "tmp/deploy-manual-dedupe/${KIND}-detail.json"
+          done
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto'; import path from 'node:path';
+          const oldJ=JSON.parse(fs.readFileSync('tmp/deploy-manual-dedupe/old-detail.json','utf8'));
+          const candJ=JSON.parse(fs.readFileSync('tmp/deploy-manual-dedupe/candidate-detail.json','utf8'));
+          if(!oldJ.success||oldJ.result?.id!==process.env.OLD_VERSION_ID) throw new Error('old version mismatch');
+          if(!candJ.success||candJ.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('candidate mismatch');
+          const old=oldJ.result,cand=candJ.result;
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=x=>(x.modules||[]).map(m=>m.name).sort();
+          const shape=x=>(x.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(names(old))!==JSON.stringify(expected)||JSON.stringify(names(cand))!==JSON.stringify(expected)) throw new Error('module shape drift');
+          if(JSON.stringify(shape(old))!==JSON.stringify(shape(cand))||shape(cand).length!==27) throw new Error('binding shape drift');
+          const decode=x=>Object.fromEntries((x.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64')]));
+          const o=decode(old),c=decode(cand),h=b=>crypto.createHash('sha256').update(b).digest('hex');
+          for(const n of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(h(o[n])!==h(c[n])) throw new Error(`${n} changed unexpectedly`);
+          if(h(o['worker_hotfix.js'])===h(c['worker_hotfix.js'])) throw new Error('worker_hotfix.js unchanged');
+          for(const [n,b] of Object.entries(c)) fs.writeFileSync(path.join('tmp/deploy-manual-dedupe','candidate-'+n),b);
+          console.log(`Preflight OK: ${names(cand).length} modules, ${shape(cand).length} bindings`);
+          NODE
+
+          node --check tmp/deploy-manual-dedupe/candidate-worker_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs tmp/deploy-manual-dedupe/candidate-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/deploy-manual-dedupe/candidate-worker_hotfix.js
+
+          cat > tmp/deploy-manual-dedupe/deploy-request.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Make manual APD email tests idempotent"}}
+          JSON
+
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @tmp/deploy-manual-dedupe/deploy-request.json > tmp/deploy-manual-dedupe/deploy-response.json
+          node -e "const j=require('./tmp/deploy-manual-dedupe/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));console.log('Deployment accepted:',j.result.id)"
+          PROMOTED=1
+          wait_active "${CANDIDATE_VERSION_ID}" promote
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/deploy-manual-dedupe/active-detail.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/deploy-manual-dedupe/active-detail.json','utf8'));
+          if(!j.success||j.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('active candidate detail mismatch');
+          for(const m of j.result.modules||[]) fs.writeFileSync(path.join('tmp/deploy-manual-dedupe','active-'+m.name),Buffer.from(m.content_base64||'','base64'));
+          NODE
+          node --check tmp/deploy-manual-dedupe/active-worker_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs tmp/deploy-manual-dedupe/active-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/deploy-manual-dedupe/active-worker_hotfix.js
+
+          retry_code() {
+            local NAME="$1" EXPECTED="$2"; shift 2
+            for I in $(seq 1 18); do
+              local CODE
+              CODE=$(curl -sS -o "tmp/deploy-manual-dedupe/${NAME}-${I}.out" -w "%{http_code}" "$@") || CODE=000
+              echo "${NAME} attempt ${I}: HTTP ${CODE}"
+              if [ "${CODE}" = "${EXPECTED}" ]; then return 0; fi
+              sleep 5
+            done
+            return 1
+          }
+
+          retry_code version 200 "${WORKER_URL}/api/version"
+          retry_code planes 200 "${WORKER_URL}/api/planes"
+          retry_code mis-alertas 401 "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          retry_code mi-plan 401 "${WORKER_URL}/api/mi-plan?user_id=${FAKE_USER_ID}"
+          retry_code historico 401 "${WORKER_URL}/api/historico-resumen?user_id=${FAKE_USER_ID}"
+          retry_code preferencias 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/guardar-preferencias"
+          retry_code capturar 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/capturar-historico-apd"
+          retry_code checkout 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\",\"plan_code\":\"PRO\"}" "${WORKER_URL}/api/mercadopago/create-checkout-link"
+          retry_code whatsapp 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/whatsapp/test-send"
+          retry_code invalid-bearer 401 -H "Authorization: Bearer ${FAKE_USER_ID}" "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          retry_code cors 200 -X OPTIONS -H "Origin: https://alertasapd.com.ar" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization" "${WORKER_URL}/api/mis-alertas"
+          retry_code site 200 -L "${SITE_URL}/"
+
+          ACTIVE_FINAL=$(get_active tmp/deploy-manual-dedupe/final.json)
+          test "${ACTIVE_FINAL}" = "${CANDIDATE_VERSION_ID}"
+          trap - ERR
+
+          cat > tmp/deploy-manual-dedupe/summary.json <<JSON
+          {
+            "ok": true,
+            "old_version_id": "${OLD_VERSION_ID}",
+            "active_version_id": "${ACTIVE_FINAL}",
+            "rollback_triggered": false,
+            "manual_email_dedupe_contract_green": true,
+            "offer_identity_contract_green": true,
+            "protected_routes_unauth_401": 7,
+            "uuid_bearer_rejected": true,
+            "version_ok": true,
+            "planes_ok": true,
+            "cors_ok": true,
+            "site_ok": true
+          }
+          JSON
+          cat tmp/deploy-manual-dedupe/summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-manual-email-dedupe-deployment
+          path: tmp/deploy-manual-dedupe/
+          if-no-files-found: ignore
