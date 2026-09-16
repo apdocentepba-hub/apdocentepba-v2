@@ -1,0 +1,50 @@
+name: Diagnose 18:00 email slot KV state
+
+on:
+  push:
+    branches:
+      - ops/promote-login-pbkdf2-fix-20260916
+    paths:
+      - .github/workflows/diag-email-slot-1800.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    env:
+      ACCOUNT_ID: f446c729ea2148db5f90126e61e5abcd
+      NAMESPACE_ID: 1f2f957e8fb44b76a09a53d63979633c
+      SLOT_KEY: 2026-09-16_18
+      TARGET_USER_SHA256: 1195bf1ef2b88f4856874cdbe237eae8a041e801c3799b43c03eef8a3e9d0316
+    steps:
+      - name: Read non-secret email sweep KV state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          get_kv() {
+            key="$1"
+            enc=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$key")
+            code=$(curl -sS -o /tmp/value.txt -w '%{http_code}' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${NAMESPACE_ID}/values/${enc}")
+            if [ "$code" = "200" ]; then cat /tmp/value.txt; else printf ''; fi
+          }
+
+          active=$(get_kv 'email:active_slot_key')
+          started=$(get_kv "email:slot:${SLOT_KEY}:started_at")
+          finished=$(get_kv "email:slot:${SLOT_KEY}:finished")
+          cursor=$(get_kv "email:slot:${SLOT_KEY}:cursor_user_id")
+          cursor_hash=''
+          if [ -n "$cursor" ]; then
+            cursor_hash=$(printf '%s' "$cursor" | sha256sum | awk '{print $1}')
+          fi
+
+          echo "active_slot=${active:-<empty>}"
+          echo "slot_started=${started:-<empty>}"
+          echo "slot_finished=${finished:-<empty>}"
+          echo "cursor_present=$([ -n "$cursor" ] && echo true || echo false)"
+          echo "cursor_is_target=$([ -n "$cursor_hash" ] && [ "$cursor_hash" = "$TARGET_USER_SHA256" ] && echo true || echo false)"
+          if [ -n "$cursor_hash" ]; then echo "cursor_hash=${cursor_hash}"; fi
