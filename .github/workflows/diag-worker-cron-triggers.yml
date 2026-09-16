@@ -1,0 +1,35 @@
+name: Inspect live Worker cron triggers
+
+on:
+  push:
+    branches:
+      - ops/promote-login-pbkdf2-fix-20260916
+    paths:
+      - .github/workflows/diag-worker-cron-triggers.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    env:
+      ACCOUNT_ID: f446c729ea2148db5f90126e61e5abcd
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - name: Read current cron trigger list
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" \
+            > /tmp/schedules.json
+          node - <<'NODE'
+          const j=require('/tmp/schedules.json');
+          if(!j.success) throw new Error(JSON.stringify(j.errors||j));
+          const result=Array.isArray(j.result)?j.result:[];
+          console.log('cron_count='+result.length);
+          for(const x of result) console.log('cron='+String(x.cron||''));
+          NODE
