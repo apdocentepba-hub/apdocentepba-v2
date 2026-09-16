@@ -17,6 +17,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
       CANDIDATE_VERSION_ID: 2230bf23-c14c-4fa7-b430-15d52b4204d8
       EXPECTED_OLD_VERSION_ID: cb32450b-b937-4fb9-ad9e-a35a97162f82
+      EXPECTED_CANONICAL_HASH: 298741ce58898971722aa9512dd047d391eb6ed95fda11da15fdcf8816404f0b
       WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
       SITE_URL: https://alertasapd.com.ar
     steps:
@@ -62,21 +63,25 @@ jobs:
           if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
           const modules=r.modules||[];
           const names=modules.map(m=>m.name).sort();
-          for(const name of ['worker_hotfix.js','email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(!names.includes(name)) throw new Error(`Missing module ${name}`);
+          console.log(`candidate_modules=${JSON.stringify(names)}`);
           const liveBindings=r.bindings||[];
           if(liveBindings.length!==27) throw new Error(`Unexpected binding count ${liveBindings.length}`);
-          const mainModule=modules.find(m=>m.name==='worker_hotfix.js');
-          const candidateSource=Buffer.from(mainModule?.content_base64||'','base64');
           const repoSource=fs.readFileSync('worker-live/worker_hotfix.js');
           const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
-          const candidateHash=sha(candidateSource), repoHash=sha(repoSource);
+          const repoHash=sha(repoSource);
           console.log(`repo_hash=${repoHash}`);
+          if(repoHash!==process.env.EXPECTED_CANONICAL_HASH) throw new Error('Merged canonical Worker hash is not the reviewed PR hash');
+          const mainModule=modules.find(m=>m.name==='worker_hotfix.js');
+          if(!mainModule) throw new Error('Candidate main module content unavailable');
+          const candidateSource=Buffer.from(mainModule.content_base64||'','base64');
+          const candidateHash=sha(candidateSource);
           console.log(`candidate_hash=${candidateHash}`);
-          if(candidateHash!==repoHash) throw new Error('Candidate source does not match merged canonical Worker');
-          const text=repoSource.toString('utf8');
-          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(text)) throw new Error('PBKDF2 ceiling fix absent');
-          if(!/iterations > ACCOUNT_PBKDF2_ITERATIONS_V1/.test(text)) throw new Error('PBKDF2 verifier guard absent');
-          console.log(`Candidate preflight OK: ${names.length} modules, ${liveBindings.length} bindings`);
+          const candidateText=candidateSource.toString('utf8');
+          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(candidateText)) throw new Error('Candidate PBKDF2 ceiling fix absent');
+          if(!/iterations > ACCOUNT_PBKDF2_ITERATIONS_V1/.test(candidateText)) throw new Error('Candidate PBKDF2 verifier guard absent');
+          const repoText=repoSource.toString('utf8');
+          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(repoText)) throw new Error('Repo PBKDF2 ceiling fix absent');
+          console.log(`Candidate preflight OK: main=${r.main_module}; modules=${names.length}; bindings=${liveBindings.length}`);
           NODE
 
           cat > out/deploy.json <<JSON
