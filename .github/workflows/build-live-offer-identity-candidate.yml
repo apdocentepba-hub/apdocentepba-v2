@@ -1,0 +1,207 @@
+name: Build live offer identity candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/build-live-offer-identity-candidate.yml'
+      - 'scripts/test-live-offer-identity-bundle.mjs'
+      - 'scripts/patch-live-offer-identity-bundle.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read active Worker and lock deployment shape
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/live-offer-candidate/live tmp/live-offer-candidate/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/live-offer-candidate/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/live-offer-candidate/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-offer-candidate/deployments-before.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/live-offer-candidate/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION_ID=${ACTIVE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Active version: ${ACTIVE_VERSION_ID}"
+          test "${ACTIVE_VERSION_ID}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/live-offer-candidate/active.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/live-offer-candidate/active.json','utf8'));
+          const r=j.result;
+          if(!j.success||!r?.id) throw new Error('Active version detail missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`Unexpected module set ${JSON.stringify(names)}`);
+          for(const m of r.modules||[]) {
+            const content=Buffer.from(m.content_base64||'','base64');
+            fs.writeFileSync(path.join('tmp/live-offer-candidate/live',m.name),content);
+            fs.writeFileSync(path.join('tmp/live-offer-candidate/candidate',m.name),content);
+          }
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(shape.length!==27) throw new Error(`Expected 27 bindings, got ${shape.length}`);
+          fs.writeFileSync('tmp/live-offer-candidate/binding-shape.json',JSON.stringify(shape));
+          const hashes=Object.fromEntries(names.map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join('tmp/live-offer-candidate/live',name))).digest('hex')]));
+          fs.writeFileSync('tmp/live-offer-candidate/live-hashes.json',JSON.stringify(hashes,null,2));
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA canonical offer identity candidate','workers/tag':'offer-identity-20260915'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
+          };
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/live-offer-candidate/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Live shape locked: modules=${names.length}; bindings=${shape.length}`);
+          console.log(JSON.stringify(hashes,null,2));
+          NODE
+
+      - name: Confirm RED on current live bundle
+        run: |
+          set -euo pipefail
+          if node scripts/test-live-offer-identity-bundle.mjs tmp/live-offer-candidate/live/worker_hotfix.js > tmp/live-offer-candidate/red.log 2>&1; then
+            cat tmp/live-offer-candidate/red.log
+            echo 'Expected current live bundle to fail canonical identity contract'
+            exit 1
+          fi
+          cat tmp/live-offer-candidate/red.log
+          grep -q 'LIVE_OFFER_IDENTITY_V1' tmp/live-offer-candidate/red.log
+          echo 'RED confirmed'
+
+      - name: Apply one surgical identity patch and verify GREEN
+        run: |
+          set -euo pipefail
+          node scripts/patch-live-offer-identity-bundle.mjs \
+            tmp/live-offer-candidate/live/worker_hotfix.js \
+            tmp/live-offer-candidate/candidate/worker_hotfix.js
+
+          node --check tmp/live-offer-candidate/candidate/worker_hotfix.js
+          node --check tmp/live-offer-candidate/candidate/email_queue_hotfix.js
+          node --check tmp/live-offer-candidate/candidate/worker_email_queue_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/live-offer-candidate/candidate/worker_hotfix.js
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const live=JSON.parse(fs.readFileSync('tmp/live-offer-candidate/live-hashes.json','utf8'));
+          const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+          const after={
+            'worker_hotfix.js':hash('tmp/live-offer-candidate/candidate/worker_hotfix.js'),
+            'email_queue_hotfix.js':hash('tmp/live-offer-candidate/candidate/email_queue_hotfix.js'),
+            'worker_email_queue_hotfix.js':hash('tmp/live-offer-candidate/candidate/worker_email_queue_hotfix.js')
+          };
+          if(after['worker_hotfix.js']===live['worker_hotfix.js']) throw new Error('worker_hotfix.js did not change');
+          for(const name of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) {
+            if(after[name]!==live[name]) throw new Error(`${name} changed unexpectedly`);
+          }
+          fs.writeFileSync('tmp/live-offer-candidate/candidate-hashes.json',JSON.stringify(after,null,2));
+          console.log('GREEN confirmed; only worker_hotfix.js changed');
+          NODE
+
+      - name: Create candidate version without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/live-offer-candidate/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/live-offer-candidate/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/live-offer-candidate/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/live-offer-candidate/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/live-offer-candidate/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare candidate upload HTTP ${HTTP_CODE}"
+          CANDIDATE_VERSION_ID=$(node -e "const j=require('./tmp/live-offer-candidate/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Candidate version: ${CANDIDATE_VERSION_ID}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/live-offer-candidate/candidate-detail.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const expectedShape=JSON.parse(fs.readFileSync('tmp/live-offer-candidate/binding-shape.json','utf8'));
+          const localHashes=JSON.parse(fs.readFileSync('tmp/live-offer-candidate/candidate-hashes.json','utf8'));
+          const j=JSON.parse(fs.readFileSync('tmp/live-offer-candidate/candidate-detail.json','utf8'));
+          const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate detail mismatch');
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`Candidate modules changed ${JSON.stringify(names)}`);
+          const actualShape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expectedShape)!==JSON.stringify(actualShape)) throw new Error('Binding shape differs');
+          for(const m of r.modules||[]) {
+            const content=Buffer.from(m.content_base64||'','base64');
+            const out=path.join('tmp/live-offer-candidate','uploaded-'+m.name);
+            fs.writeFileSync(out,content);
+            const uploadedHash=crypto.createHash('sha256').update(content).digest('hex');
+            if(uploadedHash!==localHashes[m.name]) throw new Error(`${m.name} uploaded bytes differ from candidate`);
+          }
+          console.log(`Candidate shape OK: modules=${names.length}; bindings=${actualShape.length}`);
+          NODE
+
+          node --check tmp/live-offer-candidate/uploaded-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/live-offer-candidate/uploaded-worker_hotfix.js
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-offer-candidate/deployments-after.json
+          ACTIVE_AFTER=$(node -e "const j=require('./tmp/live-offer-candidate/deployments-after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(4);process.stdout.write(v.version_id)")
+          echo "Active after candidate upload: ${ACTIVE_AFTER}"
+          test "${ACTIVE_AFTER}" = "${ACTIVE_VERSION_ID}"
+
+          CANDIDATE_VERSION_ID="${CANDIDATE_VERSION_ID}" ACTIVE_VERSION_ID="${ACTIVE_VERSION_ID}" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const summary={
+            ok:true,
+            candidate_version_id:process.env.CANDIDATE_VERSION_ID,
+            active_version_id:process.env.ACTIVE_VERSION_ID,
+            traffic_changed:false,
+            red_verified:true,
+            green_verified:true,
+            syntax_checked:true,
+            binding_shape_preserved:true,
+            module_shape_preserved:true,
+            unchanged_modules:['email_queue_hotfix.js','worker_email_queue_hotfix.js'],
+            changed_module:'worker_hotfix.js'
+          };
+          fs.writeFileSync('tmp/live-offer-candidate/summary.json',JSON.stringify(summary,null,2));
+          fs.writeFileSync('tmp/live-offer-candidate/candidate-id.txt',process.env.CANDIDATE_VERSION_ID+'\n');
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-offer-identity-candidate
+          path: |
+            tmp/live-offer-candidate/summary.json
+            tmp/live-offer-candidate/candidate-id.txt
+            tmp/live-offer-candidate/red.log
+            tmp/live-offer-candidate/live-hashes.json
+            tmp/live-offer-candidate/candidate-hashes.json
+          if-no-files-found: ignore
