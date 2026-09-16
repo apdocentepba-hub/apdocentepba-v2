@@ -1,0 +1,66 @@
+name: Audit live manual email dedupe
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/audit-live-manual-email-dedupe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect live manual email and dedupe logic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/manual-email-audit
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/manual-email-audit/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/manual-email-audit/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/manual-email-audit/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/manual-email-audit/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          echo "Active: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/manual-email-audit/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/manual-email-audit/active.json','utf8'));
+          const mod=(j.result.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          if(!mod) throw new Error('worker_hotfix.js missing');
+          const s=Buffer.from(mod.content_base64||'','base64').toString('utf8');
+          fs.writeFileSync('tmp/manual-email-audit/worker_hotfix.js',s);
+          const needles=['async function runEmailAlertsSweep','/test-email-sweep','manual_test','manual_test_digest_targeted','dedupe_key','email:slot:','sent_alert_digest','notification_delivery_logs','slotKey'];
+          const report={};
+          for(const n of needles){
+            const hits=[]; let from=0;
+            while(hits.length<20){
+              const i=s.indexOf(n,from); if(i<0)break;
+              hits.push({index:i,snippet:s.slice(Math.max(0,i-1600),Math.min(s.length,i+n.length+3500))});
+              from=i+n.length;
+            }
+            report[n]=hits;
+          }
+          fs.writeFileSync('tmp/manual-email-audit/report.json',JSON.stringify(report,null,2));
+          for(const n of needles){
+            console.log(`\n===== ${n} (${report[n].length}) =====`);
+            for(const h of report[n]) console.log(h.snippet.replace(/\s+/g,' ').slice(0,5000));
+          }
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-manual-email-dedupe-audit
+          path: tmp/manual-email-audit/
+          if-no-files-found: error
