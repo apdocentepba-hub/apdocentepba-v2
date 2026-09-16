@@ -11448,6 +11448,10 @@ async function handleLoginHotfix(request, env) {
     const legacyUser = legacy.data?.user || legacy.data?.data || {};
     user = await ensureLocalUser(env, { email, password, nombre: legacyUser?.nombre || legacyUser?.name || "", apellido: legacyUser?.apellido || legacyUser?.last_name || "", celular: legacyUser?.celular || legacyUser?.phone || "" });
     if (!user?.id) return json2({ ok: false, message: "No se pudo migrar la cuenta existente" }, 500);
+    await supabasePatch(env, "users", `id=eq.${encodeURIComponent(user.id)}`, {
+      password_hash: await accountHashPasswordV1(password),
+      activo: true
+    }).catch(() => null);
     await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_legacy");
     const session = await accountCreateSessionV1(env, user.id, "password_legacy");
     await touchUltimoLogin2(env, user.id);
@@ -14157,7 +14161,7 @@ async function recordObservedEmailCron(env, startedAt, result, slotKey) {
   }
 }
 
-const ACCOUNT_PBKDF2_ITERATIONS_V1 = 210000;
+const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;
 function accountToHexV1(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -14212,6 +14216,9 @@ async function accountVerifyPasswordV1(storedPassword, plainPassword) {
     const expected = parts[3];
     if (!Number.isInteger(iterations) || iterations < 10000 || iterations > 1000000 || !salt || !expected) {
       return { ok: false, needsUpgrade: false };
+    }
+    if (iterations > ACCOUNT_PBKDF2_ITERATIONS_V1) {
+      return { ok: false, needsUpgrade: false, unsupportedPbkdf2: true };
     }
     try {
       const actual = await accountPbkdf2HexV1(plain, salt, iterations);
