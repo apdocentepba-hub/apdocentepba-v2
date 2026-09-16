@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const manifest = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
 const equivalence = fs.readFileSync('scripts/test-live-source-equivalence.mjs', 'utf8');
 const smoke = fs.readFileSync('.github/workflows/smoke-live-worker-contracts.yml', 'utf8');
+const sourceGuard = fs.readFileSync('scripts/test-production-worker-source-guard.mjs', 'utf8');
 
 assert.equal(manifest.main_module, 'worker_hotfix.js');
 assert.deepEqual(
@@ -36,6 +37,17 @@ assert.doesNotMatch(
   smoke,
   /for file in manifest\.json email_queue_hotfix\.js worker_email_queue_hotfix\.js worker_hotfix\.js/,
   'PR production baseline copy must derive module files from its manifest'
+);
+
+assert.doesNotMatch(
+  sourceGuard,
+  /requiredModules/,
+  'source-guard contract must not require the removed legacy requiredModules identifier'
+);
+assert.match(
+  sourceGuard,
+  /main module/i,
+  'source-guard contract must preserve verification that the production smoke validates the active main module'
 );
 
 console.log('worker packaging guard regression: OK');
