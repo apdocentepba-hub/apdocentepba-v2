@@ -19,6 +19,7 @@ on:
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-plan-code-single-key.mjs
       - scripts/test-account-security-contract.mjs
+      - scripts/test-sensitive-test-endpoints.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -42,6 +43,7 @@ on:
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-plan-code-single-key.mjs
       - scripts/test-account-security-contract.mjs
+      - scripts/test-sensitive-test-endpoints.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -77,6 +79,8 @@ jobs:
         run: node scripts/test-pr-production-baseline.mjs
       - name: Verify account security contract
         run: node scripts/test-account-security-contract.mjs
+      - name: Verify sensitive test endpoints contract
+        run: node scripts/test-sensitive-test-endpoints.mjs
       - name: Install Wrangler dependencies
         run: npm install
       - name: Package canonical Worker and reject duplicate object keys
