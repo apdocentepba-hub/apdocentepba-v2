@@ -5,7 +5,7 @@
   "description": "APDocentePBA frontend + Cloudflare Worker source control",
   "scripts": {
     "dev:worker": "wrangler dev",
-    "deploy:worker": "wrangler deploy",
+    "deploy:worker": "node -e \"console.error('PRODUCTION_SOURCE_GUARD_V1: direct repository deploy disabled; use verified live-bundle deployment workflow'); process.exit(1)\"",
     "tail:worker": "wrangler tail"
   },
   "devDependencies": {

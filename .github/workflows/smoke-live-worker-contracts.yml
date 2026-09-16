@@ -4,14 +4,29 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '15 11 * * *'
-  push:
-    branches:
-      - test/live-worker-contract-smoke-2026-09-16
+  pull_request:
     paths:
+      - package.json
+      - wrangler.toml
+      - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
       - scripts/test-live-email-cron-isolation.mjs
+      - .github/workflows/deploy-worker-manual.yml
+      - .github/workflows/smoke-live-worker-contracts.yml
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - wrangler.toml
+      - scripts/test-production-worker-source-guard.mjs
+      - scripts/test-live-manual-email-dedupe.mjs
+      - scripts/test-live-offer-identity-bundle.mjs
+      - scripts/test-live-email-observability.mjs
+      - scripts/test-live-email-cron-isolation.mjs
+      - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
 
 permissions:
@@ -27,9 +42,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify repository production-source guard
+        run: node scripts/test-production-worker-source-guard.mjs
+
       - name: Download current active Worker bundle
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           mkdir -p tmp/live-worker-contract-smoke
@@ -37,11 +56,32 @@ jobs:
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "$ROOT/accounts.json"
-          ACCOUNT_ID=$(node -e "const j=require('./$ROOT/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+          if [ -n "$ACCOUNT_ID" ]; then
+            ROOT="$ROOT" ACCOUNT_ID="$ACCOUNT_ID" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          if (!j.success || !accounts.some(account => account.id === process.env.ACCOUNT_ID)) {
+            throw new Error('Configured CLOUDFLARE_ACCOUNT_ID is not accessible with this token');
+          }
+          NODE
+          else
+            ACCOUNT_COUNT=$(ROOT="$ROOT" node -e "const j=require('./'+process.env.ROOT+'/accounts.json');const a=Array.isArray(j.result)?j.result:[];if(!j.success)process.exit(2);process.stdout.write(String(a.length))")
+            if [ "$ACCOUNT_COUNT" -ne 1 ]; then
+              echo "Expected exactly one accessible Cloudflare account when CLOUDFLARE_ACCOUNT_ID is unset; found ${ACCOUNT_COUNT}."
+              echo "Set repository secret CLOUDFLARE_ACCOUNT_ID to remove account ambiguity."
+              exit 2
+            fi
+            ACCOUNT_ID=$(ROOT="$ROOT" node -e "const j=require('./'+process.env.ROOT+'/accounts.json');const [account]=j.result||[];if(!account?.id)process.exit(2);process.stdout.write(account.id)")
+          fi
+          echo "Cloudflare account selected explicitly/unambiguously."
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments.json"
-          ACTIVE=$(node -e "const j=require('./$ROOT/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+
+          ACTIVE=$(ROOT="$ROOT" node -e "const j=require('./'+process.env.ROOT+'/deployments.json');const d=j.result?.deployments?.[0];const traffic=(d?.versions||[]).filter(x=>Number(x.percentage)>0);if(traffic.length!==1||Number(traffic[0].percentage)!==100||!traffic[0].version_id){console.error('Expected one 100% traffic version; got '+JSON.stringify(traffic));process.exit(3)};process.stdout.write(traffic[0].version_id)")
           echo "ACTIVE_VERSION=${ACTIVE}" >> "$GITHUB_ENV"
           echo "Active production version: ${ACTIVE}"
 
@@ -51,25 +91,34 @@ jobs:
           ROOT="$ROOT" node --input-type=module - <<'NODE'
           import fs from 'node:fs';
           import path from 'node:path';
-          const root=process.env.ROOT;
-          const j=JSON.parse(fs.readFileSync(`${root}/active.json`,'utf8'));
-          const r=j.result;
-          if(!j.success||!r?.id) throw new Error('active version detail missing');
-          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
-          const names=(r.modules||[]).map(m=>m.name).sort();
-          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`module shape drift: ${JSON.stringify(names)}`);
-          if((r.bindings||[]).length!==27) throw new Error(`binding shape drift: ${(r.bindings||[]).length}`);
-          for(const m of r.modules||[]) fs.writeFileSync(path.join(root,m.name),Buffer.from(m.content_base64||'','base64'));
-          console.log(`Bundle shape OK: ${names.length} modules / ${(r.bindings||[]).length} bindings`);
+          const root = process.env.ROOT;
+          const j = JSON.parse(fs.readFileSync(`${root}/active.json`, 'utf8'));
+          const r = j.result;
+          if (!j.success || !r?.id) throw new Error('active version detail missing');
+          if (r.main_module !== 'worker_hotfix.js') throw new Error(`main module drift: ${r.main_module}`);
+
+          const requiredModules = ['email_queue_hotfix.js', 'worker_email_queue_hotfix.js', 'worker_hotfix.js'];
+          const names = (r.modules || []).map(m => m.name);
+          for (const name of requiredModules) {
+            if (!names.includes(name)) throw new Error(`required production module missing: ${name}`);
+          }
+
+          const bindings = r.bindings || [];
+          if (bindings.length < 27) throw new Error(`binding shape lost required entries: ${bindings.length}`);
+
+          for (const m of r.modules || []) {
+            fs.writeFileSync(path.join(root, m.name), Buffer.from(m.content_base64 || '', 'base64'));
+          }
+          console.log(`Bundle shape OK: ${names.length} modules / ${bindings.length} bindings`);
           NODE
 
       - name: Run production bundle contracts
         run: |
           set -euo pipefail
           ROOT=tmp/live-worker-contract-smoke
-          node --check "$ROOT/worker_hotfix.js"
-          node --check "$ROOT/email_queue_hotfix.js"
-          node --check "$ROOT/worker_email_queue_hotfix.js"
+          for file in "$ROOT"/*.js; do
+            node --check "$file"
+          done
           node scripts/test-live-email-cron-isolation.mjs "$ROOT/worker_hotfix.js"
           node scripts/test-live-email-observability.mjs "$ROOT/worker_hotfix.js"
           node scripts/test-live-manual-email-dedupe.mjs "$ROOT/worker_hotfix.js"
@@ -79,6 +128,9 @@ jobs:
         run: |
           set -euo pipefail
           DUMMY=00000000-0000-4000-8000-000000000000
+          curl_code() {
+            curl --retry 2 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
+          }
           for path in \
             "/api/mis-alertas?user_id=${DUMMY}" \
             "/api/mi-plan?user_id=${DUMMY}" \
@@ -87,13 +139,13 @@ jobs:
             "/api/capturar-historico-apd" \
             "/api/mercadopago/create-checkout-link" \
             "/api/whatsapp/test-send"; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}${path}")
+            code=$(curl_code "${WORKER_URL}${path}")
             echo "${path} -> ${code}"
             test "$code" = "401"
           done
-          test "$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${DUMMY}" "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/version")" = "200"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/planes")" = "200"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "${WORKER_URL}/api/mis-alertas")" = "200"
-          test "$(curl -L -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")" = "200"
+          test "$(curl_code -H "Authorization: Bearer ${DUMMY}" "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${WORKER_URL}/api/version")" = "200"
+          test "$(curl_code "${WORKER_URL}/api/planes")" = "200"
+          test "$(curl_code -X OPTIONS "${WORKER_URL}/api/mis-alertas")" = "200"
+          test "$(curl_code -L "${SITE_URL}/")" = "200"
           echo "Production HTTP smoke OK for ${ACTIVE_VERSION}"
