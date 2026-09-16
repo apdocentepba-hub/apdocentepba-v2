@@ -38,7 +38,8 @@
     },
     {
       "name": "EMAIL_SWEEP_STATE",
-      "type": "kv_namespace"
+      "type": "kv_namespace",
+      "namespace_id": "1f2f957e8fb44b76a09a53d63979633c"
     },
     {
       "name": "GOOGLE_CLIENT_ID",
