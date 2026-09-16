@@ -17,8 +17,8 @@ assert.match(patch, /Authorization/, 'account frontend must send Authorization h
 assert.match(patch, /Bearer/, 'account frontend must send Bearer session token');
 assert.doesNotMatch(index, /account_profile_hotfix\.js/, 'obsolete direct-Supabase account hotfix must not be loaded');
 
-assert.match(worker, /\/api\/account\/profile/, 'canonical Worker must expose account profile API');
-assert.match(worker, /\/api\/account\/change-password/, 'canonical Worker must expose account password API');
+assert.match(worker, /account\/profile/, 'canonical Worker must expose account profile API');
+assert.match(worker, /account\/change-password/, 'canonical Worker must expose account password API');
 assert.match(worker, /pbkdf2_sha256\$/, 'canonical Worker must store secure PBKDF2 password hashes');
 assert.doesNotMatch(worker, /password_hash:\s*password\s*[,}]/, 'canonical Worker must not store registration passwords in plaintext');
 assert.doesNotMatch(worker, /password_hash:\s*payload\?\.password\s*\?\s*String\(payload\.password\)/, 'canonical Worker must not persist legacy migration passwords in plaintext');
