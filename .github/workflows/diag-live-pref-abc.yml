@@ -1,0 +1,280 @@
+name: Diagnostic live ABC preferences
+
+on:
+  push:
+    branches:
+      - diag/live-pref-abc-20260916
+    paths:
+      - .github/workflows/diag-live-pref-abc.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare live ABC offers with active preference shapes
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cat > /tmp/diag.mjs <<'NODE'
+          import fs from 'node:fs';
+
+          const API = 'https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
+          const rows = 150;
+          const productionMaxPages = 6;
+          const now = Date.now();
+
+          const profiles = [
+            {
+              name: 'AVELLANEDA_A',
+              districts: ['AVELLANEDA', 'GENERAL SAN MARTIN'],
+              cargoCodes: ['MTM', 'MCS', '4I', 'PR'],
+              levels: ['SECUNDARIO', 'TECNICO PROFESIONAL']
+            },
+            {
+              name: 'AVELLANEDA_B',
+              districts: ['AVELLANEDA', 'GENERAL SAN MARTIN', 'PARTIDO DE LA COSTA'],
+              cargoCodes: ['PR', 'NTI', 'ELI', 'MTM'],
+              levels: ['SECUNDARIO', 'TECNICO PROFESIONAL']
+            }
+          ];
+
+          const cargoDefs = {
+            MTM: { term: 'MATEMATICA', aliases: ['MATEMATICA'] },
+            MCS: { term: 'MATEMATICA - CICLO SUPERIOR', aliases: ['MATEMATICA CICLO SUPERIOR'] },
+            '4I': { term: 'MATEMATICA CENS - ADULTOS', aliases: ['MATEMATICA CENS ADULTOS'] },
+            PR: { term: 'PRECEPTOR', aliases: ['PRECEPTOR'] },
+            NTI: { term: 'NTICX', aliases: ['NTICX'] },
+            ELI: { term: 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.', aliases: ['ENCARGADO MEDIOS APOYO TEC PED INF COMP E INF APL', 'ENCARGADO DE MEDIOS DE APOYO TECNICO PEDAGOGICO'] }
+          };
+
+          const norm = (v='') => String(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+          const escapeSolr = (v='') => String(v).replace(/(["\\])/g, '\\$1');
+          const keyOf = (d) => String(d?.iddetalle || d?.id || d?.idoferta || JSON.stringify(d));
+
+          function parseDate(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return null;
+            const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z)?$/);
+            if (iso) {
+              const [, yyyy, mm, dd, hh='0', mi='0', ss='0'] = iso;
+              const hasZ = /Z$/.test(raw);
+              return hasZ
+                ? new Date(Date.UTC(Number(yyyy), Number(mm)-1, Number(dd), Number(hh), Number(mi), Number(ss)))
+                : new Date(Number(yyyy), Number(mm)-1, Number(dd), Number(hh), Number(mi), Number(ss));
+            }
+            const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+            if (dmy) {
+              const [, dd, mm, yyyy, hh='0', mi='0', ss='0'] = dmy;
+              return new Date(Number(yyyy), Number(mm)-1, Number(dd), Number(hh), Number(mi), Number(ss));
+            }
+            const d = new Date(raw);
+            return Number.isFinite(d.getTime()) ? d : null;
+          }
+
+          function isActive(doc) {
+            const end = parseDate(doc?.finoferta || '');
+            if (end) return end.getTime() >= now;
+            const estado = norm(doc?.estado || '');
+            return !/(ANUL|CERR|FINAL|DESIGN|DESIER)/.test(estado);
+          }
+
+          function docText(doc) {
+            return norm([
+              doc?.descripcioncargo, doc?.descripcionarea, doc?.cargo,
+              doc?.materia, doc?.asignatura, doc?.area
+            ].filter(Boolean).join(' '));
+          }
+
+          function codesInDoc(doc) {
+            const raw = [doc?.descripcioncargo, doc?.descripcionarea, doc?.cargo, doc?.materia, doc?.asignatura, doc?.area]
+              .filter(Boolean).join(' ');
+            const out = new Set();
+            for (const m of raw.matchAll(/\(([^)]+)\)/g)) {
+              const c = norm(m[1]).replace(/[^A-Z0-9]/g, '');
+              if (c) out.add(c);
+            }
+            return out;
+          }
+
+          function cargoMatches(doc, wantedCodes) {
+            const codes = codesInDoc(doc);
+            const text = docText(doc);
+            for (const code of wantedCodes) {
+              if (codes.has(code)) return { ok:true, code, reason:'code' };
+              const def = cargoDefs[code];
+              if (def && def.aliases.some(a => text.includes(norm(a)))) return { ok:true, code, reason:'alias' };
+            }
+            return { ok:false, code:null, reason:'none' };
+          }
+
+          function levelCats(text) {
+            const t = norm(text);
+            const out = new Set();
+            if (!t) return out;
+            if (t.includes('INICIAL')) out.add('INICIAL');
+            if (t.includes('PRIMARIA') || t.includes('PRIMARIO')) out.add('PRIMARIO');
+            if (t.includes('SECUNDARIA') || t.includes('SECUNDARIO')) out.add('SECUNDARIO');
+            if (t.includes('SUPERIOR') || t.includes('FORMACION DOCENTE') || t.includes('DOCENTE')) out.add('SUPERIOR');
+            if (t.includes('ESPECIAL')) out.add('EDUCACION ESPECIAL');
+            if (t.includes('JOVENES') || t.includes('ADULTOS') || t.includes('CENS')) out.add('ADULTOS');
+            if (t.includes('FISICA')) out.add('EDUCACION FISICA');
+            if (t.includes('PSICOLOGIA') || t.includes('COMUNITARIA')) out.add('PSICOLOGIA');
+            if (t.includes('ARTISTICA') || t.includes('ARTE')) out.add('EDUCACION ARTISTICA');
+            if (t.includes('TECNICO') || t.includes('FORMACION PROFESIONAL')) out.add('TECNICO PROFESIONAL');
+            return out;
+          }
+
+          function productionLevelText(doc) {
+            return [doc?.descnivelmodalidad, doc?.nivel, doc?.modalidad, doc?.nivel_modalidad]
+              .filter(Boolean).join(' ');
+          }
+
+          function levelMatchesProduction(doc, prefLevels) {
+            const text = productionLevelText(doc);
+            if (!text) return { ok:false, reason:'missing-production-level-fields', cats:[] };
+            const docCats = levelCats(text);
+            const prefCats = new Set(prefLevels.flatMap(x => [...levelCats(x)]));
+            if (!prefCats.size) return { ok:true, reason:'unrecognized-pref', cats:[...docCats] };
+            const ok = [...prefCats].some(c => docCats.has(c));
+            return { ok, reason: ok ? 'compatible' : 'incompatible', cats:[...docCats] };
+          }
+
+          function preview(doc) {
+            return {
+              iddetalle: doc?.iddetalle ?? doc?.id ?? null,
+              idoferta: doc?.idoferta ?? null,
+              distrito: doc?.descdistrito ?? '',
+              cargo: doc?.descripcioncargo ?? doc?.cargo ?? '',
+              area: doc?.descripcionarea ?? doc?.area ?? '',
+              escuela: doc?.escuela ?? doc?.nombreestablecimiento ?? '',
+              turno: doc?.turno ?? '',
+              descripcionturno: doc?.descripcionturno ?? '',
+              estado: doc?.estado ?? '',
+              finoferta: doc?.finoferta ?? '',
+              descnivelmodalidad: doc?.descnivelmodalidad ?? null,
+              nivelmodalidad: doc?.nivelmodalidad ?? null,
+              nivel: doc?.nivel ?? null,
+              modalidad: doc?.modalidad ?? null,
+              nivel_modalidad: doc?.nivel_modalidad ?? null
+            };
+          }
+
+          async function fetchQuery(q, maxPages = productionMaxPages) {
+            const docs = [];
+            let numFound = 0;
+            for (let page=0; page<maxPages; page++) {
+              const u = new URL(API);
+              u.searchParams.set('q', q);
+              u.searchParams.set('rows', String(rows));
+              u.searchParams.set('start', String(page * rows));
+              u.searchParams.set('wt', 'json');
+              u.searchParams.set('sort', 'ult_movimiento desc');
+              const r = await fetch(u, { headers: { 'user-agent': 'APDocentePBA-live-pref-audit/1.0' } });
+              if (!r.ok) throw new Error(`${r.status} ${u} ${await r.text()}`);
+              const j = await r.json();
+              numFound = Number(j?.response?.numFound ?? 0);
+              const batch = Array.isArray(j?.response?.docs) ? j.response.docs : [];
+              docs.push(...batch);
+              if (batch.length < rows || docs.length >= numFound) break;
+            }
+            return { docs, numFound };
+          }
+
+          const uniqueDistricts = [...new Set(profiles.flatMap(p => p.districts))];
+          const districtCache = new Map();
+          for (const district of uniqueDistricts) {
+            const q = `descdistrito:"${escapeSolr(district)}"`;
+            districtCache.set(district, await fetchQuery(q, productionMaxPages));
+          }
+
+          const exactFilterAudit = [];
+          const exactCache = new Map();
+          for (const district of uniqueDistricts) {
+            const neededCodes = [...new Set(profiles.filter(p => p.districts.includes(district)).flatMap(p => p.cargoCodes))];
+            for (const code of neededCodes) {
+              const def = cargoDefs[code];
+              if (!def) continue;
+              const q = [
+                `descdistrito:"${escapeSolr(district)}"`,
+                `(${[
+                  `descripcioncargo:"${escapeSolr(def.term)}"`,
+                  `descripcionarea:"${escapeSolr(def.term)}"`,
+                  `cargo:"${escapeSolr(def.term)}"`
+                ].join(' OR ')})`
+              ].join(' AND ');
+              const result = await fetchQuery(q, 20);
+              const active = result.docs.filter(d => norm(d?.descdistrito) === norm(district) && isActive(d));
+              const activeCargo = active.filter(d => cargoMatches(d, [code]).ok);
+              exactCache.set(`${district}|${code}`, activeCargo);
+              exactFilterAudit.push({
+                district, code, term:def.term,
+                abc_num_found: result.numFound,
+                active_after_date_filter: active.length,
+                active_matching_code_or_alias: activeCargo.length,
+                active_preview: activeCargo.slice(0,5).map(preview)
+              });
+            }
+          }
+
+          const report = {
+            generated_at: new Date().toISOString(),
+            note: 'Read-only diagnostic. Production window is 6x150 sorted by ult_movimiento desc. Production level matcher uses descnivelmodalidad,nivel,modalidad,nivel_modalidad (not nivelmodalidad).',
+            profiles: [],
+            abc_exact_filters: exactFilterAudit
+          };
+
+          for (const profile of profiles) {
+            const p = { name:profile.name, districts:[], total_matches:0, total_cargo_candidates:0, total_rejected_missing_level:0, total_rejected_incompatible_level:0 };
+            for (const district of profile.districts) {
+              const fetched = districtCache.get(district);
+              const docs = fetched.docs.filter(d => norm(d?.descdistrito) === norm(district));
+              const active = docs.filter(isActive);
+              const cargoCandidates = [];
+              const matches = [];
+              const rejectedMissing = [];
+              const rejectedIncompatible = [];
+              for (const doc of active) {
+                const cm = cargoMatches(doc, profile.cargoCodes);
+                if (!cm.ok) continue;
+                const lm = levelMatchesProduction(doc, profile.levels);
+                const row = { matched_cargo_code:cm.code, cargo_match_reason:cm.reason, level_result:lm, offer:preview(doc) };
+                cargoCandidates.push(row);
+                if (lm.ok) matches.push(row);
+                else if (lm.reason === 'missing-production-level-fields') rejectedMissing.push(row);
+                else rejectedIncompatible.push(row);
+              }
+              p.total_matches += matches.length;
+              p.total_cargo_candidates += cargoCandidates.length;
+              p.total_rejected_missing_level += rejectedMissing.length;
+              p.total_rejected_incompatible_level += rejectedIncompatible.length;
+              p.districts.push({
+                district,
+                abc_num_found:fetched.numFound,
+                production_window_fetched:docs.length,
+                active_in_production_window:active.length,
+                cargo_candidates:cargoCandidates.length,
+                production_matches:matches.length,
+                rejected_missing_production_level_fields:rejectedMissing.length,
+                rejected_incompatible_level:rejectedIncompatible.length,
+                matches_preview:matches.slice(0,12),
+                rejected_missing_level_preview:rejectedMissing.slice(0,12),
+                rejected_incompatible_level_preview:rejectedIncompatible.slice(0,12)
+              });
+            }
+            report.profiles.push(p);
+          }
+
+          fs.writeFileSync('artifacts/live-pref-abc.json', JSON.stringify(report, null, 2));
+          console.log(JSON.stringify(report, null, 2));
+          NODE
+          node /tmp/diag.mjs
+
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pref-abc
+          path: artifacts/live-pref-abc.json
+          if-no-files-found: error
