@@ -1,0 +1,107 @@
+name: Verify live offer identity candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/verify-live-offer-identity-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      ACTIVE_VERSION_ID: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+      CANDIDATE_VERSION_ID: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify candidate bytes, shape, contract and zero traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/verify-offer-candidate/active tmp/verify-offer-candidate/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/verify-offer-candidate/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/verify-offer-candidate/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/verify-offer-candidate/deployments.json
+          ACTIVE_NOW=$(node -e "const j=require('./tmp/verify-offer-candidate/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "Active now: ${ACTIVE_NOW}"
+          test "${ACTIVE_NOW}" = "${ACTIVE_VERSION_ID}"
+
+          for KIND in active candidate; do
+            if [ "$KIND" = active ]; then VID="${ACTIVE_VERSION_ID}"; else VID="${CANDIDATE_VERSION_ID}"; fi
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VID}?include=modules" > "tmp/verify-offer-candidate/${KIND}.json"
+          done
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const load = kind => JSON.parse(fs.readFileSync(`tmp/verify-offer-candidate/${kind}.json`, 'utf8'));
+          const a=load('active'), c=load('candidate');
+          if(!a.success||a.result?.id!==process.env.ACTIVE_VERSION_ID) throw new Error('Active detail mismatch');
+          if(!c.success||c.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate detail mismatch');
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const shape = r => (r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          const names = r => (r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names(a.result))!==JSON.stringify(expected)) throw new Error('Active module shape unexpected');
+          if(JSON.stringify(names(c.result))!==JSON.stringify(expected)) throw new Error('Candidate module shape unexpected');
+          if(JSON.stringify(shape(a.result))!==JSON.stringify(shape(c.result))) throw new Error('Binding shape changed');
+          if(shape(c.result).length!==27) throw new Error(`Expected 27 candidate bindings, got ${shape(c.result).length}`);
+          const hashes={active:{},candidate:{}};
+          for(const [kind,j] of [['active',a],['candidate',c]]) {
+            for(const m of j.result.modules||[]) {
+              const content=Buffer.from(m.content_base64||'','base64');
+              fs.writeFileSync(path.join('tmp/verify-offer-candidate',kind,m.name),content);
+              hashes[kind][m.name]=crypto.createHash('sha256').update(content).digest('hex');
+            }
+          }
+          for(const name of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) {
+            if(hashes.active[name]!==hashes.candidate[name]) throw new Error(`${name} changed`);
+          }
+          if(hashes.active['worker_hotfix.js']===hashes.candidate['worker_hotfix.js']) throw new Error('worker_hotfix.js did not change');
+          fs.writeFileSync('tmp/verify-offer-candidate/hashes.json',JSON.stringify(hashes,null,2));
+          console.log(JSON.stringify({modules:expected.length,bindings:shape(c.result).length,hashes},null,2));
+          NODE
+
+          node --check tmp/verify-offer-candidate/candidate/worker_hotfix.js
+          node --check tmp/verify-offer-candidate/candidate/email_queue_hotfix.js
+          node --check tmp/verify-offer-candidate/candidate/worker_email_queue_hotfix.js
+
+          if node scripts/test-live-offer-identity-bundle.mjs tmp/verify-offer-candidate/active/worker_hotfix.js > tmp/verify-offer-candidate/active-red.log 2>&1; then
+            echo 'Expected active version to remain RED before traffic change'; exit 1
+          fi
+          grep -q 'LIVE_OFFER_IDENTITY_V1' tmp/verify-offer-candidate/active-red.log
+          node scripts/test-live-offer-identity-bundle.mjs tmp/verify-offer-candidate/candidate/worker_hotfix.js
+
+          cat > tmp/verify-offer-candidate/summary.json <<JSON
+          {
+            "ok": true,
+            "active_version_id": "${ACTIVE_VERSION_ID}",
+            "candidate_version_id": "${CANDIDATE_VERSION_ID}",
+            "traffic_changed": false,
+            "active_contract_red": true,
+            "candidate_contract_green": true,
+            "syntax_checked": true,
+            "module_shape_preserved": true,
+            "binding_shape_preserved": true,
+            "unchanged_modules": ["email_queue_hotfix.js", "worker_email_queue_hotfix.js"],
+            "changed_module": "worker_hotfix.js"
+          }
+          JSON
+          cat tmp/verify-offer-candidate/summary.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-live-offer-identity-candidate
+          path: tmp/verify-offer-candidate/
+          if-no-files-found: error
