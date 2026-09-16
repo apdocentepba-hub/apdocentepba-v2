@@ -1,0 +1,33 @@
+name: Audit live Worker cron schedules
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/audit-worker-cron-schedules-2026-09-15.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - name: Read cron schedules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" > schedules.json
+          node - <<'NODE'
+          const j=require('./schedules.json');
+          if(!j.success) throw new Error(JSON.stringify(j.errors||j));
+          console.log(JSON.stringify((j.result||[]).map(x=>({cron:x.cron,created_on:x.created_on,modified_on:x.modified_on})),null,2));
+          NODE
