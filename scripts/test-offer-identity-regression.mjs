@@ -49,7 +49,12 @@ function extractNamedFunction(name) {
 
 const context = {};
 vm.createContext(context);
-vm.runInContext(`${extractNamedFunction('getOfferId')}\n${extractNamedFunction('normalizeOfferPayload')}`, context);
+const helperNames = ['canonicalOfferIdentity', 'getOfferId', 'normalizeOfferPayload'];
+const helpers = helperNames
+  .filter(name => source.includes(`function ${name}(`))
+  .map(extractNamedFunction)
+  .join('\n');
+vm.runInContext(helpers, context);
 
 const sameOfferFromTwoPipelines = {
   offer_id: '4294581',
@@ -66,10 +71,27 @@ assert.equal(
   'user_offer_state must key the offer by the canonical detail identity, not the numeric idoferta supplied by another pipeline'
 );
 
+const normalized = context.normalizeOfferPayload(sameOfferFromTwoPipelines);
 assert.equal(
-  context.normalizeOfferPayload(sameOfferFromTwoPipelines).offer_id,
+  normalized.offer_id,
   'D_4278473',
   'stored offer_payload.offer_id must use the same canonical identity as user_offer_state.offer_id'
+);
+assert.equal(
+  normalized.source_offer_key,
+  'D_4278473',
+  'stored source_offer_key must use the same canonical identity'
+);
+
+const sameOfferWithoutSourceKey = {
+  offer_id: '4294581',
+  idoferta: '4294581',
+  iddetalle: '4278473'
+};
+assert.equal(
+  context.getOfferId(sameOfferWithoutSourceKey),
+  'D_4278473',
+  'iddetalle must remain authoritative even when the caller omits source_offer_key'
 );
 
 console.log('offer identity regression: ok');
