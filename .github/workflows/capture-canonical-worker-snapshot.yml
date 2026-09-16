@@ -78,7 +78,7 @@ jobs:
           node --check worker-live/worker_hotfix.js
           node --check worker-live/email_queue_hotfix.js
           node --check worker-live/worker_email_queue_hotfix.js
-          node scripts/test-live-source-equivalence.mjs
+          node scripts/test-live-source-equivalence.mjs "$PWD/worker-live"
 
       - name: Commit canonical snapshot and remove one-shot workflow
         run: |
