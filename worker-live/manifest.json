@@ -2,21 +2,14 @@
   "schema_version": 1,
   "worker_name": "ancient-wildflower-cd37",
   "account_id": "f446c729ea2148db5f90126e61e5abcd",
-  "version_id": "cb32450b-b937-4fb9-ad9e-a35a97162f82",
+  "version_id": "ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac",
   "main_module": "worker_hotfix.js",
-  "captured_at": "2026-09-16T17:03:31.692Z",
+  "captured_at": "2026-09-16T23:06:23.230Z",
   "modules": [
     {
-      "name": "email_queue_hotfix.js",
-      "module_sha256": "482b7434f4debdc8b4c218ec33dff181aec93eb4e121b11b30dc240705f55ee2"
-    },
-    {
-      "name": "worker_email_queue_hotfix.js",
-      "module_sha256": "7fff1bbd7c410251c49091707ba263180c6b8051d8b21add50d6fb82d9574345"
-    },
-    {
       "name": "worker_hotfix.js",
-      "module_sha256": "ec1fd1de021b841530885b5910952d5fbd62c06490edcff277f1d311bb3b6e40"
+      "module_sha256": "9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f",
+      "source_sha256": "ddf990206512b45fd2031c7c043d5c5e7a844ce5d620aa2df604762e5c155a00"
     }
   ],
   "bindings": [
