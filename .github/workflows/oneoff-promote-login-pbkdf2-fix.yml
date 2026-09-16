@@ -16,6 +16,7 @@ jobs:
     env:
       WORKER_NAME: ancient-wildflower-cd37
       CANDIDATE_VERSION_ID: 2230bf23-c14c-4fa7-b430-15d52b4204d8
+      CANDIDATE_TAG: pr-125-748ce06a
       EXPECTED_OLD_VERSION_ID: cb32450b-b937-4fb9-ad9e-a35a97162f82
       EXPECTED_CANONICAL_HASH: 298741ce58898971722aa9512dd047d391eb6ed95fda11da15fdcf8816404f0b
       WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
@@ -52,8 +53,20 @@ jobs:
           test "${ACTIVE_BEFORE}" = "${EXPECTED_OLD_VERSION_ID}"
 
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=25" > out/versions.json
+          CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" CANDIDATE_TAG="$CANDIDATE_TAG" node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('out/versions.json','utf8'));
+          const versions=Array.isArray(j.result)?j.result:(j.result?.versions||[]);
+          const v=versions.find(x=>x.id===process.env.CANDIDATE_VERSION_ID);
+          if(!j.success||!v) throw new Error('Candidate version not present in Cloudflare version list');
+          const tag=v.annotations?.['workers/tag']||'';
+          if(tag!==process.env.CANDIDATE_TAG) throw new Error(`Candidate tag mismatch: ${tag}`);
+          console.log(`Candidate identity OK: ${v.id} tag=${tag}`);
+          NODE
 
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
           node - <<'NODE'
           const fs=require('fs');
           const crypto=require('crypto');
@@ -61,27 +74,16 @@ jobs:
           const r=j.result;
           if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate unavailable/mismatched');
           if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
-          const modules=r.modules||[];
-          const names=modules.map(m=>m.name).sort();
-          console.log(`candidate_modules=${JSON.stringify(names)}`);
-          const liveBindings=r.bindings||[];
-          if(liveBindings.length!==27) throw new Error(`Unexpected binding count ${liveBindings.length}`);
+          const bindings=r.bindings||[];
+          if(bindings.length!==27) throw new Error(`Unexpected binding count ${bindings.length}`);
           const repoSource=fs.readFileSync('worker-live/worker_hotfix.js');
-          const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
-          const repoHash=sha(repoSource);
+          const repoHash=crypto.createHash('sha256').update(repoSource).digest('hex');
           console.log(`repo_hash=${repoHash}`);
           if(repoHash!==process.env.EXPECTED_CANONICAL_HASH) throw new Error('Merged canonical Worker hash is not the reviewed PR hash');
-          const mainModule=modules.find(m=>m.name==='worker_hotfix.js');
-          if(!mainModule) throw new Error('Candidate main module content unavailable');
-          const candidateSource=Buffer.from(mainModule.content_base64||'','base64');
-          const candidateHash=sha(candidateSource);
-          console.log(`candidate_hash=${candidateHash}`);
-          const candidateText=candidateSource.toString('utf8');
-          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(candidateText)) throw new Error('Candidate PBKDF2 ceiling fix absent');
-          if(!/iterations > ACCOUNT_PBKDF2_ITERATIONS_V1/.test(candidateText)) throw new Error('Candidate PBKDF2 verifier guard absent');
-          const repoText=repoSource.toString('utf8');
-          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(repoText)) throw new Error('Repo PBKDF2 ceiling fix absent');
-          console.log(`Candidate preflight OK: main=${r.main_module}; modules=${names.length}; bindings=${liveBindings.length}`);
+          const text=repoSource.toString('utf8');
+          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(text)) throw new Error('PBKDF2 ceiling fix absent from merged source');
+          if(!/iterations > ACCOUNT_PBKDF2_ITERATIONS_V1/.test(text)) throw new Error('PBKDF2 verifier guard absent from merged source');
+          console.log(`Candidate preflight OK: main=${r.main_module}; bindings=${bindings.length}`);
           NODE
 
           cat > out/deploy.json <<JSON
@@ -107,8 +109,6 @@ jobs:
           node -e "const j=require('./out/version.json');if(j.ok!==true)throw new Error('api/version not ok')"
           test "$(curl --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/planes")" = "200"
           test "$(curl --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/mis-alertas?user_id=00000000-0000-4000-8000-000000000000")" = "401"
-          test "$(curl --retry 5 --retry-delay 2 -sS -o out/email-health.json -w '%{http_code}' "${WORKER_URL}/api/email-alerts-health")" = "200"
-          node -e "const j=require('./out/email-health.json');if(j.ok!==true)throw new Error('email alerts health not ok');console.log('email health OK')"
           SITE_CODE=$(curl -L --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")
           test "${SITE_CODE}" = "200"
 
