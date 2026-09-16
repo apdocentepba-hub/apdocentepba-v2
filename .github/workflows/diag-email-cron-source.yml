@@ -1,0 +1,30 @@
+name: Inspect email cron source
+on:
+  push:
+    branches:
+      - ops/promote-login-pbkdf2-fix-20260916
+    paths:
+      - .github/workflows/diag-email-cron-source.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract relevant canonical Worker functions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('worker-live/worker_hotfix.js').read_text()
+          def block(start_marker,end_markers):
+              a=s.find(start_marker)
+              print('\n###',start_marker,'@',a)
+              if a<0:return
+              ends=[s.find(m,a+len(start_marker)) for m in end_markers]
+              ends=[x for x in ends if x>=0]
+              b=min(ends) if ends else min(len(s),a+12000)
+              print(s[a:b][:16000])
+          block('function getArgentinaDigestSlotInfo', ['function getChannelStateStore','async function runEmailAlertsSweep','async function recordObservedEmailCron'])
+          block('async function runEmailAlertsSweep', ['async function handleTestMail','var worker_hotfix_default'])
+          PY
