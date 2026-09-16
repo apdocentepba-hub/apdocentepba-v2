@@ -29,4 +29,17 @@ assert.match(
 assert.doesNotMatch(worker, /password_hash:\s*password\s*[,}]/, 'canonical Worker must not store registration passwords in plaintext');
 assert.doesNotMatch(worker, /password_hash:\s*payload\?\.password\s*\?\s*String\(payload\.password\)/, 'canonical Worker must not persist legacy migration passwords in plaintext');
 
+const loginStart = worker.indexOf('async function handleLoginHotfix(request, env)');
+const googleStart = worker.indexOf('async function handleGoogleAuthHotfix(request, env)');
+const googleEnd = worker.indexOf('function adaptarPreferenciasRow2', googleStart);
+assert.ok(loginStart >= 0 && googleStart > loginStart, 'password hotfix login handler must exist');
+assert.ok(googleEnd > googleStart, 'Google hotfix login handler must have a bounded body');
+const loginHotfix = worker.slice(loginStart, googleStart);
+const googleHotfix = worker.slice(googleStart, googleEnd);
+for (const [name, source] of [['password', loginHotfix], ['Google', googleHotfix]]) {
+  assert.match(source, /session_token\s*:/, `${name} login must return a session_token`);
+  assert.match(source, /(?:accountCreateSessionV1|createSession)\s*\(/, `${name} login must create a server-side session`);
+}
+assert.match(loginHotfix, /password_legacy/, 'legacy password login must create a dedicated migrated session');
+
 console.log('account security contract: OK');
