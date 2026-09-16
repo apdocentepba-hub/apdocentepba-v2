@@ -1,0 +1,92 @@
+name: Materialize verified live Worker snapshot
+
+on:
+  push:
+    branches:
+      - refactor/canonical-live-worker-2026-09-16
+    paths:
+      - .github/workflows/capture-canonical-worker-snapshot.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_RUN_ID: '35093582152'
+      SOURCE_ARTIFACT: live-worker-canonical-capture
+      EXPECTED_VERSION_ID: 39b52f3c-faf6-4a15-8e93-7bbd2884b95d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/canonical-live-worker-2026-09-16
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download the already-verified production capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf worker-live
+          mkdir -p worker-live
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" \
+            --dir worker-live
+
+      - name: Verify exact version, hashes and sanitized manifest
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const dir = 'worker-live';
+          const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+          assert.equal(manifest.schema_version, 1);
+          assert.equal(manifest.version_id, process.env.EXPECTED_VERSION_ID);
+          assert.equal(manifest.main_module, 'worker_hotfix.js');
+
+          const expected = new Map([
+            ['email_queue_hotfix.js', '482b7434f4debdc8b4c218ec33dff181aec93eb4e121b11b30dc240705f55ee2'],
+            ['worker_email_queue_hotfix.js', '7fff1bbd7c410251c49091707ba263180c6b8051d8b21add50d6fb82d9574345'],
+            ['worker_hotfix.js', '6107aa8617eeafb9d7a1bdbbf557f72bea891fc6e3392a5a87c82587ce5ad1fb']
+          ]);
+          const recorded = new Map((manifest.modules || []).map(m => [m.name, m.module_sha256]));
+          assert.deepEqual([...recorded.keys()].sort(), [...expected.keys()].sort());
+
+          for (const [name, hash] of expected) {
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, name))).digest('hex');
+            assert.equal(recorded.get(name), hash, `manifest hash drift: ${name}`);
+            assert.equal(actual, hash, `artifact bytes drift: ${name}`);
+          }
+
+          for (const binding of manifest.bindings || []) {
+            assert.deepEqual(Object.keys(binding).sort(), ['name', 'type']);
+          }
+          console.log(`verified capture ${manifest.version_id}: ${expected.size} modules / ${(manifest.bindings || []).length} bindings`);
+          NODE
+
+          node --check worker-live/worker_hotfix.js
+          node --check worker-live/email_queue_hotfix.js
+          node --check worker-live/worker_email_queue_hotfix.js
+          node scripts/test-live-source-equivalence.mjs
+
+      - name: Commit canonical snapshot and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm .github/workflows/capture-canonical-worker-snapshot.yml
+          git add worker-live .github/workflows/capture-canonical-worker-snapshot.yml
+          git diff --cached --check
+          git commit -m 'refactor: snapshot active production Worker source'
+          git push origin HEAD:refactor/canonical-live-worker-2026-09-16
