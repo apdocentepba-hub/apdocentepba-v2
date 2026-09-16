@@ -7,9 +7,9 @@ const source = fs.readFileSync(file, 'utf8');
 
 const start = source.indexOf('async scheduled(event, env, ctx) {');
 assert.notEqual(start, -1, 'EMAIL_CRON_ISOLATION_V1: scheduled handler must exist');
-const end = source.indexOf('\n}\n};', start);
+const end = source.indexOf('\n};\nasync function handleTestMail', start);
 assert.notEqual(end, -1, 'EMAIL_CRON_ISOLATION_V1: scheduled handler end must exist');
-const scheduled = source.slice(start, end + 2);
+const scheduled = source.slice(start, end);
 
 assert.equal(
   scheduled.includes('runObservedProvinciaBackfill(env, event)'),
