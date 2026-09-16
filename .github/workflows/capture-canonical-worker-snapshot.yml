@@ -87,6 +87,17 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           rm .github/workflows/capture-canonical-worker-snapshot.yml
           git add worker-live .github/workflows/capture-canonical-worker-snapshot.yml
-          git diff --cached --check
+
+          git diff --cached --name-only | sort > /tmp/staged.txt
+          cat > /tmp/expected.txt <<'EOF'
+          .github/workflows/capture-canonical-worker-snapshot.yml
+          worker-live/email_queue_hotfix.js
+          worker-live/manifest.json
+          worker-live/worker_email_queue_hotfix.js
+          worker-live/worker_hotfix.js
+          EOF
+          sort -o /tmp/expected.txt /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/staged.txt
+
           git commit -m 'refactor: snapshot active production Worker source'
           git push origin HEAD:refactor/canonical-live-worker-2026-09-16
