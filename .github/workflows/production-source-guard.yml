@@ -9,6 +9,7 @@ on:
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
+      - scripts/test-reproducible-worker-binding-config.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
       - .github/workflows/deploy-worker-manual.yml
@@ -23,6 +24,7 @@ on:
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
+      - scripts/test-reproducible-worker-binding-config.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
       - .github/workflows/deploy-worker-manual.yml
@@ -47,6 +49,8 @@ jobs:
         run: node scripts/test-live-capture-contract.mjs
       - name: Verify live resource binding capture contract
         run: node scripts/test-live-resource-binding-capture.mjs
+      - name: Verify reproducible Worker binding config contract
+        run: node scripts/test-reproducible-worker-binding-config.mjs
       - name: Verify canonical live source snapshot
         run: node scripts/test-live-source-equivalence.mjs
       - name: Verify canonical Worker packaging contract
