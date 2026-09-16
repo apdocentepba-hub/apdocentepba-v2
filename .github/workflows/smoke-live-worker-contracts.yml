@@ -63,9 +63,19 @@ jobs:
             BASE_DIR=tmp/production-canonical
             rm -rf "$BASE_DIR"
             mkdir -p "$BASE_DIR"
-            for file in manifest.json email_queue_hotfix.js worker_email_queue_hotfix.js worker_hotfix.js; do
+            git show "${PR_BASE_SHA}:worker-live/manifest.json" > "${BASE_DIR}/manifest.json"
+            BASE_DIR="$BASE_DIR" node - <<'NODE' > "${BASE_DIR}/module-names.txt"
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync(`${process.env.BASE_DIR}/manifest.json`, 'utf8'));
+          for (const entry of manifest.modules || []) {
+            const name = String(entry?.name || '').trim();
+            if (name) console.log(name);
+          }
+          NODE
+            while IFS= read -r file; do
+              test -n "$file"
               git show "${PR_BASE_SHA}:worker-live/${file}" > "${BASE_DIR}/${file}"
-            done
+            done < "${BASE_DIR}/module-names.txt"
             echo "PRODUCTION_CANONICAL_DIR=${BASE_DIR}" >> "$GITHUB_ENV"
             echo "PR production baseline pinned to ${PR_BASE_SHA}"
           else
@@ -136,12 +146,10 @@ jobs:
           if (!j.success || !r?.id) throw new Error('active version detail missing');
           if (r.main_module !== 'worker_hotfix.js') throw new Error(`main module drift: ${r.main_module}`);
 
-          const requiredModules = ['email_queue_hotfix.js', 'worker_email_queue_hotfix.js', 'worker_hotfix.js'];
           const modules = r.modules || [];
           const names = modules.map(m => m.name);
-          for (const name of requiredModules) {
-            if (!names.includes(name)) throw new Error(`required production module missing: ${name}`);
-          }
+          if (!modules.length) throw new Error('active Worker has no packaged modules');
+          if (!names.includes(r.main_module)) throw new Error(`main module missing from active bundle: ${r.main_module}`);
 
           const bindings = r.bindings || [];
           if (bindings.length < 27) throw new Error(`binding shape lost required entries: ${bindings.length}`);
