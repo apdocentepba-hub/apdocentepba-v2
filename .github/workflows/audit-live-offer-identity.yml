@@ -1,0 +1,110 @@
+name: Audit live offer identity
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/audit-live-offer-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect active Worker identity logic without changing traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/live-offer-identity/modules
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/live-offer-identity/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/live-offer-identity/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-offer-identity/deployments.json
+          ACTIVE_VERSION_ID=$(node -e "const j=require('./tmp/live-offer-identity/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION_ID}?include=modules" > tmp/live-offer-identity/active.json
+
+          ACTIVE_VERSION_ID="${ACTIVE_VERSION_ID}" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+
+          const j = JSON.parse(fs.readFileSync('tmp/live-offer-identity/active.json','utf8'));
+          const r = j.result;
+          if (!j.success || !r?.id) throw new Error('Active Worker version detail missing');
+          const modules = Array.isArray(r.modules) ? r.modules : [];
+          if (!modules.length) throw new Error('Active Worker modules missing');
+
+          const needles = [
+            'function getOfferId',
+            'function normalizeOfferPayload',
+            'syncUserOfferState',
+            '/api/sync-offers',
+            'source_offer_key',
+            'iddetalle',
+            'idoferta'
+          ];
+          const moduleSummaries = [];
+          const matches = [];
+
+          for (const mod of modules) {
+            const source = mod.content_base64 ? Buffer.from(mod.content_base64, 'base64').toString('utf8') : '';
+            fs.writeFileSync(`tmp/live-offer-identity/modules/${mod.name}`, source);
+            moduleSummaries.push({
+              name: mod.name,
+              bytes: Buffer.byteLength(source),
+              sha256: crypto.createHash('sha256').update(source).digest('hex')
+            });
+            for (const needle of needles) {
+              let from = 0;
+              let count = 0;
+              while (count < 8) {
+                const i = source.indexOf(needle, from);
+                if (i < 0) break;
+                matches.push({
+                  module: mod.name,
+                  needle,
+                  index: i,
+                  snippet: source.slice(Math.max(0, i - 700), Math.min(source.length, i + needle.length + 1800))
+                });
+                count += 1;
+                from = i + needle.length;
+              }
+            }
+          }
+
+          const summary = {
+            ok: true,
+            active_version_id: process.env.ACTIVE_VERSION_ID,
+            main_module: r.main_module,
+            modules: moduleSummaries,
+            binding_shape: (r.bindings || []).map(b => `${b.name}:${b.type}`).sort(),
+            match_counts: Object.fromEntries(needles.map(n => [n, matches.filter(m => m.needle === n).length]))
+          };
+          fs.writeFileSync('tmp/live-offer-identity/summary.json', JSON.stringify(summary, null, 2));
+          fs.writeFileSync('tmp/live-offer-identity/matches.json', JSON.stringify(matches, null, 2));
+          console.log(JSON.stringify(summary, null, 2));
+          console.log('--- IDENTITY MATCHES ---');
+          for (const m of matches.filter(x => ['function getOfferId','function normalizeOfferPayload','syncUserOfferState','/api/sync-offers'].includes(x.needle))) {
+            console.log(`\n### ${m.module} :: ${m.needle} @ ${m.index}`);
+            console.log(m.snippet.replace(/\s+/g, ' ').slice(0, 2400));
+          }
+          NODE
+
+      - name: Upload live audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-offer-identity-audit
+          path: tmp/live-offer-identity/
+          if-no-files-found: error
