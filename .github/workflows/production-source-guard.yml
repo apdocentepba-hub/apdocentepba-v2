@@ -39,7 +39,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
       - name: Verify production source guard contract
         run: node scripts/test-production-worker-source-guard.mjs
       - name: Verify live capture contract
@@ -49,6 +48,6 @@ jobs:
       - name: Verify canonical Worker packaging contract
         run: node scripts/test-canonical-worker-package.mjs
       - name: Install Wrangler dependencies
-        run: npm ci
+        run: npm install
       - name: Package canonical Worker without deploying
         run: npm run package:worker
