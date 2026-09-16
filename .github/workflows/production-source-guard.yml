@@ -5,8 +5,10 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/production-source-guard.yml
@@ -15,8 +17,10 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/production-source-guard.yml
@@ -37,3 +41,5 @@ jobs:
         run: node scripts/test-production-worker-source-guard.mjs
       - name: Verify live capture contract
         run: node scripts/test-live-capture-contract.mjs
+      - name: Verify canonical live source snapshot
+        run: node scripts/test-live-source-equivalence.mjs
