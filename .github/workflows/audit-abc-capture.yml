@@ -33,7 +33,7 @@ jobs:
             { query: 'ENCARGADO MEDIOS APOYO TEC-PED.INF/COMP/E INF.APL.', code: 'ELI' }
           ];
           const rows = 150;
-          const workerMaxPages = 25;
+          const workerMaxPages = 6;
           const auditMaxPages = 120;
           const now = Date.now();
 
