@@ -12,6 +12,7 @@ on:
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
+      - scripts/test-pr-production-baseline.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
@@ -29,6 +30,7 @@ on:
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
+      - scripts/test-pr-production-baseline.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
@@ -49,6 +51,27 @@ jobs:
       SITE_URL: https://alertasapd.com.ar
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select production canonical snapshot
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            test -n "$PR_BASE_SHA"
+            git fetch origin "$PR_BASE_SHA" --depth=1
+            BASE_DIR=tmp/production-canonical
+            rm -rf "$BASE_DIR"
+            mkdir -p "$BASE_DIR"
+            for file in manifest.json email_queue_hotfix.js worker_email_queue_hotfix.js worker_hotfix.js; do
+              git show "${PR_BASE_SHA}:worker-live/${file}" > "${BASE_DIR}/${file}"
+            done
+            echo "PRODUCTION_CANONICAL_DIR=${BASE_DIR}" >> "$GITHUB_ENV"
+            echo "PR production baseline pinned to ${PR_BASE_SHA}"
+          else
+            echo "PRODUCTION_CANONICAL_DIR=worker-live" >> "$GITHUB_ENV"
+            echo "Production baseline uses current canonical snapshot."
+          fi
 
       - name: Verify repository production-source guard
         run: node scripts/test-production-worker-source-guard.mjs
@@ -166,7 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=tmp/live-worker-contract-smoke
-          node scripts/test-live-source-equivalence.mjs "$ROOT"
+          node scripts/test-live-source-equivalence.mjs "$ROOT" "$PRODUCTION_CANONICAL_DIR"
 
       - name: Upload sanitized active Worker capture
         uses: actions/upload-artifact@v4

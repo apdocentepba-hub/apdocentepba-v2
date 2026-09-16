@@ -1,0 +1,189 @@
+name: Worker zero-traffic preview validation
+
+on:
+  pull_request:
+    paths:
+      - worker-live/**
+      - wrangler.toml
+      - package.json
+      - scripts/test-worker-zero-traffic-preview.mjs
+      - .github/workflows/worker-zero-traffic-preview.yml
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      PREVIEW_ALIAS: apd-candidate
+      PREVIEW_URL: https://apd-candidate-ancient-wildflower-cd37.apdocentepba.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify zero-traffic preview workflow contract
+        run: node scripts/test-worker-zero-traffic-preview.mjs
+
+      - name: Install Wrangler dependencies
+        run: npm install
+
+      - name: Resolve Cloudflare account and capture production version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/worker-preview
+          ROOT=tmp/worker-preview
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "$ROOT/accounts.json"
+
+          ACCOUNT_ID="${CONFIGURED_ACCOUNT_ID:-}"
+          if [ -n "$ACCOUNT_ID" ]; then
+            ROOT="$ROOT" ACCOUNT_ID="$ACCOUNT_ID" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          if (!j.success || !accounts.some(account => account.id === process.env.ACCOUNT_ID)) {
+            throw new Error('Configured CLOUDFLARE_ACCOUNT_ID is not accessible with this token');
+          }
+          NODE
+          else
+            ACCOUNT_ID=$(ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          if (!j.success || accounts.length !== 1 || !accounts[0]?.id) {
+            throw new Error(`Expected exactly one accessible Cloudflare account; found ${accounts.length}`);
+          }
+          process.stdout.write(accounts[0].id);
+          NODE
+          )
+          fi
+
+          echo "CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-before.json"
+
+          BEFORE=$(ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-before.json`, 'utf8'));
+          const deployment = j.result?.deployments?.[0];
+          const traffic = (deployment?.versions || []).filter(v => Number(v.percentage) > 0);
+          if (!j.success || traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || !traffic[0].version_id) {
+            throw new Error(`Expected one 100% production version; got ${JSON.stringify(traffic)}`);
+          }
+          process.stdout.write(traffic[0].version_id);
+          NODE
+          )
+          echo "PRODUCTION_VERSION_BEFORE=${BEFORE}" >> "$GITHUB_ENV"
+          echo "Production remains pinned before candidate upload: ${BEFORE}"
+
+      - name: Upload isolated candidate version without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA8="${GITHUB_SHA:0:8}"
+          CANDIDATE_TAG="pr-${{ github.event.pull_request.number }}-${SHA8}"
+          echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
+          npx wrangler versions upload \
+            --preview-alias apd-candidate \
+            --tag "${CANDIDATE_TAG}" \
+            --message "Zero-traffic preview for PR #${{ github.event.pull_request.number }} ${GITHUB_SHA}"
+
+      - name: Prove production traffic was not changed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/worker-preview
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-after.json"
+
+          AFTER=$(ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-after.json`, 'utf8'));
+          const deployment = j.result?.deployments?.[0];
+          const traffic = (deployment?.versions || []).filter(v => Number(v.percentage) > 0);
+          if (!j.success || traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || !traffic[0].version_id) {
+            throw new Error(`Expected one 100% production version after candidate upload; got ${JSON.stringify(traffic)}`);
+          }
+          process.stdout.write(traffic[0].version_id);
+          NODE
+          )
+          echo "PRODUCTION_VERSION_AFTER=${AFTER}" >> "$GITHUB_ENV"
+          test "$AFTER" = "$PRODUCTION_VERSION_BEFORE"
+          echo "Production traffic unchanged at 100% on ${AFTER}."
+
+      - name: Verify candidate binding shape
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/worker-preview
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=25" > "$ROOT/versions.json"
+
+          CANDIDATE_ID=$(ROOT="$ROOT" CANDIDATE_TAG="$CANDIDATE_TAG" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/versions.json`, 'utf8'));
+          const versions = Array.isArray(j.result) ? j.result : (j.result?.versions || []);
+          const candidate = versions.find(v => v.annotations?.['workers/tag'] === process.env.CANDIDATE_TAG);
+          if (!j.success || !candidate?.id) {
+            throw new Error(`Uploaded candidate version with tag ${process.env.CANDIDATE_TAG} was not found`);
+          }
+          process.stdout.write(candidate.id);
+          NODE
+          )
+          echo "CANDIDATE_VERSION=${CANDIDATE_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_ID}?include=modules" > "$ROOT/candidate.json"
+
+          ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const candidate = JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`, 'utf8'));
+          const canonical = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
+          if (!candidate.success || !candidate.result?.id) throw new Error('Candidate version detail missing');
+          const live = candidate.result.bindings || [];
+          const byKey = new Map(live.map(binding => [`${binding.name}:${binding.type}`, binding]));
+          for (const expected of canonical.bindings || []) {
+            const key = `${expected.name}:${expected.type}`;
+            const actual = byKey.get(key);
+            if (!actual) throw new Error(`Candidate binding shape missing ${key}`);
+            if (expected.name === 'EMAIL_SWEEP_STATE') {
+              const id = String(actual.namespace_id || actual.id || '').trim();
+              if (id !== expected.namespace_id) throw new Error('Candidate EMAIL_SWEEP_STATE namespace mismatch');
+            }
+          }
+          console.log(`Candidate binding shape OK: ${live.length} bindings; secret values not printed.`);
+          NODE
+
+      - name: Smoke isolated preview URL
+        run: |
+          set -euo pipefail
+          DUMMY=00000000-0000-4000-8000-000000000000
+          curl_code() {
+            curl --retry 6 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
+          }
+          for path in \
+            "/api/mis-alertas?user_id=${DUMMY}" \
+            "/api/mi-plan?user_id=${DUMMY}" \
+            "/api/historico-resumen?user_id=${DUMMY}"; do
+            code=$(curl_code "${PREVIEW_URL}${path}")
+            echo "preview ${path} -> ${code}"
+            test "$code" = "401"
+          done
+          test "$(curl_code "${PREVIEW_URL}/api/version")" = "200"
+          test "$(curl_code "${PREVIEW_URL}/api/planes")" = "200"
+          test "$(curl_code -X OPTIONS "${PREVIEW_URL}/api/mis-alertas")" = "200"
+          echo "Zero-traffic preview smoke OK for ${CANDIDATE_VERSION}; production stayed on ${PRODUCTION_VERSION_AFTER}."

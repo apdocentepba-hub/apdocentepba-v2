@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const canonicalDir = path.join(repoRoot, 'worker-live');
+const canonicalDir = process.argv[3]
+  ? path.resolve(process.argv[3])
+  : path.join(repoRoot, 'worker-live');
 const captureDir = process.argv[2] ? path.resolve(process.argv[2]) : null;
 const requiredModules = [
   'email_queue_hotfix.js',
