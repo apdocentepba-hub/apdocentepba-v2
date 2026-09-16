@@ -1,0 +1,173 @@
+name: Build live manual email dedupe candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - 'scripts/patch-live-manual-email-dedupe.mjs'
+      - 'scripts/test-live-manual-email-dedupe.mjs'
+      - '.github/workflows/build-live-manual-email-dedupe-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and upload candidate without traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/manual-dedupe-candidate/live tmp/manual-dedupe-candidate/candidate
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/manual-dedupe-candidate/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/manual-dedupe-candidate/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/manual-dedupe-candidate/deployments-before.json
+          ACTIVE=$(node -e "const j=require('./tmp/manual-dedupe-candidate/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "Active before candidate: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/manual-dedupe-candidate/active.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/manual-dedupe-candidate/active.json','utf8'));
+          const r=j.result;
+          if(!j.success||!r?.id) throw new Error('active detail missing');
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`module shape drift ${JSON.stringify(names)}`);
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(shape.length!==27) throw new Error(`expected 27 bindings, got ${shape.length}`);
+          const hashes={};
+          for(const m of r.modules||[]) {
+            const b=Buffer.from(m.content_base64||'','base64');
+            fs.writeFileSync(path.join('tmp/manual-dedupe-candidate/live',m.name),b);
+            fs.writeFileSync(path.join('tmp/manual-dedupe-candidate/candidate',m.name),b);
+            hashes[m.name]=crypto.createHash('sha256').update(b).digest('hex');
+          }
+          fs.writeFileSync('tmp/manual-dedupe-candidate/live-hashes.json',JSON.stringify(hashes,null,2));
+          fs.writeFileSync('tmp/manual-dedupe-candidate/binding-shape.json',JSON.stringify(shape));
+          const metadata={
+            main_module:r.main_module,
+            compatibility_date:r.compatibility_date,
+            annotations:{'workers/message':'APDocentePBA manual email idempotency candidate','workers/tag':'manual-email-dedupe-20260915'},
+            bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
+          };
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/manual-dedupe-candidate/candidate/metadata.json',JSON.stringify(metadata));
+          console.log(`Locked live shape: ${names.length} modules, ${shape.length} bindings`);
+          NODE
+
+          if node scripts/test-live-manual-email-dedupe.mjs tmp/manual-dedupe-candidate/live/worker_hotfix.js > tmp/manual-dedupe-candidate/red.log 2>&1; then
+            echo 'Expected live bundle to be RED'; exit 1
+          fi
+          grep -q 'MANUAL_EMAIL_DEDUPE_V1' tmp/manual-dedupe-candidate/red.log
+          echo 'RED confirmed'
+
+          node scripts/patch-live-manual-email-dedupe.mjs \
+            tmp/manual-dedupe-candidate/live/worker_hotfix.js \
+            tmp/manual-dedupe-candidate/candidate/worker_hotfix.js
+
+          node --check tmp/manual-dedupe-candidate/candidate/worker_hotfix.js
+          node --check tmp/manual-dedupe-candidate/candidate/email_queue_hotfix.js
+          node --check tmp/manual-dedupe-candidate/candidate/worker_email_queue_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs tmp/manual-dedupe-candidate/candidate/worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/manual-dedupe-candidate/candidate/worker_hotfix.js
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const live=JSON.parse(fs.readFileSync('tmp/manual-dedupe-candidate/live-hashes.json','utf8'));
+          const h=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+          const after={
+            'worker_hotfix.js':h('tmp/manual-dedupe-candidate/candidate/worker_hotfix.js'),
+            'email_queue_hotfix.js':h('tmp/manual-dedupe-candidate/candidate/email_queue_hotfix.js'),
+            'worker_email_queue_hotfix.js':h('tmp/manual-dedupe-candidate/candidate/worker_email_queue_hotfix.js')
+          };
+          if(after['worker_hotfix.js']===live['worker_hotfix.js']) throw new Error('worker_hotfix.js unchanged');
+          for(const n of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(after[n]!==live[n]) throw new Error(`${n} changed unexpectedly`);
+          fs.writeFileSync('tmp/manual-dedupe-candidate/candidate-hashes.json',JSON.stringify(after,null,2));
+          console.log('Only worker_hotfix.js changed');
+          NODE
+
+          HTTP_CODE=$(curl -sS -o tmp/manual-dedupe-candidate/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/manual-dedupe-candidate/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/manual-dedupe-candidate/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@tmp/manual-dedupe-candidate/candidate/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@tmp/manual-dedupe-candidate/candidate/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Candidate upload HTTP ${HTTP_CODE}"
+          CANDIDATE=$(node -e "const j=require('./tmp/manual-dedupe-candidate/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "Candidate: ${CANDIDATE}"
+          printf '%s\n' "${CANDIDATE}" > tmp/manual-dedupe-candidate/candidate-id.txt
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE}?include=modules" > tmp/manual-dedupe-candidate/candidate-detail.json
+
+          CANDIDATE_VERSION_ID="${CANDIDATE}" node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/manual-dedupe-candidate/candidate-detail.json','utf8'));
+          const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('candidate detail mismatch');
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error('candidate module shape changed');
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          const expectedShape=JSON.parse(fs.readFileSync('tmp/manual-dedupe-candidate/binding-shape.json','utf8'));
+          if(JSON.stringify(shape)!==JSON.stringify(expectedShape)) throw new Error('candidate binding shape changed');
+          const local=JSON.parse(fs.readFileSync('tmp/manual-dedupe-candidate/candidate-hashes.json','utf8'));
+          for(const m of r.modules||[]) {
+            const b=Buffer.from(m.content_base64||'','base64');
+            fs.writeFileSync(path.join('tmp/manual-dedupe-candidate','uploaded-'+m.name),b);
+            const hash=crypto.createHash('sha256').update(b).digest('hex');
+            if(hash!==local[m.name]) throw new Error(`${m.name} uploaded bytes differ`);
+          }
+          console.log(`Candidate shape verified: ${names.length} modules, ${shape.length} bindings`);
+          NODE
+
+          node --check tmp/manual-dedupe-candidate/uploaded-worker_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs tmp/manual-dedupe-candidate/uploaded-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/manual-dedupe-candidate/uploaded-worker_hotfix.js
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/manual-dedupe-candidate/deployments-after.json
+          ACTIVE_AFTER=$(node -e "const j=require('./tmp/manual-dedupe-candidate/deployments-after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v.version_id)")
+          echo "Active after candidate upload: ${ACTIVE_AFTER}"
+          test "${ACTIVE_AFTER}" = "${ACTIVE}"
+
+          cat > tmp/manual-dedupe-candidate/summary.json <<JSON
+          {
+            "ok": true,
+            "active_version_id": "${ACTIVE}",
+            "candidate_version_id": "${CANDIDATE}",
+            "traffic_changed": false,
+            "manual_dedupe_red_on_active": true,
+            "manual_dedupe_green_on_candidate": true,
+            "offer_identity_green_on_candidate": true,
+            "module_shape_preserved": true,
+            "binding_shape_preserved": true,
+            "changed_module": "worker_hotfix.js"
+          }
+          JSON
+          cat tmp/manual-dedupe-candidate/summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-manual-email-dedupe-candidate
+          path: tmp/manual-dedupe-candidate/
+          if-no-files-found: ignore
