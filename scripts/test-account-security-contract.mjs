@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 // Keep this contract stable so account/security changes always retrigger PR validation.
 // It covers frontend isolation, password serialization and server-side session issuance on every login path.
+// Runtime regression: Workers WebCrypto must never receive a PBKDF2 count above its supported ceiling.
 const worker = fs.readFileSync('worker-live/worker_hotfix.js', 'utf8');
 const patch = fs.readFileSync('account_profile_patch.js', 'utf8');
 const hotfix = fs.readFileSync('account_profile_hotfix.js', 'utf8');
