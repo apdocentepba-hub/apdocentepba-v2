@@ -13,6 +13,7 @@ on:
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
       - scripts/test-worker-zero-traffic-preview.mjs
+      - scripts/test-pr-production-baseline.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -30,6 +31,7 @@ on:
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
       - scripts/test-worker-zero-traffic-preview.mjs
+      - scripts/test-pr-production-baseline.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -61,6 +63,8 @@ jobs:
         run: node scripts/test-canonical-worker-package.mjs
       - name: Verify zero-traffic preview workflow contract
         run: node scripts/test-worker-zero-traffic-preview.mjs
+      - name: Verify PR production baseline contract
+        run: node scripts/test-pr-production-baseline.mjs
       - name: Install Wrangler dependencies
         run: npm install
       - name: Package canonical Worker without deploying
