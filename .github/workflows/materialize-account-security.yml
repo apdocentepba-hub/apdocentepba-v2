@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/materialize-account-security.yml
       - scripts/materialize-account-security.mjs
+      - scripts/account-security-worker-snippet.txt
 
 permissions:
   contents: write
@@ -45,7 +46,7 @@ jobs:
           set -euo pipefail
           git config user.name 'apdocentepba-hub'
           git config user.email 'apdocentepba@gmail.com'
-          git rm .github/workflows/materialize-account-security.yml scripts/materialize-account-security.mjs
+          git rm .github/workflows/materialize-account-security.yml scripts/materialize-account-security.mjs scripts/account-security-worker-snippet.txt
           git add worker-live/worker_hotfix.js worker-live/manifest.json account_profile_patch.js account_profile_hotfix.js index.html scripts/test-account-security-contract.mjs .github/workflows/production-source-guard.yml
           git diff --cached --check
           git commit -m 'Harden account profile and password flows'
