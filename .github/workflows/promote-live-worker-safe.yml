@@ -17,8 +17,6 @@ jobs:
     env:
       WORKER_NAME: ancient-wildflower-cd37
       WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
-      PREVIEW_ALIAS: apd-promote
-      PREVIEW_URL: https://apd-promote-ancient-wildflower-cd37.apdocentepba.workers.dev
       EXPECTED_OLD_VERSION_ID: 39b52f3c-faf6-4a15-8e93-7bbd2884b95d
       EXPECTED_BINDING_COUNT: '27'
 
@@ -38,15 +36,14 @@ jobs:
         run: |
           set -euo pipefail
           node --check worker-live/worker_hotfix.js
+          node --check worker-live/email_queue_hotfix.js
+          node --check worker-live/worker_email_queue_hotfix.js
           node scripts/test-sensitive-test-endpoints.mjs
           node scripts/test-mercadopago-status-mapping.mjs
           node scripts/test-account-security-contract.mjs
           node scripts/test-production-worker-source-guard.mjs
 
-      - name: Install Wrangler dependencies
-        run: npm install
-
-      - name: Capture production baseline and assert expected version
+      - name: Capture active production metadata and build strict inheritance metadata
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -81,7 +78,6 @@ jobs:
           NODE
             )
           fi
-
           echo "CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
 
           curl -fsS --retry 4 --retry-delay 2 \
@@ -99,51 +95,75 @@ jobs:
           process.stdout.write(traffic[0].version_id);
           NODE
           )
-
           echo "Production active before promotion: ${ACTIVE_BEFORE}"
           test "$ACTIVE_BEFORE" = "$EXPECTED_OLD_VERSION_ID"
           echo "ACTIVE_BEFORE=${ACTIVE_BEFORE}" >> "$GITHUB_ENV"
 
-      - name: Upload zero-traffic candidate with isolated preview
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          SHA8="${GITHUB_SHA:0:8}"
-          CANDIDATE_TAG="prod-promote-${SHA8}"
-          echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
+          curl -fsS --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${EXPECTED_OLD_VERSION_ID}?include=modules" > "$ROOT/active.json"
 
-          npx wrangler versions upload \
-            --preview-alias apd-promote \
-            --tag "${CANDIDATE_TAG}" \
-            --message "Guarded APDocentePBA canonical promotion ${GITHUB_SHA}"
+          ROOT="$ROOT" EXPECTED_OLD_VERSION_ID="$EXPECTED_OLD_VERSION_ID" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/active.json`, 'utf8'));
+          const r = j.result;
+          if (!j.success || r?.id !== process.env.EXPECTED_OLD_VERSION_ID) throw new Error('Active version detail mismatch');
+          if (r.main_module !== 'worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
+          const bindings = r.bindings || [];
+          if (bindings.length !== Number(process.env.EXPECTED_BINDING_COUNT)) {
+            throw new Error(`Active binding shape mismatch: ${bindings.length}`);
+          }
+          const metadata = {
+            main_module: r.main_module,
+            compatibility_date: r.compatibility_date,
+            annotations: {
+              'workers/message': 'Guarded APDocentePBA canonical production candidate',
+              'workers/tag': `prod-promote-${process.env.GITHUB_SHA?.slice(0, 8) || 'manual'}`
+            },
+            bindings: bindings.map(b => ({
+              name: b.name,
+              type: 'inherit',
+              version_id: process.env.EXPECTED_OLD_VERSION_ID
+            }))
+          };
+          if (Array.isArray(r.compatibility_flags) && r.compatibility_flags.length) {
+            metadata.compatibility_flags = r.compatibility_flags;
+          }
+          fs.writeFileSync(`${process.env.ROOT}/metadata.json`, JSON.stringify(metadata));
+          console.log(`Strict inheritance metadata prepared from ${r.id}: ${bindings.length} bindings`);
+          NODE
 
-      - name: Resolve candidate and verify hashes plus 27 bindings
+      - name: Upload exact three-module candidate with strict binding inheritance
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
           ROOT=tmp/promotion
-
-          for attempt in 1 2 3 4 5 6 7 8; do
-            curl -fsS --retry 3 --retry-delay 1 \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=50" > "$ROOT/versions.json"
-            CANDIDATE_VERSION_ID=$(ROOT="$ROOT" CANDIDATE_TAG="$CANDIDATE_TAG" node - <<'NODE'
+          HTTP_CODE=$(curl -sS -o "$ROOT/upload.json" -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<${ROOT}/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@worker-live/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module" \
+            -F "email_queue_hotfix.js=@worker-live/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
+            -F "worker_email_queue_hotfix.js=@worker-live/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
+          echo "Cloudflare candidate upload HTTP ${HTTP_CODE}"
+          test "$HTTP_CODE" = "200"
+          CANDIDATE_VERSION_ID=$(ROOT="$ROOT" node - <<'NODE'
           const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/versions.json`, 'utf8'));
-          const versions = Array.isArray(j.result) ? j.result : (j.result?.versions || []);
-          const candidate = versions.find(v => v.annotations?.['workers/tag'] === process.env.CANDIDATE_TAG);
-          if (candidate?.id) process.stdout.write(candidate.id);
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/upload.json`, 'utf8'));
+          if (!j.success || !j.result?.id) throw new Error(JSON.stringify(j.errors || j));
+          process.stdout.write(j.result.id);
           NODE
-            )
-            if [ -n "$CANDIDATE_VERSION_ID" ]; then break; fi
-            sleep 2
-          done
-
-          test -n "${CANDIDATE_VERSION_ID:-}"
+          )
+          echo "Candidate version: ${CANDIDATE_VERSION_ID}"
           echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
 
+      - name: Verify candidate module hashes and exact 27-binding shape
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/promotion
           curl -fsS --retry 4 --retry-delay 2 \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > "$ROOT/candidate.json"
@@ -151,13 +171,11 @@ jobs:
           ROOT="$ROOT" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
           import crypto from 'node:crypto';
           import fs from 'node:fs';
-
           const candidate = JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`, 'utf8'));
           const canonical = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
           const r = candidate.result;
           if (!candidate.success || !r?.id) throw new Error('Candidate version detail missing');
           if (r.main_module !== canonical.main_module) throw new Error(`main module mismatch: ${r.main_module}`);
-
           const modules = r.modules || [];
           const actualHashes = new Map(modules.map(m => [
             m.name,
@@ -168,7 +186,6 @@ jobs:
             if (!actual) throw new Error(`candidate module missing: ${expected.name}`);
             if (actual !== expected.module_sha256) throw new Error(`module hash mismatch: ${expected.name}`);
           }
-
           const bindings = r.bindings || [];
           const expectedCount = Number(process.env.EXPECTED_BINDING_COUNT);
           if (bindings.length !== expectedCount) throw new Error(`bindings count mismatch: ${bindings.length} != ${expectedCount}`);
@@ -185,19 +202,22 @@ jobs:
           console.log(`Candidate module hashes OK; bindings ${bindings.length}/${expectedCount} OK`);
           NODE
 
-      - name: Smoke isolated candidate before promotion
+      - name: Smoke immutable zero-traffic candidate preview
         run: |
           set -euo pipefail
+          CANDIDATE_PREFIX="${CANDIDATE_VERSION_ID%%-*}"
+          CANDIDATE_PREVIEW_URL="https://${CANDIDATE_PREFIX}-${WORKER_NAME}.apdocentepba.workers.dev"
+          echo "CANDIDATE_PREVIEW_URL=${CANDIDATE_PREVIEW_URL}" >> "$GITHUB_ENV"
           DUMMY=00000000-0000-4000-8000-000000000000
           curl_code() {
             curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
           }
-          test "$(curl_code "${PREVIEW_URL}/api/version")" = "200"
-          test "$(curl_code "${PREVIEW_URL}/api/planes")" = "200"
-          test "$(curl_code "${PREVIEW_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
-          test "$(curl_code "${PREVIEW_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
-          test "$(curl_code "${PREVIEW_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
-          echo "Candidate preview smoke passed before production traffic change."
+          test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/version")" = "200"
+          test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/planes")" = "200"
+          test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
+          echo "Candidate preview smoke passed; production traffic is still unchanged."
 
       - name: Promote candidate to 100 percent and smoke production with rollback
         env:
@@ -210,10 +230,7 @@ jobs:
           rollback() {
             trap - ERR
             set +e
-            if [ "${PROMOTED:-0}" != "1" ]; then
-              echo "Promotion was not committed; rollback not needed."
-              return 0
-            fi
+            if [ "${PROMOTED:-0}" != "1" ]; then return 0; fi
             echo "Production verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
             cat > "$ROOT/rollback.json" <<JSON
           {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after guarded canonical promotion failure"}}
@@ -239,7 +256,6 @@ jobs:
           cat > "$ROOT/deploy.json" <<JSON
           {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Guarded canonical APDocentePBA promotion from ${GITHUB_SHA}"}}
           JSON
-
           trap rollback ERR
 
           curl -fsS -X POST \
@@ -265,7 +281,7 @@ jobs:
           const d = j.result?.deployments?.[0];
           const traffic = (d?.versions || []).filter(x => Number(x.percentage) > 0);
           if (traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || traffic[0].version_id !== process.env.CANDIDATE_VERSION_ID) {
-            throw new Error(`Candidate is not the sole 100% production version: ${JSON.stringify(traffic)}`);
+            throw new Error(`Candidate is not sole 100% production version: ${JSON.stringify(traffic)}`);
           }
           console.log(`Candidate promoted at 100%: ${traffic[0].version_id}`);
           NODE
@@ -283,7 +299,6 @@ jobs:
           cat > "$ROOT/summary.json" <<JSON
           {"ok":true,"old_version_id":"${EXPECTED_OLD_VERSION_ID}","candidate_version_id":"${CANDIDATE_VERSION_ID}","active_final":"${CANDIDATE_VERSION_ID}","bindings_verified":27,"module_hashes_verified":true,"preview_smoke":true,"production_smoke":true,"rollback_triggered":false}
           JSON
-
           trap - ERR
           echo "Production promotion and post-deploy smoke passed."
 
@@ -295,6 +310,8 @@ jobs:
           path: |
             tmp/promotion/summary.json
             tmp/promotion/deployments-before.json
+            tmp/promotion/active.json
+            tmp/promotion/upload.json
             tmp/promotion/candidate.json
             tmp/promotion/deployments-after.json
             tmp/promotion/rollback-response.json
