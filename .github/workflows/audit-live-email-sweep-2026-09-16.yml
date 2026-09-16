@@ -18,7 +18,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Read active bundle email decision path
+      - name: Read active email batch configuration
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -36,15 +36,21 @@ jobs:
           node --input-type=module - <<'NODE'
           import fs from 'node:fs';
           const j=JSON.parse(fs.readFileSync('tmp/live-email-audit/active.json','utf8'));
-          const mod=(j.result?.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          const r=j.result || {};
+          const mod=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
           if(!mod) throw new Error('worker_hotfix.js missing');
           fs.writeFileSync('tmp/live-email-audit/worker_hotfix.js',Buffer.from(mod.content_base64||'','base64'));
-          console.log(`MODULES=${(j.result?.modules||[]).length} BINDINGS=${(j.result?.bindings||[]).length}`);
+          console.log(`MODULES=${(r.modules||[]).length} BINDINGS=${(r.bindings||[]).length}`);
+          const wanted=/EMAIL.*(DIGEST|SWEEP|BATCH|MAX|MANUAL)|CHANNEL_STATE/i;
+          for (const b of r.bindings || []) {
+            if (!wanted.test(String(b.name||''))) continue;
+            const type=String(b.type||'');
+            const safeValue = ['plain_text','json'].includes(type) ? b.value : '<non-plain-binding>';
+            console.log(`BINDING ${b.name} type=${type} value=${JSON.stringify(safeValue)}`);
+          }
           NODE
           node --check tmp/live-email-audit/worker_hotfix.js
-          echo '===== email processing 5430-5995 ====='
-          sed -n '5430,5995p' tmp/live-email-audit/worker_hotfix.js
-          echo '===== scheduler continuation 14380-14440 ====='
-          sed -n '14380,14440p' tmp/live-email-audit/worker_hotfix.js
-          echo '===== eligibility tokens ====='
-          grep -n -E 'resolverPlanUsuario|isPlanActivo|visibleAlerts|visibleAlert|storedAlerts|freshAlerts|skip|skipped|reason|eligible|last_emailed|first_emailed|markStored|user_offer_state' tmp/live-email-audit/worker_hotfix.js | sed -n '1,240p' || true
+          echo '===== observed cron logger ====='
+          sed -n '14040,14095p' tmp/live-email-audit/worker_hotfix.js
+          echo '===== test digest handler ====='
+          sed -n '14435,14525p' tmp/live-email-audit/worker_hotfix.js
