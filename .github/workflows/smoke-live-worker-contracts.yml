@@ -11,6 +11,7 @@ on:
       - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-resource-binding-capture.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
@@ -27,6 +28,7 @@ on:
       - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-resource-binding-capture.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
@@ -53,6 +55,9 @@ jobs:
 
       - name: Verify live capture contract
         run: node scripts/test-live-capture-contract.mjs
+
+      - name: Verify live resource binding capture contract
+        run: node scripts/test-live-resource-binding-capture.mjs
 
       - name: Download current active Worker bundle
         env:
@@ -128,6 +133,18 @@ jobs:
             });
           }
 
+          const safeBindings = bindings.map(binding => {
+            const safe = { name: binding.name || '', type: binding.type || '' };
+            if (safe.type === 'kv_namespace') {
+              safe.namespace_id = String(binding.namespace_id || binding.id || '').trim();
+            }
+            return safe;
+          });
+          const sweepStateBinding = safeBindings.find(binding => binding.name === 'EMAIL_SWEEP_STATE');
+          if (!sweepStateBinding || sweepStateBinding.type !== 'kv_namespace' || !sweepStateBinding.namespace_id) {
+            throw new Error('EMAIL_SWEEP_STATE KV namespace_id missing from active Worker metadata');
+          }
+
           const manifest = {
             schema_version: 1,
             worker_name: process.env.WORKER_NAME,
@@ -136,12 +153,12 @@ jobs:
             main_module: r.main_module,
             captured_at: new Date().toISOString(),
             modules: manifestModules.sort((a, b) => a.name.localeCompare(b.name)),
-            bindings: bindings
-              .map(binding => ({ name: binding.name || '', type: binding.type || '' }))
+            bindings: safeBindings
               .sort((a, b) => `${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`))
           };
           fs.writeFileSync(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
           console.log(`Bundle shape OK: ${names.length} modules / ${bindings.length} bindings`);
+          console.log(`EMAIL_SWEEP_STATE namespace_id: ${sweepStateBinding.namespace_id}`);
           console.log(`Sanitized manifest written for ${manifest.version_id}`);
           NODE
 
