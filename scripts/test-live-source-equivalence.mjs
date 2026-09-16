@@ -53,10 +53,20 @@ if (captureDir) {
     assert.equal(sha256(path.join(captureDir, name)), canonicalHashes.get(name), `live module bytes differ: ${name}`);
   }
 
-  const canonicalBindings = new Set((canonical.bindings || []).map(binding => `${binding.name}:${binding.type}`));
-  const liveBindings = new Set((capture.bindings || []).map(binding => `${binding.name}:${binding.type}`));
-  for (const binding of canonicalBindings) {
-    assert.ok(liveBindings.has(binding), `required binding missing from live Worker: ${binding}`);
+  const liveBindingMap = new Map(
+    (capture.bindings || []).map(binding => [`${binding.name}:${binding.type}`, binding])
+  );
+  for (const binding of canonical.bindings || []) {
+    const key = `${binding.name}:${binding.type}`;
+    const liveBinding = liveBindingMap.get(key);
+    assert.ok(liveBinding, `required binding missing from live Worker: ${key}`);
+    if (binding.namespace_id) {
+      assert.equal(
+        liveBinding.namespace_id,
+        binding.namespace_id,
+        `resource namespace_id differs: ${binding.name}`
+      );
+    }
   }
 }
 
