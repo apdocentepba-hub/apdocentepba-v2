@@ -1,0 +1,51 @@
+name: Audit 22:00 email slot KV state
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/audit-email-slot-kv-2026-09-15.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      KV_NAMESPACE_ID: 1f2f957e8fb44b76a09a53d63979633c
+      SLOT_KEY: 2026-09-15_22
+    steps:
+      - name: Read slot state only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          read_key() {
+            local key="$1"
+            local enc
+            enc=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$key")
+            local code
+            code=$(curl -sS -o value.txt -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/values/${enc}")
+            if [ "$code" = "200" ]; then
+              printf '%s = %s\n' "$key" "$(cat value.txt)"
+            else
+              printf '%s = <missing:%s>\n' "$key" "$code"
+            fi
+          }
+
+          read_key "email:active_slot_key"
+          read_key "email:slot:${SLOT_KEY}:started_at"
+          read_key "email:slot:${SLOT_KEY}:cursor_user_id"
+          read_key "email:slot:${SLOT_KEY}:finished"
+          read_key "email:slot:${SLOT_KEY}:user:22052bf9-6f4b-4878-9d3a-7fbe965861d5:sent"
+          read_key "email:slot:${SLOT_KEY}:user:22d94edc-f7fd-4df9-92f7-53a118f4e73f:sent"
+          read_key "email:slot:${SLOT_KEY}:user:3a300893-a552-43c2-9189-071ab4a23198:sent"
