@@ -1,0 +1,25 @@
+name: Offer identity regression
+
+on:
+  pull_request:
+    paths:
+      - 'worker.js'
+      - 'scripts/test-offer-identity-regression.mjs'
+      - '.github/workflows/offer-identity-regression.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'worker.js'
+      - 'scripts/test-offer-identity-regression.mjs'
+      - '.github/workflows/offer-identity-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  canonical-offer-id:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Worker syntax
+        run: node --check worker.js
+      - name: Verify one APD vacancy has one stable identity
+        run: node scripts/test-offer-identity-regression.mjs
