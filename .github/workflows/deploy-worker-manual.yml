@@ -1,25 +1,18 @@
-name: Deploy Worker manual
+name: Deploy Worker manual (guarded)
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  deploy-worker:
+  production-source-guard:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Deploy Worker with Wrangler
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
+      - name: Block stale repository deploy
+        run: |
+          echo "::error::PRODUCTION_SOURCE_GUARD_V1: direct wrangler deploy is disabled because the repository modular source is not source-identical to the active production bundle."
+          echo "Use the verified live-bundle candidate/deployment workflows that preserve the active modules and bindings."
+          echo "This guard prevents a stale repository deploy from reintroducing already-fixed production bugs."
+          exit 1
