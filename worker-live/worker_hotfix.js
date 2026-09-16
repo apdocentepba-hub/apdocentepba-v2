@@ -11406,6 +11406,21 @@ async function tryLegacyPasswordLogin(email, password) {
   return { ok: false };
 }
 __name(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
+async function accountCreateSessionV1(env, userId, metodo = "password") {
+  const token = accountRandomHexV1(32);
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await supabaseInsertReturning2(env, "sessions", {
+    token,
+    user_id: userId,
+    metodo,
+    created_at: createdAt,
+    expires_at: expiresAt,
+    activo: true
+  });
+  return { token, created_at: createdAt, expires_at: expiresAt };
+}
+__name(accountCreateSessionV1, "accountCreateSessionV1");
 async function handleLoginHotfix(request, env) {
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail2(body?.email);
@@ -11420,8 +11435,9 @@ async function handleLoginHotfix(request, env) {
         await supabasePatch2(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await accountHashPasswordV1(password) }).catch(() => null);
       }
       await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_hotfix");
+      const session = await accountCreateSessionV1(env, user.id, "password");
       await touchUltimoLogin2(env, user.id);
-      return json2({ ok: true, token: String(user.id), user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
+      return json2({ ok: true, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
     }
   }
   const legacy = await tryLegacyPasswordLogin(email, password);
@@ -11430,8 +11446,9 @@ async function handleLoginHotfix(request, env) {
     user = await ensureLocalUser(env, { email, password, nombre: legacyUser?.nombre || legacyUser?.name || "", apellido: legacyUser?.apellido || legacyUser?.last_name || "", celular: legacyUser?.celular || legacyUser?.phone || "" });
     if (!user?.id) return json2({ ok: false, message: "No se pudo migrar la cuenta existente" }, 500);
     await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_legacy");
+    const session = await accountCreateSessionV1(env, user.id, "password_legacy");
     await touchUltimoLogin2(env, user.id);
-    return json2({ ok: true, migrated_legacy: true, token: String(user.id), user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
+    return json2({ ok: true, migrated_legacy: true, token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
   }
   if (user?.id) return json2({ ok: false, message: "Password incorrecto" }, 401);
   return json2({ ok: false, message: "Usuario no encontrado o credenciales incorrectas" }, 401);
@@ -11445,8 +11462,9 @@ async function handleGoogleAuthHotfix(request, env) {
   const user = await ensureLocalUser(env, googleUser);
   if (!user?.id) return json2({ ok: false, message: "No se pudo crear o vincular el usuario con Google" }, 500);
   await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_google_hotfix");
+  const session = await accountCreateSessionV1(env, user.id, "google");
   await touchUltimoLogin2(env, user.id);
-  return json2({ ok: true, mode: "login", token: String(user.id), user: { id: user.id, nombre: user.nombre || googleUser.nombre || "", apellido: user.apellido || googleUser.apellido || "", email: user.email || googleUser.email || "" } });
+  return json2({ ok: true, mode: "login", token: String(user.id), session_token: session.token, user: { id: user.id, nombre: user.nombre || googleUser.nombre || "", apellido: user.apellido || googleUser.apellido || "", email: user.email || googleUser.email || "" } });
 }
 __name(handleGoogleAuthHotfix, "handleGoogleAuthHotfix");
 function adaptarPreferenciasRow2(row) {
