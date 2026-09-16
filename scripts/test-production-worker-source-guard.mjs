@@ -23,8 +23,8 @@ assert.doesNotMatch(
 );
 assert.match(
   wrangler,
-  /main\s*=\s*"worker_hotfix\.js"/,
-  'wrangler main module must match the production main module name'
+  /main\s*=\s*"worker-live\/worker_hotfix\.js"/,
+  'wrangler main module must use the hash-verified canonical live snapshot'
 );
 assert.doesNotMatch(
   smoke,

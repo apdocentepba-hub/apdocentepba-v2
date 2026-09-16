@@ -1,14 +1,14 @@
 name = "ancient-wildflower-cd37"
-main = "worker_hotfix.js"
+main = "worker-live/worker_hotfix.js"
 compatibility_date = "2026-04-01"
 workers_dev = true
 keep_vars = true
 
 # PRODUCTION_SOURCE_GUARD_V1
-# The active production Worker is currently maintained from the verified live bundle.
-# Do not deploy this modular repository source directly until it is source-identical
-# to production. The manual GitHub deploy workflow and package deploy script are
-# intentionally blocked to prevent regression to stale Worker logic.
+# The active production Worker source is now snapshotted under worker-live/ and
+# hash-verified against the active Cloudflare version. Real repository deploys
+# remain intentionally blocked until the complete deployment configuration,
+# including binding identifiers, is proven reproducible end-to-end.
 
 [observability]
 enabled = true
@@ -20,5 +20,5 @@ crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
 # EMAIL_SWEEP_STATE (KV namespace)
 #
 # Para dejar el deploy 100% reproducible desde GitHub falta agregar el id real
-# del namespace en un bloque kv_namespaces. Eso todavia no se cargo aca porque
-# en el dashboard vimos el nombre del binding pero no el namespace id.
+# del namespace en un bloque kv_namespaces. Mientras eso no este verificado,
+# solo se permite empaquetado dry-run y el deploy real sigue bloqueado.

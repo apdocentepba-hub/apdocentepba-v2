@@ -5,7 +5,11 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
+      - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
+      - scripts/test-canonical-worker-package.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/production-source-guard.yml
@@ -14,7 +18,11 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
+      - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
+      - scripts/test-canonical-worker-package.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/production-source-guard.yml
@@ -33,3 +41,13 @@ jobs:
           node-version: '22'
       - name: Verify production source guard contract
         run: node scripts/test-production-worker-source-guard.mjs
+      - name: Verify live capture contract
+        run: node scripts/test-live-capture-contract.mjs
+      - name: Verify canonical live source snapshot
+        run: node scripts/test-live-source-equivalence.mjs
+      - name: Verify canonical Worker packaging contract
+        run: node scripts/test-canonical-worker-package.mjs
+      - name: Install Wrangler dependencies
+        run: npm install
+      - name: Package canonical Worker without deploying
+        run: npm run package:worker

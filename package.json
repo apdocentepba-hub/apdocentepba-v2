@@ -6,6 +6,7 @@
   "scripts": {
     "dev:worker": "wrangler dev",
     "deploy:worker": "node -e \"console.error('PRODUCTION_SOURCE_GUARD_V1: direct repository deploy disabled; use verified live-bundle deployment workflow'); process.exit(1)\"",
+    "package:worker": "wrangler deploy --dry-run --outdir tmp/wrangler-dry-run",
     "tail:worker": "wrangler tail"
   },
   "devDependencies": {
