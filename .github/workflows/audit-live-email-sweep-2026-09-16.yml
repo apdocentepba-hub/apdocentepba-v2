@@ -18,7 +18,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Read active email batch configuration
+      - name: Read active ABC refresh and diagnostic routes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -37,14 +37,27 @@ jobs:
           import fs from 'node:fs';
           const j=JSON.parse(fs.readFileSync('tmp/live-email-audit/active.json','utf8'));
           const r=j.result || {};
+          const mod=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          if(!mod) throw new Error('worker_hotfix.js missing');
+          const src=Buffer.from(mod.content_base64||'','base64').toString('utf8');
+          fs.writeFileSync('tmp/live-email-audit/worker_hotfix.js',src);
           console.log(`MODULES=${(r.modules||[]).length} BINDINGS=${(r.bindings||[]).length}`);
-          const wanted=/EMAIL.*(DIGEST|SWEEP|BATCH|MAX|MANUAL)|CHANNEL_STATE/i;
-          for (const b of r.bindings || []) {
-            if (!wanted.test(String(b.name||''))) continue;
-            const type=String(b.type||'');
-            let safeValue='<non-plain-binding>';
-            if (type === 'plain_text') safeValue = b.text ?? b.value ?? null;
-            if (type === 'json') safeValue = b.json ?? b.value ?? null;
-            console.log(`BINDING ${b.name} type=${type} value=${JSON.stringify(safeValue)}`);
+          function extract(name) {
+            const start=src.indexOf(`async function ${name}(`);
+            if(start<0){ console.log(`MISSING ${name}`); return; }
+            const marker=src.indexOf(`__name(${name},`,start);
+            const end=marker>=0 ? src.indexOf('\n',marker) : Math.min(src.length,start+14000);
+            console.log(`===== ${name} =====`);
+            console.log(src.slice(start,end));
+          }
+          extract('refreshEmailUserOfferStateFromAbc');
+          extract('handleTestEmailSweep');
+          const needle='handleTestEmailSweep';
+          let pos=0;
+          console.log('===== route references =====');
+          while((pos=src.indexOf(needle,pos))>=0){
+            console.log(src.slice(Math.max(0,pos-650),Math.min(src.length,pos+650)));
+            pos += needle.length;
           }
           NODE
+          node --check tmp/live-email-audit/worker_hotfix.js
