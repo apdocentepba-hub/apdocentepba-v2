@@ -4303,6 +4303,7 @@ function mapMercadoPagoSubscriptionStatus(status) {
   if (key === "PENDING" || key === "IN_PROCESS" || key === "PENDING_CONTINGENCY") return "PENDING";
   if (key === "IN_MEDIATION") return "PAUSED";
   if (key === "REFUNDED" || key === "CHARGED_BACK" || key === "CANCELLED" || key === "REJECTED") return "CANCELLED";
+  if (key === "EXPIRED") return "EXPIRED";
   return key || "PENDING";
 }
 __name(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
@@ -4311,7 +4312,9 @@ function mapMercadoPagoCheckoutStatus(status) {
   if (key === "APPROVED") return "approved";
   if (key === "AUTHORIZED") return "authorized";
   if (key === "PENDING" || key === "IN_PROCESS" || key === "PENDING_CONTINGENCY") return "pending";
-  if (key === "REJECTED" || key === "CANCELLED") return "rejected";
+  if (key === "REJECTED") return "rejected";
+  if (key === "CANCELLED") return "cancelled";
+  if (key === "EXPIRED") return "expired";
   if (key === "REFUNDED" || key === "CHARGED_BACK") return "refunded";
   return key.toLowerCase() || "pending";
 }
