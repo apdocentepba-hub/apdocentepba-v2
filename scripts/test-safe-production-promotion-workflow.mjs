@@ -12,7 +12,8 @@ assert.match(workflow, /versions\?bindings_inherit=strict/, 'candidate upload mu
 assert.match(workflow, /worker_hotfix\.js=@/, 'candidate upload must include the canonical main module');
 assert.match(workflow, /email_queue_hotfix\.js=@/, 'candidate upload must preserve the live email queue module');
 assert.match(workflow, /worker_email_queue_hotfix\.js=@/, 'candidate upload must preserve the live worker email queue module');
-assert.match(workflow, /version_id[^\n]*EXPECTED_OLD_VERSION_ID|EXPECTED_OLD_VERSION_ID[^\n]*version_id/, 'binding inheritance must pin the known active production version');
+assert.match(workflow, /version_id:\s*['"]latest['"]/, 'Scripts Versions inheritance must use Cloudflare literal latest');
+assert.match(workflow, /latest[^\n]*bindings|bindings[^\n]*latest|LATEST_VERSION_ID/s, 'workflow must validate the latest version before inheriting its bindings');
 assert.match(workflow, /CANDIDATE_VERSION_ID.*WORKER_NAME|WORKER_NAME.*CANDIDATE_VERSION_ID/s, 'workflow must smoke an isolated immutable candidate preview before promotion');
 assert.match(workflow, /bindings.*27|27.*bindings/s, 'workflow must validate the 27-binding production shape');
 assert.match(workflow, /module hash|sha256|createHash/i, 'workflow must verify module hashes before promotion');
