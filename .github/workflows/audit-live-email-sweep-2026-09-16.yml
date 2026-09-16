@@ -1,0 +1,50 @@
+name: Audit active email sweep and scheduler
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/audit-live-email-sweep-2026-09-16.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read active bundle and print only email sweep/scheduler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/live-email-audit
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/live-email-audit/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/live-email-audit/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/live-email-audit/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/live-email-audit/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION=${ACTIVE}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/live-email-audit/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/live-email-audit/active.json','utf8'));
+          const mod=(j.result?.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          if(!mod) throw new Error('worker_hotfix.js missing');
+          fs.writeFileSync('tmp/live-email-audit/worker_hotfix.js',Buffer.from(mod.content_base64||'','base64'));
+          console.log(`MODULES=${(j.result?.modules||[]).length} BINDINGS=${(j.result?.bindings||[]).length}`);
+          NODE
+          node --check tmp/live-email-audit/worker_hotfix.js
+          echo '===== runEmailAlertsSweep ====='
+          grep -n -A260 -B20 'async function runEmailAlertsSweep' tmp/live-email-audit/worker_hotfix.js || true
+          echo '===== scheduled ====='
+          grep -n -A45 -B10 'async scheduled' tmp/live-email-audit/worker_hotfix.js | tail -n 120 || true
+          echo '===== email sweep cursor/batch tokens ====='
+          grep -n -E 'BATCH_SIZE|EMAIL_SWEEP_STATE|cursor|cycle_mode|target_user_id|cron_slot|sent_alert_digest|digestDedupeKey|buildEmailDigestDedupeKey' tmp/live-email-audit/worker_hotfix.js | tail -n 180 || true
