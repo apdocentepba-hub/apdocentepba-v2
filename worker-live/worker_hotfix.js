@@ -9,7 +9,7 @@ function pdCorsHeaders() {
   return {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization"
   };
 }
@@ -992,7 +992,7 @@ function jsonResponse(obj, status = 200) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization"
     }
   });
@@ -1002,7 +1002,7 @@ __name(jsonResponse, "jsonResponse");
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization"
   };
 }
@@ -1068,7 +1068,7 @@ async function handleRegister(body, env) {
       apellido,
       email,
       celular,
-      password_hash: password,
+      password_hash: await accountHashPasswordV1(password),
       activo: true
     });
     const nuevoUsuario = Array.isArray(nuevoUsuarioRaw) ? nuevoUsuarioRaw[0] : nuevoUsuarioRaw;
@@ -1099,7 +1099,7 @@ function adminJson(data, status = 200) {
       "Content-Type": "application/json; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS"
     }
   });
 }
@@ -3180,9 +3180,12 @@ async function handleLogin(request, env) {
   if (user.activo === false) {
     return json({ ok: false, message: "Usuario inactivo" }, 403);
   }
-  const okPassword = await passwordMatches(user.password_hash, password);
-  if (!okPassword) {
+  const verifiedPassword = await accountVerifyPasswordV1(user.password_hash, password);
+  if (!verifiedPassword.ok) {
     return json({ ok: false, message: "Password incorrecto" }, 401);
+  }
+  if (verifiedPassword.needsUpgrade) {
+    await supabasePatch(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await accountHashPasswordV1(password) }).catch(() => null);
   }
   await ensureTrialIfNoSubscriptions(env, user.id, user.email, "trial_auto_login");
   await touchUltimoLogin(env, user.id);
@@ -8416,12 +8419,7 @@ function splitGoogleName(fullName) {
 }
 __name(splitGoogleName, "splitGoogleName");
 async function passwordMatches(storedPassword, plainPassword) {
-  const stored = String(storedPassword || "");
-  const plain = String(plainPassword || "");
-  if (!stored || !plain) return false;
-  if (stored === plain) return true;
-  const hashed = await sha256Hex(plain);
-  return stored === hashed;
+  return (await accountVerifyPasswordV1(storedPassword, plainPassword)).ok;
 }
 __name(passwordMatches, "passwordMatches");
 async function sha256Hex(text) {
@@ -11147,7 +11145,7 @@ function corsHeaders2() {
   return {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization"
   };
 }
@@ -11297,12 +11295,7 @@ async function sha256Hex2(text) {
 }
 __name(sha256Hex2, "sha256Hex");
 async function passwordMatches2(storedPassword, plainPassword) {
-  const stored = String(storedPassword || "");
-  const plain = String(plainPassword || "");
-  if (!stored || !plain) return false;
-  if (stored === plain) return true;
-  const hashed = await sha256Hex2(plain);
-  return stored === hashed;
+  return (await accountVerifyPasswordV1(storedPassword, plainPassword)).ok;
 }
 __name(passwordMatches2, "passwordMatches");
 async function supabaseRequest(env, path, init = {}) {
@@ -11384,14 +11377,14 @@ async function ensureLocalUser(env, payload) {
     if (!existing.apellido && payload?.apellido) patch.apellido = normalizeText2(payload.apellido);
     if (!existing.celular && payload?.celular) patch.celular = normalizeText2(payload.celular);
     if (existing.activo === false) patch.activo = true;
-    if (!existing.password_hash && payload?.password) patch.password_hash = String(payload.password);
+    if (!existing.password_hash && payload?.password) patch.password_hash = await accountHashPasswordV1(String(payload.password));
     if (Object.keys(patch).length) {
       const patched = await supabasePatch2(env, "users", `id=eq.${encodeURIComponent(existing.id)}`, patch).catch(() => null);
       return Array.isArray(patched) ? patched[0] || { ...existing, ...patch } : { ...existing, ...patch };
     }
     return existing;
   }
-  return await supabaseInsertReturning2(env, "users", { nombre: normalizeText2(payload?.nombre || "Docente"), apellido: normalizeText2(payload?.apellido || "-") || "-", email, celular: normalizeText2(payload?.celular || ""), password_hash: payload?.password ? String(payload.password) : null, activo: true });
+  return await supabaseInsertReturning2(env, "users", { nombre: normalizeText2(payload?.nombre || "Docente"), apellido: normalizeText2(payload?.apellido || "-") || "-", email, celular: normalizeText2(payload?.celular || ""), password_hash: payload?.password ? await accountHashPasswordV1(String(payload.password)) : null, activo: true });
 }
 __name(ensureLocalUser, "ensureLocalUser");
 async function tryLegacyPasswordLogin(email, password) {
@@ -11421,8 +11414,11 @@ async function handleLoginHotfix(request, env) {
   let user = await findUserByEmail2(env, email);
   if (user?.id && user.activo === false) return json2({ ok: false, message: "Usuario inactivo" }, 403);
   if (user?.id) {
-    const okPassword = await passwordMatches2(user.password_hash, password);
-    if (okPassword) {
+    const verifiedPassword = await accountVerifyPasswordV1(user.password_hash, password);
+    if (verifiedPassword.ok) {
+      if (verifiedPassword.needsUpgrade) {
+        await supabasePatch2(env, "users", `id=eq.${encodeURIComponent(user.id)}`, { password_hash: await accountHashPasswordV1(password) }).catch(() => null);
+      }
       await ensureTrialIfNoSubscriptions2(env, user.id, user.email, "trial_auto_login_hotfix");
       await touchUltimoLogin2(env, user.id);
       return json2({ ok: true, token: String(user.id), user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "" } });
@@ -14128,11 +14124,151 @@ async function recordObservedEmailCron(env, startedAt, result, slotKey) {
   }
 }
 
+const ACCOUNT_PBKDF2_ITERATIONS_V1 = 210000;
+function accountToHexV1(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function accountFromHexV1(hex) {
+  const clean = String(hex || "").trim();
+  if (!clean || clean.length % 2 !== 0 || !/^[a-f0-9]+$/i.test(clean)) throw new Error("Salt/hash inválido");
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i += 1) out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function accountRandomHexV1(bytes = 16) {
+  const value = new Uint8Array(bytes);
+  crypto.getRandomValues(value);
+  return accountToHexV1(value);
+}
+async function accountSha256HexV1(text) {
+  const data = new TextEncoder().encode(String(text || ""));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return accountToHexV1(new Uint8Array(hash));
+}
+async function accountPbkdf2HexV1(password, saltHex, iterations) {
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(String(password || "")),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: accountFromHexV1(saltHex), iterations, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+  return accountToHexV1(new Uint8Array(bits));
+}
+async function accountHashPasswordV1(password) {
+  const plain = String(password || "");
+  if (!plain) throw new Error("Contraseña vacía");
+  const salt = accountRandomHexV1(16);
+  const hash = await accountPbkdf2HexV1(plain, salt, ACCOUNT_PBKDF2_ITERATIONS_V1);
+  return `pbkdf2_sha256${ACCOUNT_PBKDF2_ITERATIONS_V1}${salt}${hash}`;
+}
+async function accountVerifyPasswordV1(storedPassword, plainPassword) {
+  const stored = String(storedPassword || "").trim();
+  const plain = String(plainPassword || "");
+  if (!stored || !plain) return { ok: false, needsUpgrade: false };
+  if (stored.startsWith("pbkdf2_sha256$")) {
+    const parts = stored.split("$");
+    if (parts.length !== 4) return { ok: false, needsUpgrade: false };
+    const iterations = Number(parts[1]);
+    const salt = parts[2];
+    const expected = parts[3];
+    if (!Number.isInteger(iterations) || iterations < 10000 || iterations > 1000000 || !salt || !expected) {
+      return { ok: false, needsUpgrade: false };
+    }
+    try {
+      const actual = await accountPbkdf2HexV1(plain, salt, iterations);
+      return { ok: actual === expected, needsUpgrade: actual === expected && iterations < ACCOUNT_PBKDF2_ITERATIONS_V1 };
+    } catch {
+      return { ok: false, needsUpgrade: false };
+    }
+  }
+  if (stored === plain) return { ok: true, needsUpgrade: true };
+  const legacySha = await accountSha256HexV1(plain);
+  if (stored === legacySha) return { ok: true, needsUpgrade: true };
+  return { ok: false, needsUpgrade: false };
+}
+async function accountReadUserV1(env, userId, includePassword = false) {
+  const select = includePassword
+    ? "id,nombre,apellido,email,celular,password_hash,activo"
+    : "id,nombre,apellido,email,celular,activo";
+  const rows = await supabaseSelect(
+    env,
+    `users?id=eq.${encodeURIComponent(userId)}&select=${select}&limit=1`
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+async function handleAccountProfileSecureV1(request, env) {
+  const authUser = await getSessionUserByBearer(env, request);
+  if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
+
+  if (request.method === "GET") {
+    const user = await accountReadUserV1(env, authUser.id, false);
+    if (!user?.id) return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+    return json2({ ok: true, user: { id: user.id, nombre: user.nombre || "", apellido: user.apellido || "", email: user.email || "", celular: user.celular || "" } });
+  }
+
+  if (request.method !== "PATCH") return json2({ ok: false, message: "Método no permitido" }, 405);
+  const body = await request.json().catch(() => ({}));
+  const nombre = String(body?.nombre || "").trim();
+  const apellido = String(body?.apellido || "").trim();
+  const email = String(body?.email || "").trim().toLowerCase();
+  const celular = String(body?.celular || "").trim();
+  if (!nombre || !apellido || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return json2({ ok: false, message: "Datos personales inválidos" }, 400);
+  }
+
+  const matches = await supabaseSelect(
+    env,
+    `users?email=ilike.${encodeURIComponent(email)}&select=id&limit=10`
+  ).catch(() => []);
+  const taken = (Array.isArray(matches) ? matches : []).some((row) => String(row?.id || "") !== String(authUser.id));
+  if (taken) return json2({ ok: false, message: "Ese email ya está registrado en otra cuenta" }, 409);
+
+  await supabasePatch(env, "users", `id=eq.${encodeURIComponent(authUser.id)}`, { nombre, apellido, email, celular });
+  const user = await accountReadUserV1(env, authUser.id, false);
+  return json2({ ok: true, user: { id: user?.id || authUser.id, nombre: user?.nombre || nombre, apellido: user?.apellido || apellido, email: user?.email || email, celular: user?.celular || celular } });
+}
+async function handleAccountChangePasswordSecureV1(request, env) {
+  const authUser = await getSessionUserByBearer(env, request);
+  if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
+  if (request.method !== "POST") return json2({ ok: false, message: "Método no permitido" }, 405);
+
+  const body = await request.json().catch(() => ({}));
+  const currentPassword = String(body?.current_password || "");
+  const newPassword = String(body?.new_password || "");
+  if (newPassword.length < 6) return json2({ ok: false, message: "La nueva contraseña debe tener al menos 6 caracteres" }, 400);
+
+  const user = await accountReadUserV1(env, authUser.id, true);
+  if (!user?.id) return json2({ ok: false, message: "Usuario no encontrado" }, 404);
+  const stored = String(user.password_hash || "").trim();
+  if (stored) {
+    if (!currentPassword) return json2({ ok: false, message: "Ingresá tu contraseña actual" }, 400);
+    const verified = await accountVerifyPasswordV1(stored, currentPassword);
+    if (!verified.ok) return json2({ ok: false, message: "La contraseña actual no coincide" }, 401);
+  }
+
+  const passwordHash = await accountHashPasswordV1(newPassword);
+  await supabasePatch(env, "users", `id=eq.${encodeURIComponent(authUser.id)}`, { password_hash: passwordHash });
+  return json2({ ok: true, message: "Contraseña actualizada" });
+}
+
 var worker_hotfix_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === `${API_URL_PREFIX3}/account/profile`) {
+      return await handleAccountProfileSecureV1(request, env);
+    }
+    if (path === `${API_URL_PREFIX3}/account/change-password`) {
+      return await handleAccountChangePasswordSecureV1(request, env);
+    }
 
     // LIVE_SESSION_AUTH_GATE_V1: protected user routes must derive identity from an active session.
     const protectedSessionGetPaths = new Set([
