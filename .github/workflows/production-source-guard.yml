@@ -67,9 +67,7 @@ jobs:
         run: node scripts/test-worker-zero-traffic-preview.mjs
       - name: Verify PR production baseline contract
         run: node scripts/test-pr-production-baseline.mjs
-      - name: Verify plan_code object keys stay unique
-        run: node scripts/test-plan-code-single-key.mjs
       - name: Install Wrangler dependencies
         run: npm install
-      - name: Package canonical Worker without deploying
-        run: npm run package:worker
+      - name: Package canonical Worker and reject duplicate object keys
+        run: node scripts/test-plan-code-single-key.mjs
