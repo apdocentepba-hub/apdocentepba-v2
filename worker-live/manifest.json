@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "worker_name": "ancient-wildflower-cd37",
+  "account_id": "f446c729ea2148db5f90126e61e5abcd",
+  "version_id": "39b52f3c-faf6-4a15-8e93-7bbd2884b95d",
+  "main_module": "worker_hotfix.js",
+  "captured_at": "2026-09-16T12:02:47.343Z",
+  "modules": [
+    {
+      "name": "email_queue_hotfix.js",
+      "module_sha256": "482b7434f4debdc8b4c218ec33dff181aec93eb4e121b11b30dc240705f55ee2"
+    },
+    {
+      "name": "worker_email_queue_hotfix.js",
+      "module_sha256": "7fff1bbd7c410251c49091707ba263180c6b8051d8b21add50d6fb82d9574345"
+    },
+    {
+      "name": "worker_hotfix.js",
+      "module_sha256": "6107aa8617eeafb9d7a1bdbbf557f72bea891fc6e3392a5a87c82587ce5ad1fb"
+    }
+  ],
+  "bindings": [
+    {
+      "name": "BREVO_API_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "BREVO_FROM_EMAIL",
+      "type": "plain_text"
+    },
+    {
+      "name": "BREVO_FROM_NAME",
+      "type": "plain_text"
+    },
+    {
+      "name": "EMAIL_DIGEST_BATCH_USERS_PER_RUN",
+      "type": "plain_text"
+    },
+    {
+      "name": "EMAIL_SWEEP_STATE",
+      "type": "kv_namespace"
+    },
+    {
+      "name": "GOOGLE_CLIENT_ID",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_ACCESS_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "MERCADOPAGO_CURRENCY_ID",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_FAILURE_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_PENDING_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_STATEMENT_DESCRIPTOR",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_SUCCESS_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_WEBHOOK_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "SUPABASE_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "TELEGRAM_BOT_TOKEN",
+      "type": "plain_text"
+    },
+    {
+      "name": "TELEGRAM_BOT_USERNAME",
+      "type": "plain_text"
+    },
+    {
+      "name": "TELEGRAM_WEBHOOK_SECRET",
+      "type": "plain_text"
+    },
+    {
+      "name": "TELEGRAM_WEBHOOK_URL",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_ACCESS_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "WHATSAPP_BOT_NUMBER",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_GRAPH_VERSION",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_PHONE_NUMBER_ID",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_TEMPLATE_ALERTA",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_TEMPLATE_LANG",
+      "type": "plain_text"
+    },
+    {
+      "name": "WHATSAPP_VERIFY_TOKEN",
+      "type": "plain_text"
+    },
+    {
+      "name": "WORKER_URL",
+      "type": "plain_text"
+    }
+  ]
+}
