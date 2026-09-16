@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// These routes must fail closed before control can fall back to the legacy Worker router.
 const worker = fs.readFileSync('worker-live/worker_hotfix.js', 'utf8');
 const requiredPaths = [
   '/test-mail',
