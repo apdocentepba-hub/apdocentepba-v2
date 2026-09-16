@@ -8,8 +8,10 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -22,8 +24,10 @@ on:
     paths:
       - package.json
       - wrangler.toml
+      - worker-live/**
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
+      - scripts/test-live-source-equivalence.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -140,6 +144,12 @@ jobs:
           console.log(`Bundle shape OK: ${names.length} modules / ${bindings.length} bindings`);
           console.log(`Sanitized manifest written for ${manifest.version_id}`);
           NODE
+
+      - name: Verify active Worker matches canonical repository snapshot
+        run: |
+          set -euo pipefail
+          ROOT=tmp/live-worker-contract-smoke
+          node scripts/test-live-source-equivalence.mjs "$ROOT"
 
       - name: Upload sanitized active Worker capture
         uses: actions/upload-artifact@v4
