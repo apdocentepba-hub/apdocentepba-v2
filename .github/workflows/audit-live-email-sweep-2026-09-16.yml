@@ -18,7 +18,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Read active email eligibility after refresh
+      - name: Read active stored alert and slot dedupe semantics
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -42,12 +42,26 @@ jobs:
           const src=Buffer.from(mod.content_base64||'','base64').toString('utf8');
           fs.writeFileSync('tmp/live-email-audit/worker_hotfix.js',src);
           console.log(`MODULES=${(r.modules||[]).length} BINDINGS=${(r.bindings||[]).length}`);
+          function extract(name) {
+            const candidates=[`async function ${name}(`,`function ${name}(`];
+            let start=-1;
+            for(const c of candidates){ start=src.indexOf(c); if(start>=0) break; }
+            if(start<0){ console.log(`MISSING ${name}`); return; }
+            const marker=src.indexOf(`__name(${name},`,start);
+            const end=marker>=0 ? src.indexOf('\n',marker) : Math.min(src.length,start+12000);
+            console.log(`===== ${name} =====`);
+            console.log(src.slice(start,end));
+          }
+          for (const name of [
+            'loadStoredEmailAlerts',
+            'markEmailAlertsAsEmailed',
+            'buildEmailUserSlotSentKey',
+            'buildEmailDigestDedupeKey',
+            'handleTestEmailSweep'
+          ]) extract(name);
           const fnStart=src.indexOf('async function runEmailAlertsSweep(');
-          if(fnStart<0) throw new Error('runEmailAlertsSweep missing');
-          const start=src.indexOf('let refreshResult = null;',fnStart);
-          const end=src.indexOf('__name(runEmailAlertsSweep,',start);
-          if(start<0||end<0) throw new Error('decision slice markers missing');
-          console.log('===== decision path after ABC refresh =====');
-          console.log(src.slice(start,end));
+          const preEnd=src.indexOf('let refreshResult = null;',fnStart);
+          console.log('===== runEmailAlertsSweep pre-refresh =====');
+          console.log(src.slice(fnStart,preEnd));
           NODE
           node --check tmp/live-email-audit/worker_hotfix.js
