@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const deploy = fs.readFileSync(new URL('../.github/workflows/deploy-worker-manual.yml', import.meta.url), 'utf8');
 const wrangler = fs.readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
 const smoke = fs.readFileSync(new URL('../.github/workflows/smoke-live-worker-contracts.yml', import.meta.url), 'utf8');
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 assert.doesNotMatch(
   deploy,
@@ -14,6 +15,11 @@ assert.match(
   deploy,
   /PRODUCTION_SOURCE_GUARD_V1/,
   'manual deploy workflow must explain that production source is guarded'
+);
+assert.doesNotMatch(
+  String(pkg.scripts?.['deploy:worker'] || ''),
+  /\bwrangler\s+deploy\b/,
+  'package deploy:worker must not bypass the production source guard'
 );
 assert.match(
   wrangler,
