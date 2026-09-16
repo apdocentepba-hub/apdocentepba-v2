@@ -1,0 +1,38 @@
+name: Diagnose ABC email district response times
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/diagnose-abc-email-districts-2026-09-15.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe ABC published offers endpoint
+        run: |
+          set -u
+          python - <<'PY'
+          import json, subprocess, urllib.parse
+          for district in ['NECOCHEA','AVELLANEDA','GENERAL SAN MARTIN']:
+              q=f'descdistrito:"{district}" AND estado:"Publicada"'
+              url='https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?'+urllib.parse.urlencode({
+                  'q':q,'rows':'150','start':'0','wt':'json','sort':'ult_movimiento desc'
+              })
+              out=f'/tmp/{district.replace(" ","_")}.json'
+              cmd=['curl','-sS','--max-time','12','-o',out,'-w','%{http_code} %{time_total}',url]
+              p=subprocess.run(cmd,text=True,capture_output=True)
+              print(f'{district}: rc={p.returncode} http_time={p.stdout.strip()} stderr={p.stderr.strip()[:300]}')
+              if p.returncode==0:
+                  try:
+                      data=json.load(open(out,'r',encoding='utf-8'))
+                      print(f'{district}: numFound={data.get("response",{}).get("numFound")} docs={len(data.get("response",{}).get("docs",[]) or [])}')
+                  except Exception as e:
+                      print(f'{district}: parse_error={e}')
+          PY
