@@ -1,0 +1,45 @@
+name: Diagnostic matcher source
+
+on:
+  push:
+    branches:
+      - diag/live-pref-abc-20260916
+    paths:
+      - .github/workflows/diag-matcher-source.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print matching functions
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const src = fs.readFileSync('worker-live/worker_hotfix.js','utf8');
+          function extract(name) {
+            const needle = `function ${name}`;
+            const start = src.indexOf(needle);
+            if (start < 0) { console.log(`NOT_FOUND ${name}`); return; }
+            const brace = src.indexOf('{', start);
+            let depth=0, inS=false, inD=false, inT=false, esc=false;
+            let end=brace;
+            for (let i=brace;i<src.length;i++) {
+              const ch=src[i];
+              if (esc) { esc=false; continue; }
+              if ((inS||inD||inT) && ch==='\\') { esc=true; continue; }
+              if (!inD&&!inT&&ch==="'") { inS=!inS; continue; }
+              if (!inS&&!inT&&ch==='"') { inD=!inD; continue; }
+              if (!inS&&!inD&&ch==='`') { inT=!inT; continue; }
+              if (inS||inD||inT) continue;
+              if (ch==='{') depth++;
+              else if (ch==='}') { depth--; if(depth===0){end=i+1;break;} }
+            }
+            console.log(`\n===== ${name} =====\n${src.slice(start,end)}\n`);
+          }
+          ['buildApdLabelFromResolved','buildResolvedApdList','canonizarPreferenciasConCatalogo','matchCargosMaterias','coincideOfertaConPreferenciasAPD','refreshEmailUserOfferStateFromAbc'].forEach(extract);
+          NODE
