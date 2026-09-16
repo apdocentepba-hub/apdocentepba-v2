@@ -29,9 +29,14 @@ if (loginStart < 0 || googleStart <= loginStart) throw new Error('login handler 
 const loginBody = source.slice(loginStart, googleStart);
 const migrationAnchor = '    if (!user?.id) return json2({ ok: false, message: "No se pudo migrar la cuenta existente" }, 500);';
 if (!loginBody.includes(migrationAnchor)) throw new Error('legacy migration anchor not found inside password login handler');
-if (loginBody.includes('password_hash: await accountHashPasswordV1(password)')) throw new Error('legacy migration rehash already present unexpectedly');
 
-const absoluteAnchor = loginStart + loginBody.indexOf(migrationAnchor) + migrationAnchor.length;
+const anchorIndex = loginBody.indexOf(migrationAnchor);
+const afterAnchor = loginBody.slice(anchorIndex + migrationAnchor.length, anchorIndex + migrationAnchor.length + 500);
+if (afterAnchor.includes('password_hash: await accountHashPasswordV1(password)')) {
+  throw new Error('legacy migration rehash already present immediately after migration anchor');
+}
+
+const absoluteAnchor = loginStart + anchorIndex + migrationAnchor.length;
 const migrationPatch = `\n    await supabasePatch(env, "users", \`id=eq.\${encodeURIComponent(user.id)}\`, {\n      password_hash: await accountHashPasswordV1(password),\n      activo: true\n    }).catch(() => null);`;
 source = source.slice(0, absoluteAnchor) + migrationPatch + source.slice(absoluteAnchor);
 
