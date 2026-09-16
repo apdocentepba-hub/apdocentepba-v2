@@ -38,6 +38,26 @@ assert.doesNotMatch(
   /for file in manifest\.json email_queue_hotfix\.js worker_email_queue_hotfix\.js worker_hotfix\.js/,
   'PR production baseline copy must derive module files from its manifest'
 );
+assert.match(
+  smoke,
+  /MANIFEST_ONLY_REFRESH/,
+  'PR smoke must explicitly gate canonical manifest refreshes'
+);
+assert.match(
+  smoke,
+  /WORKER_LIVE_CHANGES\[@\][\s\S]*-eq\s+1[\s\S]*worker-live\/manifest\.json/,
+  'manifest refresh must be allowed only when manifest.json is the sole worker-live change'
+);
+assert.match(
+  smoke,
+  /cp\s+worker-live\/manifest\.json\s+"\$BASE_DIR\/manifest\.json"/,
+  'manifest-only refresh must validate the proposed manifest against live production'
+);
+assert.match(
+  smoke,
+  /git show\s+"\$\{PR_BASE_SHA\}:worker-live\/\$\{file\}"/,
+  'manifest-only refresh must still source module bytes from the PR base commit'
+);
 
 assert.doesNotMatch(
   sourceGuard,
