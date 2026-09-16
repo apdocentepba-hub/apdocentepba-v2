@@ -132,6 +132,17 @@ jobs:
               exact_active_code_matches: exactActiveByCode.length,
               district_active_code_matches: districtActiveByCode.length,
               active_missed_by_exact_prefilter: missed.length,
+              active_preview: exactActiveByCode.slice(0,5).map(d => ({
+                iddetalle:d?.iddetalle||d?.id||null,
+                idoferta:d?.idoferta||null,
+                cargo:d?.descripcioncargo||d?.cargo||'',
+                area:d?.descripcionarea||'',
+                escuela:d?.escuela||d?.nombreestablecimiento||'',
+                nivelmodalidad:d?.nivelmodalidad||d?.nivel||d?.modalidad||d?.nombrenivel||d?.descripcionnivel||'',
+                turno:d?.turno||d?.descripcionturno||'',
+                finoferta:d?.finoferta||'',
+                estado:d?.estado||''
+              })),
               missed_preview: missed.slice(0,12).map(d => ({
                 iddetalle:d?.iddetalle||d?.id||null,
                 idoferta:d?.idoferta||null,
