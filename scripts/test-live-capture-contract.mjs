@@ -28,5 +28,15 @@ assert.doesNotMatch(
   /content_base64[^\n]*manifest|manifest[^\n]*content_base64/i,
   'manifest must not serialize raw module base64 fields'
 );
+assert.match(
+  workflow,
+  /node scripts\/test-live-source-equivalence\.mjs\s+["']?\$?ROOT["']?/,
+  'smoke must compare every fresh live capture against the committed canonical snapshot'
+);
+assert.match(
+  workflow,
+  /worker-live\/\*\*/,
+  'smoke must rerun when the canonical worker-live snapshot changes'
+);
 
 console.log('live capture contract: OK');
