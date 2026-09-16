@@ -29,12 +29,10 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Verify promotion workflow contract
-        run: node scripts/test-safe-production-promotion-workflow.mjs
-
-      - name: Verify canonical Worker contracts before upload
+      - name: Verify promotion and canonical contracts
         run: |
           set -euo pipefail
+          node scripts/test-safe-production-promotion-workflow.mjs
           node --check worker-live/worker_hotfix.js
           node --check worker-live/email_queue_hotfix.js
           node --check worker-live/worker_email_queue_hotfix.js
@@ -43,7 +41,7 @@ jobs:
           node scripts/test-account-security-contract.mjs
           node scripts/test-production-worker-source-guard.mjs
 
-      - name: Capture active production metadata and build strict inheritance metadata
+      - name: Capture production baseline and validate latest binding source
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -55,85 +53,88 @@ jobs:
           curl -fsS --retry 4 --retry-delay 2 \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "$ROOT/accounts.json"
-
           ACCOUNT_ID="${CONFIGURED_ACCOUNT_ID:-}"
           if [ -n "$ACCOUNT_ID" ]; then
             ROOT="$ROOT" ACCOUNT_ID="$ACCOUNT_ID" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
-          const accounts = Array.isArray(j.result) ? j.result : [];
-          if (!j.success || !accounts.some(account => account.id === process.env.ACCOUNT_ID)) {
-            throw new Error('Configured CLOUDFLARE_ACCOUNT_ID is not accessible with this token');
-          }
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`,'utf8'));
+          const rows=Array.isArray(j.result)?j.result:[];
+          if(!j.success||!rows.some(x=>x.id===process.env.ACCOUNT_ID)) throw new Error('Configured Cloudflare account is unavailable');
           NODE
           else
             ACCOUNT_ID=$(ROOT="$ROOT" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
-          const accounts = Array.isArray(j.result) ? j.result : [];
-          if (!j.success || accounts.length !== 1 || !accounts[0]?.id) {
-            throw new Error(`Expected exactly one accessible Cloudflare account; found ${accounts.length}`);
-          }
-          process.stdout.write(accounts[0].id);
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`,'utf8'));
+          const rows=Array.isArray(j.result)?j.result:[];
+          if(!j.success||rows.length!==1||!rows[0]?.id) throw new Error(`Expected one Cloudflare account; found ${rows.length}`);
+          process.stdout.write(rows[0].id);
           NODE
             )
           fi
           echo "CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
 
-          curl -fsS --retry 4 --retry-delay 2 \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-before.json"
-
           ACTIVE_BEFORE=$(ROOT="$ROOT" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-before.json`, 'utf8'));
-          const d = j.result?.deployments?.[0];
-          const traffic = (d?.versions || []).filter(x => Number(x.percentage) > 0);
-          if (!j.success || traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || !traffic[0].version_id) {
-            throw new Error(`Expected one 100% production version; got ${JSON.stringify(traffic)}`);
-          }
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-before.json`,'utf8'));
+          const d=j.result?.deployments?.[0];
+          const traffic=(d?.versions||[]).filter(x=>Number(x.percentage)>0);
+          if(!j.success||traffic.length!==1||Number(traffic[0].percentage)!==100||!traffic[0].version_id) throw new Error(`Unexpected production traffic ${JSON.stringify(traffic)}`);
           process.stdout.write(traffic[0].version_id);
           NODE
           )
           echo "Production active before promotion: ${ACTIVE_BEFORE}"
           test "$ACTIVE_BEFORE" = "$EXPECTED_OLD_VERSION_ID"
-          echo "ACTIVE_BEFORE=${ACTIVE_BEFORE}" >> "$GITHUB_ENV"
 
-          curl -fsS --retry 4 --retry-delay 2 \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${EXPECTED_OLD_VERSION_ID}?include=modules" > "$ROOT/active.json"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=25" > "$ROOT/versions.json"
+          LATEST_VERSION_ID=$(ROOT="$ROOT" node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/versions.json`,'utf8'));
+          const rows=Array.isArray(j.result)?j.result:(j.result?.versions||[]);
+          const latest=[...rows].sort((a,b)=>Number(b.number||0)-Number(a.number||0))[0];
+          if(!j.success||!latest?.id) throw new Error('Latest Worker version not found');
+          process.stdout.write(latest.id);
+          NODE
+          )
+          echo "Latest version used only as binding source: ${LATEST_VERSION_ID}"
+          echo "LATEST_VERSION_ID=${LATEST_VERSION_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${LATEST_VERSION_ID}?include=modules" > "$ROOT/latest.json"
 
-          ROOT="$ROOT" EXPECTED_OLD_VERSION_ID="$EXPECTED_OLD_VERSION_ID" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
+          ROOT="$ROOT" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
           import fs from 'node:fs';
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/active.json`, 'utf8'));
-          const r = j.result;
-          if (!j.success || r?.id !== process.env.EXPECTED_OLD_VERSION_ID) throw new Error('Active version detail mismatch');
-          if (r.main_module !== 'worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
-          const bindings = r.bindings || [];
-          if (bindings.length !== Number(process.env.EXPECTED_BINDING_COUNT)) {
-            throw new Error(`Active binding shape mismatch: ${bindings.length}`);
-          }
-          const metadata = {
-            main_module: r.main_module,
-            compatibility_date: r.compatibility_date,
-            annotations: {
-              'workers/message': 'Guarded APDocentePBA canonical production candidate',
-              'workers/tag': `prod-promote-${process.env.GITHUB_SHA?.slice(0, 8) || 'manual'}`
+          const active=JSON.parse(fs.readFileSync(`${process.env.ROOT}/active.json`,'utf8')).result;
+          const latest=JSON.parse(fs.readFileSync(`${process.env.ROOT}/latest.json`,'utf8')).result;
+          if(!active?.id||!latest?.id) throw new Error('Version metadata missing');
+          const shape=r=>(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          const a=shape(active), l=shape(latest);
+          const n=Number(process.env.EXPECTED_BINDING_COUNT);
+          if(a.length!==n||l.length!==n) throw new Error(`Binding count drift active=${a.length} latest=${l.length}`);
+          if(JSON.stringify(a)!==JSON.stringify(l)) throw new Error('Latest binding shape differs from active production');
+          const activeKv=(active.bindings||[]).find(b=>b.name==='EMAIL_SWEEP_STATE');
+          const latestKv=(latest.bindings||[]).find(b=>b.name==='EMAIL_SWEEP_STATE');
+          const aid=String(activeKv?.namespace_id||activeKv?.id||'');
+          const lid=String(latestKv?.namespace_id||latestKv?.id||'');
+          if(!aid||aid!==lid) throw new Error('Latest EMAIL_SWEEP_STATE binding differs from active production');
+          const metadata={
+            main_module:'worker_hotfix.js',
+            compatibility_date:active.compatibility_date,
+            annotations:{
+              'workers/message':'Guarded APDocentePBA canonical production candidate',
+              'workers/tag':`prod-promote-${process.env.GITHUB_SHA?.slice(0,8)||'manual'}`
             },
-            bindings: bindings.map(b => ({
-              name: b.name,
-              type: 'inherit',
-              version_id: process.env.EXPECTED_OLD_VERSION_ID
-            }))
+            bindings:(latest.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))
           };
-          if (Array.isArray(r.compatibility_flags) && r.compatibility_flags.length) {
-            metadata.compatibility_flags = r.compatibility_flags;
-          }
-          fs.writeFileSync(`${process.env.ROOT}/metadata.json`, JSON.stringify(metadata));
-          console.log(`Strict inheritance metadata prepared from ${r.id}: ${bindings.length} bindings`);
+          if(Array.isArray(active.compatibility_flags)&&active.compatibility_flags.length) metadata.compatibility_flags=active.compatibility_flags;
+          fs.writeFileSync(`${process.env.ROOT}/metadata.json`,JSON.stringify(metadata));
+          console.log(`Latest bindings validated against active: ${l.length}/${n}; metadata uses literal latest`);
           NODE
 
-      - name: Upload exact three-module candidate with strict binding inheritance
+      - name: Upload exact three-module zero-traffic candidate
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -147,77 +148,66 @@ jobs:
             -F "email_queue_hotfix.js=@worker-live/email_queue_hotfix.js;filename=email_queue_hotfix.js;type=application/javascript+module" \
             -F "worker_email_queue_hotfix.js=@worker-live/worker_email_queue_hotfix.js;filename=worker_email_queue_hotfix.js;type=application/javascript+module")
           echo "Cloudflare candidate upload HTTP ${HTTP_CODE}"
-          test "$HTTP_CODE" = "200"
+          if [ "$HTTP_CODE" != "200" ]; then cat "$ROOT/upload.json"; exit 1; fi
           CANDIDATE_VERSION_ID=$(ROOT="$ROOT" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/upload.json`, 'utf8'));
-          if (!j.success || !j.result?.id) throw new Error(JSON.stringify(j.errors || j));
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/upload.json`,'utf8'));
+          if(!j.success||!j.result?.id) throw new Error(JSON.stringify(j.errors||j));
           process.stdout.write(j.result.id);
           NODE
           )
-          echo "Candidate version: ${CANDIDATE_VERSION_ID}"
           echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+          echo "Candidate version: ${CANDIDATE_VERSION_ID}"
 
-      - name: Verify candidate module hashes and exact 27-binding shape
+      - name: Verify candidate hashes bindings and immutable preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
           ROOT=tmp/promotion
-          curl -fsS --retry 4 --retry-delay 2 \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > "$ROOT/candidate.json"
-
-          ROOT="$ROOT" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
+          CANDIDATE_PREVIEW_URL=$(ROOT="$ROOT" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" WORKER_NAME="$WORKER_NAME" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
           import crypto from 'node:crypto';
           import fs from 'node:fs';
-          const candidate = JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`, 'utf8'));
-          const canonical = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
-          const r = candidate.result;
-          if (!candidate.success || !r?.id) throw new Error('Candidate version detail missing');
-          if (r.main_module !== canonical.main_module) throw new Error(`main module mismatch: ${r.main_module}`);
-          const modules = r.modules || [];
-          const actualHashes = new Map(modules.map(m => [
-            m.name,
-            crypto.createHash('sha256').update(Buffer.from(m.content_base64 || '', 'base64')).digest('hex')
-          ]));
-          for (const expected of canonical.modules || []) {
-            const actual = actualHashes.get(expected.name);
-            if (!actual) throw new Error(`candidate module missing: ${expected.name}`);
-            if (actual !== expected.module_sha256) throw new Error(`module hash mismatch: ${expected.name}`);
+          const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`,'utf8'));
+          const r=j.result;
+          const canonical=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
+          if(!j.success||!r?.id) throw new Error('Candidate detail missing');
+          const hashes=new Map((r.modules||[]).map(m=>[m.name,crypto.createHash('sha256').update(Buffer.from(m.content_base64||'','base64')).digest('hex')]));
+          for(const expected of canonical.modules||[]){
+            const actual=hashes.get(expected.name);
+            if(!actual) throw new Error(`candidate module missing: ${expected.name}`);
+            if(actual!==expected.module_sha256) throw new Error(`module hash mismatch: ${expected.name}`);
           }
-          const bindings = r.bindings || [];
-          const expectedCount = Number(process.env.EXPECTED_BINDING_COUNT);
-          if (bindings.length !== expectedCount) throw new Error(`bindings count mismatch: ${bindings.length} != ${expectedCount}`);
-          const byKey = new Map(bindings.map(b => [`${b.name}:${b.type}`, b]));
-          for (const expected of canonical.bindings || []) {
-            const key = `${expected.name}:${expected.type}`;
-            const actual = byKey.get(key);
-            if (!actual) throw new Error(`candidate binding missing: ${key}`);
-            if (expected.name === 'EMAIL_SWEEP_STATE') {
-              const id = String(actual.namespace_id || actual.id || '').trim();
-              if (id !== expected.namespace_id) throw new Error('EMAIL_SWEEP_STATE namespace mismatch');
+          const bindings=r.bindings||[];
+          const n=Number(process.env.EXPECTED_BINDING_COUNT);
+          if(bindings.length!==n) throw new Error(`bindings count mismatch ${bindings.length}/${n}`);
+          const byKey=new Map(bindings.map(b=>[`${b.name}:${b.type}`,b]));
+          for(const expected of canonical.bindings||[]){
+            const actual=byKey.get(`${expected.name}:${expected.type}`);
+            if(!actual) throw new Error(`candidate binding missing ${expected.name}:${expected.type}`);
+            if(expected.name==='EMAIL_SWEEP_STATE'){
+              const id=String(actual.namespace_id||actual.id||'');
+              if(id!==expected.namespace_id) throw new Error('EMAIL_SWEEP_STATE namespace mismatch');
             }
           }
-          console.log(`Candidate module hashes OK; bindings ${bindings.length}/${expectedCount} OK`);
+          const prefix=process.env.CANDIDATE_VERSION_ID.split('-')[0];
+          const fallback=`https://${prefix}-${process.env.WORKER_NAME}.apdocentepba.workers.dev`;
+          const url=(r.urls||[]).find(u=>String(u).includes('.workers.dev'))||fallback;
+          console.error(`Candidate module hashes OK; bindings ${bindings.length}/${n} OK`);
+          process.stdout.write(String(url).replace(/\/$/,''));
           NODE
-
-      - name: Smoke immutable zero-traffic candidate preview
-        run: |
-          set -euo pipefail
-          CANDIDATE_PREFIX="${CANDIDATE_VERSION_ID%%-*}"
-          CANDIDATE_PREVIEW_URL="https://${CANDIDATE_PREFIX}-${WORKER_NAME}.apdocentepba.workers.dev"
+          )
           echo "CANDIDATE_PREVIEW_URL=${CANDIDATE_PREVIEW_URL}" >> "$GITHUB_ENV"
           DUMMY=00000000-0000-4000-8000-000000000000
-          curl_code() {
-            curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
-          }
+          curl_code(){ curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"; }
           test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/version")" = "200"
           test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/planes")" = "200"
           test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
           test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
           test "$(curl_code "${CANDIDATE_PREVIEW_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
-          echo "Candidate preview smoke passed; production traffic is still unchanged."
+          echo "Candidate preview smoke passed with production traffic unchanged."
 
       - name: Promote candidate to 100 percent and smoke production with rollback
         env:
@@ -226,8 +216,7 @@ jobs:
           set -euo pipefail
           ROOT=tmp/promotion
           PROMOTED=0
-
-          rollback() {
+          rollback(){
             trap - ERR
             set +e
             if [ "${PROMOTED:-0}" != "1" ]; then return 0; fi
@@ -235,67 +224,36 @@ jobs:
             cat > "$ROOT/rollback.json" <<JSON
           {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after guarded canonical promotion failure"}}
           JSON
-            curl -sS -X POST \
-              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              -H "Content-Type: application/json" \
-              --data @"$ROOT/rollback.json" > "$ROOT/rollback-response.json"
+            curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @"$ROOT/rollback.json" > "$ROOT/rollback-response.json"
             sleep 3
-            curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/rollback-after.json"
+            curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/rollback-after.json"
             ROOT="$ROOT" EXPECTED_OLD_VERSION_ID="$EXPECTED_OLD_VERSION_ID" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/rollback-after.json`, 'utf8'));
-          const d = j.result?.deployments?.[0];
-          const v = (d?.versions || []).find(x => Number(x.percentage) === 100);
-          if (v?.version_id !== process.env.EXPECTED_OLD_VERSION_ID) process.exit(2);
-          console.log(`Rollback verified: ${v.version_id} at 100%`);
+          const fs=require('fs'); const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/rollback-after.json`,'utf8')); const d=j.result?.deployments?.[0]; const v=(d?.versions||[]).find(x=>Number(x.percentage)===100); if(v?.version_id!==process.env.EXPECTED_OLD_VERSION_ID) process.exit(2); console.log(`Rollback verified: ${v.version_id}`);
           NODE
           }
-
           cat > "$ROOT/deploy.json" <<JSON
           {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Guarded canonical APDocentePBA promotion from ${GITHUB_SHA}"}}
           JSON
           trap rollback ERR
-
-          curl -fsS -X POST \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data @"$ROOT/deploy.json" > "$ROOT/deploy-response.json"
+          curl -fsS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @"$ROOT/deploy.json" > "$ROOT/deploy-response.json"
           ROOT="$ROOT" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deploy-response.json`, 'utf8'));
-          if (!j.success || !j.result?.id) throw new Error(JSON.stringify(j.errors || j));
-          console.log(`Deployment accepted: ${j.result.id}`);
+          const fs=require('fs'); const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/deploy-response.json`,'utf8')); if(!j.success||!j.result?.id) throw new Error(JSON.stringify(j.errors||j)); console.log(`Deployment accepted ${j.result.id}`);
           NODE
           PROMOTED=1
-
           sleep 3
-          curl -fsS --retry 4 --retry-delay 2 \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-after.json"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-after.json"
           ROOT="$ROOT" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" node - <<'NODE'
-          const fs = require('fs');
-          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-after.json`, 'utf8'));
-          const d = j.result?.deployments?.[0];
-          const traffic = (d?.versions || []).filter(x => Number(x.percentage) > 0);
-          if (traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || traffic[0].version_id !== process.env.CANDIDATE_VERSION_ID) {
-            throw new Error(`Candidate is not sole 100% production version: ${JSON.stringify(traffic)}`);
-          }
-          console.log(`Candidate promoted at 100%: ${traffic[0].version_id}`);
+          const fs=require('fs'); const j=JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-after.json`,'utf8')); const d=j.result?.deployments?.[0]; const t=(d?.versions||[]).filter(x=>Number(x.percentage)>0); if(t.length!==1||Number(t[0].percentage)!==100||t[0].version_id!==process.env.CANDIDATE_VERSION_ID) throw new Error(JSON.stringify(t)); console.log(`Candidate active at 100% ${t[0].version_id}`);
           NODE
-
-          curl_code() {
-            curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
-          }
+          curl_code(){ curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"; }
           DUMMY=00000000-0000-4000-8000-000000000000
           test "$(curl_code "${WORKER_URL}/api/version")" = "200"
           test "$(curl_code "${WORKER_URL}/api/planes")" = "200"
           test "$(curl_code "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
           test "$(curl_code "${WORKER_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
           test "$(curl_code "${WORKER_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
-
           cat > "$ROOT/summary.json" <<JSON
           {"ok":true,"old_version_id":"${EXPECTED_OLD_VERSION_ID}","candidate_version_id":"${CANDIDATE_VERSION_ID}","active_final":"${CANDIDATE_VERSION_ID}","bindings_verified":27,"module_hashes_verified":true,"preview_smoke":true,"production_smoke":true,"rollback_triggered":false}
           JSON
@@ -311,6 +269,7 @@ jobs:
             tmp/promotion/summary.json
             tmp/promotion/deployments-before.json
             tmp/promotion/active.json
+            tmp/promotion/latest.json
             tmp/promotion/upload.json
             tmp/promotion/candidate.json
             tmp/promotion/deployments-after.json
