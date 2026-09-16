@@ -63,8 +63,21 @@ jobs:
             BASE_DIR=tmp/production-canonical
             rm -rf "$BASE_DIR"
             mkdir -p "$BASE_DIR"
-            git show "${PR_BASE_SHA}:worker-live/manifest.json" > "${BASE_DIR}/manifest.json"
-            BASE_DIR="$BASE_DIR" node - <<'NODE' > "${BASE_DIR}/module-names.txt"
+
+            mapfile -t WORKER_LIVE_CHANGES < <(git diff --name-only "$PR_BASE_SHA" HEAD -- worker-live/)
+            MANIFEST_ONLY_REFRESH=0
+            if [ "${#WORKER_LIVE_CHANGES[@]}" -eq 1 ] && [ "${WORKER_LIVE_CHANGES[0]}" = "worker-live/manifest.json" ]; then
+              MANIFEST_ONLY_REFRESH=1
+            fi
+
+            if [ "$MANIFEST_ONLY_REFRESH" -eq 1 ]; then
+              cp worker-live/manifest.json "$BASE_DIR/manifest.json"
+              echo "Manifest-only production baseline refresh detected; module source remains pinned to ${PR_BASE_SHA}."
+            else
+              git show "${PR_BASE_SHA}:worker-live/manifest.json" > "$BASE_DIR/manifest.json"
+            fi
+
+            BASE_DIR="$BASE_DIR" node - <<'NODE' > "$BASE_DIR/module-names.txt"
           const fs = require('fs');
           const manifest = JSON.parse(fs.readFileSync(`${process.env.BASE_DIR}/manifest.json`, 'utf8'));
           for (const entry of manifest.modules || []) {
@@ -74,8 +87,8 @@ jobs:
           NODE
             while IFS= read -r file; do
               test -n "$file"
-              git show "${PR_BASE_SHA}:worker-live/${file}" > "${BASE_DIR}/${file}"
-            done < "${BASE_DIR}/module-names.txt"
+              git show "${PR_BASE_SHA}:worker-live/${file}" > "$BASE_DIR/${file}"
+            done < "$BASE_DIR/module-names.txt"
             echo "PRODUCTION_CANONICAL_DIR=${BASE_DIR}" >> "$GITHUB_ENV"
             echo "PR production baseline pinned to ${PR_BASE_SHA}"
           else
