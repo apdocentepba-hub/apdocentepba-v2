@@ -1,0 +1,49 @@
+name: RED live email cron isolation
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/red-live-email-cron-isolation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: 03f0a18c-1b40-4c47-b7b9-bd7cb4a7b572
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require current production isolation contract to fail
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/email-cron-isolation-red
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/email-cron-isolation-red/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/email-cron-isolation-red/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/email-cron-isolation-red/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/email-cron-isolation-red/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          echo "Active: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/email-cron-isolation-red/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/email-cron-isolation-red/active.json','utf8'));
+          const m=(j.result.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          if(!m) throw new Error('worker_hotfix.js missing');
+          fs.writeFileSync('tmp/email-cron-isolation-red/worker_hotfix.js',Buffer.from(m.content_base64||'','base64'));
+          NODE
+          if node scripts/test-live-email-cron-isolation.mjs tmp/email-cron-isolation-red/worker_hotfix.js > tmp/email-cron-isolation-red/red.log 2>&1; then
+            cat tmp/email-cron-isolation-red/red.log
+            echo 'Expected current production bundle to fail isolation contract'
+            exit 1
+          fi
+          cat tmp/email-cron-isolation-red/red.log
+          grep -q 'EMAIL_CRON_ISOLATION_V1' tmp/email-cron-isolation-red/red.log
+          echo 'RED confirmed: digest cron shares invocation with broken provincial maintenance / lacks sweep boundary'
