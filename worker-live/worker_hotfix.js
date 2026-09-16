@@ -14606,9 +14606,28 @@ async scheduled(event, env, ctx) {
   const activeFinished = await kv.get(activeFinishedKey).catch(() => null);
 
   if (activeFinished) {
+    const cleanedSlotKey = activeSlotKey;
     await kv.delete(ACTIVE_SLOT_KEY).catch(() => null);
-    console.log("CRON EMAIL ACTIVE SLOT CLEANED", activeSlotKey);
-    return;
+    console.log("CRON EMAIL ACTIVE SLOT CLEANED", cleanedSlotKey);
+    activeSlotKey = "";
+
+    if (slot.slot_hour && slot.slot_key && cleanedSlotKey !== slot.slot_key) {
+      const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;
+      const currentFinished = await kv.get(currentFinishedKey).catch(() => null);
+
+      if (!currentFinished) {
+        activeSlotKey = slot.slot_key;
+        await kv.put(ACTIVE_SLOT_KEY, activeSlotKey, {
+          expirationTtl: 60 * 60 * 36
+        }).catch(() => null);
+        await kv.put(`email:slot:${activeSlotKey}:started_at`, new Date().toISOString(), {
+          expirationTtl: 60 * 60 * 36
+        }).catch(() => null);
+        console.log("CRON EMAIL SLOT START AFTER STALE CLEANUP", activeSlotKey);
+      }
+    }
+
+    if (!activeSlotKey) return;
   }
 
   let result = null;
