@@ -14,6 +14,7 @@ on:
       - scripts/test-canonical-worker-package.mjs
       - scripts/test-worker-zero-traffic-preview.mjs
       - scripts/test-pr-production-baseline.mjs
+      - scripts/test-plan-code-single-key.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -32,6 +33,7 @@ on:
       - scripts/test-canonical-worker-package.mjs
       - scripts/test-worker-zero-traffic-preview.mjs
       - scripts/test-pr-production-baseline.mjs
+      - scripts/test-plan-code-single-key.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -67,5 +69,5 @@ jobs:
         run: node scripts/test-pr-production-baseline.mjs
       - name: Install Wrangler dependencies
         run: npm install
-      - name: Package canonical Worker without deploying
-        run: npm run package:worker
+      - name: Package canonical Worker and reject duplicate object keys
+        run: node scripts/test-plan-code-single-key.mjs
