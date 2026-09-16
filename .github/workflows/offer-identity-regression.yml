@@ -19,5 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check Worker syntax
+        run: node --check worker.js
       - name: Verify one APD vacancy has one stable identity
         run: node scripts/test-offer-identity-regression.mjs
