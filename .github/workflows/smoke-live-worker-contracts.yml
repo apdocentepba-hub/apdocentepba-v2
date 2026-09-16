@@ -1,0 +1,99 @@
+name: Smoke active production Worker contracts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 11 * * *'
+  push:
+    branches:
+      - test/live-worker-contract-smoke-2026-09-16
+    paths:
+      - scripts/test-live-manual-email-dedupe.mjs
+      - scripts/test-live-offer-identity-bundle.mjs
+      - scripts/test-live-email-observability.mjs
+      - scripts/test-live-email-cron-isolation.mjs
+      - .github/workflows/smoke-live-worker-contracts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current active Worker bundle
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/live-worker-contract-smoke
+          ROOT=tmp/live-worker-contract-smoke
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "$ROOT/accounts.json"
+          ACCOUNT_ID=$(node -e "const j=require('./$ROOT/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments.json"
+          ACTIVE=$(node -e "const j=require('./$ROOT/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "ACTIVE_VERSION=${ACTIVE}" >> "$GITHUB_ENV"
+          echo "Active production version: ${ACTIVE}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > "$ROOT/active.json"
+
+          ROOT="$ROOT" node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root=process.env.ROOT;
+          const j=JSON.parse(fs.readFileSync(`${root}/active.json`,'utf8'));
+          const r=j.result;
+          if(!j.success||!r?.id) throw new Error('active version detail missing');
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`module shape drift: ${JSON.stringify(names)}`);
+          if((r.bindings||[]).length!==27) throw new Error(`binding shape drift: ${(r.bindings||[]).length}`);
+          for(const m of r.modules||[]) fs.writeFileSync(path.join(root,m.name),Buffer.from(m.content_base64||'','base64'));
+          console.log(`Bundle shape OK: ${names.length} modules / ${(r.bindings||[]).length} bindings`);
+          NODE
+
+      - name: Run production bundle contracts
+        run: |
+          set -euo pipefail
+          ROOT=tmp/live-worker-contract-smoke
+          node --check "$ROOT/worker_hotfix.js"
+          node --check "$ROOT/email_queue_hotfix.js"
+          node --check "$ROOT/worker_email_queue_hotfix.js"
+          node scripts/test-live-email-cron-isolation.mjs "$ROOT/worker_hotfix.js"
+          node scripts/test-live-email-observability.mjs "$ROOT/worker_hotfix.js"
+          node scripts/test-live-manual-email-dedupe.mjs "$ROOT/worker_hotfix.js"
+          node scripts/test-live-offer-identity-bundle.mjs "$ROOT/worker_hotfix.js"
+
+      - name: Run read-only production HTTP smoke
+        run: |
+          set -euo pipefail
+          DUMMY=00000000-0000-4000-8000-000000000000
+          for path in \
+            "/api/mis-alertas?user_id=${DUMMY}" \
+            "/api/mi-plan?user_id=${DUMMY}" \
+            "/api/historico-resumen?user_id=${DUMMY}" \
+            "/api/guardar-preferencias" \
+            "/api/capturar-historico-apd" \
+            "/api/mercadopago/create-checkout-link" \
+            "/api/whatsapp/test-send"; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}${path}")
+            echo "${path} -> ${code}"
+            test "$code" = "401"
+          done
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${DUMMY}" "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/version")" = "200"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/planes")" = "200"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "${WORKER_URL}/api/mis-alertas")" = "200"
+          test "$(curl -L -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")" = "200"
+          echo "Production HTTP smoke OK for ${ACTIVE_VERSION}"
