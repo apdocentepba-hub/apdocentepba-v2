@@ -13948,7 +13948,19 @@ async function debugLomasPreceptor(env, userId) {
   };
 }
 
-var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest", "/api/provincia/backfill-kick"]);
+var SENSITIVE_TEST_PATHS = new Set(["/test-mail", "/test-email-sweep", "/test-digest", "/api/test-db", "/api/whatsapp/test-send", "/api/debug-lomas-pr", "/api/provincia/backfill-kick"]);
+function requireAdminTestSecret(env, request) {
+  const configured = String(env.ADMIN_TEST_SECRET || "").trim();
+  if (!configured) {
+    return adminJson({ ok: false, error: "Test endpoints disabled" }, 503);
+  }
+  const provided = String(request.headers.get("X-Admin-Test-Secret") || "").trim();
+  if (!provided || provided !== configured) {
+    return adminJson({ ok: false, error: "No autorizado" }, 401);
+  }
+  return null;
+}
+__name(requireAdminTestSecret, "requireAdminTestSecret");
 async function requireSecureAdmin(env, request) {
   const user = await getSessionUserByBearer(env, request);
   if (!user) return adminJson({ ok: false, error: "No autenticado" }, 401);
@@ -14327,7 +14339,7 @@ var worker_hotfix_default = {
     }
 
     if (SENSITIVE_TEST_PATHS.has(path)) {
-      const denied = await requireSecureAdmin(env, request);
+      const denied = requireAdminTestSecret(env, request);
       if (denied) return denied;
     }
     if (path === `${API_URL_PREFIX3}/email-alerts-health` && request.method === "GET") {
