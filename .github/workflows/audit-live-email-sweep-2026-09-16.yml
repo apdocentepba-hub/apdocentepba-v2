@@ -37,20 +37,14 @@ jobs:
           import fs from 'node:fs';
           const j=JSON.parse(fs.readFileSync('tmp/live-email-audit/active.json','utf8'));
           const r=j.result || {};
-          const mod=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
-          if(!mod) throw new Error('worker_hotfix.js missing');
-          fs.writeFileSync('tmp/live-email-audit/worker_hotfix.js',Buffer.from(mod.content_base64||'','base64'));
           console.log(`MODULES=${(r.modules||[]).length} BINDINGS=${(r.bindings||[]).length}`);
           const wanted=/EMAIL.*(DIGEST|SWEEP|BATCH|MAX|MANUAL)|CHANNEL_STATE/i;
           for (const b of r.bindings || []) {
             if (!wanted.test(String(b.name||''))) continue;
             const type=String(b.type||'');
-            const safeValue = ['plain_text','json'].includes(type) ? b.value : '<non-plain-binding>';
+            let safeValue='<non-plain-binding>';
+            if (type === 'plain_text') safeValue = b.text ?? b.value ?? null;
+            if (type === 'json') safeValue = b.json ?? b.value ?? null;
             console.log(`BINDING ${b.name} type=${type} value=${JSON.stringify(safeValue)}`);
           }
           NODE
-          node --check tmp/live-email-audit/worker_hotfix.js
-          echo '===== observed cron logger ====='
-          sed -n '14040,14095p' tmp/live-email-audit/worker_hotfix.js
-          echo '===== test digest handler ====='
-          sed -n '14435,14525p' tmp/live-email-audit/worker_hotfix.js
