@@ -1,0 +1,165 @@
+name: Deploy live email observability candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - .github/workflows/deploy-live-email-observability-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      CANDIDATE_VERSION_ID: 03f0a18c-1b40-4c47-b7b9-bd7cb4a7b572
+      EXPECTED_OLD_VERSION_ID: f5d20499-781c-402f-822f-b1543b66dd6c
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+    steps:
+      - uses: actions/checkout@v4
+      - name: Promote candidate with verified rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          active_version() {
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/deployments-current.json
+            node -e "const j=require('./out/deployments-current.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)"
+          }
+
+          wait_active() {
+            local expected="$1"
+            for i in $(seq 1 15); do
+              local current
+              current=$(active_version)
+              echo "Active poll ${i}: ${current}"
+              if [ "$current" = "$expected" ]; then return 0; fi
+              sleep 2
+            done
+            return 1
+          }
+
+          rollback() {
+            set +e
+            echo "Verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after email observability verification failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @out/rollback.json > out/rollback-response.json
+            wait_active "${EXPECTED_OLD_VERSION_ID}"
+            echo "Rollback active: $(active_version)"
+          }
+
+          ACTIVE_BEFORE=$(active_version)
+          echo "Active before: ${ACTIVE_BEFORE}"
+          test "${ACTIVE_BEFORE}" = "${EXPECTED_OLD_VERSION_ID}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('out/candidate.json','utf8'));
+          const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('candidate unavailable');
+          const names=(r.modules||[]).map(m=>m.name).sort();
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error(`unexpected modules ${JSON.stringify(names)}`);
+          if((r.bindings||[]).length!==27) throw new Error(`unexpected bindings ${(r.bindings||[]).length}`);
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('out','candidate-'+m.name),Buffer.from(m.content_base64||'','base64'));
+          console.log(`Candidate preflight: ${names.length} modules, ${(r.bindings||[]).length} bindings`);
+          NODE
+          node --check out/candidate-worker_hotfix.js
+          node scripts/test-live-email-observability.mjs out/candidate-worker_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs out/candidate-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs out/candidate-worker_hotfix.js
+
+          cat > out/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA: schema-compatible worker telemetry and email skip diagnostics"}}
+          JSON
+
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @out/deploy.json > out/deploy-response.json
+          node -e "const j=require('./out/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));console.log('Deployment accepted:',j.result.id)"
+          wait_active "${CANDIDATE_VERSION_ID}"
+          sleep 5
+
+          # Protected routes must remain closed without a session.
+          DUMMY=00000000-0000-4000-8000-000000000000
+          for path in \
+            "/api/mis-alertas?user_id=${DUMMY}" \
+            "/api/mi-plan?user_id=${DUMMY}" \
+            "/api/historico-resumen?user_id=${DUMMY}" \
+            "/api/guardar-preferencias" \
+            "/api/capturar-historico-apd" \
+            "/api/mercadopago/create-checkout-link" \
+            "/api/whatsapp/test-send"; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" "${WORKER_URL}${path}")
+            echo "${path} -> ${code}"
+            test "${code}" = "401"
+          done
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${DUMMY}" "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")
+          test "${code}" = "401"
+
+          test "$(curl -sS -o out/version.json -w '%{http_code}' "${WORKER_URL}/api/version")" = "200"
+          test "$(curl -sS -o out/planes.json -w '%{http_code}' "${WORKER_URL}/api/planes")" = "200"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "${WORKER_URL}/api/mis-alertas")" = "200"
+          test "$(curl -L -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")" = "200"
+
+          # Read-only in delivery terms: refresh/diagnose but never send mail.
+          DRY_CODE=$(curl -sS -o out/dry-run.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=0&limit=10")
+          echo "Dry-run HTTP ${DRY_CODE}"
+          test "${DRY_CODE}" = "200"
+          node - <<'NODE'
+          const j=require('./out/dry-run.json');
+          const safe={ok:j.ok,dry_run:j.dry_run,processed_users:Number(j.processed_users||0),send_attempts:Number(j.send_attempts||0),failed_count:Number(j.failed_count||0),skipped_count:Number(j.skipped_count||0),skip_reason_counts:j.skip_reason_counts||{},skipped_user_samples:Array.isArray(j.skipped_user_samples)?j.skipped_user_samples:[]};
+          console.log('Dry-run:',JSON.stringify(safe));
+          if(j.ok!==true||j.dry_run!==true) throw new Error('dry-run invalid');
+          NODE
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/active-version.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('out/active-version.json','utf8'));
+          const m=(j.result.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          if(!m) throw new Error('active worker module missing');
+          fs.writeFileSync('out/active-worker_hotfix.js',Buffer.from(m.content_base64||'','base64'));
+          NODE
+          node --check out/active-worker_hotfix.js
+          node scripts/test-live-email-observability.mjs out/active-worker_hotfix.js
+          node scripts/test-live-manual-email-dedupe.mjs out/active-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs out/active-worker_hotfix.js
+          test "$(active_version)" = "${CANDIDATE_VERSION_ID}"
+
+          trap - ERR
+          cat > out/summary.json <<JSON
+          {"deployed":true,"candidate_version_id":"${CANDIDATE_VERSION_ID}","old_version_id":"${EXPECTED_OLD_VERSION_ID}","active_final":"${CANDIDATE_VERSION_ID}","observability_contract":true,"manual_dedupe_contract":true,"offer_identity_contract":true,"auth_smoke":true,"public_smoke":true,"dry_run_no_mail":true,"rollback_triggered":false}
+          JSON
+          cat out/summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-email-observability-deploy
+          path: out/
+          if-no-files-found: ignore
