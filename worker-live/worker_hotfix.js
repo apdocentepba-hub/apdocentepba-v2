@@ -12913,7 +12913,6 @@ async function handleTelegramWebhook(request, env) {
       channel_mode: "query_only",
             enriched_postulantes: true,
       enriched_limit: Math.min(safeLimit, 30),
-      plan_code: entitlement?.plan_code || null,
       pid_visible: canShowPidForPlan(entitlement)
     });
   }
