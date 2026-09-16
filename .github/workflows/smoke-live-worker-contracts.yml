@@ -9,6 +9,7 @@ on:
       - package.json
       - wrangler.toml
       - scripts/test-production-worker-source-guard.mjs
+      - scripts/test-live-capture-contract.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -22,6 +23,7 @@ on:
       - package.json
       - wrangler.toml
       - scripts/test-production-worker-source-guard.mjs
+      - scripts/test-live-capture-contract.mjs
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -44,6 +46,9 @@ jobs:
 
       - name: Verify repository production-source guard
         run: node scripts/test-production-worker-source-guard.mjs
+
+      - name: Verify live capture contract
+        run: node scripts/test-live-capture-contract.mjs
 
       - name: Download current active Worker bundle
         env:
@@ -88,9 +93,11 @@ jobs:
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > "$ROOT/active.json"
 
-          ROOT="$ROOT" node --input-type=module - <<'NODE'
+          ROOT="$ROOT" WORKER_NAME="$WORKER_NAME" ACCOUNT_ID="$ACCOUNT_ID" ACTIVE_VERSION="$ACTIVE" node --input-type=module - <<'NODE'
+          import crypto from 'node:crypto';
           import fs from 'node:fs';
           import path from 'node:path';
+
           const root = process.env.ROOT;
           const j = JSON.parse(fs.readFileSync(`${root}/active.json`, 'utf8'));
           const r = j.result;
@@ -98,7 +105,8 @@ jobs:
           if (r.main_module !== 'worker_hotfix.js') throw new Error(`main module drift: ${r.main_module}`);
 
           const requiredModules = ['email_queue_hotfix.js', 'worker_email_queue_hotfix.js', 'worker_hotfix.js'];
-          const names = (r.modules || []).map(m => m.name);
+          const modules = r.modules || [];
+          const names = modules.map(m => m.name);
           for (const name of requiredModules) {
             if (!names.includes(name)) throw new Error(`required production module missing: ${name}`);
           }
@@ -106,11 +114,42 @@ jobs:
           const bindings = r.bindings || [];
           if (bindings.length < 27) throw new Error(`binding shape lost required entries: ${bindings.length}`);
 
-          for (const m of r.modules || []) {
-            fs.writeFileSync(path.join(root, m.name), Buffer.from(m.content_base64 || '', 'base64'));
+          const manifestModules = [];
+          for (const m of modules) {
+            const content = Buffer.from(m.content_base64 || '', 'base64');
+            fs.writeFileSync(path.join(root, m.name), content);
+            manifestModules.push({
+              name: m.name,
+              module_sha256: crypto.createHash('sha256').update(content).digest('hex')
+            });
           }
+
+          const manifest = {
+            schema_version: 1,
+            worker_name: process.env.WORKER_NAME,
+            account_id: process.env.ACCOUNT_ID,
+            version_id: process.env.ACTIVE_VERSION,
+            main_module: r.main_module,
+            captured_at: new Date().toISOString(),
+            modules: manifestModules.sort((a, b) => a.name.localeCompare(b.name)),
+            bindings: bindings
+              .map(binding => ({ name: binding.name || '', type: binding.type || '' }))
+              .sort((a, b) => `${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`))
+          };
+          fs.writeFileSync(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
           console.log(`Bundle shape OK: ${names.length} modules / ${bindings.length} bindings`);
+          console.log(`Sanitized manifest written for ${manifest.version_id}`);
           NODE
+
+      - name: Upload sanitized active Worker capture
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-worker-canonical-capture
+          path: |
+            tmp/live-worker-contract-smoke/manifest.json
+            tmp/live-worker-contract-smoke/*.js
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run production bundle contracts
         run: |
