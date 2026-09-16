@@ -1,0 +1,53 @@
+name: RED live email observability
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - scripts/test-live-email-observability.mjs
+      - .github/workflows/red-live-email-observability.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: f5d20499-781c-402f-822f-b1543b66dd6c
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require active production observability contract to fail
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/email-observability-red
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/email-observability-red/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/email-observability-red/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/email-observability-red/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/email-observability-red/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          echo "Active: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/email-observability-red/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/email-observability-red/active.json','utf8'));
+          const m=(j.result.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          if(!m) throw new Error('worker_hotfix.js missing');
+          fs.writeFileSync('tmp/email-observability-red/worker_hotfix.js',Buffer.from(m.content_base64||'','base64'));
+          NODE
+          if node scripts/test-live-email-observability.mjs tmp/email-observability-red/worker_hotfix.js > tmp/email-observability-red/red.log 2>&1; then
+            cat tmp/email-observability-red/red.log
+            echo 'Expected current production bundle to fail observability contract'
+            exit 1
+          fi
+          cat tmp/email-observability-red/red.log
+          grep -q 'EMAIL_OBSERVABILITY_V1' tmp/email-observability-red/red.log
+          echo 'RED confirmed: production telemetry is not schema-compatible / skip reasons are not persisted'
