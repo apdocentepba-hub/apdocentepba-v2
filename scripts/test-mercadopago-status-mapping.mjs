@@ -6,7 +6,7 @@ const start = worker.indexOf('function mapMercadoPagoSubscriptionStatus');
 const end = worker.indexOf('function addDaysIso', start);
 assert.ok(start >= 0 && end > start, 'Mercado Pago status mapping functions must exist in canonical Worker');
 const snippet = worker.slice(start, end);
-const factory = new Function(`${snippet}\nreturn { mapMercadoPagoSubscriptionStatus, mapMercadoPagoCheckoutStatus };`);
+const factory = new Function(`const __name = (target) => target;\n${snippet}\nreturn { mapMercadoPagoSubscriptionStatus, mapMercadoPagoCheckoutStatus };`);
 const { mapMercadoPagoSubscriptionStatus: mapSubscription, mapMercadoPagoCheckoutStatus: mapCheckout } = factory();
 
 const cases = [
