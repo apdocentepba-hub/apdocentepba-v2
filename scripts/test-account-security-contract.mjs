@@ -21,6 +21,11 @@ assert.doesNotMatch(index, /account_profile_hotfix\.js/, 'obsolete direct-Supaba
 assert.match(worker, /account\/profile/, 'canonical Worker must expose account profile API');
 assert.match(worker, /account\/change-password/, 'canonical Worker must expose account password API');
 assert.match(worker, /pbkdf2_sha256\$/, 'canonical Worker must store secure PBKDF2 password hashes');
+assert.match(
+  worker,
+  /return `pbkdf2_sha256\$\$\{ACCOUNT_PBKDF2_ITERATIONS_V1\}\$\$\{salt\}\$\$\{hash\}`;/,
+  'PBKDF2 encoder must persist algorithm, iterations, salt and hash with $ separators that the verifier can parse'
+);
 assert.doesNotMatch(worker, /password_hash:\s*password\s*[,}]/, 'canonical Worker must not store registration passwords in plaintext');
 assert.doesNotMatch(worker, /password_hash:\s*payload\?\.password\s*\?\s*String\(payload\.password\)/, 'canonical Worker must not persist legacy migration passwords in plaintext');
 
