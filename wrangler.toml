@@ -5,10 +5,11 @@ workers_dev = true
 keep_vars = true
 
 # PRODUCTION_SOURCE_GUARD_V1
-# The active production Worker source is now snapshotted under worker-live/ and
-# hash-verified against the active Cloudflare version. Real repository deploys
-# remain intentionally blocked until the complete deployment configuration,
-# including binding identifiers, is proven reproducible end-to-end.
+# The active production Worker source is snapshotted under worker-live/ and
+# hash-verified against the active Cloudflare version. Scalar vars remain
+# preserved by keep_vars=true and secrets remain managed in Cloudflare.
+# Real repository deploys stay blocked until the end-to-end deployment path is
+# explicitly validated against production metadata and post-deploy smoke gates.
 
 [observability]
 enabled = true
@@ -16,9 +17,6 @@ enabled = true
 [triggers]
 crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
 
-# Binding confirmado en Cloudflare:
-# EMAIL_SWEEP_STATE (KV namespace)
-#
-# Para dejar el deploy 100% reproducible desde GitHub falta agregar el id real
-# del namespace en un bloque kv_namespaces. Mientras eso no este verificado,
-# solo se permite empaquetado dry-run y el deploy real sigue bloqueado.
+[[kv_namespaces]]
+binding = "EMAIL_SWEEP_STATE"
+id = "1f2f957e8fb44b76a09a53d63979633c"
