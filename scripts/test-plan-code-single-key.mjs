@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
-const workerPath = process.argv[2] || 'worker-live/worker_hotfix.js';
-const worker = fs.readFileSync(workerPath, 'utf8');
-const target = 'plan_code: entitlement?.plan_code || null,';
-const lines = worker.split(/\r?\n/);
+const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const result = spawnSync(
+  npx,
+  ['wrangler', 'deploy', '--dry-run', '--outdir', 'tmp/wrangler-dry-run'],
+  { encoding: 'utf8' }
+);
 
-for (let i = 0; i < lines.length; i += 1) {
-  if (!lines[i].includes(target)) continue;
-  const window = lines.slice(i + 1, i + 5).join('\n');
-  assert.ok(!window.includes(target), `duplicate plan_code key near line ${i + 1}`);
-}
+const output = `${result.stdout || ''}${result.stderr || ''}`;
+process.stdout.write(output);
 
-console.log('plan_code duplicate guard: OK');
+assert.equal(result.error, undefined, `wrangler dry-run failed to start: ${result.error?.message || result.error}`);
+assert.equal(result.status, 0, `wrangler dry-run exited with status ${result.status}`);
+assert.doesNotMatch(
+  output,
+  /duplicate-object-key/i,
+  'wrangler/esbuild reported a duplicate object key in the canonical Worker bundle'
+);
+
+console.log('duplicate object key package guard: OK');
