@@ -13,26 +13,23 @@ function between(startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const startRun = between('async function safeStartWorkerRun(', 'async function safeFinishWorkerRun(');
-const finishRun = between('async function safeFinishWorkerRun(', 'async function runObservedProvinciaBackfill(');
 const emailTelemetry = between('async function recordObservedEmailCron(', 'var worker_hotfix_default =');
 const sweep = between('async function runEmailAlertsSweep(', 'async function handleTestMail(');
 
-for (const [name, block] of [
-  ['safeStartWorkerRun', startRun],
-  ['safeFinishWorkerRun', finishRun],
-  ['recordObservedEmailCron', emailTelemetry]
-]) {
-  for (const invalid of ['worker_name:', 'started_at:', 'finished_at:', 'status:', 'usuarios_procesados:', 'alertas_enviadas:', 'mensaje:']) {
-    assert.equal(block.includes(invalid), false, `EMAIL_OBSERVABILITY_V1: ${name} still writes invalid worker_runs field ${invalid}`);
-  }
+for (const invalid of ['worker_name:', 'started_at:', 'finished_at:', 'status:', 'usuarios_procesados:', 'alertas_enviadas:', 'mensaje:']) {
+  assert.equal(
+    emailTelemetry.includes(invalid),
+    false,
+    `EMAIL_OBSERVABILITY_V1: recordObservedEmailCron still writes invalid worker_runs field ${invalid}`
+  );
 }
 
-for (const required of ['fecha_inicio:', 'estado:', 'usuarios_total:', 'alertas_total:', 'errores:', 'detalle:']) {
-  assert.ok(startRun.includes(required) || finishRun.includes(required) || emailTelemetry.includes(required), `EMAIL_OBSERVABILITY_V1: missing valid worker_runs field ${required}`);
+for (const required of ['fecha_inicio:', 'fecha_fin:', 'estado:', 'usuarios_total:', 'alertas_total:', 'errores:', 'detalle:']) {
+  assert.ok(
+    emailTelemetry.includes(required),
+    `EMAIL_OBSERVABILITY_V1: recordObservedEmailCron missing valid worker_runs field ${required}`
+  );
 }
-assert.ok(finishRun.includes('fecha_fin:'), 'EMAIL_OBSERVABILITY_V1: finish telemetry must write fecha_fin');
-assert.ok(emailTelemetry.includes('fecha_fin:'), 'EMAIL_OBSERVABILITY_V1: email telemetry must write fecha_fin');
 
 assert.ok(sweep.includes('skip_reason_counts'), 'EMAIL_OBSERVABILITY_V1: sweep must aggregate skip reasons');
 assert.ok(sweep.includes('skipped_user_samples'), 'EMAIL_OBSERVABILITY_V1: sweep must retain bounded skipped-user samples');

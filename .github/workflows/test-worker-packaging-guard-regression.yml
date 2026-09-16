@@ -1,0 +1,20 @@
+name: Test Worker packaging guard regression
+on:
+  push:
+    branches:
+      - fix/worker-packaging-guard-20260916
+  pull_request:
+    paths:
+      - worker-live/manifest.json
+      - scripts/test-live-source-equivalence.mjs
+      - scripts/test-worker-packaging-guard-regression.mjs
+      - .github/workflows/smoke-live-worker-contracts.yml
+      - .github/workflows/test-worker-packaging-guard-regression.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/test-worker-packaging-guard-regression.mjs

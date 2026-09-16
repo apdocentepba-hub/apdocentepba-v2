@@ -43,8 +43,13 @@ assert.doesNotMatch(
 );
 assert.match(
   smoke,
-  /requiredModules/,
-  'smoke must require critical modules while allowing additive module changes'
+  /r\.main_module\s*!==\s*['"]worker_hotfix\.js['"]/,
+  'smoke must pin the expected production main module'
+);
+assert.match(
+  smoke,
+  /names\.includes\(r\.main_module\)/,
+  'smoke must verify the active main module is present in the packaged module set'
 );
 
 console.log('production worker source guard contract: OK');
