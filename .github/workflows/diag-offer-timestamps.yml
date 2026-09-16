@@ -1,0 +1,52 @@
+name: Diagnostic ABC offer timestamps
+
+on:
+  push:
+    branches:
+      - diag/live-pref-abc-20260916
+    paths:
+      - .github/workflows/diag-offer-timestamps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect matching offer timestamps
+        shell: bash
+        run: |
+          cat > /tmp/timestamps.mjs <<'NODE'
+          const API='https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select';
+          const ids=[4292602,4292455,4292531,4292521,4292409];
+          const out=[];
+          for (const id of ids) {
+            const u=new URL(API);
+            u.searchParams.set('q',`iddetalle:${id}`);
+            u.searchParams.set('rows','1');
+            u.searchParams.set('wt','json');
+            const r=await fetch(u,{headers:{'user-agent':'APDocentePBA-offer-time-audit/1.0'}});
+            if(!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+            const j=await r.json();
+            const d=j?.response?.docs?.[0]||{};
+            const temporal={};
+            for (const [k,v] of Object.entries(d)) {
+              if (/(fecha|mov|public|inicio|alta|desde|hasta|cierre|vig|crea|modif|oferta)/i.test(k)) temporal[k]=v;
+            }
+            out.push({
+              iddetalle:d.iddetalle??id,
+              idoferta:d.idoferta??null,
+              distrito:d.descdistrito??null,
+              cargo:d.descripcioncargo??d.cargo??null,
+              escuela:d.escuela??null,
+              estado:d.estado??null,
+              finoferta:d.finoferta??null,
+              ult_movimiento:d.ult_movimiento??null,
+              temporal_fields:temporal,
+              all_keys:Object.keys(d).sort()
+            });
+          }
+          console.log(JSON.stringify({generated_at:new Date().toISOString(),offers:out},null,2));
+          NODE
+          node /tmp/timestamps.mjs
