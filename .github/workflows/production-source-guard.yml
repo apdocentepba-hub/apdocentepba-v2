@@ -1,0 +1,35 @@
+name: Production Worker source guard
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - wrangler.toml
+      - scripts/test-production-worker-source-guard.mjs
+      - .github/workflows/deploy-worker-manual.yml
+      - .github/workflows/smoke-live-worker-contracts.yml
+      - .github/workflows/production-source-guard.yml
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - wrangler.toml
+      - scripts/test-production-worker-source-guard.mjs
+      - .github/workflows/deploy-worker-manual.yml
+      - .github/workflows/smoke-live-worker-contracts.yml
+      - .github/workflows/production-source-guard.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify production source guard contract
+        run: node scripts/test-production-worker-source-guard.mjs
