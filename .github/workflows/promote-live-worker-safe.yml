@@ -1,0 +1,302 @@
+name: Promote canonical live Worker safely
+
+on:
+  push:
+    branches:
+      - ops/promote-live-worker-b506502-20260916
+    paths:
+      - .github/workflows/promote-live-worker-safe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      PREVIEW_ALIAS: apd-promote
+      PREVIEW_URL: https://apd-promote-ancient-wildflower-cd37.apdocentepba.workers.dev
+      EXPECTED_OLD_VERSION_ID: 39b52f3c-faf6-4a15-8e93-7bbd2884b95d
+      EXPECTED_BINDING_COUNT: '27'
+
+    steps:
+      - name: Checkout approved promotion branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify promotion workflow contract
+        run: node scripts/test-safe-production-promotion-workflow.mjs
+
+      - name: Verify canonical Worker contracts before upload
+        run: |
+          set -euo pipefail
+          node --check worker-live/worker_hotfix.js
+          node scripts/test-sensitive-test-endpoints.mjs
+          node scripts/test-mercadopago-status-mapping.mjs
+          node scripts/test-account-security-contract.mjs
+          node scripts/test-production-worker-source-guard.mjs
+
+      - name: Install Wrangler dependencies
+        run: npm install
+
+      - name: Capture production baseline and assert expected version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/promotion
+          ROOT=tmp/promotion
+
+          curl -fsS --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "$ROOT/accounts.json"
+
+          ACCOUNT_ID="${CONFIGURED_ACCOUNT_ID:-}"
+          if [ -n "$ACCOUNT_ID" ]; then
+            ROOT="$ROOT" ACCOUNT_ID="$ACCOUNT_ID" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          if (!j.success || !accounts.some(account => account.id === process.env.ACCOUNT_ID)) {
+            throw new Error('Configured CLOUDFLARE_ACCOUNT_ID is not accessible with this token');
+          }
+          NODE
+          else
+            ACCOUNT_ID=$(ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/accounts.json`, 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          if (!j.success || accounts.length !== 1 || !accounts[0]?.id) {
+            throw new Error(`Expected exactly one accessible Cloudflare account; found ${accounts.length}`);
+          }
+          process.stdout.write(accounts[0].id);
+          NODE
+            )
+          fi
+
+          echo "CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-before.json"
+
+          ACTIVE_BEFORE=$(ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-before.json`, 'utf8'));
+          const d = j.result?.deployments?.[0];
+          const traffic = (d?.versions || []).filter(x => Number(x.percentage) > 0);
+          if (!j.success || traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || !traffic[0].version_id) {
+            throw new Error(`Expected one 100% production version; got ${JSON.stringify(traffic)}`);
+          }
+          process.stdout.write(traffic[0].version_id);
+          NODE
+          )
+
+          echo "Production active before promotion: ${ACTIVE_BEFORE}"
+          test "$ACTIVE_BEFORE" = "$EXPECTED_OLD_VERSION_ID"
+          echo "ACTIVE_BEFORE=${ACTIVE_BEFORE}" >> "$GITHUB_ENV"
+
+      - name: Upload zero-traffic candidate with isolated preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA8="${GITHUB_SHA:0:8}"
+          CANDIDATE_TAG="prod-promote-${SHA8}"
+          echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
+
+          npx wrangler versions upload \
+            --preview-alias apd-promote \
+            --tag "${CANDIDATE_TAG}" \
+            --message "Guarded APDocentePBA canonical promotion ${GITHUB_SHA}"
+
+      - name: Resolve candidate and verify hashes plus 27 bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/promotion
+
+          for attempt in 1 2 3 4 5 6 7 8; do
+            curl -fsS --retry 3 --retry-delay 1 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions?per_page=50" > "$ROOT/versions.json"
+            CANDIDATE_VERSION_ID=$(ROOT="$ROOT" CANDIDATE_TAG="$CANDIDATE_TAG" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/versions.json`, 'utf8'));
+          const versions = Array.isArray(j.result) ? j.result : (j.result?.versions || []);
+          const candidate = versions.find(v => v.annotations?.['workers/tag'] === process.env.CANDIDATE_TAG);
+          if (candidate?.id) process.stdout.write(candidate.id);
+          NODE
+            )
+            if [ -n "$CANDIDATE_VERSION_ID" ]; then break; fi
+            sleep 2
+          done
+
+          test -n "${CANDIDATE_VERSION_ID:-}"
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE_VERSION_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > "$ROOT/candidate.json"
+
+          ROOT="$ROOT" EXPECTED_BINDING_COUNT="$EXPECTED_BINDING_COUNT" node --input-type=module - <<'NODE'
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
+
+          const candidate = JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`, 'utf8'));
+          const canonical = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
+          const r = candidate.result;
+          if (!candidate.success || !r?.id) throw new Error('Candidate version detail missing');
+          if (r.main_module !== canonical.main_module) throw new Error(`main module mismatch: ${r.main_module}`);
+
+          const modules = r.modules || [];
+          const actualHashes = new Map(modules.map(m => [
+            m.name,
+            crypto.createHash('sha256').update(Buffer.from(m.content_base64 || '', 'base64')).digest('hex')
+          ]));
+          for (const expected of canonical.modules || []) {
+            const actual = actualHashes.get(expected.name);
+            if (!actual) throw new Error(`candidate module missing: ${expected.name}`);
+            if (actual !== expected.module_sha256) throw new Error(`module hash mismatch: ${expected.name}`);
+          }
+
+          const bindings = r.bindings || [];
+          const expectedCount = Number(process.env.EXPECTED_BINDING_COUNT);
+          if (bindings.length !== expectedCount) throw new Error(`bindings count mismatch: ${bindings.length} != ${expectedCount}`);
+          const byKey = new Map(bindings.map(b => [`${b.name}:${b.type}`, b]));
+          for (const expected of canonical.bindings || []) {
+            const key = `${expected.name}:${expected.type}`;
+            const actual = byKey.get(key);
+            if (!actual) throw new Error(`candidate binding missing: ${key}`);
+            if (expected.name === 'EMAIL_SWEEP_STATE') {
+              const id = String(actual.namespace_id || actual.id || '').trim();
+              if (id !== expected.namespace_id) throw new Error('EMAIL_SWEEP_STATE namespace mismatch');
+            }
+          }
+          console.log(`Candidate module hashes OK; bindings ${bindings.length}/${expectedCount} OK`);
+          NODE
+
+      - name: Smoke isolated candidate before promotion
+        run: |
+          set -euo pipefail
+          DUMMY=00000000-0000-4000-8000-000000000000
+          curl_code() {
+            curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
+          }
+          test "$(curl_code "${PREVIEW_URL}/api/version")" = "200"
+          test "$(curl_code "${PREVIEW_URL}/api/planes")" = "200"
+          test "$(curl_code "${PREVIEW_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${PREVIEW_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${PREVIEW_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
+          echo "Candidate preview smoke passed before production traffic change."
+
+      - name: Promote candidate to 100 percent and smoke production with rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/promotion
+          PROMOTED=0
+
+          rollback() {
+            trap - ERR
+            set +e
+            if [ "${PROMOTED:-0}" != "1" ]; then
+              echo "Promotion was not committed; rollback not needed."
+              return 0
+            fi
+            echo "Production verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
+            cat > "$ROOT/rollback.json" <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after guarded canonical promotion failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @"$ROOT/rollback.json" > "$ROOT/rollback-response.json"
+            sleep 3
+            curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/rollback-after.json"
+            ROOT="$ROOT" EXPECTED_OLD_VERSION_ID="$EXPECTED_OLD_VERSION_ID" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/rollback-after.json`, 'utf8'));
+          const d = j.result?.deployments?.[0];
+          const v = (d?.versions || []).find(x => Number(x.percentage) === 100);
+          if (v?.version_id !== process.env.EXPECTED_OLD_VERSION_ID) process.exit(2);
+          console.log(`Rollback verified: ${v.version_id} at 100%`);
+          NODE
+          }
+
+          cat > "$ROOT/deploy.json" <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Guarded canonical APDocentePBA promotion from ${GITHUB_SHA}"}}
+          JSON
+
+          trap rollback ERR
+
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @"$ROOT/deploy.json" > "$ROOT/deploy-response.json"
+          ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deploy-response.json`, 'utf8'));
+          if (!j.success || !j.result?.id) throw new Error(JSON.stringify(j.errors || j));
+          console.log(`Deployment accepted: ${j.result.id}`);
+          NODE
+          PROMOTED=1
+
+          sleep 3
+          curl -fsS --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-after.json"
+          ROOT="$ROOT" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(`${process.env.ROOT}/deployments-after.json`, 'utf8'));
+          const d = j.result?.deployments?.[0];
+          const traffic = (d?.versions || []).filter(x => Number(x.percentage) > 0);
+          if (traffic.length !== 1 || Number(traffic[0].percentage) !== 100 || traffic[0].version_id !== process.env.CANDIDATE_VERSION_ID) {
+            throw new Error(`Candidate is not the sole 100% production version: ${JSON.stringify(traffic)}`);
+          }
+          console.log(`Candidate promoted at 100%: ${traffic[0].version_id}`);
+          NODE
+
+          curl_code() {
+            curl --retry 8 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@"
+          }
+          DUMMY=00000000-0000-4000-8000-000000000000
+          test "$(curl_code "${WORKER_URL}/api/version")" = "200"
+          test "$(curl_code "${WORKER_URL}/api/planes")" = "200"
+          test "$(curl_code "${WORKER_URL}/api/mis-alertas?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${WORKER_URL}/api/mi-plan?user_id=${DUMMY}")" = "401"
+          test "$(curl_code "${WORKER_URL}/api/historico-resumen?user_id=${DUMMY}")" = "401"
+
+          cat > "$ROOT/summary.json" <<JSON
+          {"ok":true,"old_version_id":"${EXPECTED_OLD_VERSION_ID}","candidate_version_id":"${CANDIDATE_VERSION_ID}","active_final":"${CANDIDATE_VERSION_ID}","bindings_verified":27,"module_hashes_verified":true,"preview_smoke":true,"production_smoke":true,"rollback_triggered":false}
+          JSON
+
+          trap - ERR
+          echo "Production promotion and post-deploy smoke passed."
+
+      - name: Upload promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-production-promotion-evidence
+          path: |
+            tmp/promotion/summary.json
+            tmp/promotion/deployments-before.json
+            tmp/promotion/candidate.json
+            tmp/promotion/deployments-after.json
+            tmp/promotion/rollback-response.json
+            tmp/promotion/rollback-after.json
+          if-no-files-found: ignore
