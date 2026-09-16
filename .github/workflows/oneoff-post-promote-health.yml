@@ -1,0 +1,43 @@
+name: One-off post-promotion health
+
+on:
+  push:
+    branches:
+      - ops/promote-login-pbkdf2-fix-20260916
+    paths:
+      - .github/workflows/oneoff-post-promote-health.yml
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+    steps:
+      - name: Check non-mutating production endpoints
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          check() {
+            name="$1"; url="$2"; expected="$3"
+            code=$(curl --retry 5 --retry-delay 2 -sS -o "out/${name}.txt" -w '%{http_code}' "$url")
+            echo "${name} -> ${code}"
+            echo "${code}" > "out/${name}.code"
+            test "$code" = "$expected"
+          }
+          check version "${WORKER_URL}/api/version" 200
+          check planes "${WORKER_URL}/api/planes" 200
+          check email_health "${WORKER_URL}/api/email-alerts-health" 200
+          check protected_alerts "${WORKER_URL}/api/mis-alertas?user_id=00000000-0000-4000-8000-000000000000" 401
+          site_code=$(curl -L --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")
+          echo "site -> ${site_code}"
+          test "$site_code" = 200
+          node - <<'NODE'
+          const fs=require('fs');
+          const health=JSON.parse(fs.readFileSync('out/email_health.txt','utf8'));
+          console.log('email_health_summary', JSON.stringify({ok:health.ok,version:health.version||null}));
+          if(health.ok!==true) throw new Error('email health response not ok');
+          NODE
