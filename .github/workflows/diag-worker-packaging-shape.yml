@@ -1,0 +1,60 @@
+name: Diagnose Worker packaging shape
+on:
+  push:
+    branches:
+      - fix/worker-packaging-guard-20260916
+    paths:
+      - .github/workflows/diag-worker-packaging-shape.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Compare source, Wrangler package, and active production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf tmp/wrangler-dry-run tmp/packaging-diag
+          mkdir -p tmp/packaging-diag
+          npm run package:worker
+          echo '=== RAW SOURCE ==='
+          sha256sum worker-live/worker_hotfix.js
+          echo '=== WRANGLER DRY RUN FILES ==='
+          find tmp/wrangler-dry-run -maxdepth 2 -type f -print -exec sha256sum {} \;
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/packaging-diag/accounts.json
+          ACCOUNT_ID="${CONFIGURED_ACCOUNT_ID:-}"
+          if [ -z "$ACCOUNT_ID" ]; then
+            ACCOUNT_ID=$(node -e "const j=require('./tmp/packaging-diag/accounts.json');const a=Array.isArray(j.result)?j.result:[];if(!j.success||a.length!==1||!a[0]?.id)throw new Error('Expected exactly one account');process.stdout.write(a[0].id)")
+          fi
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/packaging-diag/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/packaging-diag/deployments.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)throw new Error('No active version');process.stdout.write(v.version_id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/packaging-diag/active.json
+          ACTIVE="$ACTIVE" node --input-type=module - <<'NODE'
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/packaging-diag/active.json','utf8'));
+          if(!j.success||!j.result?.id) throw new Error('active version detail missing');
+          const r=j.result;
+          console.log('=== ACTIVE PRODUCTION ===');
+          console.log('version='+process.env.ACTIVE);
+          console.log('main_module='+r.main_module);
+          console.log('module_count='+(r.modules||[]).length);
+          for(const m of r.modules||[]){
+            const bytes=Buffer.from(m.content_base64||'','base64');
+            console.log(`${m.name} sha256=${crypto.createHash('sha256').update(bytes).digest('hex')} bytes=${bytes.length}`);
+          }
+          console.log('binding_count='+(r.bindings||[]).length);
+          NODE
