@@ -1,0 +1,115 @@
+name: One-off promote PBKDF2 login fix
+
+on:
+  push:
+    branches:
+      - ops/promote-login-pbkdf2-fix-20260916
+    paths:
+      - .github/workflows/oneoff-promote-login-pbkdf2-fix.yml
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      CANDIDATE_VERSION_ID: 2230bf23-c14c-4fa7-b430-15d52b4204d8
+      EXPECTED_OLD_VERSION_ID: cb32450b-b937-4fb9-ad9e-a35a97162f82
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+    steps:
+      - uses: actions/checkout@v4
+      - name: Promote verified candidate with automatic rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');const a=Array.isArray(j.result)?j.result:[];if(!j.success||a.length!==1||!a[0]?.id)throw new Error('Expected exactly one Cloudflare account');process.stdout.write(a[0].id)")
+
+          rollback() {
+            echo "Verification failed; rolling back to ${EXPECTED_OLD_VERSION_ID}"
+            cat > out/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${EXPECTED_OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after PBKDF2 login-fix smoke failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @out/rollback.json > out/rollback-response.json || true
+          }
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/before.json
+          ACTIVE_BEFORE=$(node -e "const j=require('./out/before.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)throw new Error('No 100% active version');process.stdout.write(v.version_id)")
+          echo "Active before: ${ACTIVE_BEFORE}"
+          test "${ACTIVE_BEFORE}" = "${EXPECTED_OLD_VERSION_ID}"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > out/candidate.json
+
+          node - <<'NODE'
+          const fs=require('fs');
+          const crypto=require('crypto');
+          const j=JSON.parse(fs.readFileSync('out/candidate.json','utf8'));
+          const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate unavailable/mismatched');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
+          const modules=r.modules||[];
+          const names=modules.map(m=>m.name).sort();
+          for(const name of ['worker_hotfix.js','email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(!names.includes(name)) throw new Error(`Missing module ${name}`);
+          const liveBindings=r.bindings||[];
+          if(liveBindings.length!==27) throw new Error(`Unexpected binding count ${liveBindings.length}`);
+          const mainModule=modules.find(m=>m.name==='worker_hotfix.js');
+          const candidateSource=Buffer.from(mainModule?.content_base64||'','base64');
+          const repoSource=fs.readFileSync('worker-live/worker_hotfix.js');
+          const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+          const candidateHash=sha(candidateSource), repoHash=sha(repoSource);
+          console.log(`repo_hash=${repoHash}`);
+          console.log(`candidate_hash=${candidateHash}`);
+          if(candidateHash!==repoHash) throw new Error('Candidate source does not match merged canonical Worker');
+          const text=repoSource.toString('utf8');
+          if(!/const ACCOUNT_PBKDF2_ITERATIONS_V1 = 100000;/.test(text)) throw new Error('PBKDF2 ceiling fix absent');
+          if(!/iterations > ACCOUNT_PBKDF2_ITERATIONS_V1/.test(text)) throw new Error('PBKDF2 verifier guard absent');
+          console.log(`Candidate preflight OK: ${names.length} modules, ${liveBindings.length} bindings`);
+          NODE
+
+          cat > out/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Fix password login PBKDF2 Workers runtime ceiling"}}
+          JSON
+
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @out/deploy.json > out/deploy-response.json
+          node -e "const j=require('./out/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));console.log('Deployment accepted:',j.result.id)"
+
+          sleep 2
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/after.json
+          ACTIVE_AFTER=$(node -e "const j=require('./out/after.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)throw new Error('No 100% version after deploy');process.stdout.write(v.version_id)")
+          echo "Active after: ${ACTIVE_AFTER}"
+          test "${ACTIVE_AFTER}" = "${CANDIDATE_VERSION_ID}"
+
+          test "$(curl --retry 5 --retry-delay 2 -sS -o out/version.json -w '%{http_code}' "${WORKER_URL}/api/version")" = "200"
+          node -e "const j=require('./out/version.json');if(j.ok!==true)throw new Error('api/version not ok')"
+          test "$(curl --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/planes")" = "200"
+          test "$(curl --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${WORKER_URL}/api/mis-alertas?user_id=00000000-0000-4000-8000-000000000000")" = "401"
+          test "$(curl --retry 5 --retry-delay 2 -sS -o out/email-health.json -w '%{http_code}' "${WORKER_URL}/api/email-alerts-health")" = "200"
+          node -e "const j=require('./out/email-health.json');if(j.ok!==true)throw new Error('email alerts health not ok');console.log('email health OK')"
+          SITE_CODE=$(curl -L --retry 5 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "${SITE_URL}/")
+          test "${SITE_CODE}" = "200"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/final.json
+          ACTIVE_FINAL=$(node -e "const j=require('./out/final.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)throw new Error('No final active version');process.stdout.write(v.version_id)")
+          test "${ACTIVE_FINAL}" = "${CANDIDATE_VERSION_ID}"
+          trap - ERR
+          echo "PROMOTION_OK active=${ACTIVE_FINAL} old=${EXPECTED_OLD_VERSION_ID}"
