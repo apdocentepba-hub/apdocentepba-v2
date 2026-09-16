@@ -1,0 +1,53 @@
+name: RED live manual email dedupe
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - 'scripts/test-live-manual-email-dedupe.mjs'
+      - '.github/workflows/red-live-manual-email-dedupe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download active Worker and require current contract to fail
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/manual-dedupe-red
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/manual-dedupe-red/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/manual-dedupe-red/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/manual-dedupe-red/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/manual-dedupe-red/deployments.json');const d=j.result.deployments[0];const v=d.versions.find(x=>Number(x.percentage)===100)||d.versions[0];process.stdout.write(v.version_id)")
+          echo "Active: ${ACTIVE}"
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/manual-dedupe-red/active.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const j=JSON.parse(fs.readFileSync('tmp/manual-dedupe-red/active.json','utf8'));
+          const m=(j.result.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          if(!m) throw new Error('worker_hotfix.js missing');
+          fs.writeFileSync('tmp/manual-dedupe-red/worker_hotfix.js',Buffer.from(m.content_base64||'','base64'));
+          NODE
+          if node scripts/test-live-manual-email-dedupe.mjs tmp/manual-dedupe-red/worker_hotfix.js > tmp/manual-dedupe-red/red.log 2>&1; then
+            cat tmp/manual-dedupe-red/red.log
+            echo 'Expected current production bundle to fail the manual dedupe contract'
+            exit 1
+          fi
+          cat tmp/manual-dedupe-red/red.log
+          grep -q 'MANUAL_EMAIL_DEDUPE_V1' tmp/manual-dedupe-red/red.log
+          echo 'RED confirmed: production has no manual digest dedupe helper'
