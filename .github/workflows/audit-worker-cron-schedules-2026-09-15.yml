@@ -29,5 +29,8 @@ jobs:
           node - <<'NODE'
           const j=require('./schedules.json');
           if(!j.success) throw new Error(JSON.stringify(j.errors||j));
-          console.log(JSON.stringify((j.result||[]).map(x=>({cron:x.cron,created_on:x.created_on,modified_on:x.modified_on})),null,2));
+          const result=j.result||{};
+          const schedules=Array.isArray(result)?result:(Array.isArray(result.schedules)?result.schedules:[]);
+          console.log('RESULT_SHAPE='+JSON.stringify({keys:Object.keys(result||{}),isArray:Array.isArray(result)}));
+          console.log(JSON.stringify(schedules.map(x=>({cron:x.cron,created_on:x.created_on,modified_on:x.modified_on})),null,2));
           NODE
