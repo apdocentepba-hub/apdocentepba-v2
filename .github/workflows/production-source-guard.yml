@@ -12,8 +12,10 @@ on:
       - scripts/test-reproducible-worker-binding-config.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
+      - scripts/test-worker-zero-traffic-preview.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
+      - .github/workflows/worker-zero-traffic-preview.yml
       - .github/workflows/production-source-guard.yml
   push:
     branches: [main]
@@ -27,8 +29,10 @@ on:
       - scripts/test-reproducible-worker-binding-config.mjs
       - scripts/test-live-source-equivalence.mjs
       - scripts/test-canonical-worker-package.mjs
+      - scripts/test-worker-zero-traffic-preview.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
+      - .github/workflows/worker-zero-traffic-preview.yml
       - .github/workflows/production-source-guard.yml
   workflow_dispatch:
 
@@ -55,6 +59,8 @@ jobs:
         run: node scripts/test-live-source-equivalence.mjs
       - name: Verify canonical Worker packaging contract
         run: node scripts/test-canonical-worker-package.mjs
+      - name: Verify zero-traffic preview workflow contract
+        run: node scripts/test-worker-zero-traffic-preview.mjs
       - name: Install Wrangler dependencies
         run: npm install
       - name: Package canonical Worker without deploying
