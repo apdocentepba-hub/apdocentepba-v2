@@ -6,6 +6,7 @@ on:
       - fix/canonical-offer-identity-2026-09-15
     paths:
       - 'scripts/apply-canonical-offer-identity-fix.mjs'
+      - 'scripts/test-offer-identity-regression.mjs'
       - '.github/workflows/apply-canonical-offer-identity-fix.yml'
   workflow_dispatch:
 
