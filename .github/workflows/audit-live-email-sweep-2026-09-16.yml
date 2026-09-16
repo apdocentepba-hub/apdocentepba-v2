@@ -18,7 +18,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Read active bundle and print only email sweep/scheduler
+      - name: Read active bundle email decision path
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -42,9 +42,9 @@ jobs:
           console.log(`MODULES=${(j.result?.modules||[]).length} BINDINGS=${(j.result?.bindings||[]).length}`);
           NODE
           node --check tmp/live-email-audit/worker_hotfix.js
-          echo '===== runEmailAlertsSweep ====='
-          grep -n -A260 -B20 'async function runEmailAlertsSweep' tmp/live-email-audit/worker_hotfix.js || true
-          echo '===== scheduled ====='
-          grep -n -A45 -B10 'async scheduled' tmp/live-email-audit/worker_hotfix.js | tail -n 120 || true
-          echo '===== email sweep cursor/batch tokens ====='
-          grep -n -E 'BATCH_SIZE|EMAIL_SWEEP_STATE|cursor|cycle_mode|target_user_id|cron_slot|sent_alert_digest|digestDedupeKey|buildEmailDigestDedupeKey' tmp/live-email-audit/worker_hotfix.js | tail -n 180 || true
+          echo '===== email processing 5430-5995 ====='
+          sed -n '5430,5995p' tmp/live-email-audit/worker_hotfix.js
+          echo '===== scheduler continuation 14380-14440 ====='
+          sed -n '14380,14440p' tmp/live-email-audit/worker_hotfix.js
+          echo '===== eligibility tokens ====='
+          grep -n -E 'resolverPlanUsuario|isPlanActivo|visibleAlerts|visibleAlert|storedAlerts|freshAlerts|skip|skipped|reason|eligible|last_emailed|first_emailed|markStored|user_offer_state' tmp/live-email-audit/worker_hotfix.js | sed -n '1,240p' || true
