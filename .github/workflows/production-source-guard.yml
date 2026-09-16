@@ -6,6 +6,9 @@ on:
       - package.json
       - wrangler.toml
       - worker-live/**
+      - account_profile_patch.js
+      - account_profile_hotfix.js
+      - index.html
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
@@ -15,6 +18,7 @@ on:
       - scripts/test-worker-zero-traffic-preview.mjs
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-plan-code-single-key.mjs
+      - scripts/test-account-security-contract.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -25,6 +29,9 @@ on:
       - package.json
       - wrangler.toml
       - worker-live/**
+      - account_profile_patch.js
+      - account_profile_hotfix.js
+      - index.html
       - scripts/test-production-worker-source-guard.mjs
       - scripts/test-live-capture-contract.mjs
       - scripts/test-live-resource-binding-capture.mjs
@@ -34,6 +41,7 @@ on:
       - scripts/test-worker-zero-traffic-preview.mjs
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-plan-code-single-key.mjs
+      - scripts/test-account-security-contract.mjs
       - .github/workflows/deploy-worker-manual.yml
       - .github/workflows/smoke-live-worker-contracts.yml
       - .github/workflows/worker-zero-traffic-preview.yml
@@ -67,6 +75,8 @@ jobs:
         run: node scripts/test-worker-zero-traffic-preview.mjs
       - name: Verify PR production baseline contract
         run: node scripts/test-pr-production-baseline.mjs
+      - name: Verify account security contract
+        run: node scripts/test-account-security-contract.mjs
       - name: Install Wrangler dependencies
         run: npm install
       - name: Package canonical Worker and reject duplicate object keys

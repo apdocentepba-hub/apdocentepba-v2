@@ -1,7 +1,8 @@
 (()=>{
   'use strict';
 
-  const PATCH_VERSION = '2026-04-12-account-profile-4';
+  const PATCH_VERSION = '2026-09-16-account-session-api-1';
+  const WORKER_URL = window.API_URL || 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
   const state = window.__apdAccountProfileState || {
     profile: null,
     editingProfile: false,
@@ -21,75 +22,43 @@
       .replace(/"/g, '&quot;');
   }
 
-  function getTokenSafe() {
-    return typeof obtenerToken === 'function' ? obtenerToken() : null;
+  function getSessionToken() {
+    if (typeof window.obtenerAuthBearer === 'function') {
+      return String(window.obtenerAuthBearer() || '').trim();
+    }
+    if (typeof window.obtenerSessionToken === 'function') {
+      return String(window.obtenerSessionToken() || '').trim();
+    }
+    return String(localStorage.getItem('apd_session_token_v1') || '').trim();
+  }
+
+  async function accountApi(path, options = {}) {
+    const token = getSessionToken();
+    if (!token) throw new Error('Sesión no válida. Ingresá nuevamente.');
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`
+    };
+    const res = await fetch(`${WORKER_URL}${path}`, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      if (typeof window.logout === 'function') window.logout();
+      throw new Error(data?.message || 'Tu sesión venció. Ingresá nuevamente.');
+    }
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.message || data?.error || `Worker ${res.status}`);
+    }
+    return data;
   }
 
   function isValidEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
   }
 
-  function looksSha256Hex(value) {
-    return /^[a-f0-9]{64}$/i.test(String(value || '').trim());
-  }
-
-  async function sha256Hex(text) {
-    const data = new TextEncoder().encode(String(text || ''));
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash))
-      .map(item => item.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  async function supabaseAccountFetch(path, options = {}) {
-    const res = await fetch(`${APD_SUPABASE_URL}/rest/v1/${path}`, {
-      ...options,
-      headers: {
-        apikey: APD_SUPABASE_KEY,
-        Authorization: `Bearer ${APD_SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-        ...(options.headers || {})
-      }
-    });
-
-    const text = await res.text();
-    let data = null;
-
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
-    }
-
-    if (!res.ok) {
-      throw new Error(typeof data === 'string' ? data : `Supabase ${res.status}`);
-    }
-
-    return data;
-  }
-
   async function getCurrentUserRow() {
-    const userId = getTokenSafe();
-    if (!userId) throw new Error('Sesión no válida');
-
-    const rows = await supabaseAccountFetch(
-      `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,password_hash&limit=1`,
-      { method: 'GET' }
-    );
-
-    return Array.isArray(rows) ? rows[0] || null : null;
-  }
-
-  async function isEmailTakenByOtherUser(email, currentUserId) {
-    const rows = await supabaseAccountFetch(
-      `users?email=ilike.${encodeURIComponent(String(email || '').trim())}&select=id,email&limit=10`,
-      { method: 'GET' }
-    ).catch(() => []);
-
-    return (Array.isArray(rows) ? rows : []).some(
-      row => String(row?.id || '').trim() !== String(currentUserId || '').trim()
-    );
+    const data = await accountApi('/api/account/profile', { method: 'GET' });
+    return data?.user || data?.profile || null;
   }
 
   function profileFromSource(source) {
@@ -108,10 +77,7 @@
   }
 
   function setMessage(kind, text, type) {
-    state.messages[kind] = {
-      text: String(text || ''),
-      type: String(type || '')
-    };
+    state.messages[kind] = { text: String(text || ''), type: String(type || '') };
   }
 
   function clearMessage(kind) {
@@ -150,7 +116,6 @@
 
   function buildAccountMarkup() {
     const docente = state.profile || { nombre: '', apellido: '', email: '', celular: '' };
-
     return `
       <div class="plan-stack">
         <div class="plan-pill-row">
@@ -164,12 +129,10 @@
             ${editableInput('mi-cuenta-nombre', 'Nombre', docente.nombre, 'text', 'given-name')}
             ${editableInput('mi-cuenta-apellido', 'Apellido', docente.apellido, 'text', 'family-name')}
           </div>
-
           <div class="grid-2">
             ${editableInput('mi-cuenta-email', 'Email', docente.email, 'email', 'email')}
             ${editableInput('mi-cuenta-celular', 'Celular', docente.celular, 'text', 'tel')}
           </div>
-
           <div class="form-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
             ${state.editingProfile
               ? `<button type="submit" class="btn btn-primary">Guardar datos personales</button>
@@ -180,16 +143,14 @@
         </form>
 
         <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
-
         <div style="display:grid;gap:10px;">
           <div class="plan-pill-row" style="justify-content:space-between;align-items:center;">
             <span class="plan-pill plan-pill-neutral">Contraseña</span>
             <button type="button" id="btn-toggle-password" class="btn btn-secondary">${state.passwordOpen ? 'Ocultar' : 'Editar contraseña'}</button>
           </div>
-
           ${state.passwordOpen ? `
             <form id="form-mi-password" style="display:grid;gap:12px;">
-              <p class="plan-note" style="margin:0;">Si tu cuenta ya tenía contraseña, primero te pedimos la actual. La nueva debe tener al menos 6 caracteres.</p>
+              <p class="plan-note" style="margin:0;">La contraseña actual se valida en el servidor. La nueva debe tener al menos 6 caracteres.</p>
               ${passwordField('mi-password-actual', 'Contraseña actual', 'Tu contraseña actual', 'current-password')}
               <div class="grid-2">
                 ${passwordField('mi-password-nueva', 'Nueva contraseña', 'Mínimo 6 caracteres', 'new-password')}
@@ -243,55 +204,32 @@
 
   function togglePasswordBox(force) {
     state.passwordOpen = typeof force === 'boolean' ? force : !state.passwordOpen;
-    if (!state.passwordOpen) {
-      clearMessage('password');
-    }
+    if (!state.passwordOpen) clearMessage('password');
     renderAccountBox();
   }
 
   async function saveProfile(ev) {
     ev.preventDefault();
-
-    const btn = ev.submitter || document.querySelector('#form-mi-cuenta button[type="submit"]');
-    btn && (btn.disabled = true);
+    const nombre = val('mi-cuenta-nombre');
+    const apellido = val('mi-cuenta-apellido');
+    const email = val('mi-cuenta-email').toLowerCase();
+    const celular = val('mi-cuenta-celular');
     setMessage('profile', 'Guardando datos personales...', 'info');
-    renderAccountBox();
 
     try {
-      const user = await getCurrentUserRow();
-      if (!user?.id) throw new Error('No se pudo cargar tu cuenta');
-
-      const nombre = val('mi-cuenta-nombre');
-      const apellido = val('mi-cuenta-apellido');
-      const email = val('mi-cuenta-email').toLowerCase();
-      const celular = val('mi-cuenta-celular');
-
       if (!nombre) throw new Error('Ingresá tu nombre');
       if (!apellido) throw new Error('Ingresá tu apellido');
       if (!email || !isValidEmail(email)) throw new Error('Ingresá un email válido');
 
-      const currentEmail = String(user.email || '').trim().toLowerCase();
-      if (email !== currentEmail) {
-        const taken = await isEmailTakenByOtherUser(email, user.id);
-        if (taken) throw new Error('Ese email ya está registrado en otra cuenta');
-      }
-
-      await supabaseAccountFetch(`users?id=eq.${encodeURIComponent(user.id)}`, {
+      const data = await accountApi('/api/account/profile', {
         method: 'PATCH',
-        headers: {
-          Prefer: 'return=minimal'
-        },
         body: JSON.stringify({ nombre, apellido, email, celular })
       });
-
-      updateProfileState({ nombre, apellido, email, celular }, true);
+      updateProfileState(data?.user || { nombre, apellido, email, celular }, true);
       state.editingProfile = false;
       setMessage('profile', 'Datos personales actualizados', 'ok');
       renderAccountBox();
-
-      if (typeof cargarDashboard === 'function') {
-        await cargarDashboard();
-      }
+      if (typeof cargarDashboard === 'function') await cargarDashboard();
     } catch (err) {
       console.error('ERROR ACTUALIZANDO MI CUENTA:', err);
       setMessage('profile', err?.message || 'No se pudieron guardar los cambios', 'error');
@@ -301,48 +239,19 @@
 
   async function changePassword(ev) {
     ev.preventDefault();
-
+    const currentPassword = val('mi-password-actual');
+    const newPassword = val('mi-password-nueva');
+    const repeatPassword = val('mi-password-repetir');
     setMessage('password', 'Actualizando contraseña...', 'info');
-    renderAccountBox();
 
     try {
-      const user = await getCurrentUserRow();
-      if (!user?.id) throw new Error('No se pudo cargar tu cuenta');
+      if (newPassword.length < 6) throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
+      if (newPassword !== repeatPassword) throw new Error('La repetición no coincide con la nueva contraseña');
 
-      const currentPassword = val('mi-password-actual');
-      const newPassword = val('mi-password-nueva');
-      const repeatPassword = val('mi-password-repetir');
-      const storedPassword = String(user.password_hash || '').trim();
-
-      if (newPassword.length < 6) {
-        throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
-      }
-
-      if (newPassword !== repeatPassword) {
-        throw new Error('La repetición no coincide con la nueva contraseña');
-      }
-
-      if (storedPassword) {
-        if (!currentPassword) throw new Error('Ingresá tu contraseña actual');
-        const currentHash = await sha256Hex(currentPassword);
-        const matches = looksSha256Hex(storedPassword)
-          ? currentHash === storedPassword
-          : currentPassword === storedPassword;
-        if (!matches) {
-          throw new Error('La contraseña actual no coincide');
-        }
-      }
-
-      const passwordToStore = await sha256Hex(newPassword);
-
-      await supabaseAccountFetch(`users?id=eq.${encodeURIComponent(user.id)}`, {
-        method: 'PATCH',
-        headers: {
-          Prefer: 'return=minimal'
-        },
-        body: JSON.stringify({ password_hash: passwordToStore })
+      await accountApi('/api/account/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
       });
-
       state.passwordOpen = false;
       setMessage('password', 'Contraseña actualizada', 'ok');
       renderAccountBox();
@@ -360,31 +269,26 @@
       profileForm.addEventListener('submit', saveProfile);
       profileForm.dataset.bound = '1';
     }
-
     const editBtn = document.getElementById('btn-mi-cuenta-editar');
     if (editBtn && editBtn.dataset.bound !== '1') {
       editBtn.addEventListener('click', enterEditMode);
       editBtn.dataset.bound = '1';
     }
-
     const cancelBtn = document.getElementById('btn-mi-cuenta-cancelar');
     if (cancelBtn && cancelBtn.dataset.bound !== '1') {
       cancelBtn.addEventListener('click', cancelEditMode);
       cancelBtn.dataset.bound = '1';
     }
-
     const togglePasswordBtn = document.getElementById('btn-toggle-password');
     if (togglePasswordBtn && togglePasswordBtn.dataset.bound !== '1') {
       togglePasswordBtn.addEventListener('click', () => togglePasswordBox());
       togglePasswordBtn.dataset.bound = '1';
     }
-
     const passwordForm = document.getElementById('form-mi-password');
     if (passwordForm && passwordForm.dataset.bound !== '1') {
       passwordForm.addEventListener('submit', changePassword);
       passwordForm.dataset.bound = '1';
     }
-
     const cancelPasswordBtn = document.getElementById('btn-mi-password-cancelar');
     if (cancelPasswordBtn && cancelPasswordBtn.dataset.bound !== '1') {
       cancelPasswordBtn.addEventListener('click', () => togglePasswordBox(false));
@@ -395,7 +299,7 @@
   function patchRenderDashboard() {
     const originalRenderDashboard = window.renderDashboard;
     if (typeof originalRenderDashboard !== 'function') return false;
-    if (originalRenderDashboard.__accountProfilePatchWrappedV2) return true;
+    if (originalRenderDashboard.__accountProfilePatchWrappedV3) return true;
 
     const wrapped = function patchedRenderDashboard(data) {
       const result = originalRenderDashboard.apply(this, arguments);
@@ -407,33 +311,26 @@
       }
       return result;
     };
-
-    wrapped.__accountProfilePatchWrappedV2 = true;
+    wrapped.__accountProfilePatchWrappedV3 = true;
     window.renderDashboard = wrapped;
-
-    try {
-      renderDashboard = wrapped;
-    } catch (_) {}
-
+    try { renderDashboard = wrapped; } catch (_) {}
     return true;
   }
 
   function bootPatch(attempts = 40) {
     if (patchRenderDashboard()) {
       renderAccountBox();
+      getCurrentUserRow().then(user => {
+        if (user) {
+          updateProfileState(user, true);
+          renderAccountBox();
+        }
+      }).catch(() => {});
       return;
     }
-
-    if (attempts > 0) {
-      setTimeout(() => bootPatch(attempts - 1), 250);
-    }
+    if (attempts > 0) setTimeout(() => bootPatch(attempts - 1), 250);
   }
 
-  window.apdAccountProfilePatch = {
-    saveProfile,
-    changePassword,
-    version: PATCH_VERSION
-  };
-
+  window.apdAccountProfilePatch = { saveProfile, changePassword, version: PATCH_VERSION };
   bootPatch();
 })();
