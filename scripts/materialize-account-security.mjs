@@ -100,3 +100,5 @@ index = index.replace(hotfixTag, '');
 fs.writeFileSync(indexPath, index);
 
 console.log(`Account security Worker SHA-256: ${entry.module_sha256}`);
+
+// Materializer trigger: rerun after fixing the semantic route contract.
