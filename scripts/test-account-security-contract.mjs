@@ -30,6 +30,23 @@ assert.match(
 assert.doesNotMatch(worker, /password_hash:\s*password\s*[,}]/, 'canonical Worker must not store registration passwords in plaintext');
 assert.doesNotMatch(worker, /password_hash:\s*payload\?\.password\s*\?\s*String\(payload\.password\)/, 'canonical Worker must not persist legacy migration passwords in plaintext');
 
+const pbkdf2Iterations = worker.match(/const ACCOUNT_PBKDF2_ITERATIONS_V1\s*=\s*(\d+)\s*;/);
+assert.ok(pbkdf2Iterations, 'canonical Worker must declare the account PBKDF2 iteration count');
+assert.ok(
+  Number(pbkdf2Iterations[1]) <= 100000,
+  'Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations; account hashes must stay within that runtime limit'
+);
+
+const verifierStart = worker.indexOf('async function accountVerifyPasswordV1');
+const verifierEnd = worker.indexOf('async function accountReadUserV1', verifierStart);
+assert.ok(verifierStart >= 0 && verifierEnd > verifierStart, 'account PBKDF2 verifier must have a bounded body');
+const verifier = worker.slice(verifierStart, verifierEnd);
+assert.match(
+  verifier,
+  /iterations\s*>\s*ACCOUNT_PBKDF2_ITERATIONS_V1[\s\S]{0,200}unsupportedPbkdf2\s*:\s*true/,
+  'verifier must reject unsupported legacy PBKDF2 iteration counts before calling WebCrypto so login can fall back to legacy migration'
+);
+
 const loginStart = worker.indexOf('async function handleLoginHotfix(request, env)');
 const googleStart = worker.indexOf('async function handleGoogleAuthHotfix(request, env)');
 const googleEnd = worker.indexOf('function adaptarPreferenciasRow2', googleStart);
@@ -42,5 +59,10 @@ for (const [name, source] of [['password', loginHotfix], ['Google', googleHotfix
   assert.match(source, /(?:accountCreateSessionV1|createSession)\s*\(/, `${name} login must create a server-side session`);
 }
 assert.match(loginHotfix, /password_legacy/, 'legacy password login must create a dedicated migrated session');
+assert.match(
+  loginHotfix,
+  /legacy\.ok[\s\S]*password_hash\s*:\s*await accountHashPasswordV1\(password\)/,
+  'successful legacy login must replace unsupported/legacy stored hashes with a runtime-supported PBKDF2 hash'
+);
 
 console.log('account security contract: OK');
