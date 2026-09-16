@@ -10,10 +10,37 @@ function extractNamedFunction(name) {
   const marker = `function ${name}(`;
   const start = source.indexOf(marker);
   assert.notEqual(start, -1, `MANUAL_EMAIL_DEDUPE_V1: ${name} must exist`);
-  const bodyStart = source.indexOf('{', start);
-  let depth = 0;
+
+  // Cloudflare's bundle emits __name(fn, "fn") immediately after named helpers.
+  // Using that marker avoids confusing destructured parameter braces with the function body.
+  const bundledEndMarker = `__name(${name}, "${name}");`;
+  const bundledEnd = source.indexOf(bundledEndMarker, start);
+  if (bundledEnd !== -1) return source.slice(start, bundledEnd);
+
+  const openParen = source.indexOf('(', start);
+  let parenDepth = 0;
   let quote = null;
   let escaped = false;
+  let bodyStart = -1;
+
+  for (let i = openParen; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quote) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+    if (ch === '(') parenDepth += 1;
+    else if (ch === ')') parenDepth -= 1;
+    else if (ch === '{' && parenDepth === 0) { bodyStart = i; break; }
+  }
+  assert.notEqual(bodyStart, -1, `MANUAL_EMAIL_DEDUPE_V1: ${name} body must exist`);
+
+  let depth = 0;
+  quote = null;
+  escaped = false;
   for (let i = bodyStart; i < source.length; i += 1) {
     const ch = source[i];
     if (quote) {
