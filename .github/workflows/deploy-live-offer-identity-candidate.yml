@@ -1,0 +1,197 @@
+name: Deploy verified live offer identity candidate
+
+on:
+  push:
+    branches:
+      - audit/live-offer-identity-2026-09-15
+    paths:
+      - '.github/workflows/deploy-live-offer-identity-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      SITE_URL: https://alertasapd.com.ar
+      OLD_VERSION_ID: 8ba41ea0-b519-4ae9-ab50-9b5399fd3e47
+      CANDIDATE_VERSION_ID: a57fdd19-c3fa-4965-bf04-6abb53ce41f9
+      FAKE_USER_ID: 00000000-0000-4000-8000-000000000000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Promote candidate, verify propagation and rollback on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/deploy-offer-identity
+          PROMOTED=0
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/deploy-offer-identity/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/deploy-offer-identity/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+
+          get_active() {
+            local OUT="$1"
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "${OUT}"
+            node -e "const j=require('./${OUT}');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)"
+          }
+
+          wait_active() {
+            local EXPECTED="$1" PREFIX="$2"
+            for I in $(seq 1 24); do
+              local NOW
+              NOW=$(get_active "tmp/deploy-offer-identity/${PREFIX}-${I}.json") || true
+              echo "${PREFIX} poll ${I}: ${NOW:-unknown}"
+              if [ "${NOW:-}" = "${EXPECTED}" ]; then return 0; fi
+              sleep 5
+            done
+            return 1
+          }
+
+          rollback() {
+            local STATUS=$?
+            trap - ERR
+            if [ "${PROMOTED}" != "1" ]; then exit "${STATUS}"; fi
+            set +e
+            echo "Validation failed; rolling back to ${OLD_VERSION_ID}"
+            cat > tmp/deploy-offer-identity/rollback-request.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${OLD_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Automatic rollback after offer-identity validation failure"}}
+          JSON
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @tmp/deploy-offer-identity/rollback-request.json > tmp/deploy-offer-identity/rollback-response.json
+            if wait_active "${OLD_VERSION_ID}" rollback; then
+              echo "Rollback verified: ${OLD_VERSION_ID}"
+            else
+              echo "ROLLBACK VERIFICATION FAILED"
+            fi
+            exit "${STATUS}"
+          }
+
+          ACTIVE_BEFORE=$(get_active tmp/deploy-offer-identity/before.json)
+          echo "Active before: ${ACTIVE_BEFORE}"
+          test "${ACTIVE_BEFORE}" = "${OLD_VERSION_ID}"
+
+          for KIND in old candidate; do
+            if [ "$KIND" = old ]; then VID="${OLD_VERSION_ID}"; else VID="${CANDIDATE_VERSION_ID}"; fi
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${VID}?include=modules" > "tmp/deploy-offer-identity/${KIND}-detail.json"
+          done
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto'; import path from 'node:path';
+          const oldJ=JSON.parse(fs.readFileSync('tmp/deploy-offer-identity/old-detail.json','utf8'));
+          const candJ=JSON.parse(fs.readFileSync('tmp/deploy-offer-identity/candidate-detail.json','utf8'));
+          if(!oldJ.success||oldJ.result?.id!==process.env.OLD_VERSION_ID) throw new Error('Old version preflight failed');
+          if(!candJ.success||candJ.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Candidate preflight failed');
+          const old=oldJ.result,cand=candJ.result;
+          const expected=['email_queue_hotfix.js','worker_email_queue_hotfix.js','worker_hotfix.js'].sort();
+          const names=x=>(x.modules||[]).map(m=>m.name).sort();
+          const shape=x=>(x.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(old.main_module!=='worker_hotfix.js'||cand.main_module!=='worker_hotfix.js') throw new Error('Main module drift');
+          if(JSON.stringify(names(old))!==JSON.stringify(expected)||JSON.stringify(names(cand))!==JSON.stringify(expected)) throw new Error('Module shape drift');
+          if(JSON.stringify(shape(old))!==JSON.stringify(shape(cand))||shape(cand).length!==27) throw new Error('Binding shape drift');
+          const decode=x=>Object.fromEntries((x.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64')]));
+          const o=decode(old),c=decode(cand),hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+          for(const n of ['email_queue_hotfix.js','worker_email_queue_hotfix.js']) if(hash(o[n])!==hash(c[n])) throw new Error(`${n} changed unexpectedly`);
+          if(hash(o['worker_hotfix.js'])===hash(c['worker_hotfix.js'])) throw new Error('Candidate worker_hotfix.js is unchanged');
+          for(const [n,b] of Object.entries(c)) fs.writeFileSync(path.join('tmp/deploy-offer-identity','candidate-'+n),b);
+          console.log(`Preflight OK: modules=${names(cand).length}; bindings=${shape(cand).length}`);
+          NODE
+
+          node --check tmp/deploy-offer-identity/candidate-worker_hotfix.js
+          node --check tmp/deploy-offer-identity/candidate-email_queue_hotfix.js
+          node --check tmp/deploy-offer-identity/candidate-worker_email_queue_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/deploy-offer-identity/candidate-worker_hotfix.js
+
+          cat > tmp/deploy-offer-identity/deploy-request.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Canonicalize APD offer identity by iddetalle"}}
+          JSON
+
+          trap rollback ERR
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @tmp/deploy-offer-identity/deploy-request.json > tmp/deploy-offer-identity/deploy-response.json
+          node -e "const j=require('./tmp/deploy-offer-identity/deploy-response.json');if(!j.success||!j.result?.id)throw new Error(JSON.stringify(j.errors||j));console.log('Deployment accepted:',j.result.id)"
+          PROMOTED=1
+
+          wait_active "${CANDIDATE_VERSION_ID}" promote
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/deploy-offer-identity/active-candidate-detail.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path';
+          const j=JSON.parse(fs.readFileSync('tmp/deploy-offer-identity/active-candidate-detail.json','utf8'));
+          if(!j.success||j.result?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('Promoted candidate detail mismatch');
+          for(const m of j.result.modules||[]) fs.writeFileSync(path.join('tmp/deploy-offer-identity','active-'+m.name),Buffer.from(m.content_base64||'','base64'));
+          NODE
+          node --check tmp/deploy-offer-identity/active-worker_hotfix.js
+          node scripts/test-live-offer-identity-bundle.mjs tmp/deploy-offer-identity/active-worker_hotfix.js
+
+          retry_code() {
+            local NAME="$1" EXPECTED="$2"; shift 2
+            for I in $(seq 1 18); do
+              local CODE
+              CODE=$(curl -sS -o "tmp/deploy-offer-identity/${NAME}-${I}.out" -w "%{http_code}" "$@") || CODE=000
+              echo "${NAME} attempt ${I}: HTTP ${CODE}"
+              if [ "${CODE}" = "${EXPECTED}" ]; then return 0; fi
+              sleep 5
+            done
+            return 1
+          }
+
+          retry_code version 200 "${WORKER_URL}/api/version"
+          retry_code planes 200 "${WORKER_URL}/api/planes"
+          retry_code mis-alertas 401 "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          retry_code mi-plan 401 "${WORKER_URL}/api/mi-plan?user_id=${FAKE_USER_ID}"
+          retry_code historico-resumen 401 "${WORKER_URL}/api/historico-resumen?user_id=${FAKE_USER_ID}"
+          retry_code guardar-preferencias 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/guardar-preferencias"
+          retry_code capturar-historico 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/capturar-historico-apd"
+          retry_code checkout 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\",\"plan_code\":\"PRO\"}" "${WORKER_URL}/api/mercadopago/create-checkout-link"
+          retry_code whatsapp 401 -X POST -H "Content-Type: application/json" --data "{\"user_id\":\"${FAKE_USER_ID}\"}" "${WORKER_URL}/api/whatsapp/test-send"
+          retry_code invalid-bearer 401 -H "Authorization: Bearer ${FAKE_USER_ID}" "${WORKER_URL}/api/mis-alertas?user_id=${FAKE_USER_ID}"
+          retry_code cors 200 -X OPTIONS -H "Origin: https://alertasapd.com.ar" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization" "${WORKER_URL}/api/mis-alertas"
+          retry_code site 200 -L "${SITE_URL}/"
+
+          ACTIVE_FINAL=$(get_active tmp/deploy-offer-identity/final.json)
+          test "${ACTIVE_FINAL}" = "${CANDIDATE_VERSION_ID}"
+          trap - ERR
+
+          cat > tmp/deploy-offer-identity/summary.json <<JSON
+          {
+            "ok": true,
+            "old_version_id": "${OLD_VERSION_ID}",
+            "active_version_id": "${ACTIVE_FINAL}",
+            "candidate_version_id": "${CANDIDATE_VERSION_ID}",
+            "rollback_triggered": false,
+            "identity_contract_green_on_active_bytes": true,
+            "module_shape_preserved": true,
+            "binding_shape_preserved": true,
+            "protected_routes_unauth_401": 7,
+            "uuid_bearer_rejected": true,
+            "version_ok": true,
+            "planes_ok": true,
+            "cors_ok": true,
+            "site_ok": true
+          }
+          JSON
+          cat tmp/deploy-offer-identity/summary.json
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-offer-identity-deployment
+          path: tmp/deploy-offer-identity/
+          if-no-files-found: ignore
