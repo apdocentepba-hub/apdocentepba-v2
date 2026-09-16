@@ -14165,7 +14165,7 @@ async function accountHashPasswordV1(password) {
   if (!plain) throw new Error("Contraseña vacía");
   const salt = accountRandomHexV1(16);
   const hash = await accountPbkdf2HexV1(plain, salt, ACCOUNT_PBKDF2_ITERATIONS_V1);
-  return `pbkdf2_sha256${ACCOUNT_PBKDF2_ITERATIONS_V1}${salt}${hash}`;
+  return `pbkdf2_sha256$${ACCOUNT_PBKDF2_ITERATIONS_V1}$${salt}$${hash}`;
 }
 async function accountVerifyPasswordV1(storedPassword, plainPassword) {
   const stored = String(storedPassword || "").trim();
