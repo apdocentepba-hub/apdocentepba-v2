@@ -2,7 +2,7 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  const DATA = () => window.AP_DOCENTE_HABERES_CARGOS_SUTEBA_2026_4 || {};
+  const DATA = () => window.AP_DOCENTE_HABERES_CARGOS_PBA_2026_04 || window.AP_DOCENTE_HABERES_CARGOS_SUTEBA_2026_4 || {};
   const LIQ = {
     nombre: "Abril 2026",
     basicoCargo: 392179.20,
@@ -19,6 +19,18 @@
     ioma: 0.048,
     gremial: 0.039
   };
+
+  const ALIAS_CARGO = [
+    { patron: "encargado de medios", extra: "ematp encargado medios apoyo tecnico pedagogico informatica medios tecnicos" },
+    { patron: "jefe de medios", extra: "jmatp jefe medios apoyo tecnico pedagogico informatica" },
+    { patron: "hora catedra del profesor", extra: "horas catedra profesor hc" },
+    { patron: "hora catedra del ayudante", extra: "ayudante horas catedra hc" },
+    { patron: "modulos", extra: "modulos profesor secundaria materias horas" },
+    { patron: "maestro de grado", extra: "mg primaria maestra maestro" },
+    { patron: "maestro de sala", extra: "mi jm inicial jardin sala" },
+    { patron: "preceptor", extra: "preceptora preceptores" },
+    { patron: "bibliotecario", extra: "bibliotecaria biblioteca" }
+  ];
 
   let ultimo = null;
 
@@ -104,18 +116,24 @@
     $("ant").innerHTML = html;
   }
 
+  function textoBusquedaCargo(c) {
+    const base = norm(`${c.nombre} ${c.id} ${c.tipoBloque} ${tipoTexto(c.tipoBloque)}`);
+    const extra = ALIAS_CARGO
+      .filter((alias) => base.includes(norm(alias.patron)))
+      .map((alias) => alias.extra)
+      .join(" ");
+    return `${base} ${norm(extra)}`;
+  }
+
   function cargarCargos() {
     const q = norm($("buscarCargo").value);
     const todos = listarCargos();
     const prev = $("cargo").value;
-    const rows = todos.filter((c) => {
-      const hay = `${c.nombre} ${c.id} ${c.tipoBloque} ${tipoTexto(c.tipoBloque)}`;
-      return !q || norm(hay).includes(q);
-    });
+    const rows = todos.filter((c) => !q || textoBusquedaCargo(c).includes(q));
 
     if (!rows.length) {
       $("cargo").innerHTML = '<option value="">Sin resultados</option>';
-      $("cargoInfo").textContent = `0 de ${todos.length} cargos encontrados.`;
+      $("cargoInfo").textContent = `0 de ${todos.length} cargos encontrados. Probá con el nombre completo, abreviatura o tipo de cargo.`;
       $("bloque").value = "";
       return;
     }
