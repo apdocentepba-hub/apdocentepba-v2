@@ -1,0 +1,197 @@
+name: Fix live email sweep batching 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-email-sweep-batching-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac
+      EXPECTED_MAIN_SHA256: 9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+      PERMANENT_CONTINUATION_CRON: "5,10,15,20,25,30 1,17,21 * * *"
+      TEMP_RECOVERY_CRON: "* 10 17 9 *"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live version and schedules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate artifacts
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-before.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments-before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          test "${ACTIVE}" = "${EXPECTED_ACTIVE_VERSION}"
+          echo "ACTIVE_VERSION_ID=${ACTIVE}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/active.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" > tmp/schedules-before.json
+
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import crypto from 'node:crypto';
+          const j=JSON.parse(fs.readFileSync('tmp/active.json','utf8')); const r=j.result;
+          if(!j.success||!r?.id) throw new Error('Active version detail missing');
+          if(r.main_module!=='worker_hotfix.js') throw new Error(`Unexpected main module ${r.main_module}`);
+          const names=(r.modules||[]).map(m=>m.name);
+          if(names.length!==1||names[0]!=='worker_hotfix.js') throw new Error(`Unexpected live modules: ${names.join(',')}`);
+          for(const m of r.modules||[]) fs.writeFileSync(path.join('tmp/modules',m.name),Buffer.from(m.content_base64||'','base64'));
+          const main=fs.readFileSync('tmp/modules/worker_hotfix.js','utf8');
+          const sha=crypto.createHash('sha256').update(main).digest('hex');
+          if(sha!==process.env.EXPECTED_MAIN_SHA256) throw new Error(`Live source SHA drift: ${sha}`);
+          const shape=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(shape.length!==27) throw new Error(`Unexpected binding count ${shape.length}`);
+          fs.writeFileSync('tmp/active-binding-shape.json',JSON.stringify(shape));
+          const metadata={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: bounded email sweep batch with cursor continuation','workers/tag':'email-sweep-batch2-20260917'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          NODE
+
+      - name: Patch batch size and verify contract
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          let s=fs.readFileSync('tmp/modules/worker_hotfix.js','utf8');
+          const original=s;
+          const a='const DEFAULT_BATCH_SIZE = 80;';
+          if((s.split(a).length-1)!==1) throw new Error('DEFAULT_BATCH_SIZE marker drift');
+          s=s.replace(a,'const DEFAULT_BATCH_SIZE = 2;');
+          const re=/max_users:\s*(env\.[A-Z0-9_]+\s*\|\|\s*env\.[A-Z0-9_]+\s*\|\|\s*)80/g;
+          const matches=[...s.matchAll(re)];
+          if(matches.length!==1) throw new Error(`scheduled max_users marker count ${matches.length}`);
+          s=s.replace(re,(_m,p1)=>`max_users: ${p1}2`);
+          if(s===original) throw new Error('No patch applied');
+          for(const required of [
+            'const DEFAULT_BATCH_SIZE = 2;',
+            'email:active_slot_key',
+            'cursor_user_id',
+            'stopped_early:',
+            'lastProcessedUserId',
+            'await kv.put(cursorKey',
+            'recordObservedEmailCron',
+            'reserved_before_brevo_send'
+          ]) if(!s.includes(required)) throw new Error(`Missing post-patch contract marker: ${required}`);
+          if(/max_users:\s*env\.[A-Z0-9_]+\s*\|\|\s*env\.[A-Z0-9_]+\s*\|\|\s*80/.test(s)) throw new Error('Scheduled batch fallback still 80');
+          fs.writeFileSync('tmp/candidate/worker_hotfix.js',s);
+          NODE
+          node --check tmp/candidate/worker_hotfix.js
+
+      - name: Upload candidate version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo "Upload HTTP ${HTTP_CODE}"
+          CANDIDATE=$(node -e "const j=require('./tmp/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "CANDIDATE_VERSION_ID=${CANDIDATE}" >> "$GITHUB_ENV"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE}?include=modules" > tmp/candidate-detail.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const expected=JSON.parse(fs.readFileSync('tmp/active-binding-shape.json','utf8'));
+          const r=JSON.parse(fs.readFileSync('tmp/candidate-detail.json','utf8')).result;
+          if(!r?.id) throw new Error('Candidate detail missing');
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expected)!==JSON.stringify(actual)) throw new Error('Candidate binding shape differs');
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          const code=Buffer.from(main?.content_base64||'','base64').toString('utf8');
+          if(!code.includes('const DEFAULT_BATCH_SIZE = 2;')) throw new Error('Candidate batch marker missing');
+          if(!/max_users:\s*env\.[A-Z0-9_]+\s*\|\|\s*env\.[A-Z0-9_]+\s*\|\|\s*2/.test(code)) throw new Error('Candidate scheduled batch fallback missing');
+          console.log(`Candidate #${r.number} ${r.id} bindings=${actual.length}`);
+          NODE
+
+      - name: Deploy with automatic rollback and add continuation schedules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          rollback() {
+            echo "ROLLBACK"
+            cat > tmp/rollback.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${ACTIVE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"Rollback email sweep batching fix"}}
+          JSON
+            curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/rollback.json > tmp/rollback-response.json || true
+            if [ -f tmp/schedules-before.json ]; then
+              node -e "const j=require('./tmp/schedules-before.json');process.stdout.write(JSON.stringify((j.result?.schedules||j.result||[]).map(x=>({cron:x.cron}))))" > tmp/schedules-rollback-body.json || true
+              curl -sS -X PUT "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/schedules-rollback-body.json > tmp/schedules-rollback.json || true
+            fi
+          }
+          trap rollback ERR
+
+          cat > tmp/deploy.json <<JSON
+          {"strategy":"percentage","versions":[{"version_id":"${CANDIDATE_VERSION_ID}","percentage":100}],"annotations":{"workers/message":"APDocentePBA bounded email sweep batch + cursor continuation"}}
+          JSON
+          curl -fsS -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/deploy.json > tmp/deploy-response.json
+
+          for i in 1 2 3 4 5 6; do
+            sleep 3
+            curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments-after.json
+            AFTER=$(node -e "const j=require('./tmp/deployments-after.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+            [ "${AFTER}" = "${CANDIDATE_VERSION_ID}" ] && break
+          done
+          test "${AFTER}" = "${CANDIDATE_VERSION_ID}"
+
+          node - <<'NODE'
+          const fs=require('fs');
+          const j=require('./tmp/schedules-before.json');
+          const existing=(j.result?.schedules||j.result||[]).map(x=>x.cron).filter(Boolean);
+          const wanted=[...new Set([...existing,process.env.PERMANENT_CONTINUATION_CRON,process.env.TEMP_RECOVERY_CRON])];
+          fs.writeFileSync('tmp/schedules-update-body.json',JSON.stringify(wanted.map(cron=>({cron}))));
+          fs.writeFileSync('tmp/schedules-wanted.json',JSON.stringify(wanted,null,2));
+          NODE
+          curl -fsS -X PUT "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/schedules-update-body.json > tmp/schedules-update.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" > tmp/schedules-after.json
+          node - <<'NODE'
+          const fs=require('fs'); const j=require('./tmp/schedules-after.json'); const got=(j.result?.schedules||j.result||[]).map(x=>x.cron);
+          for(const x of [process.env.PERMANENT_CONTINUATION_CRON,process.env.TEMP_RECOVERY_CRON]) if(!got.includes(x)) throw new Error(`Missing schedule ${x}`);
+          NODE
+
+          VERSION_CODE=$(curl -sS -o tmp/version.json -w "%{http_code}" "${WORKER_URL}/api/version")
+          test "${VERSION_CODE}" = "200"
+
+          trap - ERR
+          node - <<'NODE'
+          const fs=require('fs');
+          const schedules=(require('./tmp/schedules-after.json').result?.schedules||require('./tmp/schedules-after.json').result||[]).map(x=>x.cron);
+          const summary={ok:true,old_version_id:process.env.ACTIVE_VERSION_ID,candidate_version_id:process.env.CANDIDATE_VERSION_ID,deployed:true,batch_size:2,bindings_preserved:true,continuation_cron:process.env.PERMANENT_CONTINUATION_CRON,temp_recovery_cron:process.env.TEMP_RECOVERY_CRON,schedules,rollback_triggered:false};
+          fs.writeFileSync('artifacts/email-sweep-batching-fix-20260917.json',JSON.stringify(summary,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Commit deployment summary
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
+          git add artifacts/email-sweep-batching-fix-20260917.json
+          git commit -m "fix: deploy bounded email sweep batching" || exit 0
+          git push
