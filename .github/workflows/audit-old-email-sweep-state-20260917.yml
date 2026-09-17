@@ -1,0 +1,52 @@
+name: Audit old email sweep continuation state 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-old-email-sweep-state-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      OLD_VERSION_ID: ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac
+    steps:
+      - name: Compare old production continuation markers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${OLD_VERSION_ID}?include=modules" > tmp/old.json
+          node <<'NODE'
+          const j=require('./tmp/old.json');
+          const main=(j.result?.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          const code=Buffer.from(main?.content_base64||'','base64').toString('utf8');
+          const markers=[
+            'email:active_slot_key',
+            'cursor_user_id',
+            'email:slot:',
+            'recordObservedEmailCron',
+            'const DEFAULT_BATCH_SIZE = 2;',
+            'EMAIL_DIGEST_BATCH_USERS_PER_RUN',
+            'reserved_before_brevo_send'
+          ];
+          console.log('old_version=',j.result?.id);
+          for(const m of markers) console.log(`${m}=${code.includes(m)}`);
+          const lines=code.split(/\r?\n/);
+          for(let i=0;i<lines.length;i++) {
+            if(lines[i].includes('async scheduled') || lines[i].includes('runEmailAlertsSweep(env')) {
+              console.log(`--- around line ${i+1} ---`);
+              for(let k=Math.max(0,i-8);k<=Math.min(lines.length-1,i+35);k++) console.log(`${String(k+1).padStart(5)} ${lines[k]}`);
+            }
+          }
+          NODE
