@@ -1,0 +1,83 @@
+name: Audit Cloudflare email sweep 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-cloudflare-email-sweep-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - name: Query Cloudflare worker state read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+
+          request() {
+            name="$1"
+            url="$2"
+            code=$(curl -sS -o "audit/${name}.json" -w "%{http_code}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "$url" || true)
+            echo "${name}_http=${code}"
+            NAME="$name" CODE="$code" node <<'NODE'
+          const fs = require('fs');
+          const name = process.env.NAME;
+          const code = process.env.CODE;
+          let raw = '';
+          try { raw = fs.readFileSync(`audit/${name}.json`, 'utf8'); } catch {}
+          let j = null;
+          try { j = JSON.parse(raw); } catch {}
+          const out = {name, http:Number(code)||code};
+          if (j && typeof j === 'object') {
+            out.success = j.success;
+            if (Array.isArray(j.errors)) out.errors = j.errors;
+            if (name === 'accounts') {
+              out.accounts = (j.result || []).map(x => ({id:x.id, name:x.name}));
+            }
+            if (name === 'deployments') {
+              out.deployments = (j.result?.deployments || j.result || []).slice(0,5).map(d => ({
+                id:d.id,
+                created_on:d.created_on,
+                source:d.source,
+                versions:(d.versions || []).map(v => ({version_id:v.version_id, percentage:v.percentage}))
+              }));
+            }
+            if (name === 'schedules') {
+              out.schedules = (j.result?.schedules || j.result || []).map(x => x.cron || x);
+            }
+            if (name === 'versions') {
+              const rows = j.result?.items || j.result?.versions || j.result || [];
+              out.versions = (Array.isArray(rows) ? rows : []).slice(0,8).map(v => ({
+                id:v.id,
+                number:v.number,
+                created_on:v.created_on,
+                annotations:v.annotations
+              }));
+            }
+          } else {
+            out.raw_prefix = raw.slice(0,500);
+          }
+          console.log(JSON.stringify(out));
+          NODE
+          }
+
+          request accounts "https://api.cloudflare.com/client/v4/accounts?per_page=50"
+          ACCOUNT_ID=$(node -e "const j=require('./audit/accounts.json'); if(!j.success||!j.result?.length) process.exit(2); process.stdout.write(j.result[0].id)")
+          echo "account_id=${ACCOUNT_ID}"
+
+          request deployments "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          request schedules "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules"
+          request versions "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?per_page=8"
+
+          echo "Audit complete; no mutation performed."
