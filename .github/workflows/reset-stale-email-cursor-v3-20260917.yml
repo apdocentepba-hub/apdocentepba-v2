@@ -1,0 +1,72 @@
+name: Reset stale email cursor v3 2026-09-17
+
+on:
+  push:
+    paths:
+      - '.github/workflows/reset-stale-email-cursor-v3-20260917.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a70257f6-7d0c-412c-9047-3a918705a755
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: RED patch GREEN deploy cursor reset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/a.json
+          A=$(jq -r '.result[0].id' tmp/a.json)
+          DURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/deployments"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/d.json
+          ACTIVE=$(node -e "const j=require('./tmp/d.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)")
+          echo active=$ACTIVE
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/v.json
+          node - <<'NODE'
+          const fs=require('fs'); const r=require('./tmp/v.json').result; const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'); const s=Buffer.from(m.content_base64,'base64').toString('utf8');
+          if(!s.includes('recovery_force_once_v2')) throw new Error('v2 marker missing');
+          fs.writeFileSync('tmp/before.js',s);
+          fs.writeFileSync('tmp/shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const md={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: reset stale cursor for missed 22h slot','workers/tag':'email-recovery-cursor-v3-20260917'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) md.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/md.json',JSON.stringify(md));
+          NODE
+
+          if node -e "const s=require('fs').readFileSync('tmp/before.js','utf8'); if(s.includes('recovery_force_once_v3')&&s.includes('cursor_user_id\").catch')) process.exit(0); process.exit(1)"; then echo 'RED unexpectedly passed'; exit 1; else echo 'RED confirmed: stale cursor is not reset'; fi
+
+          node - <<'NODE'
+          const fs=require('fs'); let s=fs.readFileSync('tmp/before.js','utf8');
+          s=s.replace('recovery_force_once_v2','recovery_force_once_v3');
+          const old='            await kv.delete(recoveryFinishedKey).catch(() => null);\n            bypassFinishedForRecovery = true;';
+          const neu='            await kv.delete(recoveryFinishedKey).catch(() => null);\n            await kv.delete("email:slot:" + recoverySlot.slot_key + ":cursor_user_id").catch(() => null);\n            bypassFinishedForRecovery = true;';
+          if((s.split(old).length-1)!==1) throw new Error('delete block drift');
+          s=s.replace(old,neu);
+          fs.writeFileSync('tmp/worker_hotfix.js',s);
+          NODE
+          node --check tmp/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),assert=require('assert'); const s=fs.readFileSync('tmp/worker_hotfix.js','utf8');
+          for(const x of ['recovery_force_once_v3','await kv.delete("email:slot:" + recoverySlot.slot_key + ":cursor_user_id").catch(() => null);','if (activeFinished && !bypassFinishedForRecovery)','const DEFAULT_BATCH_SIZE = 2;','already_sent_for_user_in_slot','reserved_before_brevo_send']) assert(s.includes(x),`missing ${x}`);
+          console.log('GREEN cursor-reset recovery contract passed');
+          NODE
+
+          CODE=$(curl -sS -o tmp/up.json -w "%{http_code}" -X POST "https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -F "metadata=<tmp/md.json;type=application/json" -F "worker_hotfix.js=@tmp/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo upload_http=$CODE; test "$CODE" = 200
+          C=$(jq -r '.result.id' tmp/up.json); echo candidate=$C; test -n "$C" -a "$C" != null
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${C}?include=modules" > tmp/c.json
+          node - <<'NODE'
+          const exp=require('./tmp/shape.json'),r=require('./tmp/c.json').result; const act=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort(); if(JSON.stringify(exp)!==JSON.stringify(act)) throw new Error('binding drift'); const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'); const s=Buffer.from(m.content_base64,'base64').toString('utf8'); if(!s.includes('recovery_force_once_v3')) throw new Error('v3 missing'); console.log(`verified ${r.id}; bindings=${act.length}`)
+          NODE
+          rollback(){ echo ROLLBACK; printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$ACTIVE" > tmp/r.json; curl -sS -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/r.json >/dev/null || true; }
+          trap rollback ERR
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Reset stale email cursor v3"}}' "$C" > tmp/deploy.json
+          CODE=$(curl -sS -o tmp/dr.json -w "%{http_code}" -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/deploy.json); echo deploy_http=$CODE; test "$CODE" = 200
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/f.json
+          F=$(node -e "const j=require('./tmp/f.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)")
+          echo final=$F; test "$F" = "$C"; trap - ERR
+          echo CURSOR_RECOVERY_V3_DEPLOYED=$F
