@@ -1,0 +1,63 @@
+name: Probe email sweep observability
+
+on:
+  push:
+    branches:
+      - fix/email-sweep-runtime-20260917
+    paths:
+      - .github/workflows/probe-email-sweep-observability.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Cloudflare Workers Logs for the 22:00 incident
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json'); if(!j.success||!j.result?.length) process.exit(2); process.stdout.write(j.result[0].id)")
+
+          cat > out/query.json <<JSON
+          {
+            "queryId": "apd-email-incident-20260916-2200",
+            "view": "events",
+            "limit": 1000,
+            "timeframe": {"from": 1789606770000, "to": 1789606950000},
+            "parameters": {
+              "datasets": ["cloudflare-workers"],
+              "filterCombination": "and",
+              "filters": [
+                {"key": "$metadata.service", "operation": "eq", "type": "string", "value": "${WORKER_NAME}"}
+              ]
+            }
+          }
+          JSON
+
+          set +e
+          HTTP_CODE=$(curl -sS -o out/telemetry.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @out/query.json \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/observability/telemetry/query")
+          RC=$?
+          set -e
+          printf 'http_code=%s\ncurl_rc=%s\n' "$HTTP_CODE" "$RC" > out/status.txt
+          echo "Telemetry HTTP ${HTTP_CODE}; curl rc ${RC}"
+          cat out/telemetry.json || true
+
+      - name: Upload observability evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-sweep-observability-probe
+          path: out/
+          if-no-files-found: error
