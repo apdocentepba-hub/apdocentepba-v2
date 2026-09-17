@@ -1,0 +1,69 @@
+name: Harden recognized email crons 2026-09-17
+
+on:
+  push:
+    paths:
+      - '.github/workflows/harden-recognized-email-crons-20260917.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: 31423e38-b3a8-41c5-bfdb-a08f5e89913b
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: RED patch GREEN deploy recognized-cron gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/a.json
+          A=$(jq -r '.result[0].id' tmp/a.json)
+          DURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/deployments"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/d.json
+          ACTIVE=$(node -e "const j=require('./tmp/d.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)")
+          echo active=$ACTIVE
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/v.json
+
+          node - <<'NODE'
+          const fs=require('fs'); const r=require('./tmp/v.json').result; if(!r?.id) throw new Error('active missing');
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'); const s=Buffer.from(m.content_base64,'base64').toString('utf8');
+          fs.writeFileSync('tmp/before.js',s);
+          fs.writeFileSync('tmp/shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const md={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: allow only recognized email cron expressions','workers/tag':'recognized-email-crons-20260917'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))}; if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length)md.compatibility_flags=r.compatibility_flags; fs.writeFileSync('tmp/md.json',JSON.stringify(md));
+          NODE
+
+          if node -e "const s=require('fs').readFileSync('tmp/before.js','utf8');process.exit(s.includes('if (!isRecognizedEmailCron) return;')?0:1)"; then echo 'RED unexpectedly passed'; exit 1; else echo 'RED confirmed: stale cron not explicitly blocked'; fi
+
+          node - <<'NODE'
+          const fs=require('fs'); let s=fs.readFileSync('tmp/before.js','utf8');
+          const old='    const isContinuationCron = String(event?.cron || "").trim() === "1-59/2 * * * *";\n    if (isContinuationCron && !activeSlotKey) return;';
+          const neu='    const emailCronExpr = String(event?.cron || "").trim();\n    const isContinuationCron = emailCronExpr === "1-59/2 * * * *";\n    const isPrimaryEmailCron = emailCronExpr === "0 01 * * *" || emailCronExpr === "0 17 * * *" || emailCronExpr === "0 21 * * *";\n    const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;\n    if (!isRecognizedEmailCron) return;\n    if (isContinuationCron && !activeSlotKey) return;';
+          if((s.split(old).length-1)!==1) throw new Error('continuation guard marker drift');
+          s=s.replace(old,neu); fs.writeFileSync('tmp/worker_hotfix.js',s);
+          NODE
+          node --check tmp/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),assert=require('assert');const s=fs.readFileSync('tmp/worker_hotfix.js','utf8');
+          for(const x of ['const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;','if (!isRecognizedEmailCron) return;','if (isContinuationCron && !activeSlotKey) return;','emailCronExpr === "0 01 * * *"','emailCronExpr === "0 17 * * *"','emailCronExpr === "0 21 * * *"','max_users: 2']) assert(s.includes(x),`missing ${x}`);
+          assert(!s.includes('const isContinuationCron = String(event?.cron || "").trim() === "1-59/2 * * * *";'));
+          console.log('GREEN recognized-cron gate passed');
+          NODE
+
+          CODE=$(curl -sS -o tmp/up.json -w '%{http_code}' -X POST "https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -F "metadata=<tmp/md.json;type=application/json" -F "worker_hotfix.js=@tmp/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo upload_http=$CODE; test "$CODE" = 200
+          C=$(jq -r '.result.id' tmp/up.json); echo candidate=$C; test -n "$C" -a "$C" != null
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${C}?include=modules" > tmp/c.json
+          node - <<'NODE'
+          const exp=require('./tmp/shape.json'),r=require('./tmp/c.json').result;const act=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();if(JSON.stringify(exp)!==JSON.stringify(act))throw new Error('binding drift');const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'),s=Buffer.from(m.content_base64,'base64').toString('utf8');if(!s.includes('if (!isRecognizedEmailCron) return;'))throw new Error('cron gate missing');if(!s.includes('max_users: 2'))throw new Error('batch bound lost');console.log(`verified ${r.id}; bindings=${act.length}`)
+          NODE
+          rollback(){ printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$ACTIVE" > tmp/r.json;curl -sS -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/r.json >/dev/null||true; }
+          trap rollback ERR
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Allow only recognized email crons"}}' "$C" > tmp/deploy.json
+          CODE=$(curl -sS -o tmp/dr.json -w '%{http_code}' -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/deploy.json);echo deploy_http=$CODE;test "$CODE" = 200
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/f.json
+          F=$(node -e "const j=require('./tmp/f.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)");echo final=$F;test "$F" = "$C";trap - ERR
+          echo RECOGNIZED_CRON_GATE_OK=$F
