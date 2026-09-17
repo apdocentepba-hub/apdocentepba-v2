@@ -17,7 +17,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch active Worker and diagnose
+      - name: Fetch active Worker and extract safe sweep skeleton
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -30,50 +30,22 @@ jobs:
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > .diag/version.json
           node - <<'NODE'
           const fs=require('fs'),crypto=require('crypto');
-          const j=JSON.parse(fs.readFileSync('.diag/version.json','utf8')); if(!j.success||!j.result)throw new Error('version fetch failed');
-          const r=j.result; const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')])); const main=mods[r.main_module]||'';
+          const j=JSON.parse(fs.readFileSync('.diag/version.json','utf8')); const r=j.result;
+          const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')])); const main=mods[r.main_module]||'';
           const start=main.indexOf('async function runEmailAlertsSweep('); if(start<0)throw new Error('sweep missing');
-          const nextCandidates=['async function handleTestMail(','async function runWhatsAppAlertsSweep(','function buildDigestHtml(','var worker_hotfix_default ='].map(x=>main.indexOf(x,start+40)).filter(x=>x>start);
-          const end=nextCandidates.length?Math.min(...nextCandidates):Math.min(main.length,start+120000); const sweep=main.slice(start,end);
-          const scheduledStart=main.indexOf('async scheduled('); const scheduled=scheduledStart>=0?main.slice(scheduledStart,Math.min(main.length,scheduledStart+20000)):'';
-          const num=(re)=>{const m=sweep.match(re);return m?m[1]:null};
-          const bool=(re)=>re.test(sweep);
-          const markers={
-            batch_size:num(/BATCH_SIZE\s*=\s*(\d+)/),
-            max_runtime_ms:num(/(?:MAX_[A-Z_]*(?:MS|MILLIS)|TIME_BUDGET_MS|DEADLINE_MS)\s*=\s*(\d+)/),
-            cursor_kv:bool(/EMAIL_SWEEP_STATE/),
-            cursor_put:bool(/EMAIL_SWEEP_STATE\.put\([^)]*cursor/),
-            self_continuation:bool(/fetch\([^\n]{0,300}(?:email-sweep|sweep|continue)/i)||/waitUntil\([^\n]{0,300}runEmailAlertsSweep/.test(scheduled),
-            scheduled_waituntil:/waitUntil\([^\n]{0,300}runEmailAlertsSweep/.test(scheduled),
-            scheduled_direct_await:/await\s+runEmailAlertsSweep/.test(scheduled),
-            per_user_try:/for\s*\([^)]*of\s+rowsToProcess[^)]*\)\s*\{[\s\S]{0,1200}try\s*\{/.test(sweep),
-            build_alerts_calls:(sweep.match(/construirAlertasParaUsuario\s*\(/g)||[]).length,
-            supabase_calls:(sweep.match(/supabase(?:Select|Insert|Patch|Request)\s*\(/g)||[]).length,
-            fetch_calls:(sweep.match(/\bfetch\s*\(/g)||[]).length,
-            brevo_calls:(sweep.match(/brevo|sendinblue/gi)||[]).length,
-            worker_run_refs:(sweep.match(/worker_runs/g)||[]).length,
-            debug_users:bool(/debug_users/),
-            target_user_id:bool(/target_user_id/),
-            dry_run:bool(/dry_run/),
-            reservation_before_send:bool(/reserved_before_brevo_send/),
-            catches_build_to_null:/construirAlertasParaUsuario\([^)]*\)\.catch\(\(\)\s*=>\s*null\)/.test(sweep),
-            returns_ok:bool(/return\s*\{[\s\S]{0,1000}ok:\s*true/),
-            sweep_chars:sweep.length,
-            main_sha256:crypto.createHash('sha256').update(main).digest('hex')
-          };
-          const loop=sweep.match(/for\s*\([^)]*of\s+rowsToProcess[^)]*\)\s*\{([\s\S]{0,12000})/); const loopText=loop?loop[1]:'';
-          const loopMarkers={
-            user_lookup:/obtenerUsuario/.test(loopText),
-            build_alerts:/construirAlertasParaUsuario/.test(loopText),
-            resolve_plan:/resolverPlanUsuario/.test(loopText),
-            mark_sent:/first_emailed_at|last_emailed_at/.test(loopText),
-            reservation:/reservation|dedupe/i.test(loopText),
-            continue_on_error:/catch\s*\([^)]*\)\s*\{[\s\S]{0,600}continue\s*;/.test(loopText),
-            break_on_error:/catch\s*\([^)]*\)\s*\{[\s\S]{0,600}break\s*;/.test(loopText),
-            throw_in_loop:/\bthrow\b/.test(loopText),
-            loop_prefix_sha256:crypto.createHash('sha256').update(loopText.slice(0,12000)).digest('hex')
-          };
-          const out={active_version_id:r.id,version_number:r.number,main_module:r.main_module,bindings:(r.bindings||[]).length,modules:Object.keys(mods),markers,loopMarkers};
+          const candidates=['async function handleTestMail(','async function runWhatsAppAlertsSweep(','function buildDigestHtml(','var worker_hotfix_default ='].map(x=>main.indexOf(x,start+40)).filter(x=>x>start); const end=candidates.length?Math.min(...candidates):Math.min(main.length,start+120000); const sweep=main.slice(start,end);
+          const lines=sweep.split('\n');
+          const safe=[];
+          for(let i=0;i<lines.length;i++){
+            const l=lines[i];
+            if(/BATCH_SIZE|target_user_id|rowsToProcess|prefRows|user_preferences|processedUsers|sentCount|skippedCount|failedCount|for \(const row of rowsToProcess\)|construirAlertasParaUsuario|resolverPlanUsuario|dedupe|reservation|first_emailed_at|last_emailed_at|newCursor|return \{|cursor|dry_run|debugUsers/.test(l)){
+              const clean=l.replace(/[A-Za-z0-9_-]{20,}/g,'<redacted>');
+              safe.push({n:i+1,text:clean.slice(0,500)});
+            }
+          }
+          const scheduledStart=main.indexOf('async scheduled('); const scheduled=scheduledStart>=0?main.slice(scheduledStart,Math.min(main.length,scheduledStart+16000)):'';
+          const scheduledLines=scheduled.split('\n').filter(x=>/runEmailAlertsSweep|waitUntil|recordObservedEmailCron|email/i.test(x)).slice(0,80).map(x=>x.replace(/[A-Za-z0-9_-]{20,}/g,'<redacted>').slice(0,500));
+          const out={active_version_id:r.id,version_number:r.number,main_sha256:crypto.createHash('sha256').update(main).digest('hex'),sweep_safe_lines:safe.slice(0,220),scheduled_safe_lines:scheduledLines};
           fs.writeFileSync('artifacts/diag-live-email-sweep-20260917.json',JSON.stringify(out,null,2));
           NODE
       - name: Commit sanitized diagnostic result
@@ -81,5 +53,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/diag-live-email-sweep-20260917.json
-          git commit -m "diag: refine live email sweep state 2026-09-17" || exit 0
+          git commit -m "diag: capture safe live sweep skeleton 2026-09-17" || exit 0
           git push
