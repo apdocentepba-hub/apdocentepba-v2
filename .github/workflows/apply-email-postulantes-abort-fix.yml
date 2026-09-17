@@ -1,5 +1,6 @@
 name: Apply email postulantes abort fix
 
+# 2026-09-17 scoped rerun after narrowing patch validation to the email enrichment function.
 on:
   push:
     branches:
