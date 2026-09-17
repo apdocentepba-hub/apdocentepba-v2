@@ -1,0 +1,25 @@
+name: Test email postulantes abort
+
+on:
+  push:
+    branches:
+      - fix/email-sweep-runtime-20260917
+    paths:
+      - worker-live/worker_hotfix.js
+      - scripts/test-email-postulantes-abort.mjs
+      - .github/workflows/test-email-postulantes-abort.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Abort contract
+        run: node scripts/test-email-postulantes-abort.mjs
