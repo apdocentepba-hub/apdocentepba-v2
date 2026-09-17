@@ -1,0 +1,47 @@
+name: Audit email sweep continuation control flow 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-email-sweep-control-flow-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      CANDIDATE_VERSION_ID: a6eade87-0174-4490-9798-56af3d98095a
+    steps:
+      - name: Print continuation-related source excerpts read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules" > tmp/candidate.json
+          node <<'NODE'
+          const j=require('./tmp/candidate.json');
+          const main=(j.result?.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          const code=Buffer.from(main?.content_base64||'','base64').toString('utf8');
+          const lines=code.split(/\r?\n/);
+          const needles=['email:active_slot_key','cursor_user_id','recordObservedEmailCron','scheduled(event','scheduled(controller','async scheduled','function scheduled','runEmailAlertsSweep'];
+          const hits=[];
+          for(let i=0;i<lines.length;i++) if(needles.some(n=>lines[i].includes(n))) hits.push(i);
+          const ranges=[];
+          for(const h of hits){
+            const a=Math.max(0,h-18), b=Math.min(lines.length-1,h+28);
+            if(!ranges.some(r=>a<=r[1]+2)){ ranges.push([a,b]); } else { ranges[ranges.length-1][1]=Math.max(ranges[ranges.length-1][1],b); }
+          }
+          for(const [a,b] of ranges){
+            console.log(`--- lines ${a+1}-${b+1} ---`);
+            for(let i=a;i<=b;i++) console.log(`${String(i+1).padStart(5)} ${lines[i]}`);
+          }
+          NODE
