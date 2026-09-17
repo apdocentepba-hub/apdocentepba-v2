@@ -1,0 +1,42 @@
+name: Apply email postulantes abort fix
+
+on:
+  push:
+    branches:
+      - fix/email-sweep-runtime-20260917
+    paths:
+      - .github/workflows/apply-email-postulantes-abort-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/email-sweep-runtime-20260917
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply minimal abort fix
+        run: node scripts/apply-email-postulantes-abort-fix.mjs
+      - name: Syntax check
+        run: node --check worker-live/worker_hotfix.js
+      - name: Regression must pass after patch
+        run: node scripts/test-email-postulantes-abort.mjs
+      - name: Commit patched Worker source
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- worker-live/worker_hotfix.js; then
+            echo 'Worker source already contains the fix.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker-live/worker_hotfix.js
+          git commit -m 'fix: abort timed out email postulantes fetches'
+          git push origin HEAD:fix/email-sweep-runtime-20260917
