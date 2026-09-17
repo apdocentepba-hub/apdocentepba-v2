@@ -1,0 +1,167 @@
+name: Fix email sweep recovery bootstrap 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-email-sweep-recovery-bootstrap-20260917.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a6eade87-0174-4490-9798-56af3d98095a
+    steps:
+      - name: Build and test recovery bootstrap candidate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/modules tmp/candidate
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "active=${ACTIVE}"
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          echo "ACTIVE_VERSION_ID=${ACTIVE}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/active.json
+
+          node <<'NODE'
+          const fs=require('fs'); const path=require('path');
+          const j=require('./tmp/active.json'); const r=j.result;
+          if(!j.success||!r?.id) throw new Error('active detail missing');
+          if((r.bindings||[]).length!==27) throw new Error(`binding drift ${(r.bindings||[]).length}`);
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          if(!main) throw new Error('worker_hotfix.js missing');
+          const code=Buffer.from(main.content_base64||'','base64').toString('utf8');
+          fs.writeFileSync('tmp/modules/worker_hotfix.js',code);
+          fs.writeFileSync('tmp/binding-shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const metadata={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: bootstrap latest missed email slot','workers/tag':'email-sweep-recovery-bootstrap-20260917'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/candidate/metadata.json',JSON.stringify(metadata));
+          NODE
+
+          node <<'NODE'
+          const fs=require('fs');
+          let s=fs.readFileSync('tmp/modules/worker_hotfix.js','utf8');
+          if(s.includes('CRON EMAIL SLOT RECOVERY START')) throw new Error('recovery bootstrap already present unexpectedly');
+
+          const helper=`function getMostRecentArgentinaDigestSlotInfo(input = Date.now()) {
+            const current = getArgentinaDigestSlotInfo(input);
+            let year = Number(current.year || 0);
+            let month = Number(current.month || 0);
+            let day = Number(current.day || 0);
+            const hour = Number(current.hour || 0);
+            let slotHour = 22;
+            if (hour >= 22) slotHour = 22;
+            else if (hour >= 18) slotHour = 18;
+            else if (hour >= 14) slotHour = 14;
+            else {
+              const previous = new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0));
+              year = previous.getUTCFullYear();
+              month = previous.getUTCMonth() + 1;
+              day = previous.getUTCDate();
+              slotHour = 22;
+            }
+            const yyyy = String(year).padStart(4, "0");
+            const mm = String(month).padStart(2, "0");
+            const dd = String(day).padStart(2, "0");
+            return {
+              year: yyyy,
+              month: mm,
+              day: dd,
+              slot_hour: slotHour,
+              slot_key: \`${'${yyyy}'}-${'${mm}'}-${'${dd}'}_${'${String(slotHour).padStart(2, "0")}'}\`
+            };
+          }
+          `;
+          const helperMarker='function getArgentinaDigestSlotInfo(input = Date.now()) {';
+          const helperCount=s.split(helperMarker).length-1;
+          if(helperCount!==1) throw new Error(`helper insertion marker count ${helperCount}`);
+          s=s.replace(helperMarker,helper+helperMarker);
+
+          const oldBlock=`    if (!activeSlotKey) {
+              return;
+            }
+            const activeFinishedKey = \`email:slot:${'${activeSlotKey}'}:finished\`;`;
+          const newBlock=`    if (!activeSlotKey) {
+              const recoverySlot = getMostRecentArgentinaDigestSlotInfo(event?.scheduledTime || Date.now());
+              if (recoverySlot?.slot_key) {
+                const recoveryFinishedKey = \`email:slot:${'${recoverySlot.slot_key}'}:finished\`;
+                const recoveryFinished = await kv.get(recoveryFinishedKey).catch(() => null);
+                if (!recoveryFinished) {
+                  activeSlotKey = recoverySlot.slot_key;
+                  await kv.put(ACTIVE_SLOT_KEY, activeSlotKey, { expirationTtl: 60 * 60 * 36 }).catch(() => null);
+                  await kv.put(\`email:slot:${'${activeSlotKey}'}:started_at\`, (/* @__PURE__ */ new Date()).toISOString(), { expirationTtl: 60 * 60 * 36 }).catch(() => null);
+                  console.log("CRON EMAIL SLOT RECOVERY START", activeSlotKey);
+                }
+              }
+              if (!activeSlotKey) return;
+            }
+            const activeFinishedKey = \`email:slot:${'${activeSlotKey}'}:finished\`;`;
+          const blockCount=s.split(oldBlock).length-1;
+          if(blockCount!==1) throw new Error(`scheduled recovery marker count ${blockCount}`);
+          s=s.replace(oldBlock,newBlock);
+          fs.writeFileSync('tmp/candidate/worker_hotfix.js',s);
+          fs.writeFileSync('tmp/helper.js',helper);
+          NODE
+
+          node --check tmp/candidate/worker_hotfix.js
+          node <<'NODE'
+          const fs=require('fs'); const vm=require('vm'); const assert=require('assert');
+          const helper=fs.readFileSync('tmp/helper.js','utf8');
+          const cases={
+            morning:{year:'2026',month:'09',day:'17',hour:9},
+            fourteen:{year:'2026',month:'09',day:'17',hour:14},
+            eighteen:{year:'2026',month:'09',day:'17',hour:18},
+            twentyTwo:{year:'2026',month:'09',day:'17',hour:22}
+          };
+          const context={getArgentinaDigestSlotInfo:(x)=>cases[x],Date}; vm.createContext(context); vm.runInContext(helper,context);
+          assert.equal(context.getMostRecentArgentinaDigestSlotInfo('morning').slot_key,'2026-09-16_22');
+          assert.equal(context.getMostRecentArgentinaDigestSlotInfo('fourteen').slot_key,'2026-09-17_14');
+          assert.equal(context.getMostRecentArgentinaDigestSlotInfo('eighteen').slot_key,'2026-09-17_18');
+          assert.equal(context.getMostRecentArgentinaDigestSlotInfo('twentyTwo').slot_key,'2026-09-17_22');
+          const code=fs.readFileSync('tmp/candidate/worker_hotfix.js','utf8');
+          for(const marker of ['CRON EMAIL SLOT RECOVERY START','getMostRecentArgentinaDigestSlotInfo','const DEFAULT_BATCH_SIZE = 2;','reserved_before_brevo_send']) assert(code.includes(marker),`missing ${marker}`);
+          console.log('GREEN recovery bootstrap tests passed');
+          NODE
+
+      - name: Upload, verify, and deploy candidate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -F "metadata=<tmp/candidate/metadata.json;type=application/json" \
+            -F "worker_hotfix.js=@tmp/candidate/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo "upload_http=${code}"
+          CANDIDATE=$(node -e "const j=require('./tmp/upload.json');if(!j.success||!j.result?.id){console.error(JSON.stringify(j.errors||j));process.exit(1)};process.stdout.write(j.result.id)")
+          echo "candidate=${CANDIDATE}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE}?include=modules" > tmp/candidate-detail.json
+          CANDIDATE_VERSION_ID="$CANDIDATE" node <<'NODE'
+          const fs=require('fs'); const expected=require('./tmp/binding-shape.json'); const j=require('./tmp/candidate-detail.json'); const r=j.result;
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error('binding shape changed');
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js'); const code=Buffer.from(main?.content_base64||'','base64').toString('utf8');
+          for(const marker of ['CRON EMAIL SLOT RECOVERY START','getMostRecentArgentinaDigestSlotInfo','const DEFAULT_BATCH_SIZE = 2;']) if(!code.includes(marker)) throw new Error(`candidate missing ${marker}`);
+          console.log(`verified candidate ${r.id} bindings=${actual.length}`);
+          NODE
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Bootstrap latest missed email slot"}}' "$CANDIDATE" > tmp/deploy.json
+          code=$(curl -sS -o tmp/deploy-response.json -w "%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/deploy.json)
+          echo "deploy_http=${code}"
+          test "$code" = "200"
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/final.json
+          FINAL=$(node -e "const j=require('./tmp/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "final=${FINAL}"
+          test "$FINAL" = "$CANDIDATE"
