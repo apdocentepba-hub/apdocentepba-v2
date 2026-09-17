@@ -1,5 +1,6 @@
 name: Audit live Worker source
 
+# 2026-09-17: rerun to inspect email sweep production incident
 on:
   push:
     branches:
