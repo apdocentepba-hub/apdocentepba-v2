@@ -4,8 +4,8 @@ import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../worker-live/worker_hotfix.js', import.meta.url), 'utf8');
 const start = source.indexOf('async function enrichEmailVisibleAlertsWithPostulantes');
 assert.notEqual(start, -1, 'missing enrichEmailVisibleAlertsWithPostulantes');
-const end = source.indexOf('__name(enrichEmailVisibleAlertsWithPostulantes', start);
-assert.notEqual(end, -1, 'missing enrichEmailVisibleAlertsWithPostulantes end marker');
+const end = source.indexOf('\n  const userIds =', start);
+assert.notEqual(end, -1, 'missing canonical email enrichment end boundary');
 const fn = source.slice(start, end);
 
 assert.match(fn, /new\s+AbortController\s*\(\s*\)/, 'email postulantes enrichment must create an AbortController per fetch');
