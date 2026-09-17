@@ -1,0 +1,48 @@
+name: Probe email sweep runtime
+
+on:
+  push:
+    branches:
+      - fix/email-sweep-runtime-20260917
+    paths:
+      - .github/workflows/probe-email-sweep-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture targeted dry-run response
+        env:
+          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+          TARGET_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          URL="${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}"
+          START=$(date +%s%3N)
+          CODE=$(curl -sS --max-time 90 \
+            -D out/headers.txt \
+            -o out/body.txt \
+            -w '%{http_code}' \
+            "$URL")
+          CURL_RC=$?
+          END=$(date +%s%3N)
+          ELAPSED_MS=$((END-START))
+          printf 'http_code=%s\ncurl_rc=%s\nelapsed_ms=%s\n' "$CODE" "$CURL_RC" "$ELAPSED_MS" | tee out/timing.txt
+          echo '--- response headers ---'
+          cat out/headers.txt || true
+          echo '--- response body ---'
+          cat out/body.txt || true
+          # The current production bug is expected to be non-200. Preserve evidence instead of failing before artifact upload.
+          exit 0
+
+      - name: Upload probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-sweep-runtime-probe
+          path: out/
+          if-no-files-found: error
