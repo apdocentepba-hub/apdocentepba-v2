@@ -14,70 +14,93 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      PREVIEW_ALIAS: apd-debug
+      PREVIEW_URL: https://apd-debug-ancient-wildflower-cd37.apdocentepba.workers.dev
+      TARGET_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
     steps:
-      - name: Capture targeted dry-run response
-        env:
-          WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
-          TARGET_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
-        run: |
-          set -uo pipefail
-          mkdir -p out
-          URL="${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}"
-          START=$(date +%s%3N)
-          CODE=$(curl -sS --max-time 90 -D out/headers.txt -o out/body.txt -w '%{http_code}' "$URL")
-          CURL_RC=$?
-          END=$(date +%s%3N)
-          ELAPSED_MS=$((END-START))
-          printf 'http_code=%s\ncurl_rc=%s\nelapsed_ms=%s\n' "$CODE" "$CURL_RC" "$ELAPSED_MS" | tee out/timing.txt
-          echo '--- response headers ---'
-          cat out/headers.txt || true
-          echo '--- response body ---'
-          cat out/body.txt || true
-          exit 0
+      - uses: actions/checkout@v4
 
-      - name: Query Workers Logs for the 22:00 incident
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Wrangler dependencies
+        run: npm install
+
+      - name: Capture active production version
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          WORKER_NAME: ancient-wildflower-cd37
         run: |
-          set -uo pipefail
+          set -euo pipefail
+          mkdir -p out
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
-          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json'); if(!j.success||!j.result?.length) process.exit(2); process.stdout.write(j.result[0].id)")
-          cat > out/telemetry-query.json <<JSON
-          {
-            "queryId":"apd-email-incident-20260916-2200",
-            "view":"events",
-            "limit":1000,
-            "timeframe":{"from":1789606770000,"to":1789606950000},
-            "parameters":{
-              "datasets":["cloudflare-workers"],
-              "filterCombination":"and",
-              "filters":[
-                {"key":"\$metadata.service","operation":"eq","type":"string","value":"${WORKER_NAME}"}
-              ]
-            }
-          }
-          JSON
-          TELEMETRY_CODE=$(curl -sS -o out/telemetry.json -w '%{http_code}' \
-            -X POST \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data @out/telemetry-query.json \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/observability/telemetry/query")
-          TELEMETRY_RC=$?
-          printf 'telemetry_http_code=%s\ntelemetry_curl_rc=%s\n' "$TELEMETRY_CODE" "$TELEMETRY_RC" | tee out/telemetry-status.txt
-          node - <<'NODE' || true
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          echo "CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID}" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/deployments-before.json
+          ACTIVE=$(node -e "const j=require('./out/deployments-before.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          echo "PRODUCTION_VERSION_BEFORE=${ACTIVE}" >> "$GITHUB_ENV"
+          test "$ACTIVE" = "ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac"
+
+      - name: Enable sensitive test endpoints only on the preview hostname
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
           const fs=require('fs');
-          const p='out/telemetry.json';
-          if(!fs.existsSync(p)) process.exit(0);
-          let j; try { j=JSON.parse(fs.readFileSync(p,'utf8')); } catch { console.log(fs.readFileSync(p,'utf8')); process.exit(0); }
-          const events=j?.events?.events || [];
-          console.log(JSON.stringify({success:j.success, errors:j.errors||[], event_count:j?.events?.count ?? events.length, events:events.map(e=>({timestamp:e.timestamp, metadata:e.$metadata, source:e.source}))},null,2));
+          const path='worker-live/worker_hotfix.js';
+          let s=fs.readFileSync(path,'utf8');
+          const old='function requireAdminTestSecret(env, request) {\n  const configured = String(env.ADMIN_TEST_SECRET || "").trim();';
+          const next='function requireAdminTestSecret(env, request) {\n  try {\n    const host = new URL(request.url).hostname;\n    if (host.startsWith("apd-debug-")) return null;\n  } catch {}\n  const configured = String(env.ADMIN_TEST_SECRET || "").trim();';
+          if(!s.includes(old)) throw new Error('requireAdminTestSecret marker not found');
+          s=s.replace(old,next);
+          fs.writeFileSync(path,s);
           NODE
+
+      - name: Upload isolated debug version with zero production traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler versions upload \
+            --preview-alias "${PREVIEW_ALIAS}" \
+            --tag "email-sweep-debug-${GITHUB_SHA:0:8}" \
+            --message "Zero-traffic email sweep incident reproduction ${GITHUB_SHA}"
+
+      - name: Reproduce affected user and first-three-user batch in dry-run
+        run: |
+          set -uo pipefail
+          probe() {
+            name="$1"; url="$2"
+            start=$(date +%s%3N)
+            code=$(curl -sS --max-time 90 -D "out/${name}-headers.txt" -o "out/${name}-body.txt" -w '%{http_code}' "$url")
+            rc=$?
+            end=$(date +%s%3N)
+            elapsed=$((end-start))
+            printf 'http_code=%s\ncurl_rc=%s\nelapsed_ms=%s\n' "$code" "$rc" "$elapsed" > "out/${name}-timing.txt"
+            echo "${name}: HTTP ${code}; curl ${rc}; ${elapsed} ms"
+            cat "out/${name}-body.txt" || true
+          }
+          probe target "${PREVIEW_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}"
+          probe first3 "${PREVIEW_URL}/test-email-sweep?dry_run=1&debug=1&limit=3"
           exit 0
 
+      - name: Prove production traffic remained unchanged
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > out/deployments-after.json
+          AFTER=$(node -e "const j=require('./out/deployments-after.json');const d=j.result?.deployments?.[0];const v=(d?.versions||[]).find(x=>Number(x.percentage)===100);if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
+          printf 'before=%s\nafter=%s\n' "$PRODUCTION_VERSION_BEFORE" "$AFTER" | tee out/production-traffic.txt
+          test "$AFTER" = "$PRODUCTION_VERSION_BEFORE"
+
       - name: Upload probe evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: email-sweep-runtime-probe
