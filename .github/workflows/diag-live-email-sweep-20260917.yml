@@ -69,6 +69,7 @@ jobs:
           HTTP=$(curl -sS --max-time 55 -o .diag/dry.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}")
           CURL_RC=$?
           set -e
+          export HTTP CURL_RC
           node - <<'NODE'
           const fs=require('fs');
           const markers=JSON.parse(fs.readFileSync('.diag/markers.json','utf8'));
@@ -78,9 +79,6 @@ jobs:
           fs.mkdirSync('artifacts',{recursive:true});
           fs.writeFileSync('artifacts/diag-live-email-sweep-20260917.json',JSON.stringify(out,null,2));
           NODE
-        env:
-          HTTP: ${{ env.HTTP }}
-          CURL_RC: ${{ env.CURL_RC }}
       - name: Commit sanitized diagnostic result
         run: |
           git config user.name "github-actions[bot]"
