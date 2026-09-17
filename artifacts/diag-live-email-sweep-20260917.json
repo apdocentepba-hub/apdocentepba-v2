@@ -1,43 +1,419 @@
 {
   "active_version_id": "ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac",
   "version_number": 720,
-  "main_module": "worker_hotfix.js",
-  "bindings": 27,
-  "modules": [
-    "worker_hotfix.js"
+  "main_sha256": "9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f",
+  "sweep_safe_lines": [
+    {
+      "n": 4,
+      "text": "  const targetUserId = String(options?.target_user_id || \"\").trim();"
+    },
+    {
+      "n": 9,
+      "text": "  const DEFAULT_BATCH_SIZE = 80;"
+    },
+    {
+      "n": 14,
+      "text": "    DEFAULT_BATCH_SIZE"
+    },
+    {
+      "n": 27,
+      "text": "  const dryRun = options?.dry_run === true;"
+    },
+    {
+      "n": 29,
+      "text": "  const cursorKey = useSlotCursor ? `email:slot:${slotKey}:cursor_user_id` : \"\";"
+    },
+    {
+      "n": 31,
+      "text": "  const cursorUserId = useSlotCursor ? String(await kv.get(cursorKey).catch(() => \"\") || \"\").trim() : \"\";"
+    },
+    {
+      "n": 35,
+      "text": "      return {"
+    },
+    {
+      "n": 47,
+      "text": "        cursor_user_id: cursorUserId || null,"
+    },
+    {
+      "n": 51,
+      "text": "        dry_run: dryRun,"
+    },
+    {
+      "n": 57,
+      "text": "  let prefSource = \"user_preferences\";"
+    },
+    {
+      "n": 58,
+      "text": "  let prefQuery = `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc`;"
+    },
+    {
+      "n": 62,
+      "text": "    if (cursorUserId) {"
+    },
+    {
+      "n": 63,
+      "text": "      prefQuery += `&user_id=gt.${encodeURIComponent(cursorUserId)}`;"
+    },
+    {
+      "n": 70,
+      "text": "  let prefRows = await supabaseSelect(env, prefQuery).catch((err) => {"
+    },
+    {
+      "n": 74,
+      "text": "  if ((!Array.isArray(prefRows) || prefRows.length === 0) && targetUserId) {"
+    },
+    {
+      "n": 75,
+      "text": "    prefRows = [{ user_id: targetUserId }];"
+    },
+    {
+      "n": 76,
+      "text": "    prefSource = \"<redacted>\";"
+    },
+    {
+      "n": 78,
+      "text": "  const rowsToProcess = Array.isArray(prefRows) ? prefRows : [];"
+    },
+    {
+      "n": 79,
+      "text": "  if (!rowsToProcess.length) {"
+    },
+    {
+      "n": 85,
+      "text": "    return {"
+    },
+    {
+      "n": 99,
+      "text": "      cursor_user_id: cursorUserId || null,"
+    },
+    {
+      "n": 106,
+      "text": "      dry_run: dryRun,"
+    },
+    {
+      "n": 151,
+      "text": "      `user_offer_state?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=id,offer_id,offer_payload,last_seen_at,first_emailed_at,last_emailed_at&order=last_seen_at.desc&limit=${encodeURIComponent(String(limit))}`"
+    },
+    {
+      "n": 164,
+      "text": "      first_emailed_at: row?.first_emailed_at || null,"
+    },
+    {
+      "n": 165,
+      "text": "      last_emailed_at: row?.last_emailed_at || null"
+    },
+    {
+      "n": 188,
+      "text": "    return { oferta, detalle };"
+    },
+    {
+      "n": 198,
+      "text": "          return {"
+    },
+    {
+      "n": 212,
+      "text": "          return {"
+    },
+    {
+      "n": 228,
+      "text": "          return {"
+    },
+    {
+      "n": 240,
+      "text": "  const userIds = rowsToProcess.map((row) => String(row?.user_id || \"\").trim()).filter(Boolean);"
+    },
+    {
+      "n": 242,
+      "text": "  let processedUsers = 0;"
+    },
+    {
+      "n": 271,
+      "text": "  let lastProcessedUserId = cursorUserId || \"\";"
+    },
+    {
+      "n": 273,
+      "text": "  for (const row of rowsToProcess) {"
+    },
+    {
+      "n": 277,
+      "text": "    processedUsers += 1;"
+    },
+    {
+      "n": 285,
+      "text": "          stage: \"dedupe\","
+    },
+    {
+      "n": 316,
+      "text": "    const <redacted> = await resolverPlanUsuario(env, userId).catch(() => null);"
+    },
+    {
+      "n": 384,
+      "text": "        first_emailed_at: item?.first_emailed_at || null,"
+    },
+    {
+      "n": 385,
+      "text": "        last_emailed_at: item?.last_emailed_at || null"
+    },
+    {
+      "n": 440,
+      "text": "      return {"
+    },
+    {
+      "n": 473,
+      "text": "      cycle_mode: \"<redacted>\","
+    },
+    {
+      "n": 474,
+      "text": "      dedupe_key: digestDedupeKey || null,"
+    },
+    {
+      "n": 482,
+      "text": "        stage: \"dry_run\","
+    },
+    {
+      "n": 496,
+      "text": "        dry_run: true,"
+    },
+    {
+      "n": 499,
+      "text": "        dedupe_key: digestDedupeKey || null"
+    },
+    {
+      "n": 503,
+      "text": "    let reservation = null;"
+    },
+    {
+      "n": 505,
+      "text": "      reservation = await <redacted>(env, {"
+    },
+    {
+      "n": 509,
+      "text": "        dedupeKey: digestDedupeKey"
+    },
+    {
+      "n": 511,
+      "text": "      if (reservation?.duplicate) {"
+    },
+    {
+      "n": 515,
+      "text": "          stage: \"dedupe_db\","
+    },
+    {
+      "n": 520,
+      "text": "          dedupe_key: digestDedupeKey"
+    },
+    {
+      "n": 524,
+      "text": "      if (!reservation?.ok) {"
+    },
+    {
+      "n": 532,
+      "text": "            reason: \"<redacted>\","
+    },
+    {
+      "n": 533,
+      "text": "            dedupe_key: digestDedupeKey,"
+    },
+    {
+      "n": 534,
+      "text": "            provider_response: reservation || null"
+    },
+    {
+      "n": 539,
+      "text": "          stage: \"dedupe_db\","
+    },
+    {
+      "n": 541,
+      "text": "          reason: \"reservation_failed\","
+    },
+    {
+      "n": 544,
+      "text": "          dedupe_key: digestDedupeKey,"
+    },
+    {
+      "n": 545,
+      "text": "          error: reservation?.error || null"
+    },
+    {
+      "n": 571,
+      "text": "    if (reservation?.id) {"
+    },
+    {
+      "n": 572,
+      "text": "      await <redacted>(env, reservation, send).catch((err) => {"
+    },
+    {
+      "n": 580,
+      "text": "          dedupe_key: digestDedupeKey,"
+    },
+    {
+      "n": 615,
+      "text": "      dedupe_key: digestDedupeKey || null,"
+    },
+    {
+      "n": 616,
+      "text": "      reservation_id: reservation?.id || null"
+    },
+    {
+      "n": 652,
+      "text": "      await kv.put(cursorKey, lastProcessedUserId, {"
+    },
+    {
+      "n": 656,
+      "text": "    if (rowsToProcess.length < BATCH_USERS_PER_RUN) {"
+    },
+    {
+      "n": 663,
+      "text": "  return {"
+    },
+    {
+      "n": 665,
+      "text": "    processed_users: processedUsers,"
+    },
+    {
+      "n": 674,
+      "text": "    stopped_early: rowsToProcess.length >= BATCH_USERS_PER_RUN,"
+    },
+    {
+      "n": 677,
+      "text": "    cursor_user_id: lastProcessedUserId || null,"
+    },
+    {
+      "n": 685,
+      "text": "    dry_run: dryRun,"
+    },
+    {
+      "n": 712,
+      "text": "  return {"
+    },
+    {
+      "n": 726,
+      "text": "  return `email:digest:cursor:${String(slotKey || \"\").trim()}`;"
+    },
+    {
+      "n": 733,
+      "text": "    return {"
+    },
+    {
+      "n": 741,
+      "text": "    return {"
+    },
+    {
+      "n": 749,
+      "text": "    return {"
+    },
+    {
+      "n": 756,
+      "text": "    return {"
+    },
+    {
+      "n": 828,
+      "text": "  const targetUserId = String(opts.target_user_id || \"\").trim();"
+    },
+    {
+      "n": 839,
+      "text": "    return {"
+    },
+    {
+      "n": 849,
+      "text": "  let cursor = {"
+    },
+    {
+      "n": 855,
+      "text": "    cursor = {"
+    },
+    {
+      "n": 861,
+      "text": "  let query = `user_preferences?alertas_activas=is.true&alertas_email=is.true&select=user_id&order=user_id.asc&limit=${maxUsers}`;"
+    },
+    {
+      "n": 865,
+      "text": "    query += `&offset=${Number(cursor.offset || 0)}`;"
+    },
+    {
+      "n": 867,
+      "text": "  const prefRows = await supabaseSelect(env, query).catch((err) => {"
+    },
+    {
+      "n": 871,
+      "text": "  const rowsToProcess = Array.isArray(prefRows) ? prefRows : [];"
+    },
+    {
+      "n": 872,
+      "text": "  if (!rowsToProcess.length) {"
+    },
+    {
+      "n": 874,
+      "text": "    return {"
+    },
+    {
+      "n": 883,
+      "text": "  const userIds = rowsToProcess.map((row) => String(row?.user_id || \"\").trim()).filter(Boolean);"
+    },
+    {
+      "n": 885,
+      "text": "  let processedUsers = 0;"
+    },
+    {
+      "n": 888,
+      "text": "  for (const row of rowsToProcess) {"
+    },
+    {
+      "n": 891,
+      "text": "    processedUsers += 1;"
+    },
+    {
+      "n": 926,
+      "text": "    const alertData = await <redacted>(env, userId).catch((err) => {"
+    },
+    {
+      "n": 928,
+      "text": "      return { ok: false, message: err?.message || \"build_failed\" };"
+    },
+    {
+      "n": 1034,
+      "text": "    processed_users: processedUsers,"
+    },
+    {
+      "n": 1039,
+      "text": "  return {"
+    },
+    {
+      "n": 1041,
+      "text": "    processed_users: processedUsers,"
+    }
   ],
-  "markers": {
-    "batch_size": "80",
-    "max_runtime_ms": null,
-    "cursor_kv": false,
-    "cursor_put": false,
-    "self_continuation": false,
-    "scheduled_waituntil": false,
-    "scheduled_direct_await": true,
-    "per_user_try": false,
-    "build_alerts_calls": 1,
-    "supabase_calls": 8,
-    "fetch_calls": 0,
-    "brevo_calls": 2,
-    "worker_run_refs": 0,
-    "debug_users": true,
-    "target_user_id": true,
-    "dry_run": true,
-    "reservation_before_send": false,
-    "catches_build_to_null": false,
-    "returns_ok": true,
-    "sweep_chars": 37300,
-    "main_sha256": "9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f"
-  },
-  "loopMarkers": {
-    "user_lookup": false,
-    "build_alerts": false,
-    "resolve_plan": true,
-    "mark_sent": true,
-    "reservation": true,
-    "continue_on_error": true,
-    "break_on_error": false,
-    "throw_in_loop": false,
-    "loop_prefix_sha256": "28d510aa2397e4ca320aa246741ee920da3b12541c9be13a9a887845b3cea805"
-  }
+  "scheduled_safe_lines": [
+    "    const emailCronStartedAt = (/* @__PURE__ */ new Date()).toISOString();",
+    "    const ACTIVE_SLOT_KEY = \"email:active_slot_key\";",
+    "      const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;",
+    "        await kv.put(`email:slot:${activeSlotKey}:started_at`, (/* @__PURE__ */ new Date()).toISOString(), {",
+    "        console.log(\"CRON EMAIL SLOT START\", activeSlotKey);",
+    "        console.log(\"CRON EMAIL SLOT PENDING, continuo slot anterior:\", activeSlotKey, \"nuevo slot:\", slot.slot_key);",
+    "        console.log(\"CRON EMAIL SLOT YA FINALIZADO:\", slot.slot_key);",
+    "    const activeFinishedKey = `email:slot:${activeSlotKey}:finished`;",
+    "      console.log(\"CRON EMAIL ACTIVE SLOT CLEANED\", cleanedSlotKey);",
+    "        const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;",
+    "          await kv.put(`email:slot:${activeSlotKey}:started_at`, (/* @__PURE__ */ new Date()).toISOString(), {",
+    "          console.log(\"CRON EMAIL SLOT START AFTER STALE CLEANUP\", activeSlotKey);",
+    "      result = await runEmailAlertsSweep(env, {",
+    "        max_users: env.<redacted> || env.<redacted> || 80",
+    "      console.error(\"CRON EMAIL SWEEP UNHANDLED\", err);",
+    "      ctx.waitUntil(<redacted>(env, emailCronStartedAt, failureResult, activeSlotKey));",
+    "    console.log(\"CRON EMAIL SWEEP RESULT\", JSON.stringify(result || {}));",
+    "    ctx.waitUntil(<redacted>(env, emailCronStartedAt, result, activeSlotKey));",
+    "      console.log(\"CRON EMAIL SLOT FINISHED\", activeSlotKey);",
+    "async function <redacted>(env) {",
+    "  const r = await runEmailAlertsSweep(env, { source: \"manual_test\" });",
+    "__name(<redacted>, \"<redacted>\");",
+    "    const targetEmail = String(url.searchParams.get(\"target_email\") || \"\").trim().toLowerCase();",
+    "    if (!targetUserId && targetEmail) {",
+    "        `users?email=eq.${encodeURIComponent(targetEmail)}&select=id,email&limit=1`",
+    "          error: \"No se encontr\\xF3 usuario para ese email\",",
+    "          target_email: targetEmail",
+    "        error: \"Falta target_user_id o target_email\"",
+    "    const result = await runEmailAlertsSweep(env, {",
+    "      target_email: targetEmail || null,"
+  ]
 }
