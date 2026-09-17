@@ -15,13 +15,11 @@ const fetchNew = `  const res = await fetch(\n    \`https://servicios3.abc.gob.a
 if (source.includes(fetchOld)) source = source.replace(fetchOld, fetchNew);
 assert.ok(source.includes(fetchNew), 'ABC postulantes fetch was not wired to options.signal');
 
-// 2) Patch ONLY the email sweep enrichment function. Other postulantes callers keep
-// their existing behavior and therefore cannot make this regression check ambiguous.
+// 2) Patch ONLY the email sweep enrichment function.
 const enrichStart = source.indexOf('async function enrichEmailVisibleAlertsWithPostulantes');
 assert.notEqual(enrichStart, -1, 'missing enrichEmailVisibleAlertsWithPostulantes');
-const enrichEndMarker = '__name(enrichEmailVisibleAlertsWithPostulantes';
-const enrichEnd = source.indexOf(enrichEndMarker, enrichStart);
-assert.notEqual(enrichEnd, -1, 'missing enrichEmailVisibleAlertsWithPostulantes end marker');
+const enrichEnd = source.indexOf('\n  const userIds =', enrichStart);
+assert.notEqual(enrichEnd, -1, 'missing canonical email enrichment end boundary');
 let enrich = source.slice(enrichStart, enrichEnd);
 
 const oldRace = `        try {\n          const resumen = await Promise.race([\n            obtenerResumenPostulantesABC(ids.oferta, ids.detalle),\n            new Promise((_, reject) =>\n              setTimeout(() => reject(new Error("timeout_postulantes_email")), 4500)\n            )\n          ]);\n\n          return {`;
