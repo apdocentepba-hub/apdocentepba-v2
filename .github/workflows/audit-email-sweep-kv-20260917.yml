@@ -1,0 +1,64 @@
+name: Audit email sweep KV state 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-email-sweep-kv-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      ACTIVE_VERSION: a6eade87-0174-4490-9798-56af3d98095a
+    steps:
+      - name: Read active slot and cursor keys from Worker KV bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE_VERSION}?include=modules" > tmp/version.json
+          node <<'NODE' > tmp/kv-bindings.tsv
+          const j=require('./tmp/version.json');
+          for(const b of (j.result?.bindings||[])) {
+            const type=String(b.type||'');
+            if(type.includes('kv')) console.log([b.name||'',type,b.namespace_id||b.id||''].join('\t'));
+          }
+          NODE
+          echo 'KV bindings:'
+          cat tmp/kv-bindings.tsv
+          found=0
+          while IFS=$'\t' read -r name type ns; do
+            [ -z "$ns" ] && continue
+            enc_key=$(node -e "process.stdout.write(encodeURIComponent('email:active_slot_key'))")
+            code=$(curl -sS -o tmp/value.txt -w "%{http_code}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${ns}/values/${enc_key}" || true)
+            value=''
+            [ "$code" = "200" ] && value=$(cat tmp/value.txt)
+            echo "binding=${name} namespace=${ns} active_slot_http=${code} active_slot=${value}"
+            if [ "$code" = "200" ] && [ -n "$value" ]; then
+              found=1
+              slot="$value"
+              for suffix in cursor_user_id finished started_at; do
+                key="email:slot:${slot}:${suffix}"
+                enc=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$key")
+                c=$(curl -sS -o tmp/key.txt -w "%{http_code}" \
+                  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces/${ns}/values/${enc}" || true)
+                v=''; [ "$c" = "200" ] && v=$(cat tmp/key.txt)
+                echo "binding=${name} key=${key} http=${c} value=${v}"
+              done
+            fi
+          done < tmp/kv-bindings.tsv
+          echo "ACTIVE_SLOT_FOUND=${found}"
