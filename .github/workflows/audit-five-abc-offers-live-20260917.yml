@@ -1,0 +1,27 @@
+name: Audit five ABC offers live 2026-09-17
+
+on:
+  push:
+    paths:
+      - '.github/workflows/audit-five-abc-offers-live-20260917.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query official ABC for missed offers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          for id in 4292409 4292455 4292521 4292531 4292602; do
+            url="https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=iddetalle%3A${id}&rows=10&wt=json"
+            code=$(curl -sS -o "tmp/${id}.json" -w '%{http_code}' "$url" || true)
+            echo "=== iddetalle=${id} http=${code} ==="
+            node - "$id" <<'NODE'
+          const fs=require('fs'); const id=process.argv[2];
+          let j={}; try{j=JSON.parse(fs.readFileSync(`tmp/${id}.json`,'latin1'))}catch(e){console.log('parse_error='+e.message);process.exit(0)}
+          const docs=j.response?.docs||[]; console.log('numFound='+(j.response?.numFound??null)+' docs='+docs.length);
+          for(const d of docs) console.log(JSON.stringify({iddetalle:d.iddetalle,idoferta:d.idoferta,estado:d.estado,descdistrito:d.descdistrito,escuela:d.escuela||d.establecimiento||d.descripcion_establecimiento||null,desde:d.desde||d.fechadesde||d.inicio||null,hasta:d.hasta||d.fechahasta||d.fin||null,fechaFin:d.fechaFin||d.fecha_fin||d.fechaCierre||d.fecha_cierre||null,ult_movimiento:d.ult_movimiento||null,raw:d}));
+          NODE
+          done
