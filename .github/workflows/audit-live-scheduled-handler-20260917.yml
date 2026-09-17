@@ -1,0 +1,26 @@
+name: Audit live scheduled handler 2026-09-17
+
+on:
+  push:
+    paths:
+      - '.github/workflows/audit-live-scheduled-handler-20260917.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Print active scheduled handler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(jq -r '.result[0].id' tmp/accounts.json)
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > tmp/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "active=${ACTIVE}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/version.json
+          node -e "const j=require('./tmp/version.json'); const r=j.result; const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'); const s=Buffer.from(m?.content_base64||'','base64').toString('utf8'); const a=s.indexOf('async scheduled(event, env, ctx)'); const b=s.indexOf('\n};\nasync function handleTestMail',a); console.log('scheduled_start='+a+' scheduled_end='+b); console.log(s.slice(a,b>0?b:a+30000));"
