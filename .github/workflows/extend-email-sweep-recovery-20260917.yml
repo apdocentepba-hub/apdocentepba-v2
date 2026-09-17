@@ -1,0 +1,63 @@
+name: Extend email sweep recovery window 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/extend-email-sweep-recovery-20260917.yml
+
+permissions:
+  contents: read
+
+jobs:
+  extend:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a6eade87-0174-4490-9798-56af3d98095a
+      RECOVERY_CRON: "* 12-13 17 9 *"
+    steps:
+      - name: Replace expired recovery cron and verify active version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
+          DEPLOYMENTS_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          SCHEDULES_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DEPLOYMENTS_URL" > tmp/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "active=${ACTIVE}"
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SCHEDULES_URL" > tmp/schedules-before.json
+          node <<'NODE'
+          const fs=require('fs');
+          const j=require('./tmp/schedules-before.json');
+          const existing=(j.result?.schedules||j.result||[]).map(x=>x.cron).filter(Boolean);
+          const base=existing.filter(x=>x!=='* 10 17 9 *' && x!==process.env.RECOVERY_CRON);
+          const wanted=[...new Set([...base, process.env.RECOVERY_CRON])];
+          if(wanted.length!==4) throw new Error(`expected 4 schedules, got ${wanted.length}: ${wanted.join(' | ')}`);
+          fs.writeFileSync('tmp/schedules-update.json',JSON.stringify(wanted.map(cron=>({cron}))));
+          console.log('wanted='+wanted.join(' | '));
+          NODE
+
+          code=$(curl -sS -o tmp/put-response.json -w "%{http_code}" -X PUT "$SCHEDULES_URL" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" --data @tmp/schedules-update.json)
+          echo "put_http=${code}"
+          if [ "$code" != "200" ]; then cat tmp/put-response.json; exit 1; fi
+
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SCHEDULES_URL" > tmp/schedules-after.json
+          node <<'NODE'
+          const j=require('./tmp/schedules-after.json');
+          const got=(j.result?.schedules||j.result||[]).map(x=>x.cron);
+          if(!got.includes(process.env.RECOVERY_CRON)) throw new Error('new recovery cron missing');
+          if(got.includes('* 10 17 9 *')) throw new Error('expired recovery cron still present');
+          if(got.length!==4) throw new Error(`unexpected schedule count ${got.length}`);
+          console.log('verified='+got.join(' | '));
+          NODE
