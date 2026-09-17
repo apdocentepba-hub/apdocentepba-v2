@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       WORKER_NAME: ancient-wildflower-cd37
-      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
-      TARGET_USER_ID: 3a300893-a552-43c2-9189-071ab4a23198
     steps:
       - uses: actions/checkout@v4
       - name: Fetch active Worker and diagnose
@@ -24,59 +22,58 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p .diag
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > .diag/accounts.json
+          mkdir -p .diag artifacts
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > .diag/accounts.json
           ACCOUNT_ID=$(node -e "const j=require('./.diag/accounts.json');if(!j.success||!j.result?.length)process.exit(2);process.stdout.write(j.result[0].id)")
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > .diag/deployments.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > .diag/deployments.json
           ACTIVE=$(node -e "const j=require('./.diag/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];if(!v?.version_id)process.exit(3);process.stdout.write(v.version_id)")
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > .diag/version.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > .diag/version.json
           node - <<'NODE'
-          const fs=require('fs'), crypto=require('crypto');
-          const j=JSON.parse(fs.readFileSync('.diag/version.json','utf8'));
-          if(!j.success||!j.result) throw new Error('version fetch failed');
-          const r=j.result;
-          const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')]));
-          const main=mods[r.main_module]||'';
-          function between(a,b){const i=main.indexOf(a); if(i<0)return ''; const j=main.indexOf(b,i+a.length); return main.slice(i,j<0?Math.min(main.length,i+30000):j);}
-          const sweep=between('async function runEmailAlertsSweep(', 'async function handleTestMail(');
-          const handler=between('if (path === "/test-email-sweep"', 'if (path === "/test-digest"');
-          const scheduled=between('async scheduled(', '};');
+          const fs=require('fs'),crypto=require('crypto');
+          const j=JSON.parse(fs.readFileSync('.diag/version.json','utf8')); if(!j.success||!j.result)throw new Error('version fetch failed');
+          const r=j.result; const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')])); const main=mods[r.main_module]||'';
+          const start=main.indexOf('async function runEmailAlertsSweep('); if(start<0)throw new Error('sweep missing');
+          const nextCandidates=['async function handleTestMail(','async function runWhatsAppAlertsSweep(','function buildDigestHtml(','var worker_hotfix_default ='].map(x=>main.indexOf(x,start+40)).filter(x=>x>start);
+          const end=nextCandidates.length?Math.min(...nextCandidates):Math.min(main.length,start+120000); const sweep=main.slice(start,end);
+          const scheduledStart=main.indexOf('async scheduled('); const scheduled=scheduledStart>=0?main.slice(scheduledStart,Math.min(main.length,scheduledStart+20000)):'';
+          const num=(re)=>{const m=sweep.match(re);return m?m[1]:null};
+          const bool=(re)=>re.test(sweep);
           const markers={
-            has_sweep:!!sweep,
-            batch_size:(sweep.match(/BATCH_SIZE\s*=\s*(\d+)/)||[])[1]||null,
-            has_target_user_id:/target_user_id/.test(sweep)||/target_user_id/.test(handler),
-            handler_passes_target:/target_user_id/.test(handler),
-            has_dry_run:/dry_run/.test(sweep)||/dry_run/.test(handler),
-            handler_passes_dry_run:/dry_run/.test(handler),
-            has_cursor_kv:/EMAIL_SWEEP_STATE/.test(sweep),
-            has_per_user_try:/for\s*\([^)]*of\s+rowsToProcess[^)]*\)\s*\{[\s\S]{0,500}try\s*\{/.test(sweep),
-            swallows_build_error:/construirAlertasParaUsuario\([^)]*\)\.catch\(\(\)\s*=>\s*null\)/.test(sweep),
-            has_debug_users:/debug_users/.test(sweep)||/debug_users/.test(handler),
-            has_worker_run:/worker_runs/.test(sweep)||/recordObservedEmailCron/.test(scheduled),
-            has_wait_until:/waitUntil\([^)]*runEmailAlertsSweep/.test(scheduled),
-            sends_brevo:/brevo|sendinblue/i.test(sweep),
-            sweep_length:sweep.length,
-            handler_length:handler.length,
+            batch_size:num(/BATCH_SIZE\s*=\s*(\d+)/),
+            max_runtime_ms:num(/(?:MAX_[A-Z_]*(?:MS|MILLIS)|TIME_BUDGET_MS|DEADLINE_MS)\s*=\s*(\d+)/),
+            cursor_kv:bool(/EMAIL_SWEEP_STATE/),
+            cursor_put:bool(/EMAIL_SWEEP_STATE\.put\([^)]*cursor/),
+            self_continuation:bool(/fetch\([^\n]{0,300}(?:email-sweep|sweep|continue)/i)||/waitUntil\([^\n]{0,300}runEmailAlertsSweep/.test(scheduled),
+            scheduled_waituntil:/waitUntil\([^\n]{0,300}runEmailAlertsSweep/.test(scheduled),
+            scheduled_direct_await:/await\s+runEmailAlertsSweep/.test(scheduled),
+            per_user_try:/for\s*\([^)]*of\s+rowsToProcess[^)]*\)\s*\{[\s\S]{0,1200}try\s*\{/.test(sweep),
+            build_alerts_calls:(sweep.match(/construirAlertasParaUsuario\s*\(/g)||[]).length,
+            supabase_calls:(sweep.match(/supabase(?:Select|Insert|Patch|Request)\s*\(/g)||[]).length,
+            fetch_calls:(sweep.match(/\bfetch\s*\(/g)||[]).length,
+            brevo_calls:(sweep.match(/brevo|sendinblue/gi)||[]).length,
+            worker_run_refs:(sweep.match(/worker_runs/g)||[]).length,
+            debug_users:bool(/debug_users/),
+            target_user_id:bool(/target_user_id/),
+            dry_run:bool(/dry_run/),
+            reservation_before_send:bool(/reserved_before_brevo_send/),
+            catches_build_to_null:/construirAlertasParaUsuario\([^)]*\)\.catch\(\(\)\s*=>\s*null\)/.test(sweep),
+            returns_ok:bool(/return\s*\{[\s\S]{0,1000}ok:\s*true/),
+            sweep_chars:sweep.length,
             main_sha256:crypto.createHash('sha256').update(main).digest('hex')
           };
-          fs.writeFileSync('.diag/markers.json',JSON.stringify({active_version_id:r.id,version_number:r.number,main_module:r.main_module,bindings:(r.bindings||[]).length,modules:Object.keys(mods),markers},null,2));
-          NODE
-
-          set +e
-          HTTP=$(curl -sS --max-time 55 -o .diag/dry.json -w "%{http_code}" "${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}")
-          CURL_RC=$?
-          set -e
-          export HTTP CURL_RC
-          node - <<'NODE'
-          const fs=require('fs');
-          const markers=JSON.parse(fs.readFileSync('.diag/markers.json','utf8'));
-          let dryText=''; try{dryText=fs.readFileSync('.diag/dry.json','utf8')}catch{}
-          let dry=null; try{dry=JSON.parse(dryText)}catch{}
-          const out={...markers,dry_run:{http_status:process.env.HTTP||null,curl_rc:Number(process.env.CURL_RC||0),json:dry?{ok:dry.ok??null,dry_run:dry.dry_run??null,processed_users:dry.processed_users??null,sent_count:dry.sent_count??null,skipped_count:dry.skipped_count??null,failed_count:dry.failed_count??null,cursor_from:dry.cursor_from??null,cursor_to:dry.cursor_to??null,message:dry.message||dry.error||null,debug_users:Array.isArray(dry.debug_users)?dry.debug_users.slice(0,3):null}:null,body_prefix:dry?null:dryText.slice(0,1200)}};
-          fs.mkdirSync('artifacts',{recursive:true});
+          const loop=sweep.match(/for\s*\([^)]*of\s+rowsToProcess[^)]*\)\s*\{([\s\S]{0,12000})/); const loopText=loop?loop[1]:'';
+          const loopMarkers={
+            user_lookup:/obtenerUsuario/.test(loopText),
+            build_alerts:/construirAlertasParaUsuario/.test(loopText),
+            resolve_plan:/resolverPlanUsuario/.test(loopText),
+            mark_sent:/first_emailed_at|last_emailed_at/.test(loopText),
+            reservation:/reservation|dedupe/i.test(loopText),
+            continue_on_error:/catch\s*\([^)]*\)\s*\{[\s\S]{0,600}continue\s*;/.test(loopText),
+            break_on_error:/catch\s*\([^)]*\)\s*\{[\s\S]{0,600}break\s*;/.test(loopText),
+            throw_in_loop:/\bthrow\b/.test(loopText),
+            loop_prefix_sha256:crypto.createHash('sha256').update(loopText.slice(0,12000)).digest('hex')
+          };
+          const out={active_version_id:r.id,version_number:r.number,main_module:r.main_module,bindings:(r.bindings||[]).length,modules:Object.keys(mods),markers,loopMarkers};
           fs.writeFileSync('artifacts/diag-live-email-sweep-20260917.json',JSON.stringify(out,null,2));
           NODE
       - name: Commit sanitized diagnostic result
@@ -84,5 +81,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/diag-live-email-sweep-20260917.json
-          git commit -m "diag: capture live email sweep state 2026-09-17" || exit 0
+          git commit -m "diag: refine live email sweep state 2026-09-17" || exit 0
           git push
