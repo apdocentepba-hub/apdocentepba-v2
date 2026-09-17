@@ -17,7 +17,7 @@ jobs:
       WORKER_NAME: ancient-wildflower-cd37
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch active Worker and count per-user work
+      - name: Fetch active Worker slot logic
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -31,18 +31,17 @@ jobs:
           node - <<'NODE'
           const fs=require('fs'),crypto=require('crypto'); const j=JSON.parse(fs.readFileSync('.diag/version.json','utf8')); const r=j.result;
           const mods=Object.fromEntries((r.modules||[]).map(m=>[m.name,Buffer.from(m.content_base64||'','base64').toString('utf8')])); const main=mods[r.main_module]||'';
-          const start=main.indexOf('async function runEmailAlertsSweep('); const next=['async function handleTestMail(','async function runWhatsAppAlertsSweep(','function buildDigestHtml(','var worker_hotfix_default ='].map(x=>main.indexOf(x,start+40)).filter(x=>x>start); const end=next.length?Math.min(...next):start+120000; const sweep=main.slice(start,end);
-          const loopStart=sweep.indexOf('for (const row of rowsToProcess)'); const loop=sweep.slice(loopStart,Math.min(sweep.length,loopStart+23000));
-          const awaitCalls=[]; for(const m of loop.matchAll(/await\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/g)) awaitCalls.push(m[1]);
-          const calls={}; for(const x of awaitCalls) calls[x]=(calls[x]||0)+1;
-          const constants={}; for(const re of [/DEFAULT_BATCH_SIZE\s*=\s*(\d+)/,/BATCH_USERS_PER_RUN\s*=\s*([^;\n]+)/,/ALERTS_PER_USER\s*=\s*([^;\n]+)/,/MAX_[A-Z_]+\s*=\s*([^;\n]+)/g]) { if(re.global){for(const m of sweep.matchAll(re))constants[m[0].split('=')[0].trim()]=m[1].trim()} else {const m=sweep.match(re);if(m)constants[re.source.split('\\s')[0]]=m[1].trim()} }
-          const out={active_version_id:r.id,version_number:r.number,main_sha256:crypto.createHash('sha256').update(main).digest('hex'),constants,per_user_await_calls:calls,per_user_await_total:awaitCalls.length,has_cursor_write:/kv\.put\(cursorKey/.test(sweep),has_slot_finish:/finishedKey|:finished/.test(sweep),has_self_continuation:/waitUntil\([^\n]{0,400}runEmailAlertsSweep|fetch\([^\n]{0,400}(?:email-sweep|continue)/i.test(sweep)};
-          fs.writeFileSync('artifacts/diag-live-email-sweep-20260917.json',JSON.stringify(out,null,2));
+          const hits=[]; const lines=main.split('\n');
+          for(let i=0;i<lines.length;i++){
+            const l=lines[i];
+            if(/slot_key|scheduledTime|event\.cron|getUTCHours|getHours\(|Argentina|Buenos_Aires|activeSlotKey|EMAIL_CRON|emailCronSlot|resolve.*Slot/i.test(l)) hits.push({n:i+1,text:l.replace(/[A-Za-z0-9_-]{24,}/g,'<redacted>').slice(0,500)});
+          }
+          fs.writeFileSync('artifacts/diag-live-email-sweep-20260917.json',JSON.stringify({active_version_id:r.id,version_number:r.number,main_sha256:crypto.createHash('sha256').update(main).digest('hex'),slot_logic:hits.slice(0,220)},null,2));
           NODE
       - name: Commit sanitized diagnostic result
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/diag-live-email-sweep-20260917.json
-          git commit -m "diag: count live email sweep per-user work" || exit 0
+          git commit -m "diag: capture live email slot logic" || exit 0
           git push
