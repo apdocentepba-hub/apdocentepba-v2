@@ -1,0 +1,45 @@
+name: Audit Cloudflare cron capacity 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/audit-cloudflare-cron-capacity-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Count cron triggers across account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts" > tmp/scripts.json
+          node -e "const j=require('./tmp/scripts.json'); for(const s of (j.result||[])) console.log(s.id||s.name)" > tmp/script-names.txt
+          total=0
+          while IFS= read -r script; do
+            [ -z "$script" ] && continue
+            enc=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$script")
+            code=$(curl -sS -o tmp/schedules.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${enc}/schedules" || true)
+            if [ "$code" != "200" ]; then
+              echo "script=${script} schedules_http=${code}"
+              continue
+            fi
+            count=$(node -e "const j=require('./tmp/schedules.json');const a=j.result?.schedules||j.result||[];process.stdout.write(String(a.length))")
+            crons=$(node -e "const j=require('./tmp/schedules.json');const a=j.result?.schedules||j.result||[];process.stdout.write(a.map(x=>x.cron).join(' | '))")
+            total=$((total + count))
+            echo "script=${script} count=${count} crons=${crons}"
+          done < tmp/script-names.txt
+          echo "ACCOUNT_CRON_TOTAL=${total}"
