@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/audit-cloudflare-cron-graphql-20260917.yml'
 
+# rerun: 2026-09-17T12:35Z
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -19,7 +20,7 @@ jobs:
           mkdir -p tmp
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
           ACCOUNT_ID=$(jq -r '.result[0].id' tmp/accounts.json)
-          FROM_ISO=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          FROM_ISO=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           TO_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           QUERY='query GetWorkersAnalytics($accountTag: string, $datetimeStart: string, $datetimeEnd: string, $scriptName: string) { viewer { accounts(filter: {accountTag: $accountTag}) { workersInvocationsAdaptive(limit: 500, filter: {scriptName: $scriptName, datetime_geq: $datetimeStart, datetime_leq: $datetimeEnd}) { sum { requests errors subrequests } dimensions { datetime scriptName status } } } } }'
           jq -n --arg q "$QUERY" --arg a "$ACCOUNT_ID" --arg f "$FROM_ISO" --arg t "$TO_ISO" --arg s "$WORKER_NAME" '{query:$q,variables:{accountTag:$a,datetimeStart:$f,datetimeEnd:$t,scriptName:$s}}' > tmp/gql.json
@@ -27,4 +28,4 @@ jobs:
           echo "graphql_http=${CODE} from=${FROM_ISO} to=${TO_ISO}"
           cat tmp/result.json
           echo
-          node -e "const j=require('./tmp/result.json'); const a=j.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive||[]; console.log('rows='+a.length); for(const x of a){console.log(JSON.stringify({datetime:x.dimensions?.datetime,status:x.dimensions?.status,requests:x.sum?.requests,errors:x.sum?.errors,subrequests:x.sum?.subrequests,script:x.dimensions?.scriptName}))}"
+          node -e "const j=require('./tmp/result.json'); const a=j.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive||[]; console.log('rows='+a.length); for(const x of a.sort((x,y)=>String(x.dimensions?.datetime).localeCompare(String(y.dimensions?.datetime)))){console.log(JSON.stringify({datetime:x.dimensions?.datetime,status:x.dimensions?.status,requests:x.sum?.requests,errors:x.sum?.errors,subrequests:x.sum?.subrequests,script:x.dimensions?.scriptName}))}"
