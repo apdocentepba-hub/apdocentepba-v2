@@ -1,0 +1,118 @@
+name: Fix recovery stale finished v2 2026-09-17
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-recovery-stale-finished-v2-20260917.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: 0d0aba09-48e8-4866-8891-c7fa289b853d
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: RED patch GREEN deploy stale-finished bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/accounts.json
+          ACCOUNT_ID=$(jq -r '.result[0].id' tmp/accounts.json)
+          DEPLOYMENTS_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DEPLOYMENTS_URL" > tmp/deployments.json
+          ACTIVE=$(node -e "const j=require('./tmp/deployments.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "active=${ACTIVE}"
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/active.json
+
+          node - <<'NODE'
+          const fs=require('fs'); const r=require('./tmp/active.json').result;
+          if(!r?.id) throw new Error('active missing');
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m?.content_base64||'','base64').toString('utf8');
+          if(!s.includes('recovery_force_once_v1')) throw new Error('v1 recovery marker missing');
+          if(s.includes('recovery_force_once_v2')) throw new Error('v2 unexpectedly present');
+          fs.writeFileSync('tmp/before.js',s);
+          fs.writeFileSync('tmp/binding-shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const metadata={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: bypass stale finished for one recovery','workers/tag':'email-recovery-stale-finished-v2-20260917'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length) metadata.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/metadata.json',JSON.stringify(metadata));
+          NODE
+
+          # RED: old code does not clear/bypass the stale finished flag.
+          if node -e "const s=require('fs').readFileSync('tmp/before.js','utf8'); if(s.includes('bypassFinishedForRecovery') && s.includes('kv.delete(recoveryFinishedKey)')) process.exit(0); process.exit(1)"; then
+            echo 'RED unexpectedly passed'; exit 1
+          else
+            echo 'RED confirmed: stale finished is not bypassed'
+          fi
+
+          node - <<'NODE'
+          const fs=require('fs');
+          let s=fs.readFileSync('tmp/before.js','utf8');
+          const marker='    let activeSlotKey = String(await kv.get(ACTIVE_SLOT_KEY).catch(() => "") || "").trim();';
+          if((s.split(marker).length-1)!==1) throw new Error('activeSlotKey marker drift');
+          s=s.replace(marker, marker+'\n    let bypassFinishedForRecovery = false;');
+          s=s.replace('recovery_force_once_v1','recovery_force_once_v2');
+          const forceLine='          if (forceRecoveryOnce) {\n            await kv.put(recoveryForceKey, (/* @__PURE__ */ new Date()).toISOString(), { expirationTtl: 60 * 60 * 48 });';
+          const forceReplacement='          if (forceRecoveryOnce) {\n            await kv.delete(recoveryFinishedKey).catch(() => null);\n            bypassFinishedForRecovery = true;\n            await kv.put(recoveryForceKey, (/* @__PURE__ */ new Date()).toISOString(), { expirationTtl: 60 * 60 * 48 });';
+          if((s.split(forceLine).length-1)!==1) throw new Error('force block drift');
+          s=s.replace(forceLine,forceReplacement);
+          const guard='    const activeFinished = await kv.get(activeFinishedKey).catch(() => null);\n    if (activeFinished) {';
+          const guard2='    const activeFinished = await kv.get(activeFinishedKey).catch(() => null);\n    if (activeFinished && !bypassFinishedForRecovery) {';
+          if((s.split(guard).length-1)!==1) throw new Error('activeFinished guard drift');
+          s=s.replace(guard,guard2);
+          fs.writeFileSync('tmp/worker_hotfix.js',s);
+          NODE
+
+          node --check tmp/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'); const assert=require('assert');
+          const s=fs.readFileSync('tmp/worker_hotfix.js','utf8');
+          for(const marker of [
+            'recovery_force_once_v2',
+            'let bypassFinishedForRecovery = false;',
+            'await kv.delete(recoveryFinishedKey).catch(() => null);',
+            'bypassFinishedForRecovery = true;',
+            'if (activeFinished && !bypassFinishedForRecovery)',
+            'const DEFAULT_BATCH_SIZE = 2;',
+            'reserved_before_brevo_send',
+            'cursor_user_id'
+          ]) assert(s.includes(marker),`missing ${marker}`);
+          console.log('GREEN stale-finished recovery tests passed');
+          NODE
+
+          CODE=$(curl -sS -o tmp/upload.json -w "%{http_code}" -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -F "metadata=<tmp/metadata.json;type=application/json" -F "worker_hotfix.js=@tmp/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo "upload_http=${CODE}"
+          test "$CODE" = "200"
+          CANDIDATE=$(jq -r '.result.id' tmp/upload.json)
+          test -n "$CANDIDATE" -a "$CANDIDATE" != "null"
+          echo "candidate=${CANDIDATE}"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE}?include=modules" > tmp/candidate.json
+          node - <<'NODE'
+          const expected=require('./tmp/binding-shape.json'); const r=require('./tmp/candidate.json').result;
+          const actual=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(expected)!==JSON.stringify(actual)) throw new Error('binding drift');
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js'); const s=Buffer.from(m?.content_base64||'','base64').toString('utf8');
+          if(!s.includes('if (activeFinished && !bypassFinishedForRecovery)')) throw new Error('guard missing');
+          console.log(`verified ${r.id}; bindings=${actual.length}`);
+          NODE
+
+          rollback() {
+            echo ROLLBACK
+            printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$ACTIVE" > tmp/rollback.json
+            curl -sS -X POST "$DEPLOYMENTS_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/rollback.json >/dev/null || true
+          }
+          trap rollback ERR
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Bypass stale finished for recovery"}}' "$CANDIDATE" > tmp/deploy.json
+          CODE=$(curl -sS -o tmp/deploy-response.json -w "%{http_code}" -X POST "$DEPLOYMENTS_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/deploy.json)
+          echo "deploy_http=${CODE}"
+          test "$CODE" = "200"
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DEPLOYMENTS_URL" > tmp/final.json
+          FINAL=$(node -e "const j=require('./tmp/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "final=${FINAL}"
+          test "$FINAL" = "$CANDIDATE"
+          trap - ERR
+          echo "RECOVERY_V2_DEPLOYED=${FINAL}"
