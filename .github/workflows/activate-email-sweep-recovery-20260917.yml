@@ -1,0 +1,109 @@
+name: Activate bounded email sweep recovery 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/activate-email-sweep-recovery-20260917.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      OLD_VERSION_ID: ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac
+      CANDIDATE_VERSION_ID: a6eade87-0174-4490-9798-56af3d98095a
+      TEMP_RECOVERY_CRON: "* 10 17 9 *"
+      WORKER_URL: https://ancient-wildflower-cd37.apdocentepba.workers.dev
+    steps:
+      - name: Deploy verified candidate with one temporary recovery trigger
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+
+          retry_get() {
+            out="$1"; url="$2"
+            for i in $(seq 1 10); do
+              code=$(curl -sS -o "$out" -w "%{http_code}" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$url" || true)
+              [ "$code" = "200" ] && return 0
+              echo "GET ${i}/10 HTTP ${code}; retrying"
+              sleep 3
+            done
+            cat "$out" 2>/dev/null || true
+            return 1
+          }
+
+          retry_get tmp/accounts.json "https://api.cloudflare.com/client/v4/accounts?per_page=50"
+          ACCOUNT_ID=$(node -e "const j=require('./tmp/accounts.json');process.stdout.write(j.result[0].id)")
+          DEPLOYMENTS_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          SCHEDULES_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules"
+          CANDIDATE_URL="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION_ID}?include=modules"
+
+          retry_get tmp/before.json "$DEPLOYMENTS_URL"
+          ACTIVE=$(node -e "const j=require('./tmp/before.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          test "$ACTIVE" = "$OLD_VERSION_ID"
+          retry_get tmp/schedules-before.json "$SCHEDULES_URL"
+          retry_get tmp/candidate.json "$CANDIDATE_URL"
+
+          node <<'NODE'
+          const j=require('./tmp/candidate.json'); const r=j.result;
+          if(!j.success||r?.id!==process.env.CANDIDATE_VERSION_ID) throw new Error('wrong candidate');
+          if((r.bindings||[]).length!==27) throw new Error('binding drift');
+          const main=(r.modules||[]).find(m=>m.name==='worker_hotfix.js');
+          const code=Buffer.from(main?.content_base64||'','base64').toString('utf8');
+          for(const marker of ['const DEFAULT_BATCH_SIZE = 2;','email:active_slot_key','cursor_user_id','reserved_before_brevo_send']) if(!code.includes(marker)) throw new Error(`missing ${marker}`);
+          console.log(`candidate verified: ${r.id}`);
+          NODE
+
+          rollback() {
+            echo ROLLBACK
+            printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$OLD_VERSION_ID" > tmp/rollback.json
+            curl -sS -X POST "$DEPLOYMENTS_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/rollback.json >/dev/null || true
+            node -e "const j=require('./tmp/schedules-before.json');process.stdout.write(JSON.stringify((j.result?.schedules||j.result||[]).map(x=>({cron:x.cron}))))" > tmp/rollback-schedules.json || true
+            curl -sS -X PUT "$SCHEDULES_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/rollback-schedules.json >/dev/null || true
+          }
+          trap rollback ERR
+
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Activate bounded email sweep recovery"}}' "$CANDIDATE_VERSION_ID" > tmp/deploy.json
+          code=$(curl -sS -o tmp/deploy-response.json -w "%{http_code}" -X POST "$DEPLOYMENTS_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/deploy.json)
+          echo "deploy_http=${code}"
+          test "$code" = "200"
+
+          SEEN=""
+          for i in $(seq 1 10); do
+            sleep 3
+            code=$(curl -sS -o tmp/probe.json -w "%{http_code}" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DEPLOYMENTS_URL" || true)
+            if [ "$code" != "200" ]; then echo "probe ${i}: HTTP ${code}"; continue; fi
+            SEEN=$(node -e "const j=require('./tmp/probe.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+            echo "probe ${i}: ${SEEN}"
+            [ "$SEEN" = "$CANDIDATE_VERSION_ID" ] && break
+          done
+          test "$SEEN" = "$CANDIDATE_VERSION_ID"
+
+          node <<'NODE'
+          const fs=require('fs'); const j=require('./tmp/schedules-before.json');
+          const existing=(j.result?.schedules||j.result||[]).map(x=>x.cron).filter(Boolean);
+          const wanted=[...new Set([...existing,process.env.TEMP_RECOVERY_CRON])];
+          if(wanted.length!==4) throw new Error(`expected 4 worker schedules, got ${wanted.length}`);
+          fs.writeFileSync('tmp/schedules.json',JSON.stringify(wanted.map(cron=>({cron}))));
+          console.log(`schedules=${wanted.join(' | ')}`);
+          NODE
+          code=$(curl -sS -o tmp/schedules-response.json -w "%{http_code}" -X PUT "$SCHEDULES_URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @tmp/schedules.json)
+          echo "schedules_http=${code}"
+          if [ "$code" != "200" ]; then cat tmp/schedules-response.json; exit 1; fi
+
+          retry_get tmp/schedules-after.json "$SCHEDULES_URL"
+          node -e "const j=require('./tmp/schedules-after.json');const a=(j.result?.schedules||j.result||[]).map(x=>x.cron);if(!a.includes(process.env.TEMP_RECOVERY_CRON)||a.length!==4)process.exit(1);console.log('verified schedules:',a.join(' | '))"
+          VERSION_CODE=$(curl -sS -o tmp/version.json -w "%{http_code}" "$WORKER_URL/api/version" || true)
+          test "$VERSION_CODE" = "200"
+          retry_get tmp/final.json "$DEPLOYMENTS_URL"
+          FINAL=$(node -e "const j=require('./tmp/final.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          test "$FINAL" = "$CANDIDATE_VERSION_ID"
+          trap - ERR
+          echo "ACTIVATION_OK version=${FINAL} recovery_cron=${TEMP_RECOVERY_CRON}"
