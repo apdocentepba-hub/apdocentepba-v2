@@ -24,11 +24,7 @@ jobs:
           mkdir -p out
           URL="${WORKER_URL}/test-email-sweep?dry_run=1&debug=1&limit=1&target_user_id=${TARGET_USER_ID}"
           START=$(date +%s%3N)
-          CODE=$(curl -sS --max-time 90 \
-            -D out/headers.txt \
-            -o out/body.txt \
-            -w '%{http_code}' \
-            "$URL")
+          CODE=$(curl -sS --max-time 90 -D out/headers.txt -o out/body.txt -w '%{http_code}' "$URL")
           CURL_RC=$?
           END=$(date +%s%3N)
           ELAPSED_MS=$((END-START))
@@ -37,7 +33,48 @@ jobs:
           cat out/headers.txt || true
           echo '--- response body ---'
           cat out/body.txt || true
-          # The current production bug is expected to be non-200. Preserve evidence instead of failing before artifact upload.
+          exit 0
+
+      - name: Query Workers Logs for the 22:00 incident
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_NAME: ancient-wildflower-cd37
+        run: |
+          set -uo pipefail
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > out/accounts.json
+          ACCOUNT_ID=$(node -e "const j=require('./out/accounts.json'); if(!j.success||!j.result?.length) process.exit(2); process.stdout.write(j.result[0].id)")
+          cat > out/telemetry-query.json <<JSON
+          {
+            "queryId":"apd-email-incident-20260916-2200",
+            "view":"events",
+            "limit":1000,
+            "timeframe":{"from":1789606770000,"to":1789606950000},
+            "parameters":{
+              "datasets":["cloudflare-workers"],
+              "filterCombination":"and",
+              "filters":[
+                {"key":"\$metadata.service","operation":"eq","type":"string","value":"${WORKER_NAME}"}
+              ]
+            }
+          }
+          JSON
+          TELEMETRY_CODE=$(curl -sS -o out/telemetry.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @out/telemetry-query.json \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/observability/telemetry/query")
+          TELEMETRY_RC=$?
+          printf 'telemetry_http_code=%s\ntelemetry_curl_rc=%s\n' "$TELEMETRY_CODE" "$TELEMETRY_RC" | tee out/telemetry-status.txt
+          node - <<'NODE' || true
+          const fs=require('fs');
+          const p='out/telemetry.json';
+          if(!fs.existsSync(p)) process.exit(0);
+          let j; try { j=JSON.parse(fs.readFileSync(p,'utf8')); } catch { console.log(fs.readFileSync(p,'utf8')); process.exit(0); }
+          const events=j?.events?.events || [];
+          console.log(JSON.stringify({success:j.success, errors:j.errors||[], event_count:j?.events?.count ?? events.length, events:events.map(e=>({timestamp:e.timestamp, metadata:e.$metadata, source:e.source}))},null,2));
+          NODE
           exit 0
 
       - name: Upload probe evidence
