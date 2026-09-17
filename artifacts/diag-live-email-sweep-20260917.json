@@ -2,31 +2,270 @@
   "active_version_id": "ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac",
   "version_number": 720,
   "main_sha256": "9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f",
-  "constants": {
-    "DEFAULT_BATCH_SIZE": "80",
-    "BATCH_USERS_PER_RUN": "clampInt(",
-    "MAX_VISIBLE_ALERTS_IN_EMAIL": "5"
-  },
-  "per_user_await_calls": {
-    "kv.get": 2,
-    "resolverPlanUsuario": 1,
-    "refreshEmailUserOfferStateFromAbc": 1,
-    "loadStoredEmailAlerts": 1,
-    "enrichEmailVisibleAlertsWithPostulantes": 1,
-    "reserveEmailDigestDeliveryLog": 1,
-    "enviarMailBrevo": 1,
-    "finishEmailDigestDeliveryLog": 1,
-    "supabaseInsert": 1,
-    "markEmailAlertsAsEmailed": 1,
-    "kv.put": 4,
-    "getEmailDigestCursor": 1,
-    "supabaseSelect": 3,
-    "loadUsersMapByIds": 1,
-    "wasInitialDigestSentRecently": 1,
-    "construirAlertasParaUsuario": 1
-  },
-  "per_user_await_total": 22,
-  "has_cursor_write": true,
-  "has_slot_finish": true,
-  "has_self_continuation": false
+  "slot_logic": [
+    {
+      "n": 3632,
+      "text": "  const hh = String(base.getHours()).padStart(2, \"0\");"
+    },
+    {
+      "n": 4540,
+      "text": "    options?.slot_key || options?.slot_info?.slot_key || \"\""
+    },
+    {
+      "n": 4573,
+      "text": "        slot_key: slotKey,"
+    },
+    {
+      "n": 4632,
+      "text": "      slot_key: slotKey || null,"
+    },
+    {
+      "n": 4822,
+      "text": "          slot_key: slotKey"
+    },
+    {
+      "n": 4947,
+      "text": "        timeZone: \"America/Argentina/Buenos_Aires\","
+    },
+    {
+      "n": 5002,
+      "text": "      slot_key: slotKey || null,"
+    },
+    {
+      "n": 5032,
+      "text": "        slot_key: slotKey || null,"
+    },
+    {
+      "n": 5053,
+      "text": "          slot_key: slotKey || null,"
+    },
+    {
+      "n": 5077,
+      "text": "          slot_key: slotKey || null,"
+    },
+    {
+      "n": 5113,
+      "text": "          slot_key: slotKey || null,"
+    },
+    {
+      "n": 5148,
+      "text": "      slot_key: slotKey || null,"
+    },
+    {
+      "n": 5210,
+      "text": "    slot_key: slotKey || null,"
+    },
+    {
+      "n": 5224,
+      "text": "function <redacted>(input = Date.now()) {"
+    },
+    {
+      "n": 5227,
+      "text": "    timeZone: \"America/Argentina/Buenos_Aires\","
+    },
+    {
+      "n": 5253,
+      "text": "    slot_key: slotKey,"
+    },
+    {
+      "n": 5257,
+      "text": "__name(<redacted>, \"<redacted>\");"
+    },
+    {
+      "n": 5258,
+      "text": "__name2(<redacted>, \"<redacted>\");"
+    },
+    {
+      "n": 5268,
+      "text": "      slot_key: String(slotKey || \"\").trim(),"
+    },
+    {
+      "n": 5276,
+      "text": "      slot_key: String(slotKey || \"\").trim(),"
+    },
+    {
+      "n": 5284,
+      "text": "      slot_key: String(parsed?.slot_key || slotKey || \"\").trim(),"
+    },
+    {
+      "n": 5291,
+      "text": "      slot_key: String(slotKey || \"\").trim(),"
+    },
+    {
+      "n": 5306,
+      "text": "    slot_key: String(slotKey || \"\").trim(),"
+    },
+    {
+      "n": 5364,
+      "text": "  const slotInfo = opts.slot_info || <redacted>(nowInput);"
+    },
+    {
+      "n": 5366,
+      "text": "    slot_key: slotInfo.slot_key || null,"
+    },
+    {
+      "n": 5371,
+      "text": "  if (!slotInfo.slot_hour || !slotInfo.slot_key) {"
+    },
+    {
+      "n": 5384,
+      "text": "    slot_key: slotInfo.slot_key,"
+    },
+    {
+      "n": 5390,
+      "text": "      slot_key: slotInfo.slot_key,"
+    },
+    {
+      "n": 5414,
+      "text": "      slot_key: slotInfo.slot_key"
+    },
+    {
+      "n": 5522,
+      "text": "    const digestAlertKey = `DIGEST:${slotInfo.slot_key}`;"
+    },
+    {
+      "n": 5525,
+      "text": "      slot_key: slotInfo.slot_key,"
+    },
+    {
+      "n": 5551,
+      "text": "          message: `Digest encolado para slot ${slotInfo.slot_key}`"
+    },
+    {
+      "n": 5571,
+      "text": "    slot_key: slotInfo.slot_key"
+    },
+    {
+      "n": 5579,
+      "text": "    slot_key: slotInfo.slot_key,"
+    },
+    {
+      "n": 7998,
+      "text": "      timeZone: \"America/Argentina/Buenos_Aires\","
+    },
+    {
+      "n": 12047,
+      "text": "      slot_key: String(slotKey || \"\"),"
+    },
+    {
+      "n": 12442,
+      "text": "    const slot = <redacted>(event?.scheduledTime || Date.now());"
+    },
+    {
+      "n": 12448,
+      "text": "    const ACTIVE_SLOT_KEY = \"email:active_slot_key\";"
+    },
+    {
+      "n": 12449,
+      "text": "    let activeSlotKey = String(await kv.get(ACTIVE_SLOT_KEY).catch(() => \"\") || \"\").trim();"
+    },
+    {
+      "n": 12450,
+      "text": "    if (slot.slot_hour && slot.slot_key) {"
+    },
+    {
+      "n": 12451,
+      "text": "      const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;"
+    },
+    {
+      "n": 12453,
+      "text": "      if (!activeSlotKey && !currentFinished) {"
+    },
+    {
+      "n": 12454,
+      "text": "        activeSlotKey = slot.slot_key;"
+    },
+    {
+      "n": 12455,
+      "text": "        await kv.put(ACTIVE_SLOT_KEY, activeSlotKey, {"
+    },
+    {
+      "n": 12458,
+      "text": "        await kv.put(`email:slot:${activeSlotKey}:started_at`, (/* @__PURE__ */ new Date()).toISOString(), {"
+    },
+    {
+      "n": 12461,
+      "text": "        console.log(\"CRON EMAIL SLOT START\", activeSlotKey);"
+    },
+    {
+      "n": 12462,
+      "text": "      } else if (activeSlotKey && activeSlotKey !== slot.slot_key) {"
+    },
+    {
+      "n": 12463,
+      "text": "        console.log(\"CRON EMAIL SLOT PENDING, continuo slot anterior:\", activeSlotKey, \"nuevo slot:\", slot.slot_key);"
+    },
+    {
+      "n": 12465,
+      "text": "        console.log(\"CRON EMAIL SLOT YA FINALIZADO:\", slot.slot_key);"
+    },
+    {
+      "n": 12468,
+      "text": "    if (!activeSlotKey) {"
+    },
+    {
+      "n": 12471,
+      "text": "    const activeFinishedKey = `email:slot:${activeSlotKey}:finished`;"
+    },
+    {
+      "n": 12474,
+      "text": "      const cleanedSlotKey = activeSlotKey;"
+    },
+    {
+      "n": 12475,
+      "text": "      await kv.delete(ACTIVE_SLOT_KEY).catch(() => null);"
+    },
+    {
+      "n": 12477,
+      "text": "      activeSlotKey = \"\";"
+    },
+    {
+      "n": 12478,
+      "text": "      if (slot.slot_hour && slot.slot_key && cleanedSlotKey !== slot.slot_key) {"
+    },
+    {
+      "n": 12479,
+      "text": "        const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;"
+    },
+    {
+      "n": 12482,
+      "text": "          activeSlotKey = slot.slot_key;"
+    },
+    {
+      "n": 12483,
+      "text": "          await kv.put(ACTIVE_SLOT_KEY, activeSlotKey, {"
+    },
+    {
+      "n": 12486,
+      "text": "          await kv.put(`email:slot:${activeSlotKey}:started_at`, (/* @__PURE__ */ new Date()).toISOString(), {"
+    },
+    {
+      "n": 12489,
+      "text": "          console.log(\"CRON EMAIL SLOT START AFTER STALE CLEANUP\", activeSlotKey);"
+    },
+    {
+      "n": 12492,
+      "text": "      if (!activeSlotKey) return;"
+    },
+    {
+      "n": 12498,
+      "text": "        slot_key: activeSlotKey,"
+    },
+    {
+      "n": 12517,
+      "text": "      ctx.waitUntil(recordObservedEmailCron(env, emailCronStartedAt, failureResult, activeSlotKey));"
+    },
+    {
+      "n": 12521,
+      "text": "    ctx.waitUntil(recordObservedEmailCron(env, emailCronStartedAt, result, activeSlotKey));"
+    },
+    {
+      "n": 12526,
+      "text": "      await kv.delete(ACTIVE_SLOT_KEY).catch(() => null);"
+    },
+    {
+      "n": 12527,
+      "text": "      console.log(\"CRON EMAIL SLOT FINISHED\", activeSlotKey);"
+    }
+  ]
 }
