@@ -1,0 +1,43 @@
+name: Test provincia scanner one step 2026-09-17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-provincia-one-step-20260917.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run exactly one provincial backfill step
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://ancient-wildflower-cd37.apdocentepba.workers.dev/api/provincia/backfill-step"
+          CODE=$(curl --max-time 90 -sS -o result.json -w '%{http_code}' -X POST "$URL" \
+            -H 'Content-Type: application/json' \
+            --data '{"force":true}')
+          echo "http=$CODE"
+          cat result.json
+          test "$CODE" = "200"
+          node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('result.json','utf8'));
+          if(j.ok!==true) throw new Error('scanner step not ok: '+JSON.stringify(j));
+          console.log('SCANNER_STEP_OK '+JSON.stringify({
+            finished:j.finished,
+            district_name:j.district_name,
+            next_district_name:j.next_district_name,
+            next_page:j.next_page,
+            pages_processed:j.pages_processed,
+            districts_completed:j.districts_completed,
+            offers_processed:j.offers_processed,
+            last_batch_count:j.last_batch_count,
+            total_districts:j.total_districts
+          }));
+          NODE
