@@ -1,15 +1,16 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "worker_name": "ancient-wildflower-cd37",
-  "account_id": "f446c729ea2148db5f90126e61e5abcd",
-  "version_id": "ed4e8d0f-f6c0-4d00-a5d1-75e8714956ac",
+  "version_id": "a7a7ec33-9010-4e2b-b9fa-88c7144bbbef",
+  "version_number": 736,
   "main_module": "worker_hotfix.js",
-  "captured_at": "2026-09-16T23:06:23.230Z",
+  "compatibility_date": "2026-04-01",
+  "captured_at": "2026-09-18T01:18:21.309Z",
   "modules": [
     {
       "name": "worker_hotfix.js",
-      "module_sha256": "9ad45f5f74a4db390aeba7277cedda09ab10eaf2f89ba8414e1bc641b83b599f",
-      "source_sha256": "ddf990206512b45fd2031c7c043d5c5e7a844ce5d620aa2df604762e5c155a00"
+      "sha256": "d9b57c815ee05bb04d572fbef42090c487e18b5cda53666c4d874bd315f4cd16",
+      "bytes": 505859
     }
   ],
   "bindings": [
@@ -122,5 +123,11 @@
       "name": "WORKER_URL",
       "type": "plain_text"
     }
+  ],
+  "schedules": [
+    "0 01 * * *",
+    "0 17 * * *",
+    "0 21 * * *",
+    "1-59/2 * * * *"
   ]
 }
