@@ -1,0 +1,216 @@
+name: Add email cron health gate 2026-09-18
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-email-cron-health-gate-20260918.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: 0fde0fff-39f8-42a0-98b2-c7e9c9010126
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: RED patch GREEN deploy health gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/a.json
+          A=$(jq -r '.result[0].id' tmp/a.json)
+          DURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/deployments"
+          SURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/schedules"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/d.json
+          ACTIVE=$(node -e "const j=require('./tmp/d.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo active_before=$ACTIVE
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/v.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SURL" > tmp/schedules-before.json
+
+          node - <<'NODE'
+          const fs=require('fs');const r=require('./tmp/v.json').result;
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m?.content_base64||'','base64').toString('utf8');
+          fs.writeFileSync('tmp/before.js',s);
+          fs.writeFileSync('tmp/shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const md={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: persistent email cron health gate','workers/tag':'email-cron-health-20260918'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length)md.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/md.json',JSON.stringify(md));
+          NODE
+
+          if node -e "const s=require('fs').readFileSync('tmp/before.js','utf8');process.exit(s.includes('async function checkEmailCronSlotHealth')?0:1)"; then
+            echo "RED unexpectedly passed"; exit 1
+          else
+            echo "RED confirmed: health gate absent"
+          fi
+
+          node - <<'NODE'
+          const fs=require('fs');
+          let s=fs.readFileSync('tmp/before.js','utf8');
+
+          // Fix existing system-error telemetry column mismatch.
+          const safeStart=s.indexOf('async function safeInsertSystemError');
+          const safeEnd=s.indexOf('__name(safeInsertSystemError',safeStart);
+          if(safeStart<0||safeEnd<0) throw new Error('safeInsertSystemError missing');
+          let safeBlock=s.slice(safeStart,safeEnd);
+          if(!safeBlock.includes('origen:')) throw new Error('expected origen mismatch not found');
+          safeBlock=safeBlock.replace('origen: String(origin || "worker_cron").slice(0, 120),','modulo: String(origin || "worker_cron").slice(0, 120),');
+          s=s.slice(0,safeStart)+safeBlock+s.slice(safeEnd);
+
+          const insertMarker='async function recordObservedEmailCron(env, startedAt, result, slotKey) {';
+          if((s.split(insertMarker).length-1)!==1) throw new Error('recordObservedEmailCron marker drift');
+          const helper=`
+          function parseEmailCronHealthDetail(value) {
+            if (value && typeof value === "object") return value;
+            if (typeof value !== "string" || !value.trim()) return {};
+            try { return JSON.parse(value); } catch (_) { return {}; }
+          }
+          __name(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
+          __name2(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
+
+          function summarizeEmailCronSlotHealth(rows, slotKey) {
+            const wanted = String(slotKey || "").trim();
+            const matching = (Array.isArray(rows) ? rows : []).map((row) => ({
+              row,
+              detail: parseEmailCronHealthDetail(row?.detalle)
+            })).filter((item) => String(item.detail?.slot_key || "").trim() === wanted && String(item.detail?.job_name || "") === "email_alerts_cron");
+            const processedUsers = matching.reduce((sum, item) => sum + Number(item.detail?.processed_users ?? item.row?.usuarios_total ?? 0), 0);
+            const sentCount = matching.reduce((sum, item) => sum + Number(item.detail?.sent_count ?? item.row?.alertas_total ?? 0), 0);
+            const errorCount = matching.reduce((sum, item) => sum + Math.max(Number(item.row?.errores || 0), Number(item.detail?.failed_count || 0)), 0);
+            const finished = matching.some((item) => item.detail?.finished === true);
+            const nonSuccess = matching.filter((item) => !["success"].includes(String(item.row?.estado || "").toLowerCase())).length;
+            return {
+              slot_key: wanted,
+              healthy: matching.length > 0 && finished && errorCount === 0 && nonSuccess === 0,
+              runs_count: matching.length,
+              processed_users: processedUsers,
+              sent_count: sentCount,
+              error_count: errorCount,
+              finished,
+              non_success_runs: nonSuccess
+            };
+          }
+          __name(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
+          __name2(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
+
+          async function checkEmailCronSlotHealth(env, kv, slotKey) {
+            const key = "email:health:" + String(slotKey || "").trim() + ":checked";
+            if (!kv || !slotKey) return { ok: false, skipped: true, reason: "missing_state" };
+            const existing = await kv.get(key).catch(() => null);
+            if (existing) return { ok: true, skipped: true, reason: "already_checked" };
+            const rows = await supabaseSelect(env, "worker_runs?select=id,estado,usuarios_total,alertas_total,errores,detalle,fecha_inicio,fecha_fin&order=id.desc&limit=50");
+            const summary = summarizeEmailCronSlotHealth(rows, slotKey);
+            if (!summary.healthy) {
+              await safeInsertSystemError(
+                env,
+                "email_alerts_cron_health",
+                new Error("Slot de email incompleto o con errores: " + slotKey),
+                summary
+              );
+            }
+            await kv.put(key, JSON.stringify({ ...summary, checked_at: new Date().toISOString() }), { expirationTtl: 60 * 60 * 72 }).catch(() => null);
+            console.log("EMAIL CRON HEALTH", JSON.stringify(summary));
+            return { ok: true, ...summary };
+          }
+          __name(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
+          __name2(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
+          `;
+          s=s.replace(insertMarker,helper+insertMarker);
+
+          const oldGate='    if (!isRecognizedEmailCron) return;\n    if (isContinuationCron && !activeSlotKey) return;';
+          const newGate=`    if (!isRecognizedEmailCron) return;
+            if (isContinuationCron && !activeSlotKey) {
+              if (slot.slot_key && slot.minute >= 13) {
+                ctx.waitUntil(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
+                  console.error("EMAIL CRON HEALTH CHECK FAILED", String(err?.message || err || ""));
+                }));
+              }
+              return;
+            }`;
+          if((s.split(oldGate).length-1)!==1) throw new Error('scheduled idle gate marker drift');
+          s=s.replace(oldGate,newGate);
+          fs.writeFileSync('tmp/worker_hotfix.js',s);
+          NODE
+
+          node --check tmp/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const s=fs.readFileSync('tmp/worker_hotfix.js','utf8');
+          const ps=s.indexOf('function parseEmailCronHealthDetail');
+          const pe=s.indexOf('__name(summarizeEmailCronSlotHealth',ps);
+          let block=s.slice(ps,pe);
+          block=block.replace(/__name\([^\n]+\);\n?/g,'').replace(/__name2\([^\n]+\);\n?/g,'');
+          const ctx={};vm.createContext(ctx);vm.runInContext(block,ctx);
+          const rows=[
+            {estado:'success',usuarios_total:2,alertas_total:1,errores:0,detalle:JSON.stringify({job_name:'email_alerts_cron',slot_key:'2026-09-17_22',finished:false,processed_users:2,sent_count:1,failed_count:0})},
+            {estado:'success',usuarios_total:1,alertas_total:0,errores:0,detalle:JSON.stringify({job_name:'email_alerts_cron',slot_key:'2026-09-17_22',finished:true,processed_users:1,sent_count:0,failed_count:0})}
+          ];
+          const good=ctx.summarizeEmailCronSlotHealth(rows,'2026-09-17_22');
+          assert.equal(good.healthy,true);assert.equal(good.processed_users,3);assert.equal(good.finished,true);
+          const bad=ctx.summarizeEmailCronSlotHealth(rows.slice(0,1),'2026-09-17_22');
+          assert.equal(bad.healthy,false);assert.equal(bad.finished,false);
+          assert(s.includes('modulo: String(origin || "worker_cron").slice(0, 120)'));
+          assert(s.includes('ctx.waitUntil(checkEmailCronSlotHealth'));
+          console.log('GREEN health summary + telemetry schema passed');
+          NODE
+
+          CODE=$(curl -sS -o tmp/up.json -w '%{http_code}' -X POST "https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict"             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             -F "metadata=<tmp/md.json;type=application/json"             -F "worker_hotfix.js=@tmp/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo upload_http=$CODE; test "$CODE" = "200"
+          C=$(jq -r '.result.id' tmp/up.json); test -n "$C" -a "$C" != "null"; echo candidate=$C
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${C}?include=modules" > tmp/c.json
+          node - <<'NODE'
+          const exp=require('./tmp/shape.json'),r=require('./tmp/c.json').result;
+          const act=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(exp)!==JSON.stringify(act)) throw new Error('binding drift');
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m.content_base64,'base64').toString('utf8');
+          for(const x of ['async function checkEmailCronSlotHealth','summarizeEmailCronSlotHealth','modulo: String(origin || "worker_cron").slice(0, 120)','ctx.waitUntil(checkEmailCronSlotHealth']) if(!s.includes(x)) throw new Error('missing '+x);
+          console.log('candidate verified bindings='+act.length);
+          NODE
+
+          rollback(){
+            printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$ACTIVE" > tmp/r.json
+            curl -sS -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/r.json >/dev/null || true
+            curl -sS -X PUT "$SURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/schedules-before.json >/dev/null || true
+          }
+          trap rollback ERR
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$C" > tmp/deploy.json
+          CODE=$(curl -sS -o tmp/dr.json -w '%{http_code}' -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/deploy.json)
+          echo deploy_http=$CODE; test "$CODE" = "200"
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/f.json
+          F=$(node -e "const j=require('./tmp/f.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)")
+          echo active_after=$F; test "$F" = "$C"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SURL" > tmp/schedules-after.json
+          node - <<'NODE'
+          function ls(j){return (j.result?.schedules||j.result||[]).map(x=>x.cron).filter(Boolean).sort()}
+          const a=ls(require('./tmp/schedules-before.json')),b=ls(require('./tmp/schedules-after.json'));
+          if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error('schedule drift');
+          console.log('schedules unchanged '+a.join(' | '));
+          NODE
+
+          cp tmp/worker_hotfix.js worker-live/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),r=require('./tmp/c.json').result;
+          const p=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8')),buf=fs.readFileSync('worker-live/worker_hotfix.js');
+          p.version_id=r.id;p.version_number=r.number??null;p.main_module=r.main_module;p.compatibility_date=r.compatibility_date||null;p.captured_at=new Date().toISOString();
+          p.modules=[{name:'worker_hotfix.js',sha256:crypto.createHash('sha256').update(buf).digest('hex'),bytes:buf.length}];
+          fs.writeFileSync('worker-live/manifest.json',JSON.stringify(p,null,2)+'\n');
+          NODE
+          git config user.name "apdocentepba-hub"
+          git config user.email "apdocentepba@gmail.com"
+          git add worker-live/worker_hotfix.js worker-live/manifest.json
+          git commit -m "fix: add persistent email cron health gate"
+          git push origin HEAD:main
+          trap - ERR
+          echo HEALTH_GATE_OK=$F
