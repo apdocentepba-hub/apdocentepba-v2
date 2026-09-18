@@ -79,31 +79,17 @@ jobs:
           `;
           s=s.replace(marker,helper+marker);
 
-          const oldFinish=`    status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-            provider_response: send || null`;
-          const newFinish=`    status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-            provider_message_id: extractBrevoMessageId(send),
-            provider_response: send || null`;
-          if((s.split(oldFinish).length-1)!==1) throw new Error('finish patch marker drift');
-          s=s.replace(oldFinish,newFinish);
+          const finishRe=/(status:\s*send\?\.ok\s*\?\s*"sent_alert_digest"\s*:\s*"failed_alert_digest",\s*\n)(\s*)provider_response:\s*send\s*\|\|\s*null/;
+          if(!finishRe.test(s)) throw new Error('finish patch marker drift');
+          s=s.replace(finishRe,(m,a,indent)=>a+indent+'provider_message_id: extractBrevoMessageId(send),\n'+indent+'provider_response: send || null');
 
-          const digestFallback=`        status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-            provider_message_id: null,
-            payload,`;
-          const digestFallbackNew=`        status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-            provider_message_id: extractBrevoMessageId(send),
-            payload,`;
-          if((s.split(digestFallback).length-1)!==1) throw new Error('digest fallback marker drift');
-          s=s.replace(digestFallback,digestFallbackNew);
+          const fallbackRe=/(status:\s*send\?\.ok\s*\?\s*"sent_alert_digest"\s*:\s*"failed_alert_digest",\s*\n)(\s*)provider_message_id:\s*null,(\s*\n\s*payload,)/;
+          if(!fallbackRe.test(s)) throw new Error('digest fallback marker drift');
+          s=s.replace(fallbackRe,(m,a,indent,tail)=>a+indent+'provider_message_id: extractBrevoMessageId(send),'+tail);
 
-          const initial=`    status: send?.ok ? "sent_initial" : "failed_initial",
-            provider_message_id: null,
-            payload: {`;
-          const initialNew=`    status: send?.ok ? "sent_initial" : "failed_initial",
-            provider_message_id: extractBrevoMessageId(send),
-            payload: {`;
-          if((s.split(initial).length-1)!==1) throw new Error('initial marker drift');
-          s=s.replace(initial,initialNew);
+          const initialRe=/(status:\s*send\?\.ok\s*\?\s*"sent_initial"\s*:\s*"failed_initial",\s*\n)(\s*)provider_message_id:\s*null,(\s*\n\s*payload:\s*\{)/;
+          if(!initialRe.test(s)) throw new Error('initial marker drift');
+          s=s.replace(initialRe,(m,a,indent,tail)=>a+indent+'provider_message_id: extractBrevoMessageId(send),'+tail);
 
           fs.writeFileSync('tmp/worker_hotfix.js',s);
           NODE
