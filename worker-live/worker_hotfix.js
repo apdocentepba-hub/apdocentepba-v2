@@ -12051,7 +12051,7 @@ async function safeInsertSystemError(env, origin, err, detail = null) {
     const stack = String(err?.stack || "").slice(0, 3e3);
     const extra = detail && typeof detail === "object" ? JSON.stringify(detail).slice(0, 1800) : String(detail || "").slice(0, 1800);
     await telemetrySupabaseRequest(env, "errores_sistema", "POST", {
-      origen: String(origin || "worker_cron").slice(0, 120),
+      modulo: String(origin || "worker_cron").slice(0, 120),
       mensaje: message,
       detalle: [stack, extra].filter(Boolean).join("\n").slice(0, 4800)
     });
@@ -12060,6 +12060,61 @@ async function safeInsertSystemError(env, origin, err, detail = null) {
   }
 }
 __name(safeInsertSystemError, "safeInsertSystemError");
+
+function parseEmailCronHealthDetail(value) {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try { return JSON.parse(value); } catch (_) { return {}; }
+}
+__name(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
+__name2(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
+
+function summarizeEmailCronSlotHealth(rows, slotKey) {
+  const wanted = String(slotKey || "").trim();
+  const matching = (Array.isArray(rows) ? rows : []).map((row) => ({
+    row,
+    detail: parseEmailCronHealthDetail(row?.detalle)
+  })).filter((item) => String(item.detail?.slot_key || "").trim() === wanted && String(item.detail?.job_name || "") === "email_alerts_cron");
+  const processedUsers = matching.reduce((sum, item) => sum + Number(item.detail?.processed_users ?? item.row?.usuarios_total ?? 0), 0);
+  const sentCount = matching.reduce((sum, item) => sum + Number(item.detail?.sent_count ?? item.row?.alertas_total ?? 0), 0);
+  const errorCount = matching.reduce((sum, item) => sum + Math.max(Number(item.row?.errores || 0), Number(item.detail?.failed_count || 0)), 0);
+  const finished = matching.some((item) => item.detail?.finished === true);
+  const nonSuccess = matching.filter((item) => !["success"].includes(String(item.row?.estado || "").toLowerCase())).length;
+  return {
+    slot_key: wanted,
+    healthy: matching.length > 0 && finished && errorCount === 0 && nonSuccess === 0,
+    runs_count: matching.length,
+    processed_users: processedUsers,
+    sent_count: sentCount,
+    error_count: errorCount,
+    finished,
+    non_success_runs: nonSuccess
+  };
+}
+__name(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
+__name2(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
+
+async function checkEmailCronSlotHealth(env, kv, slotKey) {
+  const key = "email:health:" + String(slotKey || "").trim() + ":checked";
+  if (!kv || !slotKey) return { ok: false, skipped: true, reason: "missing_state" };
+  const existing = await kv.get(key).catch(() => null);
+  if (existing) return { ok: true, skipped: true, reason: "already_checked" };
+  const rows = await supabaseSelect(env, "worker_runs?select=id,estado,usuarios_total,alertas_total,errores,detalle,fecha_inicio,fecha_fin&order=id.desc&limit=50");
+  const summary = summarizeEmailCronSlotHealth(rows, slotKey);
+  if (!summary.healthy) {
+    await safeInsertSystemError(
+      env,
+      "email_alerts_cron_health",
+      new Error("Slot de email incompleto o con errores: " + slotKey),
+      summary
+    );
+  }
+  await kv.put(key, JSON.stringify({ ...summary, checked_at: new Date().toISOString() }), { expirationTtl: 60 * 60 * 72 }).catch(() => null);
+  console.log("EMAIL CRON HEALTH", JSON.stringify(summary));
+  return { ok: true, ...summary };
+}
+__name(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
+__name2(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
 async function recordObservedEmailCron(env, startedAt, result, slotKey) {
   try {
     const failed = Number(result?.failed_count || 0);
@@ -12487,7 +12542,14 @@ var worker_hotfix_default = {
     const isPrimaryEmailCron = emailCronExpr === "0 01 * * *" || emailCronExpr === "0 17 * * *" || emailCronExpr === "0 21 * * *";
     const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;
     if (!isRecognizedEmailCron) return;
-    if (isContinuationCron && !activeSlotKey) return;
+  if (isContinuationCron && !activeSlotKey) {
+    if (slot.slot_key && slot.minute >= 13) {
+      ctx.waitUntil(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
+        console.error("EMAIL CRON HEALTH CHECK FAILED", String(err?.message || err || ""));
+      }));
+    }
+    return;
+  }
     let bypassFinishedForRecovery = false;
     if (slot.slot_hour && slot.slot_key) {
       const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;
