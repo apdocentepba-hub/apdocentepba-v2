@@ -973,10 +973,23 @@ async function reserveEmailDigestDeliveryLog(env, { user, destination, payload, 
 }
 __name(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
 __name2(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
+function extractBrevoMessageId(send) {
+  const direct = String(send?.messageId || send?.message_id || "").trim();
+  if (direct) return direct;
+  let data = send?.data;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) { return null; }
+  }
+  const nested = String(data?.messageId || data?.message_id || "").trim();
+  return nested || null;
+}
+__name(extractBrevoMessageId, "extractBrevoMessageId");
+__name2(extractBrevoMessageId, "extractBrevoMessageId");
 async function finishEmailDigestDeliveryLog(env, reservation, send) {
   if (!reservation?.id) return false;
   await supabasePatchById(env, "notification_delivery_logs", reservation.id, {
     status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+    provider_message_id: extractBrevoMessageId(send),
     provider_response: send || null
   });
   return true;
@@ -3057,7 +3070,7 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     template_code: "apd_initial_digest",
     destination: user.email,
     status: send?.ok ? "sent_initial" : "failed_initial",
-    provider_message_id: null,
+    provider_message_id: extractBrevoMessageId(send),
     payload: {
       source: options.source || "first_preferences_save",
       total_alerts: items.length,
@@ -5122,7 +5135,7 @@ async function runEmailAlertsSweep(env, options = {}) {
         template_code: "apd_email_alert_digest",
         destination: user.email,
         status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
-        provider_message_id: null,
+        provider_message_id: extractBrevoMessageId(send),
         payload,
         provider_response: send || null
       }).catch(() => null);
