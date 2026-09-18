@@ -388,15 +388,9 @@ jobs:
           if(!s.includes(scannerInsert)) throw new Error('scanner insertion marker missing');
           s=s.replace(scannerInsert,scannerHelpers+scannerInsert);
 
-          const oldIdle=`    if (isContinuationCron && !activeSlotKey) {
-              if (slot.slot_key && slot.minute >= 13) {
-                ctx.waitUntil(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
-                  console.error("EMAIL CRON HEALTH CHECK FAILED", String(err?.message || err || ""));
-                }));
-              }
-              return;
-            }`;
-          if((s.split(oldIdle).length-1)!==1) throw new Error('scheduled idle block drift');
+          const idleStart=s.indexOf('    if (isContinuationCron && !activeSlotKey) {');
+          const idleEnd=s.indexOf('    let bypassFinishedForRecovery = false;', idleStart);
+          if(idleStart<0 || idleEnd<0 || idleEnd<=idleStart) throw new Error('scheduled idle block markers missing');
           const newIdle=`    if (isContinuationCron && !activeSlotKey) {
               const backgroundTasks = [];
               if (slot.slot_key && slot.minute >= 13) {
@@ -411,8 +405,9 @@ jobs:
               }
               if (backgroundTasks.length) ctx.waitUntil(Promise.allSettled(backgroundTasks));
               return;
-            }`;
-          s=s.replace(oldIdle,newIdle);
+            }
+`;
+          s=s.slice(0,idleStart)+newIdle+s.slice(idleEnd);
 
           fs.writeFileSync('tmp/worker_hotfix.js',s);
           NODE
