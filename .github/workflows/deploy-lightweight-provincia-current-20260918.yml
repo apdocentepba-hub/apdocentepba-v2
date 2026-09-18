@@ -388,8 +388,8 @@ jobs:
           if(!s.includes(scannerInsert)) throw new Error('scanner insertion marker missing');
           s=s.replace(scannerInsert,scannerHelpers+scannerInsert);
 
-          const idleStart=s.indexOf('    if (isContinuationCron && !activeSlotKey) {');
-          const idleEnd=s.indexOf('    let bypassFinishedForRecovery = false;', idleStart);
+          const idleStart=s.indexOf('if (isContinuationCron && !activeSlotKey) {');
+          const idleEnd=s.indexOf('let bypassFinishedForRecovery = false;', idleStart);
           if(idleStart<0 || idleEnd<0 || idleEnd<=idleStart) throw new Error('scheduled idle block markers missing');
           const newIdle=`    if (isContinuationCron && !activeSlotKey) {
               const backgroundTasks = [];
