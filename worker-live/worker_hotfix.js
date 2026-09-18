@@ -5877,44 +5877,136 @@ async function handleImportarCatalogoCargos(url, env) {
 }
 __name(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
 __name2(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
-async function runProvinciaBackfillStep(env, options = {}) {
+
+function shouldRunProvinciaCurrentAuto(slot) {
+  const hour = Number(slot?.hour ?? -1);
+  return hour >= 0 && hour <= 5;
+}
+__name(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
+__name2(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
+
+async function maybeRunProvinciaCurrentCron(env, slot) {
+  if (!shouldRunProvinciaCurrentAuto(slot)) {
+    return { ok: true, skipped: true, reason: "outside_auto_window" };
+  }
   const state = await obtenerScanState(env);
+  const scanDate = String(slot?.slot_date || "").trim();
+  const completed = String(state?.notes?.completed_scan_date || "").trim();
+  if (state.status === "finished" && completed === scanDate && state?.notes?.scanner_mode === "current_published") {
+    return { ok: true, skipped: true, reason: "scan_already_completed_today", scan_date: scanDate };
+  }
+  const staleRunning = isStaleProvinciaBackfill(state);
+  const force = staleRunning || state.status === "error";
+  try {
+    const result = await runProvinciaBackfillStep(env, {
+      source: "cron_current_published",
+      scan_date: scanDate,
+      force
+    });
+    console.log("PROVINCIA CURRENT SCAN", JSON.stringify(result || {}));
+    return result;
+  } catch (err) {
+    await safeInsertSystemError(env, "provincia_current_scanner", err, {
+      scan_date: scanDate,
+      status: state?.status || null,
+      district_index: state?.district_index ?? null,
+      next_page: state?.next_page ?? null
+    });
+    throw err;
+  }
+}
+__name(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
+__name2(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
+async function runProvinciaBackfillStep(env, options = {}) {
+  let state = await obtenerScanState(env);
+  const scanDate = String(options?.scan_date || "").trim();
+  const mode = String(state?.notes?.scanner_mode || "").trim();
+  const completedScanDate = String(state?.notes?.completed_scan_date || "").trim();
+  const needsModeReset = mode !== "current_published";
+  const needsDailyRestart = state.status === "finished" && scanDate && completedScanDate !== scanDate;
+
+  if (needsModeReset || needsDailyRestart) {
+    state = {
+      scope: PROVINCIA_SCOPE,
+      status: "idle",
+      mode: "current_published",
+      district_index: 0,
+      district_name: null,
+      next_page: 0,
+      pages_processed: 0,
+      districts_completed: 0,
+      offers_processed: 0,
+      last_batch_count: 0,
+      total_districts: 0,
+      started_at: null,
+      finished_at: null,
+      last_run_at: null,
+      notes: {
+        ...(state?.notes || {}),
+        scanner_mode: "current_published",
+        snapshot_writes: false,
+        manual_only: false,
+        auto_window: "00:00-05:59 America/Argentina/Buenos_Aires",
+        scan_date: scanDate || null,
+        completed_scan_date: needsDailyRestart ? null : completedScanDate || null,
+        district_scan_started_at: null,
+        pruned_current_rows: 0,
+        migrated_at: needsModeReset ? new Date().toISOString() : state?.notes?.migrated_at || null,
+        last_error: null,
+        retryable: false,
+        failed_page: 0
+      }
+    };
+    await saveScanState(env, state);
+  }
+
   const staleRunning = isStaleProvinciaBackfill(state);
   if (state.status === "running" && options.force !== true && !staleRunning) {
-    return { ok: true, skipped: true, reason: "already_running" };
+    return { ok: true, skipped: true, reason: "already_running", mode: "current_published" };
   }
+
   const catalogRows = await obtenerDistritosProvincia(env);
-  const distritos = unique(
-    catalogRows.map((row) => norm(row.apd_nombre || row.nombre || "")).filter(Boolean)
-  );
-  if (!distritos.length) {
-    throw new Error("No hay catalogo de distritos para el backfill provincial");
-  }
+  const distritos = unique(catalogRows.map((row) => norm(row.apd_nombre || row.nombre || "")).filter(Boolean));
+  if (!distritos.length) throw new Error("No hay catalogo de distritos para el scanner provincial");
+
   let districtIndex = clampInt(state.district_index, 0, Math.max(distritos.length - 1, 0), 0);
   let nextPage = clampInt(state.next_page, 0, 999999, 0);
   let pagesProcessed = Number(state.pages_processed || 0);
   let districtsCompleted = Number(state.districts_completed || 0);
   let offersProcessed = Number(state.offers_processed || 0);
-  const startedAt = state.started_at || (/* @__PURE__ */ new Date()).toISOString();
+  let prunedTotal = Number(state?.notes?.pruned_current_rows || 0);
+  const startedAt = state.started_at || new Date().toISOString();
   const districtName = distritos[districtIndex];
+  const districtScanStartedAt = nextPage > 0 && state?.notes?.district_scan_started_at
+    ? String(state.notes.district_scan_started_at)
+    : new Date().toISOString();
+
   await saveScanState(env, {
     ...state,
     scope: PROVINCIA_SCOPE,
     status: "running",
+    mode: "current_published",
     district_index: districtIndex,
     district_name: districtName,
     next_page: nextPage,
     total_districts: distritos.length,
     started_at: startedAt,
     finished_at: null,
-    last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
+    last_run_at: new Date().toISOString(),
     notes: {
-      ...state.notes || {},
+      ...(state.notes || {}),
+      scanner_mode: "current_published",
+      snapshot_writes: false,
+      manual_only: false,
+      auto_window: "00:00-05:59 America/Argentina/Buenos_Aires",
+      scan_date: scanDate || state?.notes?.scan_date || null,
+      district_scan_started_at: districtScanStartedAt,
       retryable: false,
       last_error: null,
       failed_page: 0
     }
   });
+
   try {
     const batchInfo = await fetchAPDDistrictBatch(
       districtName,
@@ -5922,62 +6014,85 @@ async function runProvinciaBackfillStep(env, options = {}) {
       PROVINCIA_STEP_PAGES,
       PROVINCIA_CAPTURE_ROWS_PER_PAGE
     );
-    const capturedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const rows = batchInfo.docs.map((doc) => buildGlobalSnapshotRow(doc, capturedAt));
-    const currentMap = await loadCurrentRowsMap(env, rows.map((row) => row.source_offer_key));
-    const currentRows = rows.map((row) => buildGlobalCurrentRow(row, currentMap.get(row.source_offer_key), capturedAt));
-    if (rows.length) {
-      for (let i = 0; i < rows.length; i += HISTORICO_INSERT_BATCH) {
-        await supabaseInsertMany(
-          env,
-          "apd_ofertas_global_snapshots",
-          rows.slice(i, i + HISTORICO_INSERT_BATCH)
-        );
-      }
-      for (let i = 0; i < currentRows.length; i += HISTORICO_INSERT_BATCH) {
-        await supabaseUpsert(
-          env,
-          "apd_ofertas_global_current",
-          currentRows.slice(i, i + HISTORICO_INSERT_BATCH),
-          "source_offer_key"
-        );
-      }
+    const capturedAt = new Date().toISOString();
+    const shapedRows = batchInfo.docs.map((doc) => buildGlobalSnapshotRow(doc, capturedAt));
+    const currentMap = await loadCurrentRowsMap(env, shapedRows.map((row) => row.source_offer_key));
+    const currentRows = shapedRows.map((row) => buildGlobalCurrentRow(row, currentMap.get(row.source_offer_key), capturedAt));
+
+    for (let i = 0; i < currentRows.length; i += HISTORICO_INSERT_BATCH) {
+      await supabaseUpsert(
+        env,
+        "apd_ofertas_global_current",
+        currentRows.slice(i, i + HISTORICO_INSERT_BATCH),
+        "source_offer_key"
+      );
     }
+
     pagesProcessed += batchInfo.pagesRead;
-    offersProcessed += rows.length;
+    offersProcessed += currentRows.length;
+    let prunedThisStep = 0;
+
     if (batchInfo.hasMore) {
       nextPage += batchInfo.pagesRead;
     } else {
+      const deletePath =
+        'apd_ofertas_global_current?distrito=eq.' + encodeURIComponent(norm(districtName)) +
+        '&last_seen_at=lt.' + encodeURIComponent(districtScanStartedAt);
+      const deleted = await supabaseRequest(env, deletePath, {
+        method: "DELETE",
+        headers: { Prefer: "return=representation" }
+      }).catch((err) => {
+        throw new Error("No se pudo podar current de " + districtName + ": " + String(err?.message || err));
+      });
+      prunedThisStep = Array.isArray(deleted) ? deleted.length : 0;
+      prunedTotal += prunedThisStep;
       districtIndex += 1;
       districtsCompleted += 1;
       nextPage = 0;
     }
+
     const finished = districtIndex >= distritos.length;
+    const nextNotes = {
+      ...(state.notes || {}),
+      scanner_mode: "current_published",
+      snapshot_writes: false,
+      manual_only: false,
+      auto_window: "00:00-05:59 America/Argentina/Buenos_Aires",
+      scan_date: scanDate || state?.notes?.scan_date || null,
+      completed_scan_date: finished ? (scanDate || state?.notes?.scan_date || new Date().toISOString().slice(0,10)) : state?.notes?.completed_scan_date || null,
+      district_scan_started_at: batchInfo.hasMore ? districtScanStartedAt : null,
+      pruned_current_rows: prunedTotal,
+      last_pruned_rows: prunedThisStep,
+      last_source_num_found: Number(batchInfo.totalFound || 0),
+      retryable: false,
+      last_error: null,
+      failed_page: 0,
+      initial_backfill_completed: finished
+    };
+
     await saveScanState(env, {
       ...state,
       scope: PROVINCIA_SCOPE,
       status: finished ? "finished" : "idle",
+      mode: "current_published",
       district_index: finished ? distritos.length : districtIndex,
       district_name: finished ? null : distritos[districtIndex] || null,
       next_page: nextPage,
       pages_processed: pagesProcessed,
       districts_completed: districtsCompleted,
       offers_processed: offersProcessed,
-      last_batch_count: rows.length,
+      last_batch_count: currentRows.length,
       total_districts: distritos.length,
       started_at: startedAt,
-      finished_at: finished ? (/* @__PURE__ */ new Date()).toISOString() : null,
-      last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
-      notes: {
-        ...state.notes || {},
-        retryable: false,
-        last_error: null,
-        failed_page: 0,
-        initial_backfill_completed: finished
-      }
+      finished_at: finished ? new Date().toISOString() : null,
+      last_run_at: new Date().toISOString(),
+      notes: nextNotes
     });
+
     return {
       ok: true,
+      mode: "current_published",
+      snapshot_writes: false,
       finished,
       district_name: districtName,
       next_district_name: finished ? null : distritos[districtIndex] || null,
@@ -5985,7 +6100,10 @@ async function runProvinciaBackfillStep(env, options = {}) {
       pages_processed: pagesProcessed,
       districts_completed: districtsCompleted,
       offers_processed: offersProcessed,
-      last_batch_count: rows.length,
+      last_batch_count: currentRows.length,
+      source_num_found: Number(batchInfo.totalFound || 0),
+      pruned_current_rows: prunedThisStep,
+      pruned_current_rows_total: prunedTotal,
       total_districts: distritos.length
     };
   } catch (err) {
@@ -5993,6 +6111,7 @@ async function runProvinciaBackfillStep(env, options = {}) {
       ...state,
       scope: PROVINCIA_SCOPE,
       status: "error",
+      mode: "current_published",
       district_index: districtIndex,
       district_name: districtName,
       next_page: nextPage,
@@ -6003,17 +6122,23 @@ async function runProvinciaBackfillStep(env, options = {}) {
       total_districts: distritos.length,
       started_at: startedAt,
       finished_at: null,
-      last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
+      last_run_at: new Date().toISOString(),
       notes: {
-        ...state.notes || {},
-        retryable: false,
-        last_error: err?.message || "Error en backfill provincial",
+        ...(state.notes || {}),
+        scanner_mode: "current_published",
+        snapshot_writes: false,
+        manual_only: false,
+        scan_date: scanDate || state?.notes?.scan_date || null,
+        district_scan_started_at: districtScanStartedAt,
+        retryable: true,
+        last_error: err?.message || "Error en scanner provincial current",
         failed_page: nextPage
       }
     });
     throw err;
   }
 }
+
 __name(runProvinciaBackfillStep, "runProvinciaBackfillStep");
 __name2(runProvinciaBackfillStep, "runProvinciaBackfillStep");
 async function fetchHistoricoRowsByDistritos(env, table, distritos, days, limit = 8e3) {
@@ -6402,31 +6527,35 @@ async function fetchAPDDistrictBatch(distritoAPD, startPage, pagesToRead, rowsPe
   const docs = [];
   let pagesRead = 0;
   let hasMore = false;
+  let totalFound = 0;
   for (let offset = 0; offset < pagesToRead; offset += 1) {
     const pageIndex = startPage + offset;
     const start = pageIndex * rowsPerPage;
-    const q = `descdistrito:"${escaparSolr(distritoAPD)}"`;
-    const url = `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=${encodeURIComponent(q)}&rows=${rowsPerPage}&start=${start}&wt=json&sort=ult_movimiento%20desc`;
+    const q = 'descdistrito:"' + escaparSolr(distritoAPD) + '" AND estado:"Publicada"';
+    const url = 'https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select?q=' + encodeURIComponent(q) + '&rows=' + rowsPerPage + '&start=' + start + '&wt=json&sort=ult_movimiento%20desc';
     const res = await fetch(url);
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`APD respondio ${res.status}: ${txt}`);
+      throw new Error('APD publicada respondio ' + res.status + ': ' + txt);
     }
     const buffer = await res.arrayBuffer();
     const rawText = new TextDecoder("iso-8859-1").decode(buffer);
     const data = JSON.parse(rawText || "{}");
     const pageDocs = Array.isArray(data?.response?.docs) ? data.response.docs : [];
-    const filtered = pageDocs.filter((doc) => norm(doc?.descdistrito || "") === norm(distritoAPD));
+    totalFound = Number(data?.response?.numFound ?? totalFound ?? 0);
+    const filtered = pageDocs.filter((doc) =>
+      norm(doc?.descdistrito || "") === norm(distritoAPD) &&
+      estadoOfertaEsPublicada(doc) &&
+      ofertaVigente(doc)
+    );
     docs.push(...filtered);
     pagesRead += 1;
-    if (pageDocs.length < rowsPerPage) {
-      hasMore = false;
-      break;
-    }
-    hasMore = true;
+    hasMore = start + pageDocs.length < totalFound;
+    if (!hasMore || pageDocs.length < rowsPerPage) break;
   }
-  return { docs, pagesRead, hasMore };
+  return { docs, pagesRead, hasMore, totalFound };
 }
+
 __name(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
 __name2(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
 function buildGlobalSnapshotRow(oferta, capturedAt) {
@@ -12542,15 +12671,22 @@ var worker_hotfix_default = {
     const isPrimaryEmailCron = emailCronExpr === "0 01 * * *" || emailCronExpr === "0 17 * * *" || emailCronExpr === "0 21 * * *";
     const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;
     if (!isRecognizedEmailCron) return;
-  if (isContinuationCron && !activeSlotKey) {
+      if (isContinuationCron && !activeSlotKey) {
+    const backgroundTasks = [];
     if (slot.slot_key && slot.minute >= 13) {
-      ctx.waitUntil(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
+      backgroundTasks.push(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
         console.error("EMAIL CRON HEALTH CHECK FAILED", String(err?.message || err || ""));
       }));
     }
+    if (shouldRunProvinciaCurrentAuto(slot)) {
+      backgroundTasks.push(maybeRunProvinciaCurrentCron(env, slot).catch((err) => {
+        console.error("PROVINCIA CURRENT CRON FAILED", String(err?.message || err || ""));
+      }));
+    }
+    if (backgroundTasks.length) ctx.waitUntil(Promise.allSettled(backgroundTasks));
     return;
   }
-    let bypassFinishedForRecovery = false;
+let bypassFinishedForRecovery = false;
     if (slot.slot_hour && slot.slot_key) {
       const currentFinishedKey = `email:slot:${slot.slot_key}:finished`;
       const currentFinished = await kv.get(currentFinishedKey).catch(() => null);
