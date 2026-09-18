@@ -406,7 +406,7 @@ jobs:
               if (backgroundTasks.length) ctx.waitUntil(Promise.allSettled(backgroundTasks));
               return;
             }
-`;
+          `;
           s=s.slice(0,idleStart)+newIdle+s.slice(idleEnd);
 
           fs.writeFileSync('tmp/worker_hotfix.js',s);
