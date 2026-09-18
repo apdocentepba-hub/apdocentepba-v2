@@ -1,0 +1,182 @@
+name: Fix Brevo provider message id 2026-09-18
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-brevo-provider-id-20260918.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      EXPECTED_ACTIVE_VERSION: a7a7ec33-9010-4e2b-b9fa-88c7144bbbef
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: RED patch GREEN deploy and sync canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts?per_page=50" > tmp/a.json
+          A=$(jq -r '.result[0].id' tmp/a.json)
+          DURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/deployments"
+          SURL="https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/schedules"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/d.json
+          ACTIVE=$(node -e "const j=require('./tmp/d.json');const d=j.result?.deployments?.[0];const v=d?.versions?.find(x=>Number(x.percentage)===100)||d?.versions?.[0];process.stdout.write(v?.version_id||'')")
+          echo "active_before=$ACTIVE"
+          test "$ACTIVE" = "$EXPECTED_ACTIVE_VERSION"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${ACTIVE}?include=modules" > tmp/v.json
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SURL" > tmp/schedules-before.json
+
+          node - <<'NODE'
+          const fs=require('fs');
+          const r=require('./tmp/v.json').result;
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m?.content_base64||'','base64').toString('utf8');
+          fs.writeFileSync('tmp/before.js',s);
+          fs.writeFileSync('tmp/shape.json',JSON.stringify((r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort()));
+          const md={main_module:r.main_module,compatibility_date:r.compatibility_date,annotations:{'workers/message':'APDocentePBA: persist Brevo provider message id','workers/tag':'brevo-provider-id-20260918'},bindings:(r.bindings||[]).map(b=>({name:b.name,type:'inherit',version_id:'latest'}))};
+          if(Array.isArray(r.compatibility_flags)&&r.compatibility_flags.length)md.compatibility_flags=r.compatibility_flags;
+          fs.writeFileSync('tmp/md.json',JSON.stringify(md));
+          NODE
+
+          # RED: current live finish function does not persist provider_message_id.
+          if node - <<'NODE'
+          const s=require('fs').readFileSync('tmp/before.js','utf8');
+          const start=s.indexOf('async function finishEmailDigestDeliveryLog');
+          const end=s.indexOf('__name(finishEmailDigestDeliveryLog',start);
+          const block=s.slice(start,end);
+          process.exit(block.includes('provider_message_id: extractBrevoMessageId(send)')?0:1);
+          NODE
+          then echo "RED unexpectedly passed"; exit 1; else echo "RED confirmed"; fi
+
+          node - <<'NODE'
+          const fs=require('fs');
+          let s=fs.readFileSync('tmp/before.js','utf8');
+          const marker='async function finishEmailDigestDeliveryLog(env, reservation, send) {';
+          if((s.split(marker).length-1)!==1) throw new Error('finish marker drift');
+          const helper=`function extractBrevoMessageId(send) {
+            const direct = String(send?.messageId || send?.message_id || "").trim();
+            if (direct) return direct;
+            let data = send?.data;
+            if (typeof data === "string") {
+              try { data = JSON.parse(data); } catch (_) { return null; }
+            }
+            const nested = String(data?.messageId || data?.message_id || "").trim();
+            return nested || null;
+          }
+          __name(extractBrevoMessageId, "extractBrevoMessageId");
+          __name2(extractBrevoMessageId, "extractBrevoMessageId");
+          `;
+          s=s.replace(marker,helper+marker);
+
+          const oldFinish=`    status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+            provider_response: send || null`;
+          const newFinish=`    status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+            provider_message_id: extractBrevoMessageId(send),
+            provider_response: send || null`;
+          if((s.split(oldFinish).length-1)!==1) throw new Error('finish patch marker drift');
+          s=s.replace(oldFinish,newFinish);
+
+          const digestFallback=`        status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+            provider_message_id: null,
+            payload,`;
+          const digestFallbackNew=`        status: send?.ok ? "sent_alert_digest" : "failed_alert_digest",
+            provider_message_id: extractBrevoMessageId(send),
+            payload,`;
+          if((s.split(digestFallback).length-1)!==1) throw new Error('digest fallback marker drift');
+          s=s.replace(digestFallback,digestFallbackNew);
+
+          const initial=`    status: send?.ok ? "sent_initial" : "failed_initial",
+            provider_message_id: null,
+            payload: {`;
+          const initialNew=`    status: send?.ok ? "sent_initial" : "failed_initial",
+            provider_message_id: extractBrevoMessageId(send),
+            payload: {`;
+          if((s.split(initial).length-1)!==1) throw new Error('initial marker drift');
+          s=s.replace(initial,initialNew);
+
+          fs.writeFileSync('tmp/worker_hotfix.js',s);
+          NODE
+
+          node --check tmp/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const s=fs.readFileSync('tmp/worker_hotfix.js','utf8');
+          const start=s.indexOf('function extractBrevoMessageId');
+          const end=s.indexOf('__name(extractBrevoMessageId',start);
+          const fnSrc=s.slice(start,end);
+          const ctx={};vm.createContext(ctx);vm.runInContext(fnSrc,ctx);
+          assert.equal(ctx.extractBrevoMessageId({data:'{"messageId":"<abc@smtp-relay.mailin.fr>"}'}),'<abc@smtp-relay.mailin.fr>');
+          assert.equal(ctx.extractBrevoMessageId({data:{messageId:'xyz'}}),'xyz');
+          assert.equal(ctx.extractBrevoMessageId({messageId:'direct'}),'direct');
+          assert.equal(ctx.extractBrevoMessageId({data:'not-json'}),null);
+          assert(s.includes('provider_message_id: extractBrevoMessageId(send)'));
+          console.log('GREEN provider id extractor passed');
+          NODE
+
+          CODE=$(curl -sS -o tmp/up.json -w '%{http_code}' -X POST "https://api.cloudflare.com/client/v4/accounts/${A}/workers/scripts/${WORKER_NAME}/versions?bindings_inherit=strict"             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             -F "metadata=<tmp/md.json;type=application/json"             -F "worker_hotfix.js=@tmp/worker_hotfix.js;filename=worker_hotfix.js;type=application/javascript+module")
+          echo "upload_http=$CODE"; test "$CODE" = "200"
+          C=$(jq -r '.result.id' tmp/up.json); test -n "$C" -a "$C" != "null"; echo "candidate=$C"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${A}/workers/workers/${WORKER_NAME}/versions/${C}?include=modules" > tmp/c.json
+          node - <<'NODE'
+          const exp=require('./tmp/shape.json'),r=require('./tmp/c.json').result;
+          const act=(r.bindings||[]).map(b=>`${b.name}:${b.type}`).sort();
+          if(JSON.stringify(exp)!==JSON.stringify(act)) throw new Error('binding drift');
+          const m=(r.modules||[]).find(x=>x.name==='worker_hotfix.js');
+          const s=Buffer.from(m.content_base64,'base64').toString('utf8');
+          if(!s.includes('provider_message_id: extractBrevoMessageId(send)')) throw new Error('provider id patch missing');
+          console.log('candidate bindings='+act.length);
+          NODE
+
+          rollback(){
+            printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$ACTIVE" > tmp/r.json
+            curl -sS -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/r.json >/dev/null || true
+            curl -sS -X PUT "$SURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/schedules-before.json >/dev/null || true
+          }
+          trap rollback ERR
+          printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}]}' "$C" > tmp/deploy.json
+          CODE=$(curl -sS -o tmp/dr.json -w '%{http_code}' -X POST "$DURL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' --data @tmp/deploy.json)
+          echo "deploy_http=$CODE"; test "$CODE" = "200"
+          sleep 3
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$DURL" > tmp/f.json
+          F=$(node -e "const j=require('./tmp/f.json');const d=j.result.deployments[0];process.stdout.write((d.versions.find(x=>Number(x.percentage)===100)||d.versions[0]).version_id)")
+          echo "active_after=$F"; test "$F" = "$C"
+
+          # Verify schedules unchanged.
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$SURL" > tmp/schedules-after.json
+          node - <<'NODE'
+          function list(j){return (j.result?.schedules||j.result||[]).map(x=>x.cron).filter(Boolean).sort()}
+          const a=list(require('./tmp/schedules-before.json')),b=list(require('./tmp/schedules-after.json'));
+          if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error('schedule drift '+JSON.stringify({a,b}));
+          console.log('schedules unchanged '+a.join(' | '));
+          NODE
+
+          # Sync canonical source+manifest in repo.
+          cp tmp/worker_hotfix.js worker-live/worker_hotfix.js
+          node - <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const r=require('./tmp/c.json').result;
+          const prev=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
+          const buf=fs.readFileSync('worker-live/worker_hotfix.js');
+          prev.version_id=r.id; prev.version_number=r.number??null; prev.main_module=r.main_module;
+          prev.compatibility_date=r.compatibility_date||null; prev.captured_at=new Date().toISOString();
+          prev.modules=[{name:'worker_hotfix.js',sha256:crypto.createHash('sha256').update(buf).digest('hex'),bytes:buf.length}];
+          fs.writeFileSync('worker-live/manifest.json',JSON.stringify(prev,null,2)+'\n');
+          NODE
+          git config user.name "apdocentepba-hub"
+          git config user.email "apdocentepba@gmail.com"
+          git add worker-live/worker_hotfix.js worker-live/manifest.json
+          git commit -m "fix: persist Brevo provider message ids"
+          git push origin HEAD:main
+          trap - ERR
+          echo "PROVIDER_ID_FIX_OK version=$F"
