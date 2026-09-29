@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carro Tecnologico - CK3X</title>
+<style type="text/css">
+body{margin:0;padding:0;background:#e9edf2;color:#111;font-family:Arial,sans-serif;font-size:14px}
+#top{background:#172033;color:#fff;padding:8px;text-align:center}
+#top b{font-size:17px}.sub{font-size:11px;margin-top:2px}.box{background:#fff;border:1px solid #b7bec8;margin:7px;padding:8px}.actions{width:100%;border-collapse:collapse}.actions td{width:50%;padding:2px}.btn{width:100%;padding:10px 4px;border:1px solid #555;font-weight:bold;font-size:15px;background:#ddd;color:#111}.ret{background:#2468c9;color:#fff}.dev{background:#168557;color:#fff}.sel{border:3px solid #f2b705}.save{background:#172033;color:#fff;margin-top:7px}.warnbtn{background:#b85a00;color:#fff;margin-top:6px}.danger{background:#9b1c1c;color:#fff;margin-top:6px}.smallbtn{font-size:12px;padding:6px}.label{font-weight:bold;margin-top:7px;margin-bottom:3px}.field{width:96%;font-size:16px;padding:6px;border:1px solid #777;background:#fff}.select{width:100%;font-size:14px;padding:5px}.scan{font-size:20px;font-weight:bold;text-align:center;border:3px solid #f2b705;background:#fff9d8}.scan input{width:92%;font-size:19px;padding:7px;text-align:center;text-transform:uppercase}.count{text-align:center;font-size:28px;font-weight:bold}.ok{background:#dff5e8;border-left:5px solid #168557;padding:6px;margin-top:6px}.err{background:#fde4e4;border-left:5px solid #b51f1f;padding:6px;margin-top:6px}.info{background:#e7f0ff;border-left:5px solid #2468c9;padding:6px;margin-top:6px}.list{border:1px solid #aaa;margin-top:5px;max-height:115px;overflow:auto}.row{padding:6px;border-bottom:1px solid #ddd;font-weight:bold}.row a{float:right;color:#a00}.clear{clear:both}.hide{display:none}.modeTitle{text-align:center;font-size:18px;font-weight:bold;margin-bottom:4px}.note{font-size:11px;color:#444;line-height:1.3}.resultLink{display:block;margin-top:7px;background:#172033;color:#fff;text-align:center;padding:9px;text-decoration:none;font-weight:bold}
+</style>
+</head>
+<body onload="iniciarPagina()">
+<div id="top"><b>CARRO TECNOLOGICO</b><div class="sub">EEST N° 6 - Terminal Intermec CK3X</div></div>
+
+<div class="box">
+<table class="actions"><tr>
+<td><input id="btnRet" class="btn ret sel" type="button" value="RETIRAR" onclick="setTipo('Salida')"></td>
+<td><input id="btnDev" class="btn dev" type="button" value="DEVOLVER" onclick="setTipo('Devolucion')"></td>
+</tr></table>
+</div>
+
+<div class="box scan">
+<div id="modoTexto">RETIRAR</div>
+<div style="font-size:12px;font-weight:normal;margin:4px 0">Apunta al QR y apreta el gatillo</div>
+<input id="scanInput" type="text" value="" autocomplete="off" onkeyup="capturarTecla(event)" onblur="volverFoco()">
+<div id="scanMsg" class="note">Esperando QR. Ejemplo: ADM-A-01</div>
+</div>
+
+<div class="box">
+<div class="count" id="contador">0</div>
+<div style="text-align:center" class="note">netbooks en este lote</div>
+<div id="lista" class="list"><div class="row">Sin equipos escaneados</div></div>
+<input class="btn smallbtn" type="button" value="BORRAR ULTIMA" onclick="borrarUltima()">
+<input class="btn danger smallbtn" type="button" value="LIMPIAR TODO" onclick="limpiarTodo()">
+</div>
+
+<div class="box" id="datosSalida">
+<div class="modeTitle">Datos del retiro</div>
+<div class="label">Profesor / responsable</div>
+<input id="responsable" class="field" type="text" value="">
+<div class="label">Rol</div>
+<select id="rol" class="select">
+<option value="">Elegir</option><option>Docente</option><option>Alumno/a</option><option>Preceptor/a</option><option>EMATP</option><option>Directivo</option><option>Secretaria</option><option>Otro</option>
+</select>
+<div class="label">Curso / area</div>
+<input id="cursoArea" class="field" type="text" value="">
+<div class="label">Destino</div>
+<select id="destino" class="select">
+<option value="">Elegir</option><option>Aula</option><option>Sadi Carro A</option><option>Secretaria</option><option>Oficina de Alumnos</option><option>Panol</option><option>Uso personal autorizado</option><option>Reparacion</option><option>Otro</option>
+</select>
+<div class="label">Estado al entregar</div>
+<select id="estadoEntrega" class="select"><option>OK</option><option>Con observacion</option><option>Solo con fuente</option><option>Problema teclado</option><option>No enciende</option><option>Fuera de servicio</option></select>
+</div>
+
+<div class="box hide" id="datosDev">
+<div class="modeTitle">Datos de devolucion</div>
+<div class="label">Recibe devolucion</div>
+<input id="recibe" class="field" type="text" value="">
+<div class="label">Estado al devolver</div>
+<select id="estadoDev" class="select"><option>OK</option><option>Con observacion</option><option>Solo con fuente</option><option>Problema teclado</option><option>Rota</option><option>No enciende</option><option>Fuera de servicio</option></select>
+</div>
+
+<div class="box">
+<div class="label">Observaciones</div>
+<input id="obs" class="field" type="text" value="">
+<input id="btnGuardar" class="btn save" type="button" value="GUARDAR LOTE" onclick="guardarLote('registrarLote')">
+<input id="btnPendientes" class="btn warnbtn hide" type="button" value="DEVOLVER TODO PENDIENTE" onclick="guardarLote('devolverPendientesPorCodigo')">
+<div id="mensaje" class="info">Los QR existentes se usan tal cual. No se generan codigos nuevos.</div>
+<div id="resultado"></div>
+</div>
+
+<script type="text/javascript">
+var APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbxknMyHMk1F8f1LB15EB6gJX5ogyD2Uh6xtZ5aPQD1Dh1u4H9UXqZzlp5cf-ikk526N/exec';
+var TOKEN_SECRETO='CARRO-TECNOLOGICO-2026';
+var tipoMovimiento='Salida';
+var codigos=[];
+var scanTimer=null;
+var ultimoCodigo='';
+var ultimoTiempo=0;
+var PATRON=/^ADM-[ABC]-\d{2}$/;
+
+function el(id){return document.getElementById(id);}
+function iniciarPagina(){setTipo('Salida');renderLista();setTimeout(function(){enfocarScanner();},300);}
+function enfocarScanner(){try{el('scanInput').focus();el('scanInput').select();}catch(e){}}
+function volverFoco(){setTimeout(function(){enfocarScanner();},500);}
+function normalizar(v){v=String(v||'');v=v.replace(/^\s+|\s+$/g,'');v=v.toUpperCase();v=v.replace(/\s+/g,'');v=v.replace(/["']/g,'');return v;}
+function setTipo(t){
+ tipoMovimiento=t;
+ if(t=='Salida'){
+  el('btnRet').className='btn ret sel';el('btnDev').className='btn dev';el('modoTexto').innerHTML='RETIRAR';
+  el('datosSalida').className='box';el('datosDev').className='box hide';el('btnPendientes').className='btn warnbtn hide';
+ }else{
+  el('btnRet').className='btn ret';el('btnDev').className='btn dev sel';el('modoTexto').innerHTML='DEVOLVER';
+  el('datosSalida').className='box hide';el('datosDev').className='box';el('btnPendientes').className='btn warnbtn';
+ }
+ mostrarMensaje('Modo '+(t=='Salida'?'RETIRAR':'DEVOLVER')+'. Escanea una o varias netbooks.','info');
+ enfocarScanner();
+}
+function capturarTecla(evt){
+ evt=evt||window.event;
+ var k=evt.keyCode||evt.which;
+ if(scanTimer){clearTimeout(scanTimer);scanTimer=null;}
+ if(k==13){agregarDesdeInput();return false;}
+ scanTimer=setTimeout(function(){
+  var c=normalizar(el('scanInput').value);
+  if(PATRON.test(c)){agregarDesdeInput();}
+ },160);
+ return true;
+}
+function agregarDesdeInput(){var c=normalizar(el('scanInput').value);el('scanInput').value='';agregarCodigo(c);enfocarScanner();}
+function contiene(arr,v){var i;for(i=0;i<arr.length;i++){if(arr[i]==v)return true;}return false;}
+function agregarCodigo(c){
+ var ahora=(new Date()).getTime();
+ if(!c){return;}
+ if(c==ultimoCodigo && ahora-ultimoTiempo<1200){return;}
+ ultimoCodigo=c;ultimoTiempo=ahora;
+ if(!PATRON.test(c)){mostrarMensaje('Codigo no reconocido: '+esc(c)+'. Esperado ADM-A-01.','err');return;}
+ if(contiene(codigos,c)){mostrarMensaje(c+' ya estaba cargada.','err');return;}
+ codigos[codigos.length]=c;renderLista();mostrarMensaje('OK: '+c+' agregada para '+(tipoMovimiento=='Salida'?'RETIRAR':'DEVOLVER')+'.','ok');
+}
+function renderLista(){
+ el('contador').innerHTML=codigos.length;
+ var h='',i;
+ if(!codigos.length){h='<div class="row">Sin equipos escaneados</div>';}
+ for(i=0;i<codigos.length;i++){h+='<div class="row">'+(i+1)+'. '+esc(codigos[i])+' <a href="#" onclick="quitar('+i+');return false">Quitar</a><div class="clear"></div></div>';}
+ el('lista').innerHTML=h;
+}
+function quitar(i){var n=[],j;for(j=0;j<codigos.length;j++){if(j!=i)n[n.length]=codigos[j];}codigos=n;renderLista();enfocarScanner();}
+function borrarUltima(){if(codigos.length){codigos.length=codigos.length-1;renderLista();}enfocarScanner();}
+function limpiarTodo(){if(!codigos.length)return;if(confirm('Borrar todos los QR de este lote?')){codigos=[];renderLista();mostrarMensaje('Lista vacia.','info');}enfocarScanner();}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function jesc(s){s=String(s==null?'':s);return '"'+s.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\r/g,'\\r').replace(/\n/g,'\\n')+'"';}
+function jsonArray(a){var s='[',i;for(i=0;i<a.length;i++){if(i)s+=',';s+=jesc(a[i]);}return s+']';}
+function valor(id){return normalTexto(el(id).value);}
+function normalTexto(v){return String(v||'').replace(/^\s+|\s+$/g,'');}
+function payloadJson(accion){
+ var tipo=(tipoMovimiento=='Salida'?'Salida':'Devolución');
+ var s='{';
+ s+='"token":'+jesc(TOKEN_SECRETO);
+ s+=',"accion":'+jesc(accion);
+ s+=',"origen":'+jesc('CK3X');
+ s+=',"operadorEmail":'+jesc('terminal-ck3x');
+ s+=',"operadorNombre":'+jesc('Intermec CK3X - EEST 6');
+ s+=',"tipoMovimiento":'+jesc(tipo);
+ s+=',"codigos":'+jsonArray(codigos);
+ s+=',"codigoReferencia":'+jesc(codigos.length?codigos[0]:'');
+ s+=',"responsable":'+jesc(valor('responsable'));
+ s+=',"rol":'+jesc(el('rol').value);
+ s+=',"cursoArea":'+jesc(valor('cursoArea'));
+ s+=',"destino":'+jesc(el('destino').value);
+ s+=',"estadoEntrega":'+jesc(el('estadoEntrega').value);
+ s+=',"estadoDevolucion":'+jesc(el('estadoDev').value);
+ s+=',"recibe":'+jesc(valor('recibe'));
+ s+=',"observaciones":'+jesc(valor('obs'));
+ s+='}';return s;
+}
+function guardarLote(accion){
+ if(!codigos.length){mostrarMensaje('Escanea al menos una netbook.','err');enfocarScanner();return;}
+ if(tipoMovimiento=='Salida' && !valor('responsable')){mostrarMensaje('Falta Profesor / responsable.','err');el('responsable').focus();return;}
+ if(tipoMovimiento!='Salida' && !valor('recibe')){mostrarMensaje('Falta quien recibe la devolucion.','err');el('recibe').focus();return;}
+ if(accion=='devolverPendientesPorCodigo' && tipoMovimiento=='Salida'){mostrarMensaje('Esa opcion solo sirve para DEVOLVER.','err');return;}
+ var payload=payloadJson(accion);
+ var url=APPS_SCRIPT_URL+'?payload='+encodeURIComponent(payload)+'&_='+(new Date()).getTime();
+ mostrarMensaje('Abriendo confirmacion del sistema...','info');
+ el('resultado').innerHTML='<a class="resultLink" href="'+esc(url)+'" target="_blank">ABRIR RESULTADO</a>';
+ var w=null;try{w=window.open(url,'resultadoCarro');}catch(e){}
+ if(!w){window.location.href=url;}
+}
+function nuevoLote(){codigos=[];ultimoCodigo='';renderLista();el('obs').value='';mostrarMensaje('Nuevo lote. Listo para escanear.','info');enfocarScanner();}
+function mostrarMensaje(t,c){el('mensaje').className=c;el('mensaje').innerHTML=t;}
+</script>
+
+<div class="box"><input class="btn smallbtn" type="button" value="NUEVO LOTE" onclick="nuevoLote()"><div class="note" style="margin-top:6px">Compatible con el lector fisico del CK3X mediante Virtual Wedge. No usa camara ni cambia los QR ya pegados.</div></div>
+</body>
+</html>
