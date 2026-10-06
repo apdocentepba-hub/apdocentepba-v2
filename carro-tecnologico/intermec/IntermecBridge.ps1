@@ -95,65 +95,33 @@ function Escape-Html([string]$s) {
 
 function Get-TerminalPage([string]$Message, [bool]$Ok) {
     $msg = Escape-Html $Message
-    $cls = if ($Ok) { 'ok' } else { 'err' }
+    $bg = if ($Ok) { '#dff5e8' } else { '#fde4e4' }
 
     $tpl = @'
-<!DOCTYPE html>
 <html>
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Intermec USB</title>
-<style type="text/css">
-body{margin:0;background:#e9edf2;font-family:Arial,sans-serif;color:#111}
-.top{background:#172033;color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:bold}
-.box{background:#fff;border:1px solid #aaa;margin:8px;padding:10px}
-.mode{text-align:center;font-size:22px;font-weight:bold;margin-bottom:8px}
-input{width:94%;font-size:22px;padding:9px;text-align:center;text-transform:uppercase;border:3px solid #f2b705}
-.ok{background:#dff5e8;border-left:6px solid #168557;padding:8px;margin-top:8px}
-.err{background:#fde4e4;border-left:6px solid #b51f1f;padding:8px;margin-top:8px}
-.note{font-size:12px;color:#444;line-height:1.35;margin-top:8px}
-</style>
-<script type="text/javascript">
-var timer=null;
-function norm(v){return String(v||'').replace(/^\s+|\s+$/g,'').toUpperCase().replace(/\s+/g,'');}
-function keyDown(e){
-  e=e||window.event;
-  var k=e.keyCode||e.which;
-  if(k==13){
-    var c=norm(document.getElementById('code').value);
-    if(c){document.getElementById('code').value=c;document.getElementById('frm').submit();}
-    return false;
-  }
-  return true;
-}
-function keyUp(e){
-  if(timer){clearTimeout(timer);}
-  timer=setTimeout(function(){
-    var c=norm(document.getElementById('code').value);
-    if(/^ADM-[A-Z]-[0-9][0-9]$/.test(c)){
-      document.getElementById('code').value=c;
-      document.getElementById('frm').submit();
-    }
-  },220);
-}
-function init(){try{document.getElementById('code').focus();}catch(e){}}
-</script>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 </head>
-<body onload="init()">
-<div class="top">CARRO TECNOLOGICO - INTERMEC USB</div>
-<div class="box">
-<div class="mode">ESCANEAR QR</div>
-<form id="frm" method="get" action="/scan">
-<input id="code" name="code" type="text" value="" autocomplete="off" onkeydown="return keyDown(event)" onkeyup="keyUp(event)">
+<body bgcolor="#e9edf2">
+<center>
+<table width="95%" border="1" cellpadding="8" cellspacing="0" bgcolor="#ffffff">
+<tr><td bgcolor="#172033"><font color="#ffffff" size="4"><b>CARRO TECNOLOGICO - INTERMEC USB</b></font></td></tr>
+<tr><td>
+<center><font size="5"><b>ESCANEAR QR</b></font></center>
+<form method="get" action="/scan">
+<input name="code" type="text" size="24" style="font-size:22px">
+<input type="submit" value="ENVIAR">
 </form>
-<div class="__CLS__">__MSG__</div>
-<div class="note">Apunta al QR y apreta el gatillo. El codigo se envia al gestor abierto en la PC. Se usan los QR existentes (ej. ADM-A-01).</div>
-</div>
+<table width="100%" border="0" cellpadding="6" cellspacing="0"><tr><td bgcolor="__BG__">__MSG__</td></tr></table>
+<p><font size="2">Apunta al QR y apreta el gatillo. Si el lector agrega Enter al final, se envia solo. Si no, toca ENVIAR.</font></p>
+</td></tr>
+</table>
+</center>
 </body>
 </html>
 '@
-    return $tpl.Replace('__MSG__', $msg).Replace('__CLS__', $cls)
+    return $tpl.Replace('__MSG__', $msg).Replace('__BG__', $bg)
 }
 
 function Write-HttpResponse($Stream, [string]$Body, [int]$StatusCode = 200) {
