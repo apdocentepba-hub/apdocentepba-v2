@@ -204,10 +204,12 @@ try {
     while ($true) {
         $client = $listener.AcceptTcpClient()
         try {
+            $remote = ''
+            try { $remote = $client.Client.RemoteEndPoint.ToString() } catch {}
             $stream = $client.GetStream()
             $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::ASCII, $false, 2048, $true)
             $requestLine = $reader.ReadLine()
-            if ($requestLine) { Write-Host ((Get-Date -Format 'HH:mm:ss') + '  ' + $requestLine) -ForegroundColor DarkGray }
+            if ($requestLine) { Write-Host ((Get-Date -Format 'HH:mm:ss') + '  ' + $requestLine + '  DESDE ' + $remote) -ForegroundColor DarkGray }
 
             if ([string]::IsNullOrWhiteSpace($requestLine)) {
                 Write-HttpResponse $stream (Get-TerminalPage 'Esperando QR.' $true)
