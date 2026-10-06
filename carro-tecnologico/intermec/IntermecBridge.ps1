@@ -228,6 +228,7 @@ Ensure-CarroWindow | Out-Null
 
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $Port)
 $listener.Start()
+Write-Host ("Servidor HTTP escuchando en 0.0.0.0:{0}" -f $Port) -ForegroundColor Green
 Show-ConnectionUrls
 
 try {
@@ -235,8 +236,9 @@ try {
         $client = $listener.AcceptTcpClient()
         try {
             $stream = $client.GetStream()
-            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::ASCII, $false, 2048, $true)
+            $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::ASCII, $false, 2048, $true)
             $requestLine = $reader.ReadLine()
+            if ($requestLine) { Write-Host ((Get-Date -Format 'HH:mm:ss') + '  ' + $requestLine) -ForegroundColor DarkGray }
 
             if ([string]::IsNullOrWhiteSpace($requestLine)) {
                 Write-HttpResponse $stream (Get-TerminalPage 'Esperando QR.' $true)
@@ -250,7 +252,7 @@ try {
 
             $parts = $requestLine -split ' '
             $target = if ($parts.Length -ge 2) { $parts[1] } else { '/' }
-            $uri = New-Object System.Uri("http://localhost$target")
+            $uri = [System.Uri]::new("http://localhost$target")
 
             if ($uri.AbsolutePath -eq '/scan') {
                 $q = [System.Web.HttpUtility]::ParseQueryString($uri.Query)
