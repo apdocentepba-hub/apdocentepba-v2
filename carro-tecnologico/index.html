@@ -43,6 +43,7 @@
 <button class="stop" onclick="detenerScanner()">DETENER ESCÁNER</button>
 <div id="reader"></div>
 <label>Cargar código manual</label><input id="manual" placeholder="Ejemplo: ADM-A-01" onkeydown="if(event.key==='Enter')agregarManual()"><button class="sec" onclick="agregarManual()">AGREGAR CÓDIGO</button>
+<div id="intermecBox" class="msg ok hide"><b>Intermec USB activo.</b> El puente de la PC enviará cada QR directamente a este lote. <span id="intermecUltimo">Esperando lectura...</span></div>
 <div id="mensaje" class="msg">Elegí RETIRAR o DEVOLVER, iniciá el escáner y pasá las netbooks una atrás de otra.</div>
 </section>
 <section class="card"><h3>Escaneadas</h3><ul id="lista" class="lista"></ul><div id="validaciones" class="mini"></div><button class="sec" onclick="borrarUltima()">BORRAR ÚLTIMA</button><button class="danger" onclick="limpiarLista()">LIMPIAR TODO</button></section>
@@ -64,6 +65,38 @@ function decodeJwt_(token){const part=String(token).split('.')[1];if(!part)throw
 function escapeHtml(s){return String(s||'').replace(/[&<>\'\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]))}
 function setTipo(t){tipoMovimiento=t;$('bSal').classList.remove('activo');$('bDev').classList.remove('activo');if(t==='Salida'){$('bSal').classList.add('activo');$('bloqueSalida').classList.remove('hide');$('bloqueDev').classList.add('hide')}else{$('bDev').classList.add('activo');$('bloqueSalida').classList.add('hide');$('bloqueDev').classList.remove('hide')}guardarBorrador();mensaje('Modo seleccionado: '+t+'. '+(t==='Devolución'?'Escaneá al menos una netbook; después podés devolver sólo esa/s o todo lo pendiente relacionado.':'Escaneá las netbooks que se retiran.'),'msg')}
 function normalizar(v){return String(v||'').trim().toUpperCase().replace(/\s+/g,'').replace(/["']/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+let intermecCapturando=false,intermecBuffer='',intermecTimer=null;
+function iniciarIntermecUSB(){
+  const activo=new URLSearchParams(location.search).get('intermec')==='1';
+  if(activo){$('intermecBox').classList.remove('hide');mensaje('Intermec USB listo. Elegí RETIRAR o DEVOLVER y escaneá con el gatillo.','ok')}
+  document.addEventListener('keydown',capturarIntermecUSB,true);
+}
+function cancelarCapturaIntermec(){intermecCapturando=false;intermecBuffer='';if(intermecTimer){clearTimeout(intermecTimer);intermecTimer=null}}
+function capturarIntermecUSB(e){
+  const k=e.key||'';
+  if(k==='F9'){
+    intermecCapturando=true;intermecBuffer='';
+    if(intermecTimer)clearTimeout(intermecTimer);
+    intermecTimer=setTimeout(cancelarCapturaIntermec,2500);
+    e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+    return;
+  }
+  if(!intermecCapturando)return;
+  e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+  if(intermecTimer)clearTimeout(intermecTimer);
+  intermecTimer=setTimeout(cancelarCapturaIntermec,2500);
+  if(k==='Escape'){cancelarCapturaIntermec();return}
+  if(k==='Enter'){
+    const c=normalizar(intermecBuffer);
+    cancelarCapturaIntermec();
+    if(c){
+      agregarCodigo(c);
+      const u=$('intermecUltimo');if(u)u.textContent='Último: '+c;
+    }
+    return;
+  }
+  if(k.length===1)intermecBuffer+=k;
+}
 function agregarCodigo(codigo){const c=normalizar(codigo);if(!c)return;if(codigos.includes(c)){mensaje('Ya estaba escaneada: '+c,'err');vibrar([100,60,100]);return}codigos.push(c);actualizarLista();const avisos=validarCodigos().filter(x=>x.codigo===c);mensaje('Agregada: '+c+(avisos.length?' · Revisá el aviso de formato antes de guardar.':tipoMovimiento==='Devolución'?' · Ahora podés devolver sólo escaneadas o todo lo pendiente relacionado.':''),'ok');vibrar(120);beep()}
 function agregarManual(){agregarCodigo($('manual').value);$('manual').value='';$('manual').focus()}
 function actualizarLista(){$('contador').textContent=codigos.length;const ul=$('lista');ul.innerHTML='';codigos.forEach((c,i)=>{const li=document.createElement('li');const sp=document.createElement('span');sp.textContent=(i+1)+'. '+c;const b=document.createElement('button');b.className='miniBtn';b.textContent='Quitar';b.onclick=()=>{codigos.splice(i,1);actualizarLista()};li.appendChild(sp);li.appendChild(b);ul.appendChild(li)});mostrarValidaciones();guardarBorrador()}
@@ -92,6 +125,7 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredIns
 async function instalarApp(){if(!deferredInstallPrompt){mensaje('Si no aparece instalación automática, usá el menú del navegador → Agregar a pantalla principal.','warn');return}deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('installBtn').classList.add('hide')}
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}
 prepararAutosave();
+iniciarIntermecUSB();
 actualizarLista();
 </script>
 </body>
