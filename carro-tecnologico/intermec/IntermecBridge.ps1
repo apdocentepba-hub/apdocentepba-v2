@@ -102,15 +102,16 @@ function Get-TerminalPage([string]$Message, [bool]$Ok) {
 <head>
 <title>Intermec USB</title>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="IBrowse_Scanner" content="AutoEnter">
 </head>
-<body bgcolor="#e9edf2">
+<body bgcolor="#e9edf2" onload="try{document.getElementById('code').focus();}catch(e){}">
 <center>
 <table width="95%" border="1" cellpadding="8" cellspacing="0" bgcolor="#ffffff">
 <tr><td bgcolor="#172033"><font color="#ffffff" size="4"><b>CARRO TECNOLOGICO - INTERMEC USB</b></font></td></tr>
 <tr><td>
 <center><font size="5"><b>ESCANEAR QR</b></font></center>
 <form method="get" action="/scan">
-<input name="code" type="text" size="24" style="font-size:22px">
+<input id="code" name="code" type="text" size="24" style="font-size:22px">
 <input type="submit" value="ENVIAR">
 </form>
 <table width="100%" border="0" cellpadding="6" cellspacing="0"><tr><td bgcolor="__BG__">__MSG__</td></tr></table>
