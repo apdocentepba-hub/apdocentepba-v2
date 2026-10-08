@@ -1,4 +1,4 @@
-const CACHE_NAME = 'carro-tecnologico-v5-draft-prompt';
+const CACHE_NAME = 'carro-tecnologico-v6-acceso-libre';
 const APP_SHELL = [
   './',
   './index.html',
