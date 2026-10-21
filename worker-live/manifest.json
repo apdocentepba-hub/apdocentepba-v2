@@ -1,19 +1,22 @@
 {
   "schema_version": 2,
   "worker_name": "ancient-wildflower-cd37",
-  "version_id": "84a75795-ef71-43a2-96e1-a079b465803c",
-  "version_number": 739,
+  "version_id": "cb56d1e0-0be0-4d58-87d9-8aeacef4269a",
   "main_module": "worker_hotfix.js",
   "compatibility_date": "2026-04-01",
-  "captured_at": "2026-09-18T01:59:25.599Z",
+  "captured_at": "2026-10-21T18:18:27.683Z",
   "modules": [
     {
       "name": "worker_hotfix.js",
-      "sha256": "4bcddb308805d5b4b3eb679f9aaeacb3c2b7958cc50d74693ffe10868f6ef985",
-      "bytes": 515269
+      "sha256": "9ef6b9abfb2dedb06c6656f588ab22b5a8b6857e42a7215b6dc1a02b457d5054",
+      "bytes": 547139
     }
   ],
   "bindings": [
+    {
+      "name": "APD_EXPIRY_NOTICES_ENABLED",
+      "type": "plain_text"
+    },
     {
       "name": "BREVO_API_KEY",
       "type": "secret_text"
