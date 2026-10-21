@@ -6,6 +6,7 @@ on:
       - 'expiry_access_notice_patch.js'
       - 'worker-live/worker_hotfix.js'
       - 'scripts/create-expiry-guard-candidate.mjs'
+      - 'scripts/test-expiry-entitlements.mjs'
       - 'index.html'
       - '.github/workflows/expiry-access-guard-syntax.yml'
   workflow_dispatch:
@@ -22,6 +23,8 @@ jobs:
         run: node --check expiry_access_notice_patch.js
       - name: Generate guarded Worker candidate
         run: node scripts/create-expiry-guard-candidate.mjs
+      - name: Test expired and exceptional entitlement scenarios
+        run: node scripts/test-expiry-entitlements.mjs
       - name: Check generated Worker syntax as module
         run: node --input-type=module --check < tmp/expiry-candidate/worker_hotfix.js
       - name: Ensure canonical Worker unchanged and mail opt-in
