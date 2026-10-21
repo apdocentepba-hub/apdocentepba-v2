@@ -4,6 +4,14 @@ import path from 'node:path';
 const originalPath = path.resolve('worker-live/worker_hotfix.js');
 const outPath = path.resolve(process.argv[2] || 'tmp/expiry-candidate/worker_hotfix.js');
 let source = fs.readFileSync(originalPath, 'utf8');
+if (source.includes('APD_EXPIRY_NOTICE_V1: notification only')) {
+  // The canonical snapshot has already been updated after a verified deployment.
+  // Reuse its exact bytes, never apply the patch twice.
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, source);
+  console.log('Expiry candidate already present in canonical live bundle.');
+  process.exit(0);
+}
 function replaceExactlyOnce(before, after, label) {
   if (source.split(before).length !== 2) throw new Error('Cannot safely apply: ' + label);
   source = source.replace(before, after);
