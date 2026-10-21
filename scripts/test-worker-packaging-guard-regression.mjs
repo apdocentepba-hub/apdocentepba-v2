@@ -13,8 +13,9 @@ assert.deepEqual(
   'canonical live manifest must describe the actual Wrangler single-module production bundle'
 );
 assert.ok(
-  (manifest.modules || [])[0]?.source_sha256,
-  'canonical live module must record raw source_sha256 separately from packaged module_sha256'
+  (manifest.modules || [])[0]?.source_sha256 ||
+    (manifest.schema_version === 2 && (manifest.modules || [])[0]?.sha256),
+  'canonical live module must have source_sha256 or the schema-v2 verified SHA-256'
 );
 
 assert.doesNotMatch(
