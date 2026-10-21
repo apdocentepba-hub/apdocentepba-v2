@@ -7,18 +7,9 @@
   let checking = false;
   let checkGeneration = 0;
 
+  // Access state belongs to the protected backend, never infer it from incomplete data.
   function readExpiry(planInfo) {
-    const explicit = planInfo?.access_active;
-    if (typeof explicit === "boolean") return explicit;
-    const sub = planInfo?.subscription || {};
-    const code = String(sub.plan_code || planInfo?.plan?.code || "").trim().toUpperCase();
-    const status = String(sub.status || "").trim().toUpperCase();
-    if (status === "BETA") return true;
-    if (!["ACTIVE", "AUTHORIZED", "TRIALING"].includes(status)) return false;
-    const rawEnd = code === "TRIAL_7D" ? sub.trial_ends_at : sub.current_period_ends_at;
-    const end = Date.parse(String(rawEnd || ""));
-    // Fail closed on missing/malformed expiry. Explicit grants must be resolved server-side.
-    return Number.isFinite(end) && end > Date.now();
+    return planInfo?.access_active === true;
   }
 
   function ensureNotice(panel) {
@@ -61,6 +52,12 @@
       const data = await window.workerFetchJson("/api/mi-plan");
       if (generation !== checkGeneration || token !== obtenerToken()) return;
       const notice = ensureNotice(panel);
+      // Backwards-compatible rollout: older Workers do not expose access_active.
+      // Hide the banner rather than mislabel an administrator-granted lifetime plan.
+      if (typeof data?.access_active !== "boolean") {
+        notice.style.display = "none";
+        return;
+      }
       if (readExpiry(data)) {
         notice.style.display = "none";
       } else {
