@@ -31,7 +31,7 @@ assert.match(
 assert.doesNotMatch(worker, /password_hash:\s*password\s*[,}]/, 'canonical Worker must not store registration passwords in plaintext');
 assert.doesNotMatch(worker, /password_hash:\s*payload\?\.password\s*\?\s*String\(payload\.password\)/, 'canonical Worker must not persist legacy migration passwords in plaintext');
 
-const pbkdf2Iterations = worker.match(/const ACCOUNT_PBKDF2_ITERATIONS_V1\s*=\s*(\d+)\s*;/);
+const pbkdf2Iterations = worker.match(/\b(?:const|var|let) ACCOUNT_PBKDF2_ITERATIONS_V1\s*=\s*(\d+(?:\.\d+)?(?:e\+?\d+)?)\s*;/i);
 assert.ok(pbkdf2Iterations, 'canonical Worker must declare the account PBKDF2 iteration count');
 assert.ok(
   Number(pbkdf2Iterations[1]) <= 100000,
