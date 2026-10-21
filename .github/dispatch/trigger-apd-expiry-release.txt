@@ -1,0 +1,1 @@
+Release autorizado 21/10/2026: controles de vencimiento, excepciones preservadas, preview Cloudflare y suite CI satisfactorios. Desplegar únicamente por scripts/release-expiry-worker.mjs con rollback y capturar snapshot activo.
