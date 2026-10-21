@@ -2970,6 +2970,94 @@ async function handlePlanes(env) {
 }
 __name(handlePlanes, "handlePlanes");
 __name2(handlePlanes, "handlePlanes");
+// APD_EXPIRY_NOTICE_V1: notification only; no subscriptions are changed here.
+// Enabled only after the verified production deployment and explicit env opt-in.
+async function apdSendExpiryNoticeOnce(env, user, subscription, endsAtIso) {
+  const planCode = canonicalPlanCode(subscription.plan_code);
+  const expiryKey = `apd:expiry:v1:${user.id}:${planCode}:${endsAtIso}`;
+  let reserved;
+  try {
+    const result = await supabaseInsertReturning(env, "notification_delivery_logs", {
+      user_id: user.id,
+      channel: "email",
+      template_code: "apd_subscription_expired_v1",
+      destination: user.email,
+      status: "sending_expiry_notice",
+      dedupe_key: expiryKey,
+      payload: { plan_code: planCode, ended_at: endsAtIso, source: "daily_cron" }
+    });
+    reserved = Array.isArray(result) ? result[0] : result;
+  } catch (err) {
+    // Unique notification_delivery_logs_dedupe_key_uidx prevents duplicates.
+    if (/23505|duplicate key/i.test(String(err?.message || err))) return "duplicate";
+    throw err;
+  }
+  if (!reserved?.id) return "reservation_missing";
+  const firstName = String(user.nombre || "").trim().split(/\s+/)[0] || "Hola";
+  const trial = planCode === "TRIAL_7D";
+  const subject = trial
+    ? "Tu prueba gratuita de Alertas APD finalizó"
+    : "Tu plan de Alertas APD venció";
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#21314a;line-height:1.6">
+    <h2>Hola, ${escHtml(firstName)}</h2>
+    <p>${trial ? "Tu prueba gratuita de 7 días terminó." : "Terminó el período de tu plan."} Para seguir recibiendo alertas personalizadas de Actos Públicos Digitales, necesitás elegir y activar un plan vigente.</p>
+    <p>Tus preferencias quedan guardadas para cuando vuelvas.</p>
+    <p><a href="https://alertasapd.com.ar/" style="display:inline-block;padding:12px 18px;background:#123b72;color:white;text-decoration:none;border-radius:8px">Ver planes y reactivar mis alertas</a></p>
+    <p style="font-size:12px;color:#65748a">Este correo es un aviso de vencimiento de tu cuenta de APDocentePBA; no es una alerta de ofertas docentes.</p></div>`;
+  let response;
+  try {
+    response = await enviarMailBrevo(user.email, String(user.nombre || ""), subject, html, env);
+  } catch (err) {
+    response = { ok: false, status: 0, error: String(err?.message || err) };
+  }
+  await supabasePatch(env, "notification_delivery_logs", `id=eq.${reserved.id}`, {
+    status: response?.ok ? "sent_expiry_notice" : "failed_expiry_notice",
+    provider_response: { http_status: Number(response?.status || 0), ok: !!response?.ok }
+  }).catch((err) => console.error("APD expiry audit update failed", String(err?.message || err)));
+  return response?.ok ? "sent" : "failed";
+}
+async function apdProcessExpiryNotices(env) {
+  if (String(env.APD_EXPIRY_NOTICES_ENABLED || "").toLowerCase() !== "true") return;
+  // Check each real subscription before sending; never infer expiry from login sessions.
+  const [subscriptions, users] = await Promise.all([
+    supabaseSelect(env, "user_subscriptions?select=id,user_id,plan_code,status,source,trial_ends_at,current_period_ends_at,created_at&order=created_at.desc&limit=1000"),
+    supabaseSelect(env, "users?select=id,nombre,email,activo,es_admin&limit=1000")
+  ]);
+  if (!Array.isArray(subscriptions) || !Array.isArray(users)) return;
+  const grouped = new Map();
+  for (const s of subscriptions) {
+    if (!grouped.has(s.user_id)) grouped.set(s.user_id, []);
+    grouped.get(s.user_id).push(s);
+  }
+  const now = Date.now();
+  let handled = 0;
+  for (const user of users) {
+    if (handled >= 3) break;
+    if (!user?.id || !user?.activo || user?.es_admin || !String(user.email || "").includes("@")) continue;
+    const rows = grouped.get(user.id) || [];
+    if (!rows.length) continue;
+    // Active subscriptions, beta grants and explicit administrator grants are exempt.
+    if (elegirSuscripcionVigente(rows)) continue;
+    if (rows.some(row =>
+      String(row.source || "").toLowerCase() === "manual_admin_grant" ||
+      (canonicalPlanCode(row.plan_code) !== "TRIAL_7D" && (
+        !row.current_period_ends_at ||
+        Date.parse(String(row.current_period_ends_at)) > Date.UTC(2099, 0, 1)
+      ) && String(row.status || "").toUpperCase() === "ACTIVE")
+    )) continue;
+    const latest = rows[0]; // sorted by created_at DESC
+    const planCode = canonicalPlanCode(latest.plan_code);
+    const endIso = planCode === "TRIAL_7D" ? latest.trial_ends_at : latest.current_period_ends_at;
+    const endTs = Date.parse(String(endIso || ""));
+    if (!Number.isFinite(endTs) || endTs >= now || now - endTs > 7 * 86400000) continue;
+    if (String(latest.status || "").toUpperCase() !== "ACTIVE") continue;
+    handled++;
+    await apdSendExpiryNoticeOnce(env, user, latest, endIso).catch(err =>
+      console.error("APD expiry notice failed", String(err?.message || err))
+    );
+  }
+}
+
 async function handleMiPlan(url, env) {
   const userId = String(url.searchParams.get("user_id") || "").trim();
   if (!userId) {
@@ -2984,7 +3072,8 @@ async function handleMiPlan(url, env) {
     ok: true,
     user_id: userId,
     plan: resolved.plan,
-    subscription: resolved.subscription
+    subscription: resolved.subscription,
+    access_active: isPlanActivo(resolved)
   });
 }
 __name(handleMiPlan, "handleMiPlan");
@@ -3964,6 +4053,11 @@ function isPlanActivo(resolved) {
     return Number.isFinite(end) && Date.now() <= end;
   }
   if (status === "BETA") {
+    return true;
+  }
+  // Deliberate manual unlimited grant (source set only by an administrator).
+  if (status === "ACTIVE" && planCode === "INSIGNE" &&
+      String(sub.source || "") === "manual_admin_grant" && !sub.current_period_ends_at) {
     return true;
   }
   if (["ACTIVE", "AUTHORIZED", "PENDING", "PAUSED"].includes(status)) {
@@ -7957,7 +8051,8 @@ function elegirSuscripcionVigente(rows) {
     if (["CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "INACTIVE"].includes(status)) {
       continue;
     }
-    if (status === "BETA") {
+    if (status === "BETA" || (status === "ACTIVE" && planCode === "INSIGNE" &&
+        String(row.source || "") === "manual_admin_grant" && !row.current_period_ends_at)) {
       return row;
     }
     const trialEndsTs = parseFechaFlexible(row?.trial_ends_at)?.getTime();
@@ -12671,6 +12766,11 @@ var worker_hotfix_default = {
     const isPrimaryEmailCron = emailCronExpr === "0 01 * * *" || emailCronExpr === "0 17 * * *" || emailCronExpr === "0 21 * * *";
     const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;
     if (!isRecognizedEmailCron) return;
+    if (isPrimaryEmailCron) {
+      ctx.waitUntil(apdProcessExpiryNotices(env).catch(err =>
+        console.error("APD expiry notices cron failed", String(err?.message || err))
+      ));
+    }
       if (isContinuationCron && !activeSlotKey) {
     const backgroundTasks = [];
     if (slot.slot_key && slot.minute >= 13) {
