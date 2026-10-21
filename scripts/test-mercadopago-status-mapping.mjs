@@ -7,8 +7,8 @@ const end = worker.indexOf('function addDaysIso', start);
 assert.ok(start >= 0 && end > start, 'Mercado Pago status mapping functions must exist in canonical Worker');
 const snippet = worker.slice(start, end);
 // Wrangler may suffix name-wrapper helpers while packaging the exact same code.
-const helperNames = [...new Set(snippet.match(/\\b__name\\d*\\b/g) || [])];
-const helperPrelude = helperNames.map(name => `const ${name} = (target) => target;`).join('\\n');
+const helperNames = [...new Set(snippet.match(/\b__name\d*\b/g) || [])];
+const helperPrelude = helperNames.map(name => `const ${name} = (target) => target;`).join('\n');
 const factory = new Function(`${helperPrelude}\n${snippet}\nreturn { mapMercadoPagoSubscriptionStatus, mapMercadoPagoCheckoutStatus };`);
 const { mapMercadoPagoSubscriptionStatus: mapSubscription, mapMercadoPagoCheckoutStatus: mapCheckout } = factory();
 
