@@ -135,8 +135,10 @@ async function release(){
  await smoke(PREVIEW_URL);
  if((await activeVersion())!==oldVersion)throw new Error('Production version moved during preview smoke');
  // Traffic changes only after verifying the exact candidate and its original baseline.
- await promote(newVersion,'APD verified expiry/paywall update '+short);
+ // Mark promotion as attempted before the remote call so a lost API response
+ // cannot leave a newly deployed version without rollback coverage.
  deployed=true;
+ await promote(newVersion,'APD verified expiry/paywall update '+short);
  if((await activeVersion())!==newVersion)throw new Error('Candidate failed to reach 100% deployment');
  await smoke(WORKER_URL);
  const deployedMetadata=await cf('/accounts/'+accountId+'/workers/workers/'+WORKER+'/versions/'+newVersion+'?include=modules');
