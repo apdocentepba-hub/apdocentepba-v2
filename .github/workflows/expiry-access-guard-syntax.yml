@@ -1,0 +1,38 @@
+name: Expiry access guard syntax
+
+on:
+  pull_request:
+    paths:
+      - 'expiry_access_notice_patch.js'
+      - 'worker-live/worker_hotfix.js'
+      - 'scripts/create-expiry-guard-candidate.mjs'
+      - 'scripts/test-expiry-entitlements.mjs'
+      - 'scripts/release-expiry-worker.mjs'
+      - '.github/workflows/release-expiry-worker.yml'
+      - 'index.html'
+      - '.github/workflows/expiry-access-guard-syntax.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check dashboard notice JS
+        run: node --check expiry_access_notice_patch.js
+      - name: Generate guarded Worker candidate
+        run: node scripts/create-expiry-guard-candidate.mjs
+      - name: Check guarded release script syntax
+        run: node --check scripts/release-expiry-worker.mjs
+      - name: Test expired and exceptional entitlement scenarios
+        run: node scripts/test-expiry-entitlements.mjs
+      - name: Check generated Worker syntax as module
+        run: node --input-type=module --check < tmp/expiry-candidate/worker_hotfix.js
+      - name: Ensure canonical Worker unchanged and mail opt-in
+        run: |
+          grep -q 'PRODUCTION_SOURCE_GUARD_V1' wrangler.toml
+          grep -q 'APD_EXPIRY_NOTICES_ENABLED' tmp/expiry-candidate/worker_hotfix.js
+          grep -q 'expiry_access_notice_patch.js' index.html

@@ -1,0 +1,36 @@
+name: Release APD expiration safeguards
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/dispatch/trigger-apd-expiry-release.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apd-expiry-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify immutable production baseline
+        run: node scripts/test-live-source-equivalence.mjs
+      - name: Install pinned toolchain
+        run: npm install
+      - name: Promote tested candidate; smoke and rollback on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release-expiry-worker.mjs
