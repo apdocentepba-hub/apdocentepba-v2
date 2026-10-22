@@ -10,6 +10,10 @@ assert.match(flow,/if: github\.ref == 'refs\/heads\/main'/);
 assert.match(flow,/real_session_qa/);
 assert.match(flow,/confirm_release/);
 assert.match(flow,/permissions:[\s\S]{0,80}contents: write/);
+assert.match(flow,/if \[ -f package-lock\.json \]; then/, 'Support deterministic npm ci when lockfile exists');
+assert.match(flow,/npm install --no-package-lock --ignore-scripts --no-audit --no-fund/, 'Install existing dependency without an absent lockfile');
+assert.match(flow,/npx --no-install wrangler --version/, 'Validate Wrangler installation');
+
 assert.match(release,/GITHUB_EVENT_NAME !== 'workflow_dispatch'/);
 assert.match(release,/GITHUB_REF_NAME !== 'main'/);
 assert.match(release,/APD_AUTH_REAL_SESSION_QA !== 'VERIFIED'/);

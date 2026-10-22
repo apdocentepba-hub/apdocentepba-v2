@@ -52,7 +52,15 @@ jobs:
           node scripts/build-authenticated-dashboard-candidate.mjs
           node --test scripts/test-authenticated-preferences-backend.mjs
           node --check scripts/release-authenticated-preferences-worker.mjs
-      - name: Install pinned dependencies
-        run: npm ci
+      - name: Install Wrangler dependencies (repository has no lockfile)
+        run: |
+          set -euo pipefail
+          test -f package.json
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+          fi
+          npx --no-install wrangler --version
       - name: Release after explicit real-session QA attestation, verify and rollback on error
         run: node scripts/release-authenticated-preferences-worker.mjs
