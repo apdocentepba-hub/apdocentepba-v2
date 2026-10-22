@@ -130,10 +130,14 @@ async function release() {
   if (cfg.split(old).length !== 2 || cfg.includes('[vars]')) {
     throw new Error('Unexpected Wrangler configuration; refuse to replace bundle');
   }
-  fs.writeFileSync('tmp/authenticated-dashboard-candidate/wrangler-auth-release.toml',
-    cfg.replace(old,'main = "'+candidatePath+'"'));
+  // Preserve the .js main module name expected by Cloudflare's canonical capture.
+  const packagedWorker='tmp/authenticated-dashboard-candidate/worker_hotfix.js';
+  fs.copyFileSync(candidatePath,packagedWorker);
+  // Wrangler resolves the main entry relative to the directory containing config.
+  const releaseConfig='wrangler-auth-backend-release.toml';
+  fs.writeFileSync(releaseConfig,cfg.replace(old,'main = "'+packagedWorker+'"'));
   execFileSync('npx',['wrangler','versions','upload',
-    '--config','tmp/authenticated-dashboard-candidate/wrangler-auth-release.toml',
+    '--config',releaseConfig,
     '--preview-alias','apd-auth-release',
     '--tag','auth-release-'+commitSha.slice(0,8),
     '--message','APDocente secure account API release '+commitSha.slice(0,8)
