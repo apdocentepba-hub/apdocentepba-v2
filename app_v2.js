@@ -561,17 +561,23 @@ if (options.body && !headers["Content-Type"]) {
 }
 
 async function obtenerDocentePorId(userId) {
-  const rows = await supabaseFetch(
-    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
-  );
-  return rows?.[0] || null;
+  // El Worker deriva la identidad de la sesión validada; no consulta usuarios con la key pública.
+  const data = await workerFetchJson("/api/account/profile");
+  const user = data?.user || null;
+  if (!user?.id || String(user.id) !== String(userId || "")) {
+    throw new Error("La sesión no corresponde al perfil solicitado");
+  }
+  return user;
 }
 
 async function obtenerPreferenciasPorUserId(userId) {
-  const rows = await supabaseFetch(
-    `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=*`
-  );
-  return rows?.[0] || null;
+  // Ignora cualquier ID elegido por el cliente: solamente devuelve las preferencias de la sesión.
+  const data = await workerFetchJson("/api/account/preferences");
+  const preferences = data?.preferences || null;
+  if (preferences?.user_id && String(preferences.user_id) !== String(userId || "")) {
+    throw new Error("Las preferencias no corresponden al usuario autenticado");
+  }
+  return preferences;
 }
 
 async function obtenerMiPlan(userId) {
@@ -1780,8 +1786,15 @@ await adminCheckAccess();
 bindAdminEvents();
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
-    alert("Error cargando panel");
-    logout();
+    // Un error transitorio del Worker no debe cerrar una sesión válida.
+    // La capa auth_session_patch invalida la sesión automáticamente si recibe HTTP 401.
+    const sesionVigente = typeof window.obtenerSessionToken === "function"
+      ? !!window.obtenerSessionToken()
+      : !!localStorage.getItem("apd_session_token_v1");
+    if (sesionVigente) {
+      setText("panel-subtitulo", "No pudimos cargar tus datos. Volvé a abrir el panel para reintentar.");
+      alert("No se pudo cargar el panel. Tus datos siguen guardados; reintentá en unos momentos.");
+    }
   } finally {
     setPanelLoading(false);
   }
