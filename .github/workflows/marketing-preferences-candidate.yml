@@ -7,6 +7,8 @@ on:
       - 'scripts/test-marketing-preferences-candidate.mjs'
       - 'scripts/brevo-marketing-suppression-readonly.mjs'
       - 'scripts/test-brevo-marketing-suppression.mjs'
+      - 'scripts/test-marketing-account-frontend.mjs'
+      - 'account_profile_patch.js'
       - 'docs/APD_MARKETING_CONSENT_PRIVATE_20261022.md'
       - '.github/workflows/marketing-preferences-candidate.yml'
   workflow_dispatch:
@@ -32,3 +34,7 @@ jobs:
         run: node --test scripts/test-marketing-preferences-candidate.mjs
       - name: Test read-only Brevo blocklist sync policy (all mocked)
         run: node --test scripts/test-brevo-marketing-suppression.mjs
+      - name: Validate unpublished account UI syntax and safety
+        run: |
+          node --check account_profile_patch.js
+          node --test scripts/test-marketing-account-frontend.mjs
