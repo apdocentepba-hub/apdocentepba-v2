@@ -133,9 +133,23 @@ async function release() {
   // Preserve the .js main module name expected by Cloudflare's canonical capture.
   const packagedWorker='tmp/authenticated-dashboard-candidate/worker_hotfix.js';
   fs.copyFileSync(candidatePath,packagedWorker);
+  // Ensure the exact verified cron schedule survives the release. The repo's
+  // Wrangler config can lag behind the captured live Cloudflare triggers.
+  const liveCrons = snapshot.schedules || [];
+  if (!Array.isArray(liveCrons) || liveCrons.length === 0 ||
+      liveCrons.some(v => typeof v !== 'string' || !v.trim())) {
+    throw new Error('Verified live cron schedule missing; refusing release');
+  }
+  const cronLine = /^crons = \[[^\n]*\]$/m;
+  if (!cronLine.test(cfg)) throw new Error('Wrangler config missing expected cron triggers');
+  let releaseCfg=cfg.replace(old,'main = "'+packagedWorker+'"');
+  releaseCfg=releaseCfg.replace(cronLine,'crons = '+JSON.stringify(liveCrons));
+  if (!liveCrons.every(s=>releaseCfg.includes(JSON.stringify(s)))) {
+    throw new Error('Live cron triggers were not preserved');
+  }
   // Wrangler resolves the main entry relative to the directory containing config.
   const releaseConfig='wrangler-auth-backend-release.toml';
-  fs.writeFileSync(releaseConfig,cfg.replace(old,'main = "'+packagedWorker+'"'));
+  fs.writeFileSync(releaseConfig,releaseCfg);
   execFileSync('npx',['wrangler','versions','upload',
     '--config',releaseConfig,
     '--preview-alias','apd-auth-release',
