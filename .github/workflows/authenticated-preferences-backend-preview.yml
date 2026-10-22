@@ -5,7 +5,6 @@ on:
     paths:
       - 'scripts/test-authenticated-preferences-backend.mjs'
       - 'scripts/build-authenticated-dashboard-candidate.mjs'
-      - 'scripts/test-authenticated-preferences-backend.mjs'
       - '.github/workflows/authenticated-preferences-backend-preview.yml'
       - 'scripts/verify-authenticated-dashboard-candidate-bindings.mjs'
   workflow_dispatch:
