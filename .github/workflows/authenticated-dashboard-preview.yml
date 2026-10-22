@@ -54,6 +54,8 @@ jobs:
           }
           fs.appendFileSync(process.env.GITHUB_ENV, 'CLOUDFLARE_ACCOUNT_ID='+id+'\n');
           NODE
+          CLOUDFLARE_ACCOUNT_ID=$(grep '^CLOUDFLARE_ACCOUNT_ID=' "$GITHUB_ENV" | tail -n1 | cut -d= -f2-)
+          export CLOUDFLARE_ACCOUNT_ID
           curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "${ROOT}/before.json"
           ROOT="${ROOT}" node - <<'NODE'
