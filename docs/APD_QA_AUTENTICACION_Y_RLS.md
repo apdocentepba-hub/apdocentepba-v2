@@ -1,6 +1,8 @@
 # APDocente — QA autenticada y cierre RLS
 
 ## Estado
+La vista previa actual del backend se genera en el [PR #132](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/132). **No usar el preview del PR #131 para la aceptación del backend definitivo.**
+
 Pruebas automatizadas del Worker candidato completadas en CI con Supabase simulado. Cloudflare tiene una vista previa sin tráfico de producción. No hay aprobación aún de sesión real ni despliegue.
 
 ## Prueba real necesaria (sin compartir credenciales)
@@ -13,7 +15,7 @@ Pruebas automatizadas del Worker candidato completadas en CI con Supabase simula
   const session = localStorage.getItem('apd_session_token_v1');
   const expectedId = localStorage.getItem('apd_token_v2');
   if (!session || !expectedId) { console.error('No hay sesión iniciada'); return; }
-  const base = 'https://apd-auth-dashboard-ancient-wildflower-cd37.apdocentepba.workers.dev';
+  const base = 'https://apd-auth-backend-ancient-wildflower-cd37.apdocentepba.workers.dev';
   const get = async (path, authenticated = true) => {
     const headers = authenticated ? { Authorization: 'Bearer ' + session } : {};
     const r = await fetch(base + path, { headers, cache: 'no-store' });
