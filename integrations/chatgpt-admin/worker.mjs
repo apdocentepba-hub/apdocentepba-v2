@@ -36,10 +36,10 @@ async function countRows(env, table, filters = {}) {
   if (!key.startsWith("sb_secret_")) headers["authorization"] = "Bearer " + key;
   const res = await fetch(url.toString(), { method: "HEAD", headers, redirect: "error" });
   if (!res.ok) throw new Error("upstream");
-  const match = /\\/(\\d+)$/.exec(res.headers.get("content-range") || "");
-  if (!match) throw new Error("missing_count");
-  return Number(match[1]);
-}
+  const range = res.headers.get("content-range") || "";
+  const count = Number(range.split("/").pop());
+  if (!range.includes("/") || !Number.isSafeInteger(count) || count < 0) throw new Error("missing_count");
+  return count;
 
 export default {
   async fetch(request, env) {
