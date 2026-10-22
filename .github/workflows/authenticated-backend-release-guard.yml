@@ -24,3 +24,13 @@ jobs:
         run: node --check scripts/release-authenticated-preferences-worker.mjs
       - name: Validate manual-only promotion, rollback and capture barriers
         run: node scripts/test-authenticated-backend-release-guard.mjs
+      - name: Exercise Wrangler installation without lockfile (no deploy)
+        run: |
+          set -euo pipefail
+          test -f package.json
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+          fi
+          npx --no-install wrangler --version
