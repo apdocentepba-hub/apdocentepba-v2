@@ -561,17 +561,23 @@ if (options.body && !headers["Content-Type"]) {
 }
 
 async function obtenerDocentePorId(userId) {
-  const rows = await supabaseFetch(
-    `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,ultimo_login`
-  );
-  return rows?.[0] || null;
+  // El Worker deriva la identidad de la sesión validada; no consulta usuarios con la key pública.
+  const data = await workerFetchJson("/api/account/profile");
+  const user = data?.user || null;
+  if (!user?.id || String(user.id) !== String(userId || "")) {
+    throw new Error("La sesión no corresponde al perfil solicitado");
+  }
+  return user;
 }
 
 async function obtenerPreferenciasPorUserId(userId) {
-  const rows = await supabaseFetch(
-    `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=*`
-  );
-  return rows?.[0] || null;
+  // Ignora cualquier ID elegido por el cliente: solamente devuelve las preferencias de la sesión.
+  const data = await workerFetchJson("/api/account/preferences");
+  const preferences = data?.preferences || null;
+  if (preferences?.user_id && String(preferences.user_id) !== String(userId || "")) {
+    throw new Error("Las preferencias no corresponden al usuario autenticado");
+  }
+  return preferences;
 }
 
 async function obtenerMiPlan(userId) {
