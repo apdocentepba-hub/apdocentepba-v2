@@ -1,0 +1,33 @@
+name: Authenticated dashboard security
+
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'index.html'
+      - 'scripts/test-authenticated-dashboard-security.mjs'
+      - '.github/workflows/authenticated-dashboard-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate frontend syntax
+        run: node --check app_v2.js
+      - name: Validate Worker ESM syntax
+        run: node --check worker-live/worker_hotfix.js
+      - name: Check account security and session regressions
+        run: |
+          node scripts/test-auth-session-regression.mjs
+          node scripts/test-worker-session-required.mjs
+          node scripts/test-account-security-contract.mjs
+      - name: Exercise real Worker module with mocked Supabase
+        run: node --test scripts/test-authenticated-dashboard-security.mjs
