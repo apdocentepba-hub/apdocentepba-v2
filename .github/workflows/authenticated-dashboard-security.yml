@@ -7,6 +7,7 @@ on:
       - 'worker-live/worker_hotfix.js'
       - 'scripts/test-authenticated-dashboard-security.mjs'
       - '.github/workflows/authenticated-dashboard-security.yml'
+      - 'scripts/build-authenticated-dashboard-candidate.mjs'
   workflow_dispatch:
 
 permissions:
@@ -20,10 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Create isolated Worker candidate from verified snapshot
+        run: node scripts/build-authenticated-dashboard-candidate.mjs
       - name: Validate frontend syntax
         run: node --check app_v2.js
       - name: Validate Worker ESM syntax
-        run: node --experimental-default-type=module --check worker-live/worker_hotfix.js
+        run: node --check tmp/authenticated-dashboard-candidate/worker_hotfix.mjs
       - name: Check account security and session regressions
         run: |
           node scripts/test-auth-session-regression.mjs
