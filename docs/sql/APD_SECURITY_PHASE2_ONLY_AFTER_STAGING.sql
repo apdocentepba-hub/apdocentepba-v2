@@ -1,7 +1,11 @@
--- ETAPA 2 / APDocente: PRIVACIDAD COMPLETA, AUN NO APLICAR.
--- Archivo de preparación manual. NO es una migración activada automáticamente.
--- Preservar la fase 1 hasta verificar Worker y frontend actualizados, cachés,
--- autenticación contraseña/Google, panel, preferencias y alertas reales.
+-- ESTADO: CIERRE DE ETAPA 2 APLICADO EN SUPABASE EL 22/10/2026.
+-- Migración real en Supabase: apd_secure_users_preferences_after_authenticated_panel_20261022.
+-- ESTE ARCHIVO ES UN BORRADOR HISTÓRICO. NO REEJECUTAR NI USAR COMO ROLLBACK.
+-- La migración real aplica las revocaciones y habilita RLS con verificaciones
+-- de rol de servidor, privilegios y estado previo/posterior.
+-- Ver: docs/APD_RLS_SEGURIDAD_APLICADA_20261022.md
+--
+-- Bloque histórico de preparación anterior al despliegue:
 --
 -- Ejecutar en una sesión administrativa solamente cuando la persona responsable
 -- haya verificado el despliegue y habilite deliberadamente la bandera:
