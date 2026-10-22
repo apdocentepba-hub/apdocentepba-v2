@@ -108,6 +108,38 @@ async function smoke(base) {
   if (noSessionMarketingPost !== 401) throw new Error('Unauthenticated opt-out was not rejected');
 
 }
+
+async function waitForMarketingRoutePropagation() {
+  // Cloudflare may report the new version at 100% before all production edges
+  // serve its routes. A brief 404 from the previous version is not a reason
+  // for an immediate rollback. Do not tolerate any other unexpected status.
+  const maxAttempts = 16;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const probe = workerUrl + '/api/account/marketing-preferences?apd_release_probe=' +
+      encodeURIComponent(candidateId) + '-' + attempt;
+    const got = await status(probe, {headers:{'Cache-Control':'no-cache'}});
+    if (got === 401) {
+      if (await activeVersion() !== candidateId) {
+        throw new Error('Production version changed during propagation');
+      }
+      console.log('Marketing route is live in production; anonymous access denied (401).');
+      return;
+    }
+    if (got !== 404) {
+      throw new Error('Unexpected marketing route response during rollout: HTTP ' + got);
+    }
+    if (await activeVersion() !== candidateId) {
+      throw new Error('Production version changed during propagation');
+    }
+    if (attempt < maxAttempts) {
+      console.log('Waiting for Cloudflare propagation of new marketing route (' +
+        attempt + '/' + maxAttempts + '); current HTTP 404.');
+      await new Promise(resolve => setTimeout(resolve, 4000));
+    }
+  }
+  throw new Error('Marketing route remained HTTP 404 after bounded rollout wait; rollback required');
+}
+
 async function rollback(reason) {
   if (!promotionAttempted || !beforeId) return;
   console.error('Rollback required after release failure: '+String(reason).slice(0,250));
@@ -213,6 +245,7 @@ async function release() {
   promotionAttempted=true;
   await promote(candidateId,'APDocente marketing preference backend '+commitSha.slice(0,8));
   if (await activeVersion() !== candidateId) throw new Error('Candidate promotion did not reach 100 percent');
+  await waitForMarketingRoutePropagation();
   await smoke(workerUrl);
   if (await status(website+'/') !== 200) throw new Error('Website not healthy after promotion');
 
