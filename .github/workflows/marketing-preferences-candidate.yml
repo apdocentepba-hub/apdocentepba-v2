@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/build-marketing-preferences-candidate.mjs'
       - 'scripts/test-marketing-preferences-candidate.mjs'
+      - 'scripts/brevo-marketing-suppression-readonly.mjs'
+      - 'scripts/test-brevo-marketing-suppression.mjs'
       - 'docs/APD_MARKETING_CONSENT_PRIVATE_20261022.md'
       - '.github/workflows/marketing-preferences-candidate.yml'
   workflow_dispatch:
@@ -28,3 +30,5 @@ jobs:
         run: node --check tmp/apd-marketing-consent-candidate/worker_hotfix.mjs
       - name: Test authorization, opt-out and default denial (all mocked)
         run: node --test scripts/test-marketing-preferences-candidate.mjs
+      - name: Test read-only Brevo blocklist sync policy (all mocked)
+        run: node --test scripts/test-brevo-marketing-suppression.mjs
