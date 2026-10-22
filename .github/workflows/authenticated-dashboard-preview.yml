@@ -7,6 +7,7 @@ on:
       - 'scripts/build-authenticated-dashboard-candidate.mjs'
       - 'scripts/test-authenticated-dashboard-security.mjs'
       - '.github/workflows/authenticated-dashboard-preview.yml'
+      - 'scripts/verify-authenticated-dashboard-candidate-bindings.mjs'
   workflow_dispatch:
 
 permissions:
@@ -76,9 +77,11 @@ jobs:
       - name: Upload candidate at zero traffic (never deploy)
         run: |
           set -euo pipefail
+          CANDIDATE_TAG="auth-dashboard-${GITHUB_SHA:0:8}"
+          echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
           npx wrangler versions upload tmp/authenticated-dashboard-candidate/worker_hotfix.mjs \
             --preview-alias "${PREVIEW_ALIAS}" \
-            --tag "pr-${{ github.event.pull_request.number }}-${GITHUB_SHA:0:8}" \
+            --tag "${CANDIDATE_TAG}" \
             --message "Isolated account endpoint candidate - no production traffic" \
             --keep-vars
 
@@ -99,6 +102,9 @@ jobs:
           }
           console.log('Verified: production version unchanged with 100% traffic.');
           NODE
+
+      - name: Verify all production bindings and KV IDs were preserved
+        run: node scripts/verify-authenticated-dashboard-candidate-bindings.mjs
 
       - name: Live read-only smoke against candidate URL (no user sessions)
         run: |
