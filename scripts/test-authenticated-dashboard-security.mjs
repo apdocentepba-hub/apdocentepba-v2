@@ -141,3 +141,21 @@ test("dashboard no longer reads private tables with the browser's public key", (
   assert.match(frontend, /workerFetchJson\("\/api\/account\/profile"\)/);
   assert.match(frontend, /workerFetchJson\("\/api\/account\/preferences"\)/);
 });
+
+test("dashboard keeps a valid session on transient API failures", () => {
+  const begin = frontend.indexOf("async function cargarDashboard()");
+  const end = frontend.indexOf("function renderDashboard(", begin);
+  assert.ok(begin >= 0 && end > begin);
+  const section = frontend.slice(begin, end);
+  const catchIndex = section.lastIndexOf('console.error("ERROR CARGANDO PANEL:", err)');
+  assert.ok(catchIndex > 0);
+  const errorHandler = section.slice(catchIndex);
+  assert.doesNotMatch(errorHandler, /\blogout\s*\(/, "network errors must not log out users");
+  assert.match(errorHandler, /sesionVigente/, "only auth patch may clear an invalid session");
+});
+
+test("HTML invalidates the legacy dashboard bundle cache", () => {
+  const html = readFileSync("index.html", "utf8");
+  assert.match(html, /app_v2\.js\?v=18/, "dashboard script version must change on rollout");
+  assert.match(html, /auth_session_patch\.js/, "session-based API wrapper must remain loaded");
+});
