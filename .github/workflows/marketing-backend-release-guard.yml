@@ -1,0 +1,36 @@
+name: Marketing privacy backend release safety checks
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/release-marketing-preferences-worker.mjs'
+      - 'scripts/test-marketing-backend-release-guard.mjs'
+      - '.github/workflows/release-marketing-preferences-worker.yml'
+      - '.github/workflows/marketing-backend-release-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check release script syntax
+        run: node --check scripts/release-marketing-preferences-worker.mjs
+      - name: Validate manual-only promotion, rollback and capture barriers
+        run: node scripts/test-marketing-backend-release-guard.mjs
+      - name: Exercise Wrangler installation without lockfile (no deploy)
+        run: |
+          set -euo pipefail
+          test -f package.json
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+          fi
+          npx --no-install wrangler --version
