@@ -1,0 +1,26 @@
+name: Authenticated backend release safety checks
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/release-authenticated-preferences-worker.mjs'
+      - 'scripts/test-authenticated-backend-release-guard.mjs'
+      - '.github/workflows/release-authenticated-preferences-worker.yml'
+      - '.github/workflows/authenticated-backend-release-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check release script syntax
+        run: node --check scripts/release-authenticated-preferences-worker.mjs
+      - name: Validate manual-only promotion, rollback and capture barriers
+        run: node scripts/test-authenticated-backend-release-guard.mjs
