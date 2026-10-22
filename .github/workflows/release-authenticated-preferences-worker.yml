@@ -33,10 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      APD_AUTH_RELEASE_CONFIRM: \${{ inputs.confirm_release }}
-      APD_AUTH_REAL_SESSION_QA: \${{ inputs.real_session_qa }}
-      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      APD_AUTH_RELEASE_CONFIRM: ${{ inputs.confirm_release }}
+      APD_AUTH_REAL_SESSION_QA: ${{ inputs.real_session_qa }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
