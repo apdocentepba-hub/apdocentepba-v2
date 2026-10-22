@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 const release=fs.readFileSync('scripts/release-authenticated-preferences-worker.mjs','utf8');
 const flow=fs.readFileSync('.github/workflows/release-authenticated-preferences-worker.yml','utf8');
 assert.match(flow,/workflow_dispatch:/);
@@ -28,4 +29,23 @@ assert.match(release,/bindings\.get\(b\.name\+':'.*b\.type\)/);
 assert.match(release,/fs\.writeFileSync\('worker-live\/manifest\.json'/);
 assert.match(release,/git'\,\['push'/);
 assert.doesNotMatch(release,/SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*['"]/, 'Never hard-code privileged key');
+
+// Real process tests: invalid contexts must exit before any network/API operation.
+function mustReject(env, message) {
+  const p=spawnSync(process.execPath,['scripts/release-authenticated-preferences-worker.mjs'],{
+    env:{PATH:process.env.PATH||'',...env},
+    encoding:'utf8',timeout:6000
+  });
+  assert.notEqual(p.status,0,'Release script unexpectedly accepted forbidden context');
+  assert.match(p.stderr+String(p.stdout||''),message);
+}
+mustReject({GITHUB_REF_NAME:'security/test',GITHUB_EVENT_NAME:'workflow_dispatch',
+  APD_AUTH_RELEASE_CONFIRM:'RELEASE',APD_AUTH_REAL_SESSION_QA:'VERIFIED'},/Manual release only from main branch/);
+mustReject({GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'push',
+  APD_AUTH_RELEASE_CONFIRM:'RELEASE',APD_AUTH_REAL_SESSION_QA:'VERIFIED'},/Manual release only from main branch/);
+mustReject({GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'workflow_dispatch',
+  APD_AUTH_RELEASE_CONFIRM:'NO',APD_AUTH_REAL_SESSION_QA:'VERIFIED'},/Release blocked/);
+mustReject({GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'workflow_dispatch',
+  APD_AUTH_RELEASE_CONFIRM:'RELEASE',APD_AUTH_REAL_SESSION_QA:'NOT_VERIFIED'},/Release blocked/);
+
 console.log('Authenticated backend release guard contracts: OK');
