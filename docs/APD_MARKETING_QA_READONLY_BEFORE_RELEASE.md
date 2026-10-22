@@ -4,16 +4,16 @@
 
 Una nueva ruta interna, sin envíos de publicidad, que permite consultar el estado de marketing propio y registrar una baja. **El sitio y el Worker productivo NO deben cambiar durante la prueba**. URL de prueba:
 
-\`https://apd-marketing-safe-ancient-wildflower-cd37.apdocentepba.workers.dev\`
+`https://apd-marketing-safe-ancient-wildflower-cd37.apdocentepba.workers.dev`
 
 GitHub Actions ya comprueba rutas sin credenciales y evita modificar el tráfico. Falta el GET real con la sesión del dueño. Hacé la prueba en tu navegador estando ya identificado en https://alertasapd.com.ar/.
 
 ### Consola del navegador: prueba solo lectura
 
-Abrir F12 > Consola y ejecutar el siguiente código. **No copiar tokens, emails ni el contenido de las respuestas en mensajes o tickets.** Solo compartir la tabla de resultados PASS/FAIL.
+Abrir F12 > Consola y ejecutar **solamente el JavaScript dentro del bloque de código**. Si copiás a mano, empezá en `;(async () => {` y terminá en `})();`: **no pegues las marcas de Markdown ` ```js ` ni ` ``` `**, porque la consola las interpreta como JavaScript y aparece `TypeError: "" is not a function`. **No copiar tokens, emails ni el contenido de las respuestas en mensajes o tickets.** Solo compartir la tabla de resultados PASS/FAIL.
 
-\`\`\`js
-(async () => {
+```js
+;(async () => {
   const base = 'https://apd-marketing-safe-ancient-wildflower-cd37.apdocentepba.workers.dev';
   const token = String(
     (typeof window.obtenerAuthBearer === 'function' && window.obtenerAuthBearer()) ||
@@ -48,7 +48,7 @@ Abrir F12 > Consola y ejecutar el siguiente código. **No copiar tokens, emails 
   console.table(checks.map(([prueba,ok,http])=>({prueba,passed:ok,http})));
   console.log('Resumen:',checks.every(row=>row[1])?'4/4 OK':'REVISAR - NO PUBLICAR');
 })();
-\`\`\`
+```
 
 Este script no imprime el token ni datos de usuarios y no ejecuta ninguna operación de escritura. No prueba el botón de baja real.
 
@@ -56,9 +56,9 @@ Este script no imprime el token ni datos de usuarios y no ejecuta ninguna operac
 
 - CI de rama backend verde: generación, sesión mock, bloqueos de Brevo, Cloudflare con 0% de tráfico, bindings+KV.
 - Prueba real con consola 4/4 OK sobre la URL de vista previa de **esta** versión.
-- Workflow manual de GitHub \`Release marketing preferences backend (manual and gated)\` sobre \`main\`, con los dos controles \`RELEASE\` y \`VERIFIED\`, solo después del QA.
+- Workflow manual de GitHub `Release marketing preferences backend (manual and gated)` sobre `main`, con los dos controles `RELEASE` y `VERIFIED`, solo después del QA.
 - Tras publicación, repetir el smoke GET 401/405/200 sin transferir credenciales, y revisar el estado de las cuatro tareas cron.
 - La interfaz de «Mi cuenta» debe publicarse **después** de la API.
 - La baja local del servidor no sincroniza por sí sola las bajas existentes en Brevo. **No iniciar campañas hasta validar la sincronización/opt-out del proveedor y la lista de marketing.**
-- La ruta \`request_confirmation\` solo registra una solicitud y **no envía correo de doble confirmación**.
+- La ruta `request_confirmation` solo registra una solicitud y **no envía correo de doble confirmación**.
 - **No reutilizar** el flujo manual viejo de preferencias autenticadas. Usar únicamente el flujo nuevo de marketing, que preserva capturas, vinculaciones, cron y rollback.
