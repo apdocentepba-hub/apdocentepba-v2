@@ -4,13 +4,25 @@ import path from 'node:path';
 const originalPath = path.resolve('worker-live/worker_hotfix.js');
 const outPath = path.resolve(process.argv[2] || 'tmp/expiry-candidate/worker_hotfix.js');
 let source = fs.readFileSync(originalPath, 'utf8');
-if (source.includes('APD_EXPIRY_NOTICE_V1: notification only')) {
-  // The canonical snapshot has already been updated after a verified deployment.
-  // Reuse its exact bytes, never apply the patch twice.
+// Production source captures can omit source comments after bundling.
+// Verify *all* release behaviors before treating this as already applied.
+const appliedEvidence = [
+  'async function apdSendExpiryNoticeOnce(',
+  'async function apdProcessExpiryNotices(',
+  'access_active: isPlanActivo(resolved)',
+  'ctx.waitUntil(apdProcessExpiryNotices(env).catch(',
+  'String(sub.source || "") === "manual_admin_grant" && !sub.current_period_ends_at',
+  'String(row.source || "") === "manual_admin_grant" && !row.current_period_ends_at'
+];
+const appliedCount = appliedEvidence.filter(marker => source.includes(marker)).length;
+if (appliedCount === appliedEvidence.length) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, source);
-  console.log('Expiry candidate already present in canonical live bundle.');
+  console.log('Expiry safeguards already present in canonical bundle; no duplicate patch.');
   process.exit(0);
+}
+if (appliedCount !== 0 || source.includes('APD_EXPIRY_NOTICE_V1: notification only')) {
+  throw new Error('Partial/unknown expiry release state; refuse to patch canonical capture.');
 }
 function replaceExactlyOnce(before, after, label) {
   if (source.split(before).length !== 2) throw new Error('Cannot safely apply: ' + label);
