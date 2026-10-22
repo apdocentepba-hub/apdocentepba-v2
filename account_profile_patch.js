@@ -13,6 +13,8 @@
     }
   };
   window.__apdAccountProfileState = state;
+  state.marketing = state.marketing || { status: 'loading', message: '', loading: false };
+
 
   function esc(value) {
     return String(value || '')
@@ -142,6 +144,18 @@
           ${msgHtml('profile', 'mi-cuenta-msg')}
         </form>
 
+
+        <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
+        <section id="apd-marketing-settings" aria-label="Comunicaciones comerciales" style="display:grid;gap:8px;">
+          <div class="plan-pill-row">
+            <span class="plan-pill plan-pill-neutral">Comunicaciones promocionales</span>
+          </div>
+          <p class="plan-note" style="margin:0;">Estas comunicaciones son distintas de tus alertas docentes. No estás inscripto automáticamente para recibir publicidad.</p>
+          <p id="apd-marketing-status" role="status" style="margin:0;">${esc(state.marketing.status === 'unsubscribed' ? 'Elegiste no recibir promociones.' : state.marketing.status === 'pending_confirmation' ? 'Tu solicitud está pendiente de confirmación; no recibís publicidad.' : state.marketing.status === 'subscribed' ? 'Consentimiento comercial confirmado.' : state.marketing.status === 'loading' ? 'Consultando preferencias...' : 'No estás inscripto para promociones.')}</p>
+          <p class="plan-note" style="margin:0;">La inscripción a promociones estará disponible cuando habilitemos la confirmación independiente por correo.</p>
+          <button type="button" id="btn-apd-marketing-optout" class="btn btn-secondary" ${state.marketing.loading ? 'disabled' : ''}>No recibir comunicaciones promocionales</button>
+          <p id="apd-marketing-message" role="status" class="plan-note" style="margin:0;">${esc(state.marketing.message || '')}</p>
+        </section>
         <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
         <div style="display:grid;gap:10px;">
           <div class="plan-pill-row" style="justify-content:space-between;align-items:center;">
@@ -263,7 +277,45 @@
     }
   }
 
+  async function loadMarketingPreference() {
+    try {
+      const data = await accountApi('/api/account/marketing-preferences',{method:'GET'});
+      state.marketing.status = String(data?.marketing?.status || 'not_requested');
+      state.marketing.message = '';
+    } catch (_) {
+      state.marketing.status = 'loading';
+      state.marketing.message = 'No se pudo verificar la preferencia comercial. No se habilita publicidad.';
+    }
+    renderAccountBox();
+  }
+
+  async function optOutMarketing() {
+    state.marketing.loading = true;
+    state.marketing.message = 'Guardando tu solicitud de baja...';
+    renderAccountBox();
+    try {
+      const data = await accountApi('/api/account/marketing-preferences',{
+        method:'POST',
+        body:JSON.stringify({action:'opt_out'})
+      });
+      if (data?.status !== 'unsubscribed')
+        throw new Error('No se pudo confirmar la baja');
+      state.marketing.status = 'unsubscribed';
+      state.marketing.message = 'Tu baja local se registró. No recibirás campañas gestionadas por APDocente. La baja de Brevo se gestiona por separado.';
+    } catch(err) {
+      state.marketing.message = err?.message || 'No se pudo registrar la baja.';
+    } finally {
+      state.marketing.loading = false;
+      renderAccountBox();
+    }
+  }
+
   function bindEvents() {
+    const marketingBtn = document.getElementById('btn-apd-marketing-optout');
+    if (marketingBtn && marketingBtn.dataset.bound !== '1') {
+      marketingBtn.addEventListener('click', optOutMarketing);
+      marketingBtn.dataset.bound = '1';
+    }
     const profileForm = document.getElementById('form-mi-cuenta');
     if (profileForm && profileForm.dataset.bound !== '1') {
       profileForm.addEventListener('submit', saveProfile);
@@ -320,6 +372,7 @@
   function bootPatch(attempts = 40) {
     if (patchRenderDashboard()) {
       renderAccountBox();
+      loadMarketingPreference().catch(() => {});
       getCurrentUserRow().then(user => {
         if (user) {
           updateProfileState(user, true);
@@ -331,6 +384,6 @@
     if (attempts > 0) setTimeout(() => bootPatch(attempts - 1), 250);
   }
 
-  window.apdAccountProfilePatch = { saveProfile, changePassword, version: PATCH_VERSION };
+  window.apdAccountProfilePatch = { saveProfile, changePassword, optOutMarketing, version: PATCH_VERSION };
   bootPatch();
 })();
