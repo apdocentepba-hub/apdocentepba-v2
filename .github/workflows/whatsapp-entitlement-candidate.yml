@@ -1,0 +1,29 @@
+name: WhatsApp entitlement candidate (no deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-whatsapp-entitlement-candidate.mjs'
+      - 'scripts/test-whatsapp-entitlement-candidate.mjs'
+      - '.github/workflows/whatsapp-entitlement-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm canonical production Worker is unchanged
+        run: node scripts/test-live-source-equivalence.mjs
+      - name: Build isolated WhatsApp candidate
+        run: node scripts/build-whatsapp-entitlement-candidate.mjs
+      - name: Verify candidate syntax
+        run: node --check tmp/apd-whatsapp-entitlement-candidate/worker_hotfix.mjs
+      - name: Test entitlement gate (mocked, no outbound messages)
+        run: node --test scripts/test-whatsapp-entitlement-candidate.mjs
