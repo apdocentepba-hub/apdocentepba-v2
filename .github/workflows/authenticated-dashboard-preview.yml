@@ -66,6 +66,10 @@ jobs:
           if (!j.success || active.length!==1 || Number(active[0].percentage)!==100 || !active[0].version_id) {
             throw new Error('Production version not pinned at 100%; candidate upload blocked');
           }
+          const manifest=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
+          if (active[0].version_id!==manifest.version_id) {
+            throw new Error('Captured Worker no longer matches active production. Refresh baseline before uploading candidate.');
+          }
           fs.appendFileSync(process.env.GITHUB_ENV, 'PRODUCTION_VERSION_BEFORE='+active[0].version_id+'\n');
           NODE
 
