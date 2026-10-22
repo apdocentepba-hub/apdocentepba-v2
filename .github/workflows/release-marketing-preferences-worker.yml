@@ -1,0 +1,66 @@
+name: Release marketing preferences backend (manual and gated)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Write RELEASE only after production readiness review"
+        required: true
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "RELEASE"
+      real_session_qa:
+        description: "Confirm authorized real-session preview QA (no tokens shared)"
+        required: true
+        default: "NOT_VERIFIED"
+        type: choice
+        options:
+          - "NOT_VERIFIED"
+          - "VERIFIED"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apd-marketing-privacy-backend-release
+  cancel-in-progress: false
+
+jobs:
+  guarded-release:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE' && inputs.real_session_qa == 'VERIFIED'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      APD_MARKETING_RELEASE_CONFIRM: ${{ inputs.confirm_release }}
+      APD_MARKETING_REAL_SESSION_QA: ${{ inputs.real_session_qa }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify canonical Worker source and run session tests
+        run: |
+          set -euo pipefail
+          node scripts/test-live-source-equivalence.mjs
+          node scripts/build-marketing-preferences-candidate.mjs
+          node --test scripts/test-marketing-preferences-candidate.mjs
+          node --check scripts/release-marketing-preferences-worker.mjs
+      - name: Install Wrangler dependencies (repository has no lockfile)
+        run: |
+          set -euo pipefail
+          test -f package.json
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+          fi
+          npx --no-install wrangler --version
+      - name: Release after explicit real-session QA attestation, verify and rollback on error
+        run: node scripts/release-marketing-preferences-worker.mjs
