@@ -1,11 +1,13 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// tmp/expiry-candidate/worker_hotfix.js
+// tmp/authenticated-dashboard-candidate/worker_hotfix.js
 var __defProp2 = Object.defineProperty;
 var __name2 = /* @__PURE__ */ __name((target, value) => __defProp2(target, "name", { value, configurable: true }), "__name");
 var __defProp22 = Object.defineProperty;
 var __name22 = /* @__PURE__ */ __name2((target, value) => __defProp22(target, "name", { value, configurable: true }), "__name");
+var __defProp222 = Object.defineProperty;
+var __name222 = /* @__PURE__ */ __name22((target, value) => __defProp222(target, "name", { value, configurable: true }), "__name");
 var PANEL_URL = "https://alertasapd.com.ar";
 var API_URL_PREFIX = "/api";
 var PD_ABC_SYNC_SOURCE = "abc_public";
@@ -20,18 +22,21 @@ function pdCorsHeaders() {
 __name(pdCorsHeaders, "pdCorsHeaders");
 __name2(pdCorsHeaders, "pdCorsHeaders");
 __name22(pdCorsHeaders, "pdCorsHeaders");
+__name222(pdCorsHeaders, "pdCorsHeaders");
 function pdJson(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), { status, headers: pdCorsHeaders() });
 }
 __name(pdJson, "pdJson");
 __name2(pdJson, "pdJson");
 __name22(pdJson, "pdJson");
+__name222(pdJson, "pdJson");
 function pdNorm(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
 }
 __name(pdNorm, "pdNorm");
 __name2(pdNorm, "pdNorm");
 __name22(pdNorm, "pdNorm");
+__name222(pdNorm, "pdNorm");
 function pdTokens(v) {
   const stop = /* @__PURE__ */ new Set(["DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "EN", "A"]);
   return [...new Set(
@@ -41,6 +46,7 @@ function pdTokens(v) {
 __name(pdTokens, "pdTokens");
 __name2(pdTokens, "pdTokens");
 __name22(pdTokens, "pdTokens");
+__name222(pdTokens, "pdTokens");
 function pdGetBearerToken(request) {
   const auth = request.headers.get("Authorization") || "";
   return auth.startsWith("Bearer ") ? String(auth.slice(7) || "").trim() : "";
@@ -48,6 +54,7 @@ function pdGetBearerToken(request) {
 __name(pdGetBearerToken, "pdGetBearerToken");
 __name2(pdGetBearerToken, "pdGetBearerToken");
 __name22(pdGetBearerToken, "pdGetBearerToken");
+__name222(pdGetBearerToken, "pdGetBearerToken");
 function pdGetAuthedUserId(request, body = null, url = null) {
   const bearer = pdGetBearerToken(request);
   const hinted = String(body?.user_id || url?.searchParams?.get("user_id") || "").trim();
@@ -59,6 +66,7 @@ function pdGetAuthedUserId(request, body = null, url = null) {
 __name(pdGetAuthedUserId, "pdGetAuthedUserId");
 __name2(pdGetAuthedUserId, "pdGetAuthedUserId");
 __name22(pdGetAuthedUserId, "pdGetAuthedUserId");
+__name222(pdGetAuthedUserId, "pdGetAuthedUserId");
 async function pdSupabaseRequest(env, path, init = {}) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
@@ -84,12 +92,14 @@ async function pdSupabaseRequest(env, path, init = {}) {
 __name(pdSupabaseRequest, "pdSupabaseRequest");
 __name2(pdSupabaseRequest, "pdSupabaseRequest");
 __name22(pdSupabaseRequest, "pdSupabaseRequest");
+__name222(pdSupabaseRequest, "pdSupabaseRequest");
 async function pdSupabaseSelect(env, query) {
   return await pdSupabaseRequest(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
 }
 __name(pdSupabaseSelect, "pdSupabaseSelect");
 __name2(pdSupabaseSelect, "pdSupabaseSelect");
 __name22(pdSupabaseSelect, "pdSupabaseSelect");
+__name222(pdSupabaseSelect, "pdSupabaseSelect");
 async function pdSupabaseInsertReturning(env, table, data) {
   const rows = await pdSupabaseRequest(env, table, {
     method: "POST",
@@ -101,6 +111,7 @@ async function pdSupabaseInsertReturning(env, table, data) {
 __name(pdSupabaseInsertReturning, "pdSupabaseInsertReturning");
 __name2(pdSupabaseInsertReturning, "pdSupabaseInsertReturning");
 __name22(pdSupabaseInsertReturning, "pdSupabaseInsertReturning");
+__name222(pdSupabaseInsertReturning, "pdSupabaseInsertReturning");
 async function pdSupabaseUpsert(env, table, rows, conflict) {
   return await pdSupabaseRequest(env, `${table}?on_conflict=${encodeURIComponent(conflict)}`, {
     method: "POST",
@@ -111,6 +122,7 @@ async function pdSupabaseUpsert(env, table, rows, conflict) {
 __name(pdSupabaseUpsert, "pdSupabaseUpsert");
 __name2(pdSupabaseUpsert, "pdSupabaseUpsert");
 __name22(pdSupabaseUpsert, "pdSupabaseUpsert");
+__name222(pdSupabaseUpsert, "pdSupabaseUpsert");
 async function pdGetUserById(env, userId) {
   const rows = await pdSupabaseSelect(
     env,
@@ -121,12 +133,14 @@ async function pdGetUserById(env, userId) {
 __name(pdGetUserById, "pdGetUserById");
 __name2(pdGetUserById, "pdGetUserById");
 __name22(pdGetUserById, "pdGetUserById");
+__name222(pdGetUserById, "pdGetUserById");
 function pdNormalizeDni(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 __name(pdNormalizeDni, "pdNormalizeDni");
 __name2(pdNormalizeDni, "pdNormalizeDni");
 __name22(pdNormalizeDni, "pdNormalizeDni");
+__name222(pdNormalizeDni, "pdNormalizeDni");
 async function pdSha256Hex(text) {
   const data = new TextEncoder().encode(String(text || ""));
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -135,6 +149,7 @@ async function pdSha256Hex(text) {
 __name(pdSha256Hex, "pdSha256Hex");
 __name2(pdSha256Hex, "pdSha256Hex");
 __name22(pdSha256Hex, "pdSha256Hex");
+__name222(pdSha256Hex, "pdSha256Hex");
 function pdNormalizeListadoType(raw) {
   const value = pdNorm(raw);
   if (!value) return "OFICIAL";
@@ -150,6 +165,7 @@ function pdNormalizeListadoType(raw) {
 __name(pdNormalizeListadoType, "pdNormalizeListadoType");
 __name2(pdNormalizeListadoType, "pdNormalizeListadoType");
 __name22(pdNormalizeListadoType, "pdNormalizeListadoType");
+__name222(pdNormalizeListadoType, "pdNormalizeListadoType");
 function pdParsePuntaje(raw) {
   const text = String(raw || "").trim();
   const normalized = text.includes(",") ? text.replace(/\./g, "").replace(/,/g, ".") : text;
@@ -161,6 +177,7 @@ function pdParsePuntaje(raw) {
 __name(pdParsePuntaje, "pdParsePuntaje");
 __name2(pdParsePuntaje, "pdParsePuntaje");
 __name22(pdParsePuntaje, "pdParsePuntaje");
+__name222(pdParsePuntaje, "pdParsePuntaje");
 function pdNormalizeListadoRow(row, fallback = {}) {
   const cargo = String(row?.cargo || fallback.cargo || "").trim();
   const materia = String(row?.materia || fallback.materia || "").trim();
@@ -184,6 +201,7 @@ function pdNormalizeListadoRow(row, fallback = {}) {
 __name(pdNormalizeListadoRow, "pdNormalizeListadoRow");
 __name2(pdNormalizeListadoRow, "pdNormalizeListadoRow");
 __name22(pdNormalizeListadoRow, "pdNormalizeListadoRow");
+__name222(pdNormalizeListadoRow, "pdNormalizeListadoRow");
 function pdParseListadoText(rawText, fallback = {}) {
   const lines = String(rawText || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   const rows = [];
@@ -231,12 +249,14 @@ function pdParseListadoText(rawText, fallback = {}) {
 __name(pdParseListadoText, "pdParseListadoText");
 __name2(pdParseListadoText, "pdParseListadoText");
 __name22(pdParseListadoText, "pdParseListadoText");
+__name222(pdParseListadoText, "pdParseListadoText");
 function pdSafeOfferId(offer) {
   return String(offer?.offer_id || offer?.source_offer_key || offer?.idoferta || offer?.iddetalle || offer?.id || "").trim();
 }
 __name(pdSafeOfferId, "pdSafeOfferId");
 __name2(pdSafeOfferId, "pdSafeOfferId");
 __name22(pdSafeOfferId, "pdSafeOfferId");
+__name222(pdSafeOfferId, "pdSafeOfferId");
 function pdNormalizeOfferText(offer) {
   const fields = [
     offer?.cargo,
@@ -251,6 +271,7 @@ function pdNormalizeOfferText(offer) {
 __name(pdNormalizeOfferText, "pdNormalizeOfferText");
 __name2(pdNormalizeOfferText, "pdNormalizeOfferText");
 __name22(pdNormalizeOfferText, "pdNormalizeOfferText");
+__name222(pdNormalizeOfferText, "pdNormalizeOfferText");
 function pdComputeEligibilityForOffer(offer, listados) {
   const offerId = pdSafeOfferId(offer);
   const offerText = pdNormalizeOfferText(offer);
@@ -336,6 +357,7 @@ function pdComputeEligibilityForOffer(offer, listados) {
 __name(pdComputeEligibilityForOffer, "pdComputeEligibilityForOffer");
 __name2(pdComputeEligibilityForOffer, "pdComputeEligibilityForOffer");
 __name22(pdComputeEligibilityForOffer, "pdComputeEligibilityForOffer");
+__name222(pdComputeEligibilityForOffer, "pdComputeEligibilityForOffer");
 async function pdFetchAbcListadoPublic(dni) {
   const normalizedDni = pdNormalizeDni(dni);
   if (normalizedDni.length < 7 || normalizedDni.length > 9) {
@@ -423,6 +445,7 @@ async function pdFetchAbcListadoPublic(dni) {
 __name(pdFetchAbcListadoPublic, "pdFetchAbcListadoPublic");
 __name2(pdFetchAbcListadoPublic, "pdFetchAbcListadoPublic");
 __name22(pdFetchAbcListadoPublic, "pdFetchAbcListadoPublic");
+__name222(pdFetchAbcListadoPublic, "pdFetchAbcListadoPublic");
 function pdBuildListadoSummary(rows) {
   const distritos = [...new Set(rows.map((row) => pdNorm(row?.distrito || "")).filter(Boolean))].sort();
   const anios = [...new Set(rows.map((row) => Number(row?.anio || 0)).filter(Boolean))].sort((a, b) => b - a);
@@ -437,6 +460,7 @@ function pdBuildListadoSummary(rows) {
 __name(pdBuildListadoSummary, "pdBuildListadoSummary");
 __name2(pdBuildListadoSummary, "pdBuildListadoSummary");
 __name22(pdBuildListadoSummary, "pdBuildListadoSummary");
+__name222(pdBuildListadoSummary, "pdBuildListadoSummary");
 function pdMapAbcDocToListadoRow(doc, dni) {
   const cargoArea = String(doc?.cargo_area || "").trim();
   const rama = String(doc?.rama || "").trim();
@@ -480,6 +504,7 @@ function pdMapAbcDocToListadoRow(doc, dni) {
 __name(pdMapAbcDocToListadoRow, "pdMapAbcDocToListadoRow");
 __name2(pdMapAbcDocToListadoRow, "pdMapAbcDocToListadoRow");
 __name22(pdMapAbcDocToListadoRow, "pdMapAbcDocToListadoRow");
+__name222(pdMapAbcDocToListadoRow, "pdMapAbcDocToListadoRow");
 async function pdDeleteUserAutoSyncedListados(env, userId) {
   await pdSupabaseRequest(
     env,
@@ -490,6 +515,7 @@ async function pdDeleteUserAutoSyncedListados(env, userId) {
 __name(pdDeleteUserAutoSyncedListados, "pdDeleteUserAutoSyncedListados");
 __name2(pdDeleteUserAutoSyncedListados, "pdDeleteUserAutoSyncedListados");
 __name22(pdDeleteUserAutoSyncedListados, "pdDeleteUserAutoSyncedListados");
+__name222(pdDeleteUserAutoSyncedListados, "pdDeleteUserAutoSyncedListados");
 async function pdUpdateIdentityProfileSync(env, userId, patch = {}) {
   const profileRows = await pdSupabaseSelect(
     env,
@@ -515,6 +541,7 @@ async function pdUpdateIdentityProfileSync(env, userId, patch = {}) {
 __name(pdUpdateIdentityProfileSync, "pdUpdateIdentityProfileSync");
 __name2(pdUpdateIdentityProfileSync, "pdUpdateIdentityProfileSync");
 __name22(pdUpdateIdentityProfileSync, "pdUpdateIdentityProfileSync");
+__name222(pdUpdateIdentityProfileSync, "pdUpdateIdentityProfileSync");
 async function handleProfileMe(request, env, url) {
   const userId = pdGetAuthedUserId(request, null, url);
   if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
@@ -547,6 +574,7 @@ async function handleProfileMe(request, env, url) {
 __name(handleProfileMe, "handleProfileMe");
 __name2(handleProfileMe, "handleProfileMe");
 __name22(handleProfileMe, "handleProfileMe");
+__name222(handleProfileMe, "handleProfileMe");
 async function handleSaveDni(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -576,6 +604,7 @@ async function handleSaveDni(request, env) {
 __name(handleSaveDni, "handleSaveDni");
 __name2(handleSaveDni, "handleSaveDni");
 __name22(handleSaveDni, "handleSaveDni");
+__name222(handleSaveDni, "handleSaveDni");
 async function handleMisListados(request, env, url) {
   const userId = pdGetAuthedUserId(request, null, url);
   if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
@@ -599,6 +628,7 @@ async function handleMisListados(request, env, url) {
 __name(handleMisListados, "handleMisListados");
 __name2(handleMisListados, "handleMisListados");
 __name22(handleMisListados, "handleMisListados");
+__name222(handleMisListados, "handleMisListados");
 async function handleImportManual(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -631,6 +661,7 @@ async function handleImportManual(request, env) {
 __name(handleImportManual, "handleImportManual");
 __name2(handleImportManual, "handleImportManual");
 __name22(handleImportManual, "handleImportManual");
+__name222(handleImportManual, "handleImportManual");
 async function handleImportPaste(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -672,6 +703,7 @@ async function handleImportPaste(request, env) {
 __name(handleImportPaste, "handleImportPaste");
 __name2(handleImportPaste, "handleImportPaste");
 __name22(handleImportPaste, "handleImportPaste");
+__name222(handleImportPaste, "handleImportPaste");
 async function handleSyncPublicAbc(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -752,6 +784,7 @@ async function handleSyncPublicAbc(request, env) {
 __name(handleSyncPublicAbc, "handleSyncPublicAbc");
 __name2(handleSyncPublicAbc, "handleSyncPublicAbc");
 __name22(handleSyncPublicAbc, "handleSyncPublicAbc");
+__name222(handleSyncPublicAbc, "handleSyncPublicAbc");
 async function handleDeleteListado(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -768,6 +801,7 @@ async function handleDeleteListado(request, env) {
 __name(handleDeleteListado, "handleDeleteListado");
 __name2(handleDeleteListado, "handleDeleteListado");
 __name22(handleDeleteListado, "handleDeleteListado");
+__name222(handleDeleteListado, "handleDeleteListado");
 async function fetchStoredOffers(env, userId) {
   const rows = await pdSupabaseSelect(
     env,
@@ -781,6 +815,7 @@ async function fetchStoredOffers(env, userId) {
 __name(fetchStoredOffers, "fetchStoredOffers");
 __name2(fetchStoredOffers, "fetchStoredOffers");
 __name22(fetchStoredOffers, "fetchStoredOffers");
+__name222(fetchStoredOffers, "fetchStoredOffers");
 async function handleEligibilityRecompute(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = pdGetAuthedUserId(request, body, null);
@@ -834,6 +869,7 @@ async function handleEligibilityRecompute(request, env) {
 __name(handleEligibilityRecompute, "handleEligibilityRecompute");
 __name2(handleEligibilityRecompute, "handleEligibilityRecompute");
 __name22(handleEligibilityRecompute, "handleEligibilityRecompute");
+__name222(handleEligibilityRecompute, "handleEligibilityRecompute");
 async function handleEligibilityList(request, env, url) {
   const userId = pdGetAuthedUserId(request, null, url);
   if (!userId) return pdJson({ ok: false, message: "No autenticado" }, 401);
@@ -846,6 +882,7 @@ async function handleEligibilityList(request, env, url) {
 __name(handleEligibilityList, "handleEligibilityList");
 __name2(handleEligibilityList, "handleEligibilityList");
 __name22(handleEligibilityList, "handleEligibilityList");
+__name222(handleEligibilityList, "handleEligibilityList");
 async function handleProfileListadosRoute(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -881,6 +918,7 @@ async function handleProfileListadosRoute(request, env) {
 __name(handleProfileListadosRoute, "handleProfileListadosRoute");
 __name2(handleProfileListadosRoute, "handleProfileListadosRoute");
 __name22(handleProfileListadosRoute, "handleProfileListadosRoute");
+__name222(handleProfileListadosRoute, "handleProfileListadosRoute");
 async function supabaseInsert(env, table, data) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
@@ -901,6 +939,7 @@ async function supabaseInsert(env, table, data) {
 __name(supabaseInsert, "supabaseInsert");
 __name2(supabaseInsert, "supabaseInsert");
 __name22(supabaseInsert, "supabaseInsert");
+__name222(supabaseInsert, "supabaseInsert");
 async function supabaseInsertReturning(env, table, data) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
@@ -926,6 +965,7 @@ async function supabaseInsertReturning(env, table, data) {
 __name(supabaseInsertReturning, "supabaseInsertReturning");
 __name2(supabaseInsertReturning, "supabaseInsertReturning");
 __name22(supabaseInsertReturning, "supabaseInsertReturning");
+__name222(supabaseInsertReturning, "supabaseInsertReturning");
 function isSupabaseDuplicateError(err) {
   const msg = String(err?.message || err || "").toLowerCase();
   return msg.includes("23505") || msg.includes("duplicate key") || msg.includes("duplicate") || msg.includes("unique") || msg.includes("notification_delivery_logs_dedupe_key_uidx");
@@ -933,6 +973,7 @@ function isSupabaseDuplicateError(err) {
 __name(isSupabaseDuplicateError, "isSupabaseDuplicateError");
 __name2(isSupabaseDuplicateError, "isSupabaseDuplicateError");
 __name22(isSupabaseDuplicateError, "isSupabaseDuplicateError");
+__name222(isSupabaseDuplicateError, "isSupabaseDuplicateError");
 async function supabasePatchById(env, table, id, patch) {
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`,
@@ -956,6 +997,7 @@ async function supabasePatchById(env, table, id, patch) {
 __name(supabasePatchById, "supabasePatchById");
 __name2(supabasePatchById, "supabasePatchById");
 __name22(supabasePatchById, "supabasePatchById");
+__name222(supabasePatchById, "supabasePatchById");
 async function reserveEmailDigestDeliveryLog(env, { user, destination, payload, dedupeKey }) {
   if (!dedupeKey) {
     return {
@@ -1016,6 +1058,7 @@ async function reserveEmailDigestDeliveryLog(env, { user, destination, payload, 
 __name(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
 __name2(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
 __name22(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
+__name222(reserveEmailDigestDeliveryLog, "reserveEmailDigestDeliveryLog");
 function extractBrevoMessageId(send) {
   const direct = String(send?.messageId || send?.message_id || "").trim();
   if (direct) return direct;
@@ -1033,6 +1076,7 @@ function extractBrevoMessageId(send) {
 __name(extractBrevoMessageId, "extractBrevoMessageId");
 __name2(extractBrevoMessageId, "extractBrevoMessageId");
 __name22(extractBrevoMessageId, "extractBrevoMessageId");
+__name222(extractBrevoMessageId, "extractBrevoMessageId");
 async function finishEmailDigestDeliveryLog(env, reservation, send) {
   if (!reservation?.id) return false;
   await supabasePatchById(env, "notification_delivery_logs", reservation.id, {
@@ -1045,6 +1089,7 @@ async function finishEmailDigestDeliveryLog(env, reservation, send) {
 __name(finishEmailDigestDeliveryLog, "finishEmailDigestDeliveryLog");
 __name2(finishEmailDigestDeliveryLog, "finishEmailDigestDeliveryLog");
 __name22(finishEmailDigestDeliveryLog, "finishEmailDigestDeliveryLog");
+__name222(finishEmailDigestDeliveryLog, "finishEmailDigestDeliveryLog");
 var API_VERSION = "2026-03-27";
 var API_URL_PREFIX2 = "/api";
 var HISTORICO_DAYS_DEFAULT = 30;
@@ -1076,6 +1121,7 @@ function jsonResponse(obj, status = 200) {
 __name(jsonResponse, "jsonResponse");
 __name2(jsonResponse, "jsonResponse");
 __name22(jsonResponse, "jsonResponse");
+__name222(jsonResponse, "jsonResponse");
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -1086,18 +1132,21 @@ function corsHeaders() {
 __name(corsHeaders, "corsHeaders");
 __name2(corsHeaders, "corsHeaders");
 __name22(corsHeaders, "corsHeaders");
+__name222(corsHeaders, "corsHeaders");
 function normalizeEmail(v) {
   return String(v || "").trim().toLowerCase();
 }
 __name(normalizeEmail, "normalizeEmail");
 __name2(normalizeEmail, "normalizeEmail");
 __name22(normalizeEmail, "normalizeEmail");
+__name222(normalizeEmail, "normalizeEmail");
 function normalizeText(v) {
   return String(v || "").trim();
 }
 __name(normalizeText, "normalizeText");
 __name2(normalizeText, "normalizeText");
 __name22(normalizeText, "normalizeText");
+__name222(normalizeText, "normalizeText");
 async function ensureTrialIfNoSubscriptions(env, userId, email, source = "trial_auto") {
   const existing = await supabaseSelect(
     env,
@@ -1131,6 +1180,7 @@ async function ensureTrialIfNoSubscriptions(env, userId, email, source = "trial_
 __name(ensureTrialIfNoSubscriptions, "ensureTrialIfNoSubscriptions");
 __name2(ensureTrialIfNoSubscriptions, "ensureTrialIfNoSubscriptions");
 __name22(ensureTrialIfNoSubscriptions, "ensureTrialIfNoSubscriptions");
+__name222(ensureTrialIfNoSubscriptions, "ensureTrialIfNoSubscriptions");
 async function handleRegister(body, env) {
   try {
     const nombre = normalizeText(body?.nombre);
@@ -1179,6 +1229,7 @@ async function handleRegister(body, env) {
 __name(handleRegister, "handleRegister");
 __name2(handleRegister, "handleRegister");
 __name22(handleRegister, "handleRegister");
+__name222(handleRegister, "handleRegister");
 function adminJson(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1193,6 +1244,7 @@ function adminJson(data, status = 200) {
 __name(adminJson, "adminJson");
 __name2(adminJson, "adminJson");
 __name22(adminJson, "adminJson");
+__name222(adminJson, "adminJson");
 function getBearerToken(request) {
   const auth = request.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return null;
@@ -1201,6 +1253,7 @@ function getBearerToken(request) {
 __name(getBearerToken, "getBearerToken");
 __name2(getBearerToken, "getBearerToken");
 __name22(getBearerToken, "getBearerToken");
+__name222(getBearerToken, "getBearerToken");
 function startOfTodayISO() {
   const now = /* @__PURE__ */ new Date();
   const y = now.getUTCFullYear();
@@ -1211,6 +1264,7 @@ function startOfTodayISO() {
 __name(startOfTodayISO, "startOfTodayISO");
 __name2(startOfTodayISO, "startOfTodayISO");
 __name22(startOfTodayISO, "startOfTodayISO");
+__name222(startOfTodayISO, "startOfTodayISO");
 function sevenDaysAgoISO() {
   const dt = /* @__PURE__ */ new Date();
   dt.setUTCDate(dt.getUTCDate() - 6);
@@ -1220,6 +1274,7 @@ function sevenDaysAgoISO() {
 __name(sevenDaysAgoISO, "sevenDaysAgoISO");
 __name2(sevenDaysAgoISO, "sevenDaysAgoISO");
 __name22(sevenDaysAgoISO, "sevenDaysAgoISO");
+__name222(sevenDaysAgoISO, "sevenDaysAgoISO");
 async function getSessionUserByBearer(env, request) {
   const token = getBearerToken(request);
   if (!token) return null;
@@ -1249,6 +1304,7 @@ async function getSessionUserByBearer(env, request) {
 __name(getSessionUserByBearer, "getSessionUserByBearer");
 __name2(getSessionUserByBearer, "getSessionUserByBearer");
 __name22(getSessionUserByBearer, "getSessionUserByBearer");
+__name222(getSessionUserByBearer, "getSessionUserByBearer");
 async function requireAdmin(env, request) {
   const user = await getSessionUserByBearer(env, request);
   if (!user) {
@@ -1268,6 +1324,7 @@ async function requireAdmin(env, request) {
 __name(requireAdmin, "requireAdmin");
 __name2(requireAdmin, "requireAdmin");
 __name22(requireAdmin, "requireAdmin");
+__name222(requireAdmin, "requireAdmin");
 async function handleAdminMe(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -1279,6 +1336,7 @@ async function handleAdminMe(request, env) {
 __name(handleAdminMe, "handleAdminMe");
 __name2(handleAdminMe, "handleAdminMe");
 __name22(handleAdminMe, "handleAdminMe");
+__name222(handleAdminMe, "handleAdminMe");
 async function handleAdminResumen(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -1325,6 +1383,7 @@ async function handleAdminResumen(request, env) {
 __name(handleAdminResumen, "handleAdminResumen");
 __name2(handleAdminResumen, "handleAdminResumen");
 __name22(handleAdminResumen, "handleAdminResumen");
+__name222(handleAdminResumen, "handleAdminResumen");
 async function handleAdminUsuarios(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -1348,6 +1407,7 @@ async function handleAdminUsuarios(request, env) {
 __name(handleAdminUsuarios, "handleAdminUsuarios");
 __name2(handleAdminUsuarios, "handleAdminUsuarios");
 __name22(handleAdminUsuarios, "handleAdminUsuarios");
+__name222(handleAdminUsuarios, "handleAdminUsuarios");
 async function handleAdminSesiones(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -1378,6 +1438,7 @@ async function handleAdminSesiones(request, env) {
 __name(handleAdminSesiones, "handleAdminSesiones");
 __name2(handleAdminSesiones, "handleAdminSesiones");
 __name22(handleAdminSesiones, "handleAdminSesiones");
+__name222(handleAdminSesiones, "handleAdminSesiones");
 async function handleAdminAlertas(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -1411,6 +1472,7 @@ async function handleAdminAlertas(request, env) {
 __name(handleAdminAlertas, "handleAdminAlertas");
 __name2(handleAdminAlertas, "handleAdminAlertas");
 __name22(handleAdminAlertas, "handleAdminAlertas");
+__name222(handleAdminAlertas, "handleAdminAlertas");
 async function enviarMailBrevo(destinatario, nombre, asunto, html, env) {
   const API_KEY = String(
     env.BREVO_API_KEY || env.SENDINBLUE_API_KEY || env.BREVO_TRANSACTIONAL_API_KEY || ""
@@ -1467,6 +1529,7 @@ async function enviarMailBrevo(destinatario, nombre, asunto, html, env) {
 __name(enviarMailBrevo, "enviarMailBrevo");
 __name2(enviarMailBrevo, "enviarMailBrevo");
 __name22(enviarMailBrevo, "enviarMailBrevo");
+__name222(enviarMailBrevo, "enviarMailBrevo");
 function canonicalOfferIdentity(offer) {
   const detailRaw = String(offer?.iddetalle || offer?.raw?.iddetalle || "").trim();
   if (detailRaw) return `D_${detailRaw.replace(/^D_/i, "")}`;
@@ -1482,12 +1545,14 @@ function canonicalOfferIdentity(offer) {
 __name(canonicalOfferIdentity, "canonicalOfferIdentity");
 __name2(canonicalOfferIdentity, "canonicalOfferIdentity");
 __name22(canonicalOfferIdentity, "canonicalOfferIdentity");
+__name222(canonicalOfferIdentity, "canonicalOfferIdentity");
 function getOfferId(offer) {
   return canonicalOfferIdentity(offer);
 }
 __name(getOfferId, "getOfferId");
 __name2(getOfferId, "getOfferId");
 __name22(getOfferId, "getOfferId");
+__name222(getOfferId, "getOfferId");
 function normalizeOfferPayload(offer) {
   return {
     raw: offer,
@@ -1542,12 +1607,14 @@ function normalizeOfferPayload(offer) {
 __name(normalizeOfferPayload, "normalizeOfferPayload");
 __name2(normalizeOfferPayload, "normalizeOfferPayload");
 __name22(normalizeOfferPayload, "normalizeOfferPayload");
+__name222(normalizeOfferPayload, "normalizeOfferPayload");
 function escHtml(v) {
   return String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 __name(escHtml, "escHtml");
 __name2(escHtml, "escHtml");
 __name22(escHtml, "escHtml");
+__name222(escHtml, "escHtml");
 function digestRow(label, value) {
   if (!value && value !== 0) return "";
   return `
@@ -1559,6 +1626,7 @@ function digestRow(label, value) {
 __name(digestRow, "digestRow");
 __name2(digestRow, "digestRow");
 __name22(digestRow, "digestRow");
+__name222(digestRow, "digestRow");
 function emailSchoolChip(row) {
   const p = normalizeOfferPayload(row?.offer_payload || row || {});
   const raw = p?.raw || row?.raw || {};
@@ -1585,6 +1653,7 @@ function emailSchoolChip(row) {
 __name(emailSchoolChip, "emailSchoolChip");
 __name2(emailSchoolChip, "emailSchoolChip");
 __name22(emailSchoolChip, "emailSchoolChip");
+__name222(emailSchoolChip, "emailSchoolChip");
 function parseMailNumber(value) {
   let raw = String(value || "").trim();
   if (!raw) return null;
@@ -1607,6 +1676,7 @@ function parseMailNumber(value) {
 }
 __name(parseMailNumber, "parseMailNumber");
 __name2(parseMailNumber, "parseMailNumber");
+__name22(parseMailNumber, "parseMailNumber");
 function formatMailNumber(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "-";
@@ -1617,12 +1687,14 @@ function formatMailNumber(value) {
 }
 __name(formatMailNumber, "formatMailNumber");
 __name2(formatMailNumber, "formatMailNumber");
+__name22(formatMailNumber, "formatMailNumber");
 function hasPidEvidence(payload) {
   const p = normalizeOfferPayload(payload || {});
   return !!(p.pid_listado || p.pid_anio || p.pid_area || p.pid_bloque || p.pid_reason || p.pid_match || p.pid_compatible || Number.isFinite(Number(p.pid_puntaje_total_base)) || Number.isFinite(Number(p.pid_puntaje_total_final)));
 }
 __name(hasPidEvidence, "hasPidEvidence");
 __name2(hasPidEvidence, "hasPidEvidence");
+__name22(hasPidEvidence, "hasPidEvidence");
 function stripPidFromPayload(payload) {
   const p = normalizeOfferPayload(payload || {});
   return {
@@ -1644,6 +1716,7 @@ function stripPidFromPayload(payload) {
 }
 __name(stripPidFromPayload, "stripPidFromPayload");
 __name2(stripPidFromPayload, "stripPidFromPayload");
+__name22(stripPidFromPayload, "stripPidFromPayload");
 function getPlanCodeValue(value) {
   if (typeof value === "string") {
     return String(value || "").trim().toUpperCase();
@@ -1655,12 +1728,14 @@ function getPlanCodeValue(value) {
 __name(getPlanCodeValue, "getPlanCodeValue");
 __name2(getPlanCodeValue, "getPlanCodeValue");
 __name22(getPlanCodeValue, "getPlanCodeValue");
+__name222(getPlanCodeValue, "getPlanCodeValue");
 function canShowPidForPlan(value) {
   return getPlanCodeValue(value) === "INSIGNE";
 }
 __name(canShowPidForPlan, "canShowPidForPlan");
 __name2(canShowPidForPlan, "canShowPidForPlan");
 __name22(canShowPidForPlan, "canShowPidForPlan");
+__name222(canShowPidForPlan, "canShowPidForPlan");
 function applyPidVisibilityToPayload(payload, planOrEntitlement) {
   const normalized = normalizeOfferPayload(payload || {});
   if (canShowPidForPlan(planOrEntitlement)) {
@@ -1671,6 +1746,7 @@ function applyPidVisibilityToPayload(payload, planOrEntitlement) {
 __name(applyPidVisibilityToPayload, "applyPidVisibilityToPayload");
 __name2(applyPidVisibilityToPayload, "applyPidVisibilityToPayload");
 __name22(applyPidVisibilityToPayload, "applyPidVisibilityToPayload");
+__name222(applyPidVisibilityToPayload, "applyPidVisibilityToPayload");
 function applyPidVisibilityToAlerts(alerts, planOrEntitlement) {
   return (Array.isArray(alerts) ? alerts : []).map((item) => ({
     ...item,
@@ -1683,6 +1759,7 @@ function applyPidVisibilityToAlerts(alerts, planOrEntitlement) {
 __name(applyPidVisibilityToAlerts, "applyPidVisibilityToAlerts");
 __name2(applyPidVisibilityToAlerts, "applyPidVisibilityToAlerts");
 __name22(applyPidVisibilityToAlerts, "applyPidVisibilityToAlerts");
+__name222(applyPidVisibilityToAlerts, "applyPidVisibilityToAlerts");
 function buildMailChanceInfo(p) {
   const payload = normalizeOfferPayload(p || {});
   if (!hasPidEvidence(payload)) {
@@ -1757,6 +1834,7 @@ function buildMailChanceInfo(p) {
 }
 __name(buildMailChanceInfo, "buildMailChanceInfo");
 __name2(buildMailChanceInfo, "buildMailChanceInfo");
+__name22(buildMailChanceInfo, "buildMailChanceInfo");
 function renderMailOfferCard(row) {
   const raw = row?.offer_payload || row || {};
   const p = normalizeOfferPayload(raw);
@@ -1803,6 +1881,7 @@ function renderMailOfferCard(row) {
   }
   __name(resolveMailHref, "resolveMailHref");
   __name2(resolveMailHref, "resolveMailHref");
+  __name22(resolveMailHref, "resolveMailHref");
   function actionBtn(label, href, variant = "primary") {
     const bg = variant === "secondary" ? "#163f7a" : "#2563eb";
     return `
@@ -1823,6 +1902,7 @@ function renderMailOfferCard(row) {
   }
   __name(actionBtn, "actionBtn");
   __name2(actionBtn, "actionBtn");
+  __name22(actionBtn, "actionBtn");
   const abcUrl = resolveMailHref(
     p.link,
     p.url,
@@ -2116,6 +2196,7 @@ function renderMailOfferCard(row) {
 }
 __name(renderMailOfferCard, "renderMailOfferCard");
 __name2(renderMailOfferCard, "renderMailOfferCard");
+__name22(renderMailOfferCard, "renderMailOfferCard");
 async function syncUserOfferState(env, userId, offers) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const safeUserId = encodeURIComponent(String(userId || "").trim());
@@ -2205,12 +2286,14 @@ async function syncUserOfferState(env, userId, offers) {
 __name(syncUserOfferState, "syncUserOfferState");
 __name2(syncUserOfferState, "syncUserOfferState");
 __name22(syncUserOfferState, "syncUserOfferState");
+__name222(syncUserOfferState, "syncUserOfferState");
 function audNorm(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
 }
 __name(audNorm, "audNorm");
 __name2(audNorm, "audNorm");
 __name22(audNorm, "audNorm");
+__name222(audNorm, "audNorm");
 function audExtraerSiglaParentesis(txt) {
   const m = String(txt || "").match(/\(([^)]+)\)/);
   return m ? audNorm(m[1]) : "";
@@ -2218,6 +2301,7 @@ function audExtraerSiglaParentesis(txt) {
 __name(audExtraerSiglaParentesis, "audExtraerSiglaParentesis");
 __name2(audExtraerSiglaParentesis, "audExtraerSiglaParentesis");
 __name22(audExtraerSiglaParentesis, "audExtraerSiglaParentesis");
+__name222(audExtraerSiglaParentesis, "audExtraerSiglaParentesis");
 function audNormalizarTurno(turno) {
   const t = audNorm(turno);
   if (!t) return "";
@@ -2230,6 +2314,7 @@ function audNormalizarTurno(turno) {
 __name(audNormalizarTurno, "audNormalizarTurno");
 __name2(audNormalizarTurno, "audNormalizarTurno");
 __name22(audNormalizarTurno, "audNormalizarTurno");
+__name222(audNormalizarTurno, "audNormalizarTurno");
 function audNormalizarOfertaAPD(doc) {
   return {
     id: String(doc?.iddetalle || doc?.idoferta || doc?.id || "").trim(),
@@ -2264,6 +2349,7 @@ function audNormalizarOfertaAPD(doc) {
 __name(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
 __name2(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
 __name22(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
+__name222(audNormalizarOfertaAPD, "audNormalizarOfertaAPD");
 function audOfertaActiva(oferta) {
   const estado = audNorm(oferta?.estado || "");
   const estadoPublicacion = audNorm(oferta?.estado_publicacion_raw || "");
@@ -2302,6 +2388,7 @@ function audOfertaActiva(oferta) {
 __name(audOfertaActiva, "audOfertaActiva");
 __name2(audOfertaActiva, "audOfertaActiva");
 __name22(audOfertaActiva, "audOfertaActiva");
+__name222(audOfertaActiva, "audOfertaActiva");
 async function audFetchAPDPage(start = 0, rows = 100, distrito = "") {
   const base = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
   const url = new URL(base);
@@ -2328,6 +2415,7 @@ async function audFetchAPDPage(start = 0, rows = 100, distrito = "") {
 __name(audFetchAPDPage, "audFetchAPDPage");
 __name2(audFetchAPDPage, "audFetchAPDPage");
 __name22(audFetchAPDPage, "audFetchAPDPage");
+__name222(audFetchAPDPage, "audFetchAPDPage");
 async function audObtenerOfertasBaseAPD(distrito = "", maxPages = 3) {
   const rows = 100;
   let start = 0;
@@ -2353,6 +2441,7 @@ async function audObtenerOfertasBaseAPD(distrito = "", maxPages = 3) {
 __name(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
 __name2(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
 __name22(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
+__name222(audObtenerOfertasBaseAPD, "audObtenerOfertasBaseAPD");
 function audFiltrarPorDistrito(ofertas, distritoBuscado) {
   const d = audNorm(distritoBuscado);
   return (ofertas || []).filter((of) => of.distrito_norm === d);
@@ -2360,6 +2449,7 @@ function audFiltrarPorDistrito(ofertas, distritoBuscado) {
 __name(audFiltrarPorDistrito, "audFiltrarPorDistrito");
 __name2(audFiltrarPorDistrito, "audFiltrarPorDistrito");
 __name22(audFiltrarPorDistrito, "audFiltrarPorDistrito");
+__name222(audFiltrarPorDistrito, "audFiltrarPorDistrito");
 function audMatchCargo(oferta, preferenciaCargo) {
   const siglaPref = audExtraerSiglaParentesis(preferenciaCargo);
   const siglaOferta = oferta.cargo_sigla || "";
@@ -2370,6 +2460,7 @@ function audMatchCargo(oferta, preferenciaCargo) {
 __name(audMatchCargo, "audMatchCargo");
 __name2(audMatchCargo, "audMatchCargo");
 __name22(audMatchCargo, "audMatchCargo");
+__name222(audMatchCargo, "audMatchCargo");
 function audMatchNivel(oferta, preferenciaNivel) {
   const n = audNorm(preferenciaNivel);
   if (!n) return true;
@@ -2378,6 +2469,7 @@ function audMatchNivel(oferta, preferenciaNivel) {
 __name(audMatchNivel, "audMatchNivel");
 __name2(audMatchNivel, "audMatchNivel");
 __name22(audMatchNivel, "audMatchNivel");
+__name222(audMatchNivel, "audMatchNivel");
 function audMatchTurno(oferta, preferenciaTurno) {
   const t = audNormalizarTurno(preferenciaTurno);
   if (!t) return true;
@@ -2386,6 +2478,7 @@ function audMatchTurno(oferta, preferenciaTurno) {
 __name(audMatchTurno, "audMatchTurno");
 __name2(audMatchTurno, "audMatchTurno");
 __name22(audMatchTurno, "audMatchTurno");
+__name222(audMatchTurno, "audMatchTurno");
 function audEvaluarOfertaPasoAPaso(oferta, pref) {
   const base = {
     id: oferta.id,
@@ -2448,6 +2541,7 @@ function audEvaluarOfertaPasoAPaso(oferta, pref) {
 __name(audEvaluarOfertaPasoAPaso, "audEvaluarOfertaPasoAPaso");
 __name2(audEvaluarOfertaPasoAPaso, "audEvaluarOfertaPasoAPaso");
 __name22(audEvaluarOfertaPasoAPaso, "audEvaluarOfertaPasoAPaso");
+__name222(audEvaluarOfertaPasoAPaso, "audEvaluarOfertaPasoAPaso");
 function audResumenDistrito(items, totalBase, distrito) {
   return {
     distrito,
@@ -2462,6 +2556,7 @@ function audResumenDistrito(items, totalBase, distrito) {
 __name(audResumenDistrito, "audResumenDistrito");
 __name2(audResumenDistrito, "audResumenDistrito");
 __name22(audResumenDistrito, "audResumenDistrito");
+__name222(audResumenDistrito, "audResumenDistrito");
 function audResumenComparacion(evaluadas) {
   return {
     total_evaluadas: evaluadas.length,
@@ -2475,6 +2570,7 @@ function audResumenComparacion(evaluadas) {
 __name(audResumenComparacion, "audResumenComparacion");
 __name2(audResumenComparacion, "audResumenComparacion");
 __name22(audResumenComparacion, "audResumenComparacion");
+__name222(audResumenComparacion, "audResumenComparacion");
 async function handleAdminAuditoriaDistrito(request, env) {
   const auth = await requireAdmin(env, request);
   if (!auth.ok) return auth.response;
@@ -2501,6 +2597,7 @@ async function handleAdminAuditoriaDistrito(request, env) {
 __name(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
 __name2(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
 __name22(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
+__name222(handleAdminAuditoriaDistrito, "handleAdminAuditoriaDistrito");
 async function handleAdminCompararFiltro(request, env) {
   try {
     const auth = await requireAdmin(env, request);
@@ -2591,6 +2688,7 @@ async function handleAdminCompararFiltro(request, env) {
 __name(handleAdminCompararFiltro, "handleAdminCompararFiltro");
 __name2(handleAdminCompararFiltro, "handleAdminCompararFiltro");
 __name22(handleAdminCompararFiltro, "handleAdminCompararFiltro");
+__name222(handleAdminCompararFiltro, "handleAdminCompararFiltro");
 async function handleAdminVerificarCaso(request, env) {
   try {
     const auth = await requireAdmin(env, request);
@@ -2631,17 +2729,20 @@ async function handleAdminVerificarCaso(request, env) {
 }
 __name(handleAdminVerificarCaso, "handleAdminVerificarCaso");
 __name2(handleAdminVerificarCaso, "handleAdminVerificarCaso");
+__name22(handleAdminVerificarCaso, "handleAdminVerificarCaso");
 function dbg2Norm(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\/()\-]+/gu, " ").replace(/\s+/g, " ").trim();
 }
 __name(dbg2Norm, "dbg2Norm");
 __name2(dbg2Norm, "dbg2Norm");
+__name22(dbg2Norm, "dbg2Norm");
 function dbg2ExtraerSiglaParentesis(txt) {
   const m = String(txt || "").match(/\(([^)]+)\)/);
   return m ? dbg2Norm(m[1]) : "";
 }
 __name(dbg2ExtraerSiglaParentesis, "dbg2ExtraerSiglaParentesis");
 __name2(dbg2ExtraerSiglaParentesis, "dbg2ExtraerSiglaParentesis");
+__name22(dbg2ExtraerSiglaParentesis, "dbg2ExtraerSiglaParentesis");
 function dbg2NormalizarTurno(turno) {
   const t = dbg2Norm(turno);
   if (!t) return "";
@@ -2654,6 +2755,7 @@ function dbg2NormalizarTurno(turno) {
 }
 __name(dbg2NormalizarTurno, "dbg2NormalizarTurno");
 __name2(dbg2NormalizarTurno, "dbg2NormalizarTurno");
+__name22(dbg2NormalizarTurno, "dbg2NormalizarTurno");
 function dbg2NormalizarOferta(doc) {
   return {
     id: String(doc?.iddetalle || doc?.idoferta || doc?.id || "").trim(),
@@ -2673,6 +2775,7 @@ function dbg2NormalizarOferta(doc) {
 }
 __name(dbg2NormalizarOferta, "dbg2NormalizarOferta");
 __name2(dbg2NormalizarOferta, "dbg2NormalizarOferta");
+__name22(dbg2NormalizarOferta, "dbg2NormalizarOferta");
 function dbg2OfertaActiva(oferta) {
   const estado = dbg2Norm(oferta?.estado_raw || "");
   const fin = String(oferta?.finoferta || "").trim();
@@ -2688,6 +2791,7 @@ function dbg2OfertaActiva(oferta) {
 }
 __name(dbg2OfertaActiva, "dbg2OfertaActiva");
 __name2(dbg2OfertaActiva, "dbg2OfertaActiva");
+__name22(dbg2OfertaActiva, "dbg2OfertaActiva");
 async function dbg2FetchPage(distrito, start = 0, rows = 100) {
   const base = "https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
   const url = new URL(base);
@@ -2711,6 +2815,7 @@ async function dbg2FetchPage(distrito, start = 0, rows = 100) {
 }
 __name(dbg2FetchPage, "dbg2FetchPage");
 __name2(dbg2FetchPage, "dbg2FetchPage");
+__name22(dbg2FetchPage, "dbg2FetchPage");
 async function dbg2ObtenerBaseDistrito(distrito, maxPages = 4) {
   const rows = 100;
   let start = 0;
@@ -2735,6 +2840,7 @@ async function dbg2ObtenerBaseDistrito(distrito, maxPages = 4) {
 }
 __name(dbg2ObtenerBaseDistrito, "dbg2ObtenerBaseDistrito");
 __name2(dbg2ObtenerBaseDistrito, "dbg2ObtenerBaseDistrito");
+__name22(dbg2ObtenerBaseDistrito, "dbg2ObtenerBaseDistrito");
 function dbg2MatchCargo(oferta, cargoPreferencia) {
   const siglaPref = dbg2ExtraerSiglaParentesis(cargoPreferencia);
   const siglaOferta = oferta.cargo_sigla || "";
@@ -2744,6 +2850,7 @@ function dbg2MatchCargo(oferta, cargoPreferencia) {
 }
 __name(dbg2MatchCargo, "dbg2MatchCargo");
 __name2(dbg2MatchCargo, "dbg2MatchCargo");
+__name22(dbg2MatchCargo, "dbg2MatchCargo");
 function dbg2MatchNivel(oferta, nivelPreferencia) {
   const n = dbg2Norm(nivelPreferencia);
   if (!n) return true;
@@ -2751,6 +2858,7 @@ function dbg2MatchNivel(oferta, nivelPreferencia) {
 }
 __name(dbg2MatchNivel, "dbg2MatchNivel");
 __name2(dbg2MatchNivel, "dbg2MatchNivel");
+__name22(dbg2MatchNivel, "dbg2MatchNivel");
 function dbg2MatchTurno(oferta, turnoPreferencia) {
   const t = dbg2NormalizarTurno(turnoPreferencia);
   if (!t) return true;
@@ -2758,6 +2866,7 @@ function dbg2MatchTurno(oferta, turnoPreferencia) {
 }
 __name(dbg2MatchTurno, "dbg2MatchTurno");
 __name2(dbg2MatchTurno, "dbg2MatchTurno");
+__name22(dbg2MatchTurno, "dbg2MatchTurno");
 async function handleAdminVerificarCasoV2(request, env) {
   try {
     const auth = await requireAdmin(env, request);
@@ -2826,6 +2935,7 @@ async function handleAdminVerificarCasoV2(request, env) {
 }
 __name(handleAdminVerificarCasoV2, "handleAdminVerificarCasoV2");
 __name2(handleAdminVerificarCasoV2, "handleAdminVerificarCasoV2");
+__name22(handleAdminVerificarCasoV2, "handleAdminVerificarCasoV2");
 var worker_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -3010,6 +3120,7 @@ async function handleLogin(request, env) {
 __name(handleLogin, "handleLogin");
 __name2(handleLogin, "handleLogin");
 __name22(handleLogin, "handleLogin");
+__name222(handleLogin, "handleLogin");
 async function handleGoogleAuth(request, env) {
   const body = await request.json();
   const credential = String(body?.credential || "").trim();
@@ -3064,6 +3175,7 @@ async function handleGoogleAuth(request, env) {
 __name(handleGoogleAuth, "handleGoogleAuth");
 __name2(handleGoogleAuth, "handleGoogleAuth");
 __name22(handleGoogleAuth, "handleGoogleAuth");
+__name222(handleGoogleAuth, "handleGoogleAuth");
 async function handlePlanes(env) {
   let rows = [];
   try {
@@ -3087,6 +3199,7 @@ async function handlePlanes(env) {
 __name(handlePlanes, "handlePlanes");
 __name2(handlePlanes, "handlePlanes");
 __name22(handlePlanes, "handlePlanes");
+__name222(handlePlanes, "handlePlanes");
 async function apdSendExpiryNoticeOnce(env, user, subscription, endsAtIso) {
   const planCode = canonicalPlanCode(subscription.plan_code);
   const expiryKey = `apd:expiry:v1:${user.id}:${planCode}:${endsAtIso}`;
@@ -3129,6 +3242,7 @@ async function apdSendExpiryNoticeOnce(env, user, subscription, endsAtIso) {
   return response?.ok ? "sent" : "failed";
 }
 __name(apdSendExpiryNoticeOnce, "apdSendExpiryNoticeOnce");
+__name2(apdSendExpiryNoticeOnce, "apdSendExpiryNoticeOnce");
 async function apdProcessExpiryNotices(env) {
   if (String(env.APD_EXPIRY_NOTICES_ENABLED || "").toLowerCase() !== "true") return;
   const [subscriptions, users] = await Promise.all([
@@ -3165,6 +3279,7 @@ async function apdProcessExpiryNotices(env) {
   }
 }
 __name(apdProcessExpiryNotices, "apdProcessExpiryNotices");
+__name2(apdProcessExpiryNotices, "apdProcessExpiryNotices");
 async function handleMiPlan(url, env) {
   const userId = String(url.searchParams.get("user_id") || "").trim();
   if (!userId) {
@@ -3186,6 +3301,7 @@ async function handleMiPlan(url, env) {
 __name(handleMiPlan, "handleMiPlan");
 __name2(handleMiPlan, "handleMiPlan");
 __name22(handleMiPlan, "handleMiPlan");
+__name222(handleMiPlan, "handleMiPlan");
 async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options = {}) {
   if (!user?.id || !user?.email) {
     return { ok: false, skipped: true, reason: "missing_user_or_email" };
@@ -3285,6 +3401,7 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
 __name(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
 __name2(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
 __name22(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
+__name222(sendInitialAlertsDigestIfNeeded, "sendInitialAlertsDigestIfNeeded");
 async function handleGuardarPreferencias(request, env) {
   const body = await request.json();
   const userId = String(body?.user_id || "").trim();
@@ -3364,6 +3481,7 @@ async function handleGuardarPreferencias(request, env) {
 __name(handleGuardarPreferencias, "handleGuardarPreferencias");
 __name2(handleGuardarPreferencias, "handleGuardarPreferencias");
 __name22(handleGuardarPreferencias, "handleGuardarPreferencias");
+__name222(handleGuardarPreferencias, "handleGuardarPreferencias");
 async function handleMisAlertas(url, env) {
   const userId = String(url.searchParams.get("user_id") || "").trim();
   if (!userId) {
@@ -3400,6 +3518,7 @@ async function handleMisAlertas(url, env) {
 __name(handleMisAlertas, "handleMisAlertas");
 __name2(handleMisAlertas, "handleMisAlertas");
 __name22(handleMisAlertas, "handleMisAlertas");
+__name222(handleMisAlertas, "handleMisAlertas");
 async function handlePostulantesResumen(url) {
   const ofertaId = String(url.searchParams.get("oferta") || "").trim();
   const detalleId = String(url.searchParams.get("detalle") || "").trim();
@@ -3418,6 +3537,7 @@ async function handlePostulantesResumen(url) {
 __name(handlePostulantesResumen, "handlePostulantesResumen");
 __name2(handlePostulantesResumen, "handlePostulantesResumen");
 __name22(handlePostulantesResumen, "handlePostulantesResumen");
+__name222(handlePostulantesResumen, "handlePostulantesResumen");
 async function handleCapturarHistoricoAPD(request, env) {
   const body = await request.json();
   const userId = String(body?.user_id || "").trim();
@@ -3492,6 +3612,7 @@ async function handleCapturarHistoricoAPD(request, env) {
 __name(handleCapturarHistoricoAPD, "handleCapturarHistoricoAPD");
 __name2(handleCapturarHistoricoAPD, "handleCapturarHistoricoAPD");
 __name22(handleCapturarHistoricoAPD, "handleCapturarHistoricoAPD");
+__name222(handleCapturarHistoricoAPD, "handleCapturarHistoricoAPD");
 async function handleHistoricoResumen(url, env) {
   const userId = String(url.searchParams.get("user_id") || "").trim();
   const days = clampInt(url.searchParams.get("days"), 7, 120, HISTORICO_DAYS_DEFAULT);
@@ -3525,6 +3646,7 @@ async function handleHistoricoResumen(url, env) {
 __name(handleHistoricoResumen, "handleHistoricoResumen");
 __name2(handleHistoricoResumen, "handleHistoricoResumen");
 __name22(handleHistoricoResumen, "handleHistoricoResumen");
+__name222(handleHistoricoResumen, "handleHistoricoResumen");
 async function handleProvinciaBackfillStatus(env) {
   const state = await obtenerScanState(env);
   const staleRunning = isStaleProvinciaBackfill(state);
@@ -3558,6 +3680,7 @@ async function handleProvinciaBackfillStatus(env) {
 __name(handleProvinciaBackfillStatus, "handleProvinciaBackfillStatus");
 __name2(handleProvinciaBackfillStatus, "handleProvinciaBackfillStatus");
 __name22(handleProvinciaBackfillStatus, "handleProvinciaBackfillStatus");
+__name222(handleProvinciaBackfillStatus, "handleProvinciaBackfillStatus");
 async function handleProvinciaBackfillKick(request, env, ctx) {
   const state = await obtenerScanState(env);
   const staleRunning = isStaleProvinciaBackfill(state);
@@ -3588,6 +3711,7 @@ async function handleProvinciaBackfillKick(request, env, ctx) {
 __name(handleProvinciaBackfillKick, "handleProvinciaBackfillKick");
 __name2(handleProvinciaBackfillKick, "handleProvinciaBackfillKick");
 __name22(handleProvinciaBackfillKick, "handleProvinciaBackfillKick");
+__name222(handleProvinciaBackfillKick, "handleProvinciaBackfillKick");
 async function handleProvinciaBackfillReset(env) {
   await saveScanState(env, {
     scope: PROVINCIA_SCOPE,
@@ -3611,6 +3735,7 @@ async function handleProvinciaBackfillReset(env) {
 __name(handleProvinciaBackfillReset, "handleProvinciaBackfillReset");
 __name2(handleProvinciaBackfillReset, "handleProvinciaBackfillReset");
 __name22(handleProvinciaBackfillReset, "handleProvinciaBackfillReset");
+__name222(handleProvinciaBackfillReset, "handleProvinciaBackfillReset");
 async function handleProvinciaBackfillStep(request, env) {
   const body = await request.json().catch(() => ({}));
   const force = body?.force === true;
@@ -3620,6 +3745,7 @@ async function handleProvinciaBackfillStep(request, env) {
 __name(handleProvinciaBackfillStep, "handleProvinciaBackfillStep");
 __name2(handleProvinciaBackfillStep, "handleProvinciaBackfillStep");
 __name22(handleProvinciaBackfillStep, "handleProvinciaBackfillStep");
+__name222(handleProvinciaBackfillStep, "handleProvinciaBackfillStep");
 async function handleProvinciaResumen(url, env) {
   const days = clampInt(url.searchParams.get("days"), 7, 120, PROVINCIA_DAYS_DEFAULT);
   const rows = await fetchProvinciaCurrentRows(env, days);
@@ -3629,6 +3755,7 @@ async function handleProvinciaResumen(url, env) {
 __name(handleProvinciaResumen, "handleProvinciaResumen");
 __name2(handleProvinciaResumen, "handleProvinciaResumen");
 __name22(handleProvinciaResumen, "handleProvinciaResumen");
+__name222(handleProvinciaResumen, "handleProvinciaResumen");
 async function handleProvinciaInsights(url, env) {
   const days = clampInt(url.searchParams.get("days"), 7, 120, PROVINCIA_DAYS_DEFAULT);
   const rows = await fetchProvinciaCurrentRows(env, days);
@@ -3643,6 +3770,7 @@ async function handleProvinciaInsights(url, env) {
 __name(handleProvinciaInsights, "handleProvinciaInsights");
 __name2(handleProvinciaInsights, "handleProvinciaInsights");
 __name22(handleProvinciaInsights, "handleProvinciaInsights");
+__name222(handleProvinciaInsights, "handleProvinciaInsights");
 async function handleMercadoPagoCreateCheckoutLink(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = String(body?.user_id || "").trim();
@@ -3753,6 +3881,7 @@ async function handleMercadoPagoCreateCheckoutLink(request, env) {
 __name(handleMercadoPagoCreateCheckoutLink, "handleMercadoPagoCreateCheckoutLink");
 __name2(handleMercadoPagoCreateCheckoutLink, "handleMercadoPagoCreateCheckoutLink");
 __name22(handleMercadoPagoCreateCheckoutLink, "handleMercadoPagoCreateCheckoutLink");
+__name222(handleMercadoPagoCreateCheckoutLink, "handleMercadoPagoCreateCheckoutLink");
 function arParseDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -3761,6 +3890,7 @@ function arParseDate(value) {
 }
 __name(arParseDate, "arParseDate");
 __name2(arParseDate, "arParseDate");
+__name22(arParseDate, "arParseDate");
 function arFormatDate(value) {
   const d = arParseDate(value);
   if (!d) return "";
@@ -3772,12 +3902,14 @@ function arFormatDate(value) {
 }
 __name(arFormatDate, "arFormatDate");
 __name2(arFormatDate, "arFormatDate");
+__name22(arFormatDate, "arFormatDate");
 function arAddDaysIso(baseIso, days) {
   const base = arParseDate(baseIso) || /* @__PURE__ */ new Date();
   return new Date(base.getTime() + days * 24 * 60 * 60 * 1e3).toISOString();
 }
 __name(arAddDaysIso, "arAddDaysIso");
 __name2(arAddDaysIso, "arAddDaysIso");
+__name22(arAddDaysIso, "arAddDaysIso");
 function arRecurringStatus(status) {
   const raw = String(status || "").trim().toLowerCase();
   if (!raw) return "inactive";
@@ -3789,6 +3921,7 @@ function arRecurringStatus(status) {
 }
 __name(arRecurringStatus, "arRecurringStatus");
 __name2(arRecurringStatus, "arRecurringStatus");
+__name22(arRecurringStatus, "arRecurringStatus");
 async function arSupabasePatchById(env, table, id, payload) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -3810,6 +3943,7 @@ async function arSupabasePatchById(env, table, id, payload) {
 }
 __name(arSupabasePatchById, "arSupabasePatchById");
 __name2(arSupabasePatchById, "arSupabasePatchById");
+__name22(arSupabasePatchById, "arSupabasePatchById");
 async function arMercadoPagoRequest(env, path, init = {}) {
   const token = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
   if (!token) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
@@ -3835,6 +3969,7 @@ async function arMercadoPagoRequest(env, path, init = {}) {
 }
 __name(arMercadoPagoRequest, "arMercadoPagoRequest");
 __name2(arMercadoPagoRequest, "arMercadoPagoRequest");
+__name22(arMercadoPagoRequest, "arMercadoPagoRequest");
 async function arGetCurrentPaidSubscription(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -3854,6 +3989,7 @@ async function arGetCurrentPaidSubscription(env, userId) {
 }
 __name(arGetCurrentPaidSubscription, "arGetCurrentPaidSubscription");
 __name2(arGetCurrentPaidSubscription, "arGetCurrentPaidSubscription");
+__name22(arGetCurrentPaidSubscription, "arGetCurrentPaidSubscription");
 function arMercadoPagoDate(value) {
   const base = arParseDate(value) || new Date(Date.now() + 5 * 60 * 1e3);
   const yyyy = base.getFullYear();
@@ -3871,6 +4007,7 @@ function arMercadoPagoDate(value) {
 }
 __name(arMercadoPagoDate, "arMercadoPagoDate");
 __name2(arMercadoPagoDate, "arMercadoPagoDate");
+__name22(arMercadoPagoDate, "arMercadoPagoDate");
 async function handleSubscriptionEnableAutoRenew(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = String(body?.user_id || "").trim();
@@ -3930,6 +4067,7 @@ async function handleSubscriptionEnableAutoRenew(request, env) {
 }
 __name(handleSubscriptionEnableAutoRenew, "handleSubscriptionEnableAutoRenew");
 __name2(handleSubscriptionEnableAutoRenew, "handleSubscriptionEnableAutoRenew");
+__name22(handleSubscriptionEnableAutoRenew, "handleSubscriptionEnableAutoRenew");
 async function handleSubscriptionCancelAutoRenew(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = String(body?.user_id || "").trim();
@@ -3960,6 +4098,7 @@ async function handleSubscriptionCancelAutoRenew(request, env) {
 }
 __name(handleSubscriptionCancelAutoRenew, "handleSubscriptionCancelAutoRenew");
 __name2(handleSubscriptionCancelAutoRenew, "handleSubscriptionCancelAutoRenew");
+__name22(handleSubscriptionCancelAutoRenew, "handleSubscriptionCancelAutoRenew");
 async function handleMercadoPagoWebhook(request, env) {
   const raw = await request.text();
   let payload = null;
@@ -3993,6 +4132,7 @@ async function handleMercadoPagoWebhook(request, env) {
 __name(handleMercadoPagoWebhook, "handleMercadoPagoWebhook");
 __name2(handleMercadoPagoWebhook, "handleMercadoPagoWebhook");
 __name22(handleMercadoPagoWebhook, "handleMercadoPagoWebhook");
+__name222(handleMercadoPagoWebhook, "handleMercadoPagoWebhook");
 async function syncMercadoPagoWebhook(env, event) {
   const topic = String(event?.topic || event?.action || "").trim().toLowerCase();
   const resourceId = String(event?.resourceId || "").trim();
@@ -4012,6 +4152,7 @@ async function syncMercadoPagoWebhook(env, event) {
 __name(syncMercadoPagoWebhook, "syncMercadoPagoWebhook");
 __name2(syncMercadoPagoWebhook, "syncMercadoPagoWebhook");
 __name22(syncMercadoPagoWebhook, "syncMercadoPagoWebhook");
+__name222(syncMercadoPagoWebhook, "syncMercadoPagoWebhook");
 async function fetchMercadoPagoPayment(env, paymentId) {
   const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
   if (!accessToken) throw new Error("Falta MERCADOPAGO_ACCESS_TOKEN");
@@ -4035,6 +4176,7 @@ async function fetchMercadoPagoPayment(env, paymentId) {
 __name(fetchMercadoPagoPayment, "fetchMercadoPagoPayment");
 __name2(fetchMercadoPagoPayment, "fetchMercadoPagoPayment");
 __name22(fetchMercadoPagoPayment, "fetchMercadoPagoPayment");
+__name222(fetchMercadoPagoPayment, "fetchMercadoPagoPayment");
 async function applyMercadoPagoPayment(env, payment) {
   const externalReference = String(payment?.external_reference || "").trim();
   if (!externalReference) {
@@ -4111,6 +4253,7 @@ async function applyMercadoPagoPayment(env, payment) {
 __name(applyMercadoPagoPayment, "applyMercadoPagoPayment");
 __name2(applyMercadoPagoPayment, "applyMercadoPagoPayment");
 __name22(applyMercadoPagoPayment, "applyMercadoPagoPayment");
+__name222(applyMercadoPagoPayment, "applyMercadoPagoPayment");
 async function findCheckoutSessionByExternalReference(env, externalReference) {
   const rows = await supabaseSelect(
     env,
@@ -4121,6 +4264,7 @@ async function findCheckoutSessionByExternalReference(env, externalReference) {
 __name(findCheckoutSessionByExternalReference, "findCheckoutSessionByExternalReference");
 __name2(findCheckoutSessionByExternalReference, "findCheckoutSessionByExternalReference");
 __name22(findCheckoutSessionByExternalReference, "findCheckoutSessionByExternalReference");
+__name222(findCheckoutSessionByExternalReference, "findCheckoutSessionByExternalReference");
 async function findSubscriptionByExternalReference(env, externalReference) {
   const rows = await supabaseSelect(
     env,
@@ -4131,6 +4275,7 @@ async function findSubscriptionByExternalReference(env, externalReference) {
 __name(findSubscriptionByExternalReference, "findSubscriptionByExternalReference");
 __name2(findSubscriptionByExternalReference, "findSubscriptionByExternalReference");
 __name22(findSubscriptionByExternalReference, "findSubscriptionByExternalReference");
+__name222(findSubscriptionByExternalReference, "findSubscriptionByExternalReference");
 function parseMercadoPagoExternalReference(value) {
   const raw = String(value || "").trim();
   if (!raw) return { user_id: "", plan_code: "" };
@@ -4143,6 +4288,7 @@ function parseMercadoPagoExternalReference(value) {
 __name(parseMercadoPagoExternalReference, "parseMercadoPagoExternalReference");
 __name2(parseMercadoPagoExternalReference, "parseMercadoPagoExternalReference");
 __name22(parseMercadoPagoExternalReference, "parseMercadoPagoExternalReference");
+__name222(parseMercadoPagoExternalReference, "parseMercadoPagoExternalReference");
 function mapMercadoPagoSubscriptionStatus(status) {
   const key = String(status || "").trim().toUpperCase();
   if (key === "APPROVED") return "ACTIVE";
@@ -4156,6 +4302,7 @@ function mapMercadoPagoSubscriptionStatus(status) {
 __name(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
 __name2(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
 __name22(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
+__name222(mapMercadoPagoSubscriptionStatus, "mapMercadoPagoSubscriptionStatus");
 function mapMercadoPagoCheckoutStatus(status) {
   const key = String(status || "").trim().toUpperCase();
   if (key === "APPROVED") return "approved";
@@ -4170,6 +4317,7 @@ function mapMercadoPagoCheckoutStatus(status) {
 __name(mapMercadoPagoCheckoutStatus, "mapMercadoPagoCheckoutStatus");
 __name2(mapMercadoPagoCheckoutStatus, "mapMercadoPagoCheckoutStatus");
 __name22(mapMercadoPagoCheckoutStatus, "mapMercadoPagoCheckoutStatus");
+__name222(mapMercadoPagoCheckoutStatus, "mapMercadoPagoCheckoutStatus");
 function addDaysIso(baseIso, days) {
   const baseDate = parseFechaFlexible(baseIso) || /* @__PURE__ */ new Date();
   const next = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1e3);
@@ -4178,6 +4326,7 @@ function addDaysIso(baseIso, days) {
 __name(addDaysIso, "addDaysIso");
 __name2(addDaysIso, "addDaysIso");
 __name22(addDaysIso, "addDaysIso");
+__name222(addDaysIso, "addDaysIso");
 function isPlanActivo(resolved) {
   const sub = resolved?.subscription || resolved || {};
   const planCode = canonicalPlanCode(
@@ -4209,6 +4358,7 @@ function isPlanActivo(resolved) {
 __name(isPlanActivo, "isPlanActivo");
 __name2(isPlanActivo, "isPlanActivo");
 __name22(isPlanActivo, "isPlanActivo");
+__name222(isPlanActivo, "isPlanActivo");
 async function handleWhatsAppHealth(env) {
   const templateName = String(env.WHATSAPP_TEMPLATE_ALERTA || "hello_world").trim();
   const templateLang = String(env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
@@ -4229,6 +4379,7 @@ async function handleWhatsAppHealth(env) {
 __name(handleWhatsAppHealth, "handleWhatsAppHealth");
 __name2(handleWhatsAppHealth, "handleWhatsAppHealth");
 __name22(handleWhatsAppHealth, "handleWhatsAppHealth");
+__name222(handleWhatsAppHealth, "handleWhatsAppHealth");
 async function handleWhatsAppTestSend(request, env) {
   const body = await request.json().catch(() => ({}));
   const userId = String(body?.user_id || "").trim();
@@ -4296,6 +4447,7 @@ async function handleWhatsAppTestSend(request, env) {
 __name(handleWhatsAppTestSend, "handleWhatsAppTestSend");
 __name2(handleWhatsAppTestSend, "handleWhatsAppTestSend");
 __name22(handleWhatsAppTestSend, "handleWhatsAppTestSend");
+__name222(handleWhatsAppTestSend, "handleWhatsAppTestSend");
 async function createMercadoPagoCheckoutPreference(env, context) {
   const accessToken = String(env.MERCADOPAGO_ACCESS_TOKEN || "").trim();
   const amount = Number(context?.plan?.price_ars);
@@ -4366,6 +4518,7 @@ async function createMercadoPagoCheckoutPreference(env, context) {
 __name(createMercadoPagoCheckoutPreference, "createMercadoPagoCheckoutPreference");
 __name2(createMercadoPagoCheckoutPreference, "createMercadoPagoCheckoutPreference");
 __name22(createMercadoPagoCheckoutPreference, "createMercadoPagoCheckoutPreference");
+__name222(createMercadoPagoCheckoutPreference, "createMercadoPagoCheckoutPreference");
 function normalizeWhatsappDestination(value) {
   let digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
@@ -4379,6 +4532,7 @@ function normalizeWhatsappDestination(value) {
 __name(normalizeWhatsappDestination, "normalizeWhatsappDestination");
 __name2(normalizeWhatsappDestination, "normalizeWhatsappDestination");
 __name22(normalizeWhatsappDestination, "normalizeWhatsappDestination");
+__name222(normalizeWhatsappDestination, "normalizeWhatsappDestination");
 function whatsappTestDestinations(value) {
   const primary = normalizeWhatsappDestination(value);
   if (!primary) return [];
@@ -4391,6 +4545,7 @@ function whatsappTestDestinations(value) {
 __name(whatsappTestDestinations, "whatsappTestDestinations");
 __name2(whatsappTestDestinations, "whatsappTestDestinations");
 __name22(whatsappTestDestinations, "whatsappTestDestinations");
+__name222(whatsappTestDestinations, "whatsappTestDestinations");
 function whatsappAllowedListVariant(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
@@ -4401,12 +4556,14 @@ function whatsappAllowedListVariant(value) {
 __name(whatsappAllowedListVariant, "whatsappAllowedListVariant");
 __name2(whatsappAllowedListVariant, "whatsappAllowedListVariant");
 __name22(whatsappAllowedListVariant, "whatsappAllowedListVariant");
+__name222(whatsappAllowedListVariant, "whatsappAllowedListVariant");
 function isHelloWorldTemplate(templateName) {
   return String(templateName || "").trim().toLowerCase() === "hello_world";
 }
 __name(isHelloWorldTemplate, "isHelloWorldTemplate");
 __name2(isHelloWorldTemplate, "isHelloWorldTemplate");
 __name22(isHelloWorldTemplate, "isHelloWorldTemplate");
+__name222(isHelloWorldTemplate, "isHelloWorldTemplate");
 function buildWhatsAppTemplatePayload(destination, templateName, templateLang, bodyParameters = []) {
   const payload = {
     messaging_product: "whatsapp",
@@ -4430,6 +4587,7 @@ function buildWhatsAppTemplatePayload(destination, templateName, templateLang, b
 __name(buildWhatsAppTemplatePayload, "buildWhatsAppTemplatePayload");
 __name2(buildWhatsAppTemplatePayload, "buildWhatsAppTemplatePayload");
 __name22(buildWhatsAppTemplatePayload, "buildWhatsAppTemplatePayload");
+__name222(buildWhatsAppTemplatePayload, "buildWhatsAppTemplatePayload");
 async function sendWhatsAppTemplate(env, payload) {
   const response = await fetch(
     `https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
@@ -4454,6 +4612,7 @@ async function sendWhatsAppTemplate(env, payload) {
 __name(sendWhatsAppTemplate, "sendWhatsAppTemplate");
 __name2(sendWhatsAppTemplate, "sendWhatsAppTemplate");
 __name22(sendWhatsAppTemplate, "sendWhatsAppTemplate");
+__name222(sendWhatsAppTemplate, "sendWhatsAppTemplate");
 function isMetaAllowedListError(data) {
   const message = String(data?.error?.message || data?.message || "").toLowerCase();
   const code = Number(data?.error?.error_subcode || data?.error?.code || 0);
@@ -4462,6 +4621,7 @@ function isMetaAllowedListError(data) {
 __name(isMetaAllowedListError, "isMetaAllowedListError");
 __name2(isMetaAllowedListError, "isMetaAllowedListError");
 __name22(isMetaAllowedListError, "isMetaAllowedListError");
+__name222(isMetaAllowedListError, "isMetaAllowedListError");
 async function getRecentSentEmailAlertKeysForUser(env, userId) {
   const limit = 200;
   const rows = await supabaseSelect(
@@ -4485,6 +4645,7 @@ async function getRecentSentEmailAlertKeysForUser(env, userId) {
 __name(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
 __name2(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
 __name22(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
+__name222(getRecentSentEmailAlertKeysForUser, "getRecentSentEmailAlertKeysForUser");
 async function loadPendingEmailAlertKeysForUser(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -4500,6 +4661,7 @@ async function loadPendingEmailAlertKeysForUser(env, userId) {
 __name(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
 __name2(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
 __name22(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
+__name222(loadPendingEmailAlertKeysForUser, "loadPendingEmailAlertKeysForUser");
 async function hasPendingEmailNotifications(env, userId = "") {
   const filters = [
     "channel=eq.email",
@@ -4520,6 +4682,7 @@ async function hasPendingEmailNotifications(env, userId = "") {
 __name(hasPendingEmailNotifications, "hasPendingEmailNotifications");
 __name2(hasPendingEmailNotifications, "hasPendingEmailNotifications");
 __name22(hasPendingEmailNotifications, "hasPendingEmailNotifications");
+__name222(hasPendingEmailNotifications, "hasPendingEmailNotifications");
 function buildEmailAlertKey(userId, alertItem) {
   const key = String(
     alertItem?.source_offer_key || alertItem?.iddetalle || alertItem?.idoferta || alertItem?.codigo || JSON.stringify(alertItem)
@@ -4528,6 +4691,7 @@ function buildEmailAlertKey(userId, alertItem) {
 }
 __name(buildEmailAlertKey, "buildEmailAlertKey");
 __name2(buildEmailAlertKey, "buildEmailAlertKey");
+__name22(buildEmailAlertKey, "buildEmailAlertKey");
 async function enrichAlertForRichChannels(env, user, alertItem, resolvedPlan = null) {
   const resolved = resolvedPlan || await resolverPlanUsuario(env, user?.id || "").catch(() => null);
   const planCode = String(
@@ -4557,6 +4721,7 @@ async function enrichAlertForRichChannels(env, user, alertItem, resolvedPlan = n
 }
 __name(enrichAlertForRichChannels, "enrichAlertForRichChannels");
 __name2(enrichAlertForRichChannels, "enrichAlertForRichChannels");
+__name22(enrichAlertForRichChannels, "enrichAlertForRichChannels");
 async function enrichAlertsForRichChannels(env, user, alerts, limit = 10) {
   const items = Array.isArray(alerts) ? alerts.slice(0, limit) : [];
   if (!items.length) return [];
@@ -4571,7 +4736,8 @@ async function enrichAlertsForRichChannels(env, user, alerts, limit = 10) {
 }
 __name(enrichAlertsForRichChannels, "enrichAlertsForRichChannels");
 __name2(enrichAlertsForRichChannels, "enrichAlertsForRichChannels");
-__name22(buildEmailAlertKey, "buildEmailAlertKey");
+__name22(enrichAlertsForRichChannels, "enrichAlertsForRichChannels");
+__name222(buildEmailAlertKey, "buildEmailAlertKey");
 async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
   const alertKey = buildEmailAlertKey(user?.id, alertItem);
   if (!user?.email) {
@@ -4661,6 +4827,7 @@ async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
 __name(sendEmailAlertForUser, "sendEmailAlertForUser");
 __name2(sendEmailAlertForUser, "sendEmailAlertForUser");
 __name22(sendEmailAlertForUser, "sendEmailAlertForUser");
+__name222(sendEmailAlertForUser, "sendEmailAlertForUser");
 async function fetchPublishedOffersForEmailDistrict(distritoAPD, shared = {}) {
   const districtKey = norm(String(distritoAPD || ""));
   if (!districtKey) return [];
@@ -4701,6 +4868,7 @@ async function fetchPublishedOffersForEmailDistrict(distritoAPD, shared = {}) {
 }
 __name(fetchPublishedOffersForEmailDistrict, "fetchPublishedOffersForEmailDistrict");
 __name2(fetchPublishedOffersForEmailDistrict, "fetchPublishedOffersForEmailDistrict");
+__name22(fetchPublishedOffersForEmailDistrict, "fetchPublishedOffersForEmailDistrict");
 async function refreshEmailUserOfferStateFromAbc(env, userId, shared = {}) {
   const prefs = await getUserPrefs(env, userId);
   if (!prefs || !prefs.alertas_activas || !prefs.alertas_email) {
@@ -4766,6 +4934,7 @@ async function refreshEmailUserOfferStateFromAbc(env, userId, shared = {}) {
 }
 __name(refreshEmailUserOfferStateFromAbc, "refreshEmailUserOfferStateFromAbc");
 __name2(refreshEmailUserOfferStateFromAbc, "refreshEmailUserOfferStateFromAbc");
+__name22(refreshEmailUserOfferStateFromAbc, "refreshEmailUserOfferStateFromAbc");
 async function markEmailAlertsAsEmailed(env, rows) {
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   let marked = 0;
@@ -4781,6 +4950,7 @@ async function markEmailAlertsAsEmailed(env, rows) {
 }
 __name(markEmailAlertsAsEmailed, "markEmailAlertsAsEmailed");
 __name2(markEmailAlertsAsEmailed, "markEmailAlertsAsEmailed");
+__name22(markEmailAlertsAsEmailed, "markEmailAlertsAsEmailed");
 function buildEmailDigestDedupeKey({ source = "", slotKey = "", userId = "", visibleAlertKeys = [], idempotencyKey = "", now = Date.now() } = {}) {
   const sourceSafe = String(source || "").trim();
   const userSafe = String(userId || "").trim();
@@ -4800,6 +4970,7 @@ function buildEmailDigestDedupeKey({ source = "", slotKey = "", userId = "", vis
 __name(buildEmailDigestDedupeKey, "buildEmailDigestDedupeKey");
 __name2(buildEmailDigestDedupeKey, "buildEmailDigestDedupeKey");
 __name22(buildEmailDigestDedupeKey, "buildEmailDigestDedupeKey");
+__name222(buildEmailDigestDedupeKey, "buildEmailDigestDedupeKey");
 async function runEmailAlertsSweep(env, options = {}) {
   const source = String(options?.source || "").trim();
   const isManualRun = source.startsWith("manual_");
@@ -4948,6 +5119,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   }
   __name(emailAlertTime, "emailAlertTime");
   __name2(emailAlertTime, "emailAlertTime");
+  __name22(emailAlertTime, "emailAlertTime");
   async function loadStoredEmailAlerts(env2, userId, limit = 80) {
     const rows = await supabaseSelect(
       env2,
@@ -4973,6 +5145,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   }
   __name(loadStoredEmailAlerts, "loadStoredEmailAlerts");
   __name2(loadStoredEmailAlerts, "loadStoredEmailAlerts");
+  __name22(loadStoredEmailAlerts, "loadStoredEmailAlerts");
   function emailCleanId(value) {
     const s = String(value || "").trim();
     if (!s) return "";
@@ -4981,6 +5154,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   }
   __name(emailCleanId, "emailCleanId");
   __name2(emailCleanId, "emailCleanId");
+  __name22(emailCleanId, "emailCleanId");
   function emailGetOfertaDetalle(payload) {
     const p = normalizeOfferPayload(payload || {});
     const raw = p?.raw || {};
@@ -4994,6 +5168,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   }
   __name(emailGetOfertaDetalle, "emailGetOfertaDetalle");
   __name2(emailGetOfertaDetalle, "emailGetOfertaDetalle");
+  __name22(emailGetOfertaDetalle, "emailGetOfertaDetalle");
   async function enrichEmailVisibleAlertsWithPostulantes(env2, alerts) {
     const source2 = Array.isArray(alerts) ? alerts : [];
     const enriched = await Promise.all(
@@ -5044,6 +5219,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   }
   __name(enrichEmailVisibleAlertsWithPostulantes, "enrichEmailVisibleAlertsWithPostulantes");
   __name2(enrichEmailVisibleAlertsWithPostulantes, "enrichEmailVisibleAlertsWithPostulantes");
+  __name22(enrichEmailVisibleAlertsWithPostulantes, "enrichEmailVisibleAlertsWithPostulantes");
   const userIds = rowsToProcess.map((row) => String(row?.user_id || "").trim()).filter(Boolean);
   const usersMap = await loadUsersMapByIds(env, userIds).catch(() => /* @__PURE__ */ new Map());
   let processedUsers = 0;
@@ -5056,7 +5232,7 @@ async function runEmailAlertsSweep(env, options = {}) {
   const skip_reason_counts = {};
   const skipped_user_samples = [];
   const debug_users = [];
-  const pushDebug = /* @__PURE__ */ __name2((entry = {}) => {
+  const pushDebug = /* @__PURE__ */ __name22((entry = {}) => {
     const entryUserId = String(entry?.user_id || "").trim();
     const reason = String(entry?.reason || "").trim();
     if (entry?.skipped === true && reason) {
@@ -5225,7 +5401,7 @@ async function runEmailAlertsSweep(env, options = {}) {
         minute: "2-digit",
         hour12: false
       }).formatToParts(/* @__PURE__ */ new Date());
-      const get = /* @__PURE__ */ __name2((type) => parts.find((p) => p.type === type)?.value || "", "get");
+      const get = /* @__PURE__ */ __name22((type) => parts.find((p) => p.type === type)?.value || "", "get");
       return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
     })();
     const subject = `Resumen APD \xB7 ${subjectSlotLabel} \xB7 ${shownCount} de ${totalAlerts}`;
@@ -5495,6 +5671,7 @@ async function runEmailAlertsSweep(env, options = {}) {
 }
 __name(runEmailAlertsSweep, "runEmailAlertsSweep");
 __name2(runEmailAlertsSweep, "runEmailAlertsSweep");
+__name22(runEmailAlertsSweep, "runEmailAlertsSweep");
 function getMostRecentArgentinaDigestSlotInfo(input = Date.now()) {
   const current = getArgentinaDigestSlotInfo(input);
   let year = Number(current.year || 0);
@@ -5518,6 +5695,7 @@ function getMostRecentArgentinaDigestSlotInfo(input = Date.now()) {
   return { year: yyyy, month: mm, day: dd, slot_hour: slotHour, slot_key: yyyy + "-" + mm + "-" + dd + "_" + String(slotHour).padStart(2, "0") };
 }
 __name(getMostRecentArgentinaDigestSlotInfo, "getMostRecentArgentinaDigestSlotInfo");
+__name2(getMostRecentArgentinaDigestSlotInfo, "getMostRecentArgentinaDigestSlotInfo");
 function getArgentinaDigestSlotInfo(input = Date.now()) {
   const date = input instanceof Date ? input : new Date(input);
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -5554,12 +5732,14 @@ function getArgentinaDigestSlotInfo(input = Date.now()) {
 __name(getArgentinaDigestSlotInfo, "getArgentinaDigestSlotInfo");
 __name2(getArgentinaDigestSlotInfo, "getArgentinaDigestSlotInfo");
 __name22(getArgentinaDigestSlotInfo, "getArgentinaDigestSlotInfo");
+__name222(getArgentinaDigestSlotInfo, "getArgentinaDigestSlotInfo");
 function emailDigestCursorKey(slotKey) {
   return `email:digest:cursor:${String(slotKey || "").trim()}`;
 }
 __name(emailDigestCursorKey, "emailDigestCursorKey");
 __name2(emailDigestCursorKey, "emailDigestCursorKey");
 __name22(emailDigestCursorKey, "emailDigestCursorKey");
+__name222(emailDigestCursorKey, "emailDigestCursorKey");
 async function getEmailDigestCursor(env, slotKey) {
   const kv = getChannelStateStore(env);
   if (!kv || !slotKey) {
@@ -5596,6 +5776,7 @@ async function getEmailDigestCursor(env, slotKey) {
 __name(getEmailDigestCursor, "getEmailDigestCursor");
 __name2(getEmailDigestCursor, "getEmailDigestCursor");
 __name22(getEmailDigestCursor, "getEmailDigestCursor");
+__name222(getEmailDigestCursor, "getEmailDigestCursor");
 async function saveEmailDigestCursor(env, slotKey, patch = {}) {
   const kv = getChannelStateStore(env);
   if (!kv || !slotKey) return null;
@@ -5618,6 +5799,7 @@ async function saveEmailDigestCursor(env, slotKey, patch = {}) {
 __name(saveEmailDigestCursor, "saveEmailDigestCursor");
 __name2(saveEmailDigestCursor, "saveEmailDigestCursor");
 __name22(saveEmailDigestCursor, "saveEmailDigestCursor");
+__name222(saveEmailDigestCursor, "saveEmailDigestCursor");
 async function loadUsersMapByIds(env, userIds) {
   const ids = unique(
     (Array.isArray(userIds) ? userIds : []).map((x) => String(x || "").trim()).filter(Boolean)
@@ -5641,6 +5823,7 @@ async function loadUsersMapByIds(env, userIds) {
 __name(loadUsersMapByIds, "loadUsersMapByIds");
 __name2(loadUsersMapByIds, "loadUsersMapByIds");
 __name22(loadUsersMapByIds, "loadUsersMapByIds");
+__name222(loadUsersMapByIds, "loadUsersMapByIds");
 async function wasInitialDigestSentRecently(env, userId, nowInput, lookbackMinutes = 60) {
   const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
   const sinceIso = new Date(now.getTime() - lookbackMinutes * 60 * 1e3).toISOString();
@@ -5653,6 +5836,7 @@ async function wasInitialDigestSentRecently(env, userId, nowInput, lookbackMinut
 __name(wasInitialDigestSentRecently, "wasInitialDigestSentRecently");
 __name2(wasInitialDigestSentRecently, "wasInitialDigestSentRecently");
 __name22(wasInitialDigestSentRecently, "wasInitialDigestSentRecently");
+__name222(wasInitialDigestSentRecently, "wasInitialDigestSentRecently");
 async function runEmailAlertsQueueSweep(env, opts = {}) {
   const source = opts.source || "cron";
   const maxUsers = clampInt(
@@ -5886,7 +6070,8 @@ async function runEmailAlertsQueueSweep(env, opts = {}) {
 __name(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
 __name2(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
 __name22(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
-__name22(runEmailAlertsSweep, "runEmailAlertsSweep");
+__name222(runEmailAlertsQueueSweep, "runEmailAlertsQueueSweep");
+__name222(runEmailAlertsSweep, "runEmailAlertsSweep");
 function parseWhatsAppBodyParameters(raw) {
   if (!raw) return [];
   try {
@@ -5900,6 +6085,7 @@ function parseWhatsAppBodyParameters(raw) {
 __name(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 __name2(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 __name22(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
+__name222(parseWhatsAppBodyParameters, "parseWhatsAppBodyParameters");
 async function runWhatsAppAlertsSweep(env, options = {}) {
   const source = options.source || "cron";
   const configured = !!env.WHATSAPP_PHONE_NUMBER_ID && !!env.WHATSAPP_ACCESS_TOKEN && !!env.WHATSAPP_TEMPLATE_ALERTA;
@@ -5985,6 +6171,7 @@ async function runWhatsAppAlertsSweep(env, options = {}) {
 __name(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
 __name2(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
 __name22(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
+__name222(runWhatsAppAlertsSweep, "runWhatsAppAlertsSweep");
 async function loadRecentSentWhatsAppAlertKeys(env, userId) {
   const limit = clampInt(
     env.WHATSAPP_ALERT_LOG_LOOKBACK,
@@ -6008,6 +6195,7 @@ async function loadRecentSentWhatsAppAlertKeys(env, userId) {
 __name(loadRecentSentWhatsAppAlertKeys, "loadRecentSentWhatsAppAlertKeys");
 __name2(loadRecentSentWhatsAppAlertKeys, "loadRecentSentWhatsAppAlertKeys");
 __name22(loadRecentSentWhatsAppAlertKeys, "loadRecentSentWhatsAppAlertKeys");
+__name222(loadRecentSentWhatsAppAlertKeys, "loadRecentSentWhatsAppAlertKeys");
 function buildWhatsAppAlertKey(userId, alertItem) {
   const sourceKey = String(
     alertItem?.source_offer_key || alertItem?.iddetalle || alertItem?.idoferta || ""
@@ -6017,6 +6205,7 @@ function buildWhatsAppAlertKey(userId, alertItem) {
 __name(buildWhatsAppAlertKey, "buildWhatsAppAlertKey");
 __name2(buildWhatsAppAlertKey, "buildWhatsAppAlertKey");
 __name22(buildWhatsAppAlertKey, "buildWhatsAppAlertKey");
+__name222(buildWhatsAppAlertKey, "buildWhatsAppAlertKey");
 function buildWhatsAppAlertBodyParameters(alertItem) {
   const values = [
     alertItem?.cargo || alertItem?.area || "Oferta APD",
@@ -6032,6 +6221,7 @@ function buildWhatsAppAlertBodyParameters(alertItem) {
 __name(buildWhatsAppAlertBodyParameters, "buildWhatsAppAlertBodyParameters");
 __name2(buildWhatsAppAlertBodyParameters, "buildWhatsAppAlertBodyParameters");
 __name22(buildWhatsAppAlertBodyParameters, "buildWhatsAppAlertBodyParameters");
+__name222(buildWhatsAppAlertBodyParameters, "buildWhatsAppAlertBodyParameters");
 async function sendWhatsAppAlertForUser(env, user, alertItem, options = {}) {
   const templateName = String(options.templateName || env.WHATSAPP_TEMPLATE_ALERTA || "").trim();
   const templateLang = String(options.templateLang || env.WHATSAPP_TEMPLATE_LANG || "en_US").trim();
@@ -6101,6 +6291,7 @@ async function sendWhatsAppAlertForUser(env, user, alertItem, options = {}) {
 __name(sendWhatsAppAlertForUser, "sendWhatsAppAlertForUser");
 __name2(sendWhatsAppAlertForUser, "sendWhatsAppAlertForUser");
 __name22(sendWhatsAppAlertForUser, "sendWhatsAppAlertForUser");
+__name222(sendWhatsAppAlertForUser, "sendWhatsAppAlertForUser");
 async function handleImportarCatalogoCargos(url, env) {
   const totalPaginas = 232;
   const desde = clampInt(url.searchParams.get("desde"), 1, totalPaginas, 1);
@@ -6153,6 +6344,7 @@ async function handleImportarCatalogoCargos(url, env) {
 __name(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
 __name2(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
 __name22(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
+__name222(handleImportarCatalogoCargos, "handleImportarCatalogoCargos");
 function shouldRunProvinciaCurrentAuto(slot) {
   const hour = Number(slot?.hour ?? -1);
   return hour >= 0 && hour <= 5;
@@ -6160,6 +6352,7 @@ function shouldRunProvinciaCurrentAuto(slot) {
 __name(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
 __name2(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
 __name22(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
+__name222(shouldRunProvinciaCurrentAuto, "shouldRunProvinciaCurrentAuto");
 async function maybeRunProvinciaCurrentCron(env, slot) {
   if (!shouldRunProvinciaCurrentAuto(slot)) {
     return { ok: true, skipped: true, reason: "outside_auto_window" };
@@ -6193,6 +6386,7 @@ async function maybeRunProvinciaCurrentCron(env, slot) {
 __name(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 __name2(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 __name22(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
+__name222(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 async function runProvinciaBackfillStep(env, options = {}) {
   let state = await obtenerScanState(env);
   const scanDate = String(options?.scan_date || "").trim();
@@ -6401,6 +6595,7 @@ async function runProvinciaBackfillStep(env, options = {}) {
 __name(runProvinciaBackfillStep, "runProvinciaBackfillStep");
 __name2(runProvinciaBackfillStep, "runProvinciaBackfillStep");
 __name22(runProvinciaBackfillStep, "runProvinciaBackfillStep");
+__name222(runProvinciaBackfillStep, "runProvinciaBackfillStep");
 async function fetchHistoricoRowsByDistritos(env, table, distritos, days, limit = 8e3) {
   const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1e3).toISOString();
   const filters = distritos.map((item) => `distrito.eq.${encodeURIComponent(item)}`).join(",");
@@ -6413,6 +6608,7 @@ async function fetchHistoricoRowsByDistritos(env, table, distritos, days, limit 
 __name(fetchHistoricoRowsByDistritos, "fetchHistoricoRowsByDistritos");
 __name2(fetchHistoricoRowsByDistritos, "fetchHistoricoRowsByDistritos");
 __name22(fetchHistoricoRowsByDistritos, "fetchHistoricoRowsByDistritos");
+__name222(fetchHistoricoRowsByDistritos, "fetchHistoricoRowsByDistritos");
 function buildHistoricoResumenPayload(rows, days) {
   const groupedRows = /* @__PURE__ */ new Map();
   for (const row of rows) {
@@ -6499,6 +6695,7 @@ function buildHistoricoResumenPayload(rows, days) {
 __name(buildHistoricoResumenPayload, "buildHistoricoResumenPayload");
 __name2(buildHistoricoResumenPayload, "buildHistoricoResumenPayload");
 __name22(buildHistoricoResumenPayload, "buildHistoricoResumenPayload");
+__name222(buildHistoricoResumenPayload, "buildHistoricoResumenPayload");
 function emptyHistoricoPayload(days, message) {
   return {
     ok: true,
@@ -6528,6 +6725,7 @@ function emptyHistoricoPayload(days, message) {
 __name(emptyHistoricoPayload, "emptyHistoricoPayload");
 __name2(emptyHistoricoPayload, "emptyHistoricoPayload");
 __name22(emptyHistoricoPayload, "emptyHistoricoPayload");
+__name222(emptyHistoricoPayload, "emptyHistoricoPayload");
 async function fetchProvinciaCurrentRows(env, days) {
   const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1e3).toISOString();
   const rows = await supabaseSelect(
@@ -6539,6 +6737,7 @@ async function fetchProvinciaCurrentRows(env, days) {
 __name(fetchProvinciaCurrentRows, "fetchProvinciaCurrentRows");
 __name2(fetchProvinciaCurrentRows, "fetchProvinciaCurrentRows");
 __name22(fetchProvinciaCurrentRows, "fetchProvinciaCurrentRows");
+__name222(fetchProvinciaCurrentRows, "fetchProvinciaCurrentRows");
 function buildProvinciaResumenPayload(rows, days, state) {
   const activeRows = rows.filter(ofertaHistoricaActiva);
   const closedRows = rows.filter((row) => !ofertaHistoricaActiva(row));
@@ -6596,6 +6795,7 @@ function buildProvinciaResumenPayload(rows, days, state) {
 __name(buildProvinciaResumenPayload, "buildProvinciaResumenPayload");
 __name2(buildProvinciaResumenPayload, "buildProvinciaResumenPayload");
 __name22(buildProvinciaResumenPayload, "buildProvinciaResumenPayload");
+__name222(buildProvinciaResumenPayload, "buildProvinciaResumenPayload");
 function buildProvincialInsightCards(rows, activeRows, closedRows, state) {
   const items = [];
   const seenTexts = /* @__PURE__ */ new Set();
@@ -6614,6 +6814,7 @@ function buildProvincialInsightCards(rows, activeRows, closedRows, state) {
   __name(pushCard, "pushCard");
   __name2(pushCard, "pushCard");
   __name22(pushCard, "pushCard");
+  __name222(pushCard, "pushCard");
   if (rankedDistricts[0]) {
     pushCard(
       "Distrito con mas movimiento",
@@ -6700,6 +6901,7 @@ function buildProvincialInsightCards(rows, activeRows, closedRows, state) {
 __name(buildProvincialInsightCards, "buildProvincialInsightCards");
 __name2(buildProvincialInsightCards, "buildProvincialInsightCards");
 __name22(buildProvincialInsightCards, "buildProvincialInsightCards");
+__name222(buildProvincialInsightCards, "buildProvincialInsightCards");
 function findSubjectLeader(rows, keywords) {
   const subset = rows.filter((row) => {
     const title = norm(`${row.cargo || ""} ${row.area || ""}`);
@@ -6710,6 +6912,7 @@ function findSubjectLeader(rows, keywords) {
 __name(findSubjectLeader, "findSubjectLeader");
 __name2(findSubjectLeader, "findSubjectLeader");
 __name22(findSubjectLeader, "findSubjectLeader");
+__name222(findSubjectLeader, "findSubjectLeader");
 function buildProvinciaCoverageHint(state, districtsWithActivity, activeRows) {
   const rankedDistricts = topCountItems(activeRows.map((row) => row.distrito), 2);
   const topDistrict = rankedDistricts[0]?.label || null;
@@ -6726,6 +6929,7 @@ function buildProvinciaCoverageHint(state, districtsWithActivity, activeRows) {
 __name(buildProvinciaCoverageHint, "buildProvinciaCoverageHint");
 __name2(buildProvinciaCoverageHint, "buildProvinciaCoverageHint");
 __name22(buildProvinciaCoverageHint, "buildProvinciaCoverageHint");
+__name222(buildProvinciaCoverageHint, "buildProvinciaCoverageHint");
 async function obtenerScanState(env) {
   const rows = await supabaseSelect(
     env,
@@ -6747,6 +6951,7 @@ async function obtenerScanState(env) {
 __name(obtenerScanState, "obtenerScanState");
 __name2(obtenerScanState, "obtenerScanState");
 __name22(obtenerScanState, "obtenerScanState");
+__name222(obtenerScanState, "obtenerScanState");
 async function saveScanState(env, state) {
   await supabaseUpsert(
     env,
@@ -6777,6 +6982,7 @@ async function saveScanState(env, state) {
 __name(saveScanState, "saveScanState");
 __name2(saveScanState, "saveScanState");
 __name22(saveScanState, "saveScanState");
+__name222(saveScanState, "saveScanState");
 function isStaleProvinciaBackfill(state) {
   if (String(state?.status || "").trim().toLowerCase() !== "running") return false;
   const ts = parseFechaFlexible(state?.updated_at || state?.last_run_at)?.getTime() || 0;
@@ -6786,6 +6992,7 @@ function isStaleProvinciaBackfill(state) {
 __name(isStaleProvinciaBackfill, "isStaleProvinciaBackfill");
 __name2(isStaleProvinciaBackfill, "isStaleProvinciaBackfill");
 __name22(isStaleProvinciaBackfill, "isStaleProvinciaBackfill");
+__name222(isStaleProvinciaBackfill, "isStaleProvinciaBackfill");
 async function obtenerDistritosProvincia(env) {
   const rows = await supabaseSelect(
     env,
@@ -6796,6 +7003,7 @@ async function obtenerDistritosProvincia(env) {
 __name(obtenerDistritosProvincia, "obtenerDistritosProvincia");
 __name2(obtenerDistritosProvincia, "obtenerDistritosProvincia");
 __name22(obtenerDistritosProvincia, "obtenerDistritosProvincia");
+__name222(obtenerDistritosProvincia, "obtenerDistritosProvincia");
 async function fetchAPDDistrictBatch(distritoAPD, startPage, pagesToRead, rowsPerPage) {
   const docs = [];
   let pagesRead = 0;
@@ -6829,6 +7037,7 @@ async function fetchAPDDistrictBatch(distritoAPD, startPage, pagesToRead, rowsPe
 __name(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
 __name2(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
 __name22(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
+__name222(fetchAPDDistrictBatch, "fetchAPDDistrictBatch");
 function buildGlobalSnapshotRow(oferta, capturedAt) {
   return {
     source_offer_key: buildSourceOfferKeyFromOferta(oferta),
@@ -6855,6 +7064,7 @@ function buildGlobalSnapshotRow(oferta, capturedAt) {
 __name(buildGlobalSnapshotRow, "buildGlobalSnapshotRow");
 __name2(buildGlobalSnapshotRow, "buildGlobalSnapshotRow");
 __name22(buildGlobalSnapshotRow, "buildGlobalSnapshotRow");
+__name222(buildGlobalSnapshotRow, "buildGlobalSnapshotRow");
 async function loadCurrentRowsMap(env, keys) {
   const map = /* @__PURE__ */ new Map();
   const uniqueKeys = unique(keys).filter(Boolean);
@@ -6874,6 +7084,7 @@ async function loadCurrentRowsMap(env, keys) {
 __name(loadCurrentRowsMap, "loadCurrentRowsMap");
 __name2(loadCurrentRowsMap, "loadCurrentRowsMap");
 __name22(loadCurrentRowsMap, "loadCurrentRowsMap");
+__name222(loadCurrentRowsMap, "loadCurrentRowsMap");
 function buildGlobalCurrentRow(snapshotRow, prevRow, capturedAt) {
   const prevState = prevRow ? estadoHistoricoKey(prevRow.estado) : estadoHistoricoKey(snapshotRow.estado);
   const nextState = estadoHistoricoKey(snapshotRow.estado);
@@ -6908,6 +7119,7 @@ function buildGlobalCurrentRow(snapshotRow, prevRow, capturedAt) {
 __name(buildGlobalCurrentRow, "buildGlobalCurrentRow");
 __name2(buildGlobalCurrentRow, "buildGlobalCurrentRow");
 __name22(buildGlobalCurrentRow, "buildGlobalCurrentRow");
+__name222(buildGlobalCurrentRow, "buildGlobalCurrentRow");
 async function buildHistoricoCaptureRows(oferta, capturedAt, includePostulantes) {
   const item = buildAlertItem(oferta, { detalle: {} });
   let resumen = {
@@ -6970,6 +7182,7 @@ async function buildHistoricoCaptureRows(oferta, capturedAt, includePostulantes)
 __name(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
 __name2(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
 __name22(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
+__name222(buildHistoricoCaptureRows, "buildHistoricoCaptureRows");
 async function construirAlertasParaUsuario(env, userId) {
   const user = await obtenerUsuario(env, userId);
   if (!user) return { ok: false, message: "Usuario no encontrado" };
@@ -7071,6 +7284,7 @@ async function construirAlertasParaUsuario(env, userId) {
 }
 __name(construirAlertasParaUsuario, "construirAlertasParaUsuario");
 __name2(construirAlertasParaUsuario, "construirAlertasParaUsuario");
+__name22(construirAlertasParaUsuario, "construirAlertasParaUsuario");
 var PID_STORAGE_WEBAPP = "https://script.google.com/macros/s/AKfycbxN1cKD8SWvYpFe0xZ-NZuDe0362NVbaTZuCVRq1EgnsB2ykFZYQd3EZnQxGLFpogs2Yg/exec";
 async function postPidStorageFromMainWorker(payload) {
   const res = await fetch(PID_STORAGE_WEBAPP, {
@@ -7097,7 +7311,8 @@ async function postPidStorageFromMainWorker(payload) {
 }
 __name(postPidStorageFromMainWorker, "postPidStorageFromMainWorker");
 __name2(postPidStorageFromMainWorker, "postPidStorageFromMainWorker");
-__name22(construirAlertasParaUsuario, "construirAlertasParaUsuario");
+__name22(postPidStorageFromMainWorker, "postPidStorageFromMainWorker");
+__name222(construirAlertasParaUsuario, "construirAlertasParaUsuario");
 function formatearDiasHorariosOferta(oferta) {
   const directo = String(
     oferta?.dias_horarios || oferta?.diashorarios || oferta?.horario || ""
@@ -7127,6 +7342,7 @@ function formatearDiasHorariosOferta(oferta) {
 __name(formatearDiasHorariosOferta, "formatearDiasHorariosOferta");
 __name2(formatearDiasHorariosOferta, "formatearDiasHorariosOferta");
 __name22(formatearDiasHorariosOferta, "formatearDiasHorariosOferta");
+__name222(formatearDiasHorariosOferta, "formatearDiasHorariosOferta");
 function resolverTipoRevistaOferta(oferta) {
   const revistaRaw = norm(
     oferta?.supl_revista || oferta?.revista || oferta?.situacion_revista || ""
@@ -7155,6 +7371,7 @@ function resolverTipoRevistaOferta(oferta) {
 __name(resolverTipoRevistaOferta, "resolverTipoRevistaOferta");
 __name2(resolverTipoRevistaOferta, "resolverTipoRevistaOferta");
 __name22(resolverTipoRevistaOferta, "resolverTipoRevistaOferta");
+__name222(resolverTipoRevistaOferta, "resolverTipoRevistaOferta");
 async function obtenerUltimaPidGuardada(userId) {
   const docenteId = String(userId || "").trim();
   if (!docenteId) return null;
@@ -7170,6 +7387,7 @@ async function obtenerUltimaPidGuardada(userId) {
   }
   __name(parseJsonArray, "parseJsonArray");
   __name2(parseJsonArray, "parseJsonArray");
+  __name22(parseJsonArray, "parseJsonArray");
   function normalizePidStorageResponse(data) {
     if (!data || data.ok !== true) return null;
     if (data.found === false) return null;
@@ -7198,6 +7416,7 @@ async function obtenerUltimaPidGuardada(userId) {
   }
   __name(normalizePidStorageResponse, "normalizePidStorageResponse");
   __name2(normalizePidStorageResponse, "normalizePidStorageResponse");
+  __name22(normalizePidStorageResponse, "normalizePidStorageResponse");
   const actions = [
     "obtener_ultima_pid_consulta",
     "leer_pid_consulta",
@@ -7219,6 +7438,7 @@ async function obtenerUltimaPidGuardada(userId) {
 }
 __name(obtenerUltimaPidGuardada, "obtenerUltimaPidGuardada");
 __name2(obtenerUltimaPidGuardada, "obtenerUltimaPidGuardada");
+__name22(obtenerUltimaPidGuardada, "obtenerUltimaPidGuardada");
 function normalizePidAreaCode(value) {
   const raw = String(value || "").trim().toUpperCase();
   if (!raw) return "";
@@ -7230,11 +7450,13 @@ function normalizePidAreaCode(value) {
 }
 __name(normalizePidAreaCode, "normalizePidAreaCode");
 __name2(normalizePidAreaCode, "normalizePidAreaCode");
+__name22(normalizePidAreaCode, "normalizePidAreaCode");
 function normalizePidAreaLabel(value) {
   return norm(String(value || "").replace(/\(\s*\/?[A-Z0-9]{1,6}\s*\)/g, " "));
 }
 __name(normalizePidAreaLabel, "normalizePidAreaLabel");
 __name2(normalizePidAreaLabel, "normalizePidAreaLabel");
+__name22(normalizePidAreaLabel, "normalizePidAreaLabel");
 function extractOfertaAreaIdentity(oferta) {
   const candidates = [
     oferta?.descripcionarea,
@@ -7259,6 +7481,7 @@ function extractOfertaAreaIdentity(oferta) {
 }
 __name(extractOfertaAreaIdentity, "extractOfertaAreaIdentity");
 __name2(extractOfertaAreaIdentity, "extractOfertaAreaIdentity");
+__name22(extractOfertaAreaIdentity, "extractOfertaAreaIdentity");
 function categoriasPidBloque(value) {
   const t = norm(value);
   const out = /* @__PURE__ */ new Set();
@@ -7277,6 +7500,7 @@ function categoriasPidBloque(value) {
 }
 __name(categoriasPidBloque, "categoriasPidBloque");
 __name2(categoriasPidBloque, "categoriasPidBloque");
+__name22(categoriasPidBloque, "categoriasPidBloque");
 function categoriasOfertaParaPid(oferta) {
   const texto = [
     oferta?.descnivelmodalidad,
@@ -7292,6 +7516,7 @@ function categoriasOfertaParaPid(oferta) {
 }
 __name(categoriasOfertaParaPid, "categoriasOfertaParaPid");
 __name2(categoriasOfertaParaPid, "categoriasOfertaParaPid");
+__name22(categoriasOfertaParaPid, "categoriasOfertaParaPid");
 function setsIntersect(a, b) {
   for (const item of a) {
     if (b.has(item)) return true;
@@ -7300,6 +7525,7 @@ function setsIntersect(a, b) {
 }
 __name(setsIntersect, "setsIntersect");
 __name2(setsIntersect, "setsIntersect");
+__name22(setsIntersect, "setsIntersect");
 function parsePidPuntaje(value) {
   let raw = String(value || "").trim();
   if (!raw) return null;
@@ -7323,6 +7549,7 @@ function parsePidPuntaje(value) {
 }
 __name(parsePidPuntaje, "parsePidPuntaje");
 __name2(parsePidPuntaje, "parsePidPuntaje");
+__name22(parsePidPuntaje, "parsePidPuntaje");
 function normalizePidRows(pidData) {
   const rows = Array.isArray(pidData?.result?.table_rows) ? pidData.result.table_rows : [];
   return rows.map((row) => ({
@@ -7336,6 +7563,7 @@ function normalizePidRows(pidData) {
 }
 __name(normalizePidRows, "normalizePidRows");
 __name2(normalizePidRows, "normalizePidRows");
+__name22(normalizePidRows, "normalizePidRows");
 function isPidAreaCompatible(ofertaIdentity, pidRow) {
   if (ofertaIdentity.code && pidRow.area_code) {
     return ofertaIdentity.code === pidRow.area_code;
@@ -7347,6 +7575,7 @@ function isPidAreaCompatible(ofertaIdentity, pidRow) {
 }
 __name(isPidAreaCompatible, "isPidAreaCompatible");
 __name2(isPidAreaCompatible, "isPidAreaCompatible");
+__name22(isPidAreaCompatible, "isPidAreaCompatible");
 function isPidBlockCompatibleWithOferta(oferta, pidRow) {
   const catsOferta = categoriasOfertaParaPid(oferta);
   const catsPid = categoriasPidBloque(pidRow?.bloque || "");
@@ -7355,17 +7584,20 @@ function isPidBlockCompatibleWithOferta(oferta, pidRow) {
 }
 __name(isPidBlockCompatibleWithOferta, "isPidBlockCompatibleWithOferta");
 __name2(isPidBlockCompatibleWithOferta, "isPidBlockCompatibleWithOferta");
+__name22(isPidBlockCompatibleWithOferta, "isPidBlockCompatibleWithOferta");
 function normalizeDistrictText(value) {
   return norm(value || "").replace(/\(\d+\)/g, " ").replace(/[.,;:/_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 __name(normalizeDistrictText, "normalizeDistrictText");
 __name2(normalizeDistrictText, "normalizeDistrictText");
+__name22(normalizeDistrictText, "normalizeDistrictText");
 function addDistrictVariant(set, value) {
   const v = normalizeDistrictText(value);
   if (v) set.add(v);
 }
 __name(addDistrictVariant, "addDistrictVariant");
 __name2(addDistrictVariant, "addDistrictVariant");
+__name22(addDistrictVariant, "addDistrictVariant");
 function buildDistrictVariants(officialName) {
   const set = /* @__PURE__ */ new Set();
   const base = normalizeDistrictText(officialName);
@@ -7383,6 +7615,7 @@ function buildDistrictVariants(officialName) {
 }
 __name(buildDistrictVariants, "buildDistrictVariants");
 __name2(buildDistrictVariants, "buildDistrictVariants");
+__name22(buildDistrictVariants, "buildDistrictVariants");
 function extractCatalogDistrictNames(catalogos) {
   const raw = catalogos?.distritos || catalogos?.catalogo_distritos || catalogos?.districts || [];
   return raw.map(
@@ -7393,6 +7626,7 @@ function extractCatalogDistrictNames(catalogos) {
 }
 __name(extractCatalogDistrictNames, "extractCatalogDistrictNames");
 __name2(extractCatalogDistrictNames, "extractCatalogDistrictNames");
+__name22(extractCatalogDistrictNames, "extractCatalogDistrictNames");
 function buildDistrictIndex(catalogos) {
   const names = extractCatalogDistrictNames(catalogos);
   const index = /* @__PURE__ */ new Map();
@@ -7408,6 +7642,7 @@ function buildDistrictIndex(catalogos) {
 }
 __name(buildDistrictIndex, "buildDistrictIndex");
 __name2(buildDistrictIndex, "buildDistrictIndex");
+__name22(buildDistrictIndex, "buildDistrictIndex");
 function resolveDistrictAgainstCatalog(value, districtIndex) {
   const normalized = normalizeDistrictText(value);
   if (!normalized) return "";
@@ -7430,6 +7665,7 @@ function resolveDistrictAgainstCatalog(value, districtIndex) {
 }
 __name(resolveDistrictAgainstCatalog, "resolveDistrictAgainstCatalog");
 __name2(resolveDistrictAgainstCatalog, "resolveDistrictAgainstCatalog");
+__name22(resolveDistrictAgainstCatalog, "resolveDistrictAgainstCatalog");
 function extractPidRequestedDistricts(pidData, districtIndex) {
   const raw = String(
     pidData?.result?.distritos_solicitados || pidData?.distritos_solicitados || ""
@@ -7441,6 +7677,7 @@ function extractPidRequestedDistricts(pidData, districtIndex) {
 }
 __name(extractPidRequestedDistricts, "extractPidRequestedDistricts");
 __name2(extractPidRequestedDistricts, "extractPidRequestedDistricts");
+__name22(extractPidRequestedDistricts, "extractPidRequestedDistricts");
 function resolveOfertaDistrict(oferta, districtIndex) {
   return resolveDistrictAgainstCatalog(
     oferta?.descdistrito || oferta?.distrito || oferta?.raw?.descdistrito || oferta?.raw?.distrito || "",
@@ -7449,6 +7686,7 @@ function resolveOfertaDistrict(oferta, districtIndex) {
 }
 __name(resolveOfertaDistrict, "resolveOfertaDistrict");
 __name2(resolveOfertaDistrict, "resolveOfertaDistrict");
+__name22(resolveOfertaDistrict, "resolveOfertaDistrict");
 function evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex) {
   if (!pidData) {
     return {
@@ -7489,6 +7727,7 @@ function evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex) {
   }
   __name(getResidenciaBonus, "getResidenciaBonus");
   __name2(getResidenciaBonus, "getResidenciaBonus");
+  __name22(getResidenciaBonus, "getResidenciaBonus");
   const offerDistrict = resolveOfertaDistrict(oferta, districtIndex);
   const pidDistricts = extractPidRequestedDistricts(pidData, districtIndex);
   if (offerDistrict && pidDistricts.length && !pidDistricts.includes(offerDistrict)) {
@@ -7561,6 +7800,7 @@ function evaluatePidCompatibility(oferta, pidData, pidRows, districtIndex) {
 }
 __name(evaluatePidCompatibility, "evaluatePidCompatibility");
 __name2(evaluatePidCompatibility, "evaluatePidCompatibility");
+__name22(evaluatePidCompatibility, "evaluatePidCompatibility");
 function buildAlertItem(oferta, evaluacion, pidInfo = null) {
   const suplDesde = oferta.supl_desde || "";
   const suplHasta = oferta.supl_hasta || "";
@@ -7641,6 +7881,7 @@ function buildAlertItem(oferta, evaluacion, pidInfo = null) {
 __name(buildAlertItem, "buildAlertItem");
 __name2(buildAlertItem, "buildAlertItem");
 __name22(buildAlertItem, "buildAlertItem");
+__name222(buildAlertItem, "buildAlertItem");
 async function obtenerResumenPostulantesABC(ofertaId, detalleId) {
   const ofertaSafe = sanitizeSolrNumber(ofertaId);
   const detalleSafe = sanitizeSolrNumber(detalleId);
@@ -7684,6 +7925,7 @@ async function obtenerResumenPostulantesABC(ofertaId, detalleId) {
 __name(obtenerResumenPostulantesABC, "obtenerResumenPostulantesABC");
 __name2(obtenerResumenPostulantesABC, "obtenerResumenPostulantesABC");
 __name22(obtenerResumenPostulantesABC, "obtenerResumenPostulantesABC");
+__name222(obtenerResumenPostulantesABC, "obtenerResumenPostulantesABC");
 function buildAbcPostulantesUrl(ofertaId, detalleId) {
   const params = new URLSearchParams();
   const ofertaSafe = sanitizeSolrNumber(ofertaId);
@@ -7695,6 +7937,7 @@ function buildAbcPostulantesUrl(ofertaId, detalleId) {
 __name(buildAbcPostulantesUrl, "buildAbcPostulantesUrl");
 __name2(buildAbcPostulantesUrl, "buildAbcPostulantesUrl");
 __name22(buildAbcPostulantesUrl, "buildAbcPostulantesUrl");
+__name222(buildAbcPostulantesUrl, "buildAbcPostulantesUrl");
 async function obtenerPlanPorCode(env, planCode) {
   const candidates = uniqueUpper([planCode, canonicalPlanCode(planCode)]);
   for (const code of candidates) {
@@ -7714,6 +7957,7 @@ async function obtenerPlanPorCode(env, planCode) {
 __name(obtenerPlanPorCode, "obtenerPlanPorCode");
 __name2(obtenerPlanPorCode, "obtenerPlanPorCode");
 __name22(obtenerPlanPorCode, "obtenerPlanPorCode");
+__name222(obtenerPlanPorCode, "obtenerPlanPorCode");
 async function findUserByEmail(env, email) {
   const rows = await supabaseSelect(
     env,
@@ -7724,6 +7968,7 @@ async function findUserByEmail(env, email) {
 __name(findUserByEmail, "findUserByEmail");
 __name2(findUserByEmail, "findUserByEmail");
 __name22(findUserByEmail, "findUserByEmail");
+__name222(findUserByEmail, "findUserByEmail");
 async function findUserByGoogleSub(env, sub) {
   const rows = await supabaseSelect(
     env,
@@ -7734,6 +7979,7 @@ async function findUserByGoogleSub(env, sub) {
 __name(findUserByGoogleSub, "findUserByGoogleSub");
 __name2(findUserByGoogleSub, "findUserByGoogleSub");
 __name22(findUserByGoogleSub, "findUserByGoogleSub");
+__name222(findUserByGoogleSub, "findUserByGoogleSub");
 async function createUserFromGoogle(env, googleUser) {
   const row = await supabaseInsertReturning(env, "users", {
     nombre: googleUser.nombre || "Docente",
@@ -7747,6 +7993,7 @@ async function createUserFromGoogle(env, googleUser) {
 __name(createUserFromGoogle, "createUserFromGoogle");
 __name2(createUserFromGoogle, "createUserFromGoogle");
 __name22(createUserFromGoogle, "createUserFromGoogle");
+__name222(createUserFromGoogle, "createUserFromGoogle");
 async function obtenerUsuario(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -7757,6 +8004,7 @@ async function obtenerUsuario(env, userId) {
 __name(obtenerUsuario, "obtenerUsuario");
 __name2(obtenerUsuario, "obtenerUsuario");
 __name22(obtenerUsuario, "obtenerUsuario");
+__name222(obtenerUsuario, "obtenerUsuario");
 async function touchUltimoLogin(env, userId) {
   await supabasePatch(env, "users", `id=eq.${encodeURIComponent(userId)}`, {
     ultimo_login: (/* @__PURE__ */ new Date()).toISOString()
@@ -7765,6 +8013,7 @@ async function touchUltimoLogin(env, userId) {
 __name(touchUltimoLogin, "touchUltimoLogin");
 __name2(touchUltimoLogin, "touchUltimoLogin");
 __name22(touchUltimoLogin, "touchUltimoLogin");
+__name222(touchUltimoLogin, "touchUltimoLogin");
 async function verifyGoogleCredential(idToken, expectedAud) {
   if (!expectedAud) throw new Error("Falta GOOGLE_CLIENT_ID en Cloudflare");
   const res = await fetch(
@@ -7792,6 +8041,7 @@ async function verifyGoogleCredential(idToken, expectedAud) {
 __name(verifyGoogleCredential, "verifyGoogleCredential");
 __name2(verifyGoogleCredential, "verifyGoogleCredential");
 __name22(verifyGoogleCredential, "verifyGoogleCredential");
+__name222(verifyGoogleCredential, "verifyGoogleCredential");
 function splitGoogleName(fullName) {
   const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
   const nombre = parts.shift() || "Docente";
@@ -7801,12 +8051,14 @@ function splitGoogleName(fullName) {
 __name(splitGoogleName, "splitGoogleName");
 __name2(splitGoogleName, "splitGoogleName");
 __name22(splitGoogleName, "splitGoogleName");
+__name222(splitGoogleName, "splitGoogleName");
 async function passwordMatches(storedPassword, plainPassword) {
   return (await accountVerifyPasswordV1(storedPassword, plainPassword)).ok;
 }
 __name(passwordMatches, "passwordMatches");
 __name2(passwordMatches, "passwordMatches");
 __name22(passwordMatches, "passwordMatches");
+__name222(passwordMatches, "passwordMatches");
 async function sha256Hex(text) {
   const data = new TextEncoder().encode(String(text || ""));
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -7815,6 +8067,7 @@ async function sha256Hex(text) {
 __name(sha256Hex, "sha256Hex");
 __name2(sha256Hex, "sha256Hex");
 __name22(sha256Hex, "sha256Hex");
+__name222(sha256Hex, "sha256Hex");
 async function supabaseSelect(env, query) {
   const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${query}`, {
     method: "GET",
@@ -7838,6 +8091,7 @@ async function supabaseSelect(env, query) {
 __name(supabaseSelect, "supabaseSelect");
 __name2(supabaseSelect, "supabaseSelect");
 __name22(supabaseSelect, "supabaseSelect");
+__name222(supabaseSelect, "supabaseSelect");
 async function supabaseInsertMany(env, tabla, rows) {
   if (!rows.length) return;
   const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${tabla}`, {
@@ -7858,6 +8112,7 @@ async function supabaseInsertMany(env, tabla, rows) {
 __name(supabaseInsertMany, "supabaseInsertMany");
 __name2(supabaseInsertMany, "supabaseInsertMany");
 __name22(supabaseInsertMany, "supabaseInsertMany");
+__name222(supabaseInsertMany, "supabaseInsertMany");
 async function supabaseUpsert(env, tabla, rows, conflict) {
   if (!rows.length) return;
   const res = await supabaseFetchWithRetry(
@@ -7882,6 +8137,7 @@ async function supabaseUpsert(env, tabla, rows, conflict) {
 __name(supabaseUpsert, "supabaseUpsert");
 __name2(supabaseUpsert, "supabaseUpsert");
 __name22(supabaseUpsert, "supabaseUpsert");
+__name222(supabaseUpsert, "supabaseUpsert");
 async function supabaseUpsertReturning(env, tabla, rows, conflict) {
   const res = await supabaseFetchWithRetry(
     env,
@@ -7905,6 +8161,7 @@ async function supabaseUpsertReturning(env, tabla, rows, conflict) {
 __name(supabaseUpsertReturning, "supabaseUpsertReturning");
 __name2(supabaseUpsertReturning, "supabaseUpsertReturning");
 __name22(supabaseUpsertReturning, "supabaseUpsertReturning");
+__name222(supabaseUpsertReturning, "supabaseUpsertReturning");
 async function supabasePatch(env, tabla, filtro, row) {
   const res = await supabaseFetchWithRetry(env, `${env.SUPABASE_URL}/rest/v1/${tabla}?${filtro}`, {
     method: "PATCH",
@@ -7923,6 +8180,7 @@ async function supabasePatch(env, tabla, filtro, row) {
 __name(supabasePatch, "supabasePatch");
 __name2(supabasePatch, "supabasePatch");
 __name22(supabasePatch, "supabasePatch");
+__name222(supabasePatch, "supabasePatch");
 function safeJson(text) {
   try {
     return JSON.parse(text);
@@ -7933,6 +8191,7 @@ function safeJson(text) {
 __name(safeJson, "safeJson");
 __name2(safeJson, "safeJson");
 __name22(safeJson, "safeJson");
+__name222(safeJson, "safeJson");
 async function supabaseFetchWithRetry(env, url, init) {
   const maxAttempts = 4;
   let lastError = null;
@@ -7960,12 +8219,14 @@ async function supabaseFetchWithRetry(env, url, init) {
 __name(supabaseFetchWithRetry, "supabaseFetchWithRetry");
 __name2(supabaseFetchWithRetry, "supabaseFetchWithRetry");
 __name22(supabaseFetchWithRetry, "supabaseFetchWithRetry");
+__name222(supabaseFetchWithRetry, "supabaseFetchWithRetry");
 function shouldRetrySupabaseStatus(status) {
   return [408, 429, 500, 502, 503, 504].includes(Number(status));
 }
 __name(shouldRetrySupabaseStatus, "shouldRetrySupabaseStatus");
 __name2(shouldRetrySupabaseStatus, "shouldRetrySupabaseStatus");
 __name22(shouldRetrySupabaseStatus, "shouldRetrySupabaseStatus");
+__name222(shouldRetrySupabaseStatus, "shouldRetrySupabaseStatus");
 function shouldRetrySupabaseErrorMessage(message) {
   const text = String(message || "").toUpperCase();
   return text.includes("SUPABASE 429") || text.includes("SUPABASE 500") || text.includes("SUPABASE 502") || text.includes("SUPABASE 503") || text.includes("SUPABASE 504") || text.includes("BAD GATEWAY") || text.includes("TIMEOUT") || text.includes("ECONNRESET") || text.includes("FETCH") || text.includes("NETWORK");
@@ -7973,6 +8234,7 @@ function shouldRetrySupabaseErrorMessage(message) {
 __name(shouldRetrySupabaseErrorMessage, "shouldRetrySupabaseErrorMessage");
 __name2(shouldRetrySupabaseErrorMessage, "shouldRetrySupabaseErrorMessage");
 __name22(shouldRetrySupabaseErrorMessage, "shouldRetrySupabaseErrorMessage");
+__name222(shouldRetrySupabaseErrorMessage, "shouldRetrySupabaseErrorMessage");
 async function obtenerPreferenciasUsuario(env, userId) {
   const rows = await supabaseSelect(
     env,
@@ -7984,6 +8246,7 @@ async function obtenerPreferenciasUsuario(env, userId) {
 __name(obtenerPreferenciasUsuario, "obtenerPreferenciasUsuario");
 __name2(obtenerPreferenciasUsuario, "obtenerPreferenciasUsuario");
 __name22(obtenerPreferenciasUsuario, "obtenerPreferenciasUsuario");
+__name222(obtenerPreferenciasUsuario, "obtenerPreferenciasUsuario");
 async function cargarCatalogos(env) {
   const [distritos, cargos] = await Promise.all([
     supabaseSelect(
@@ -8003,6 +8266,7 @@ async function cargarCatalogos(env) {
 __name(cargarCatalogos, "cargarCatalogos");
 __name2(cargarCatalogos, "cargarCatalogos");
 __name22(cargarCatalogos, "cargarCatalogos");
+__name222(cargarCatalogos, "cargarCatalogos");
 function canonicalPlanCode(code) {
   const key = String(code || "").trim().toUpperCase();
   if (!key) return "PLUS";
@@ -8012,6 +8276,7 @@ function canonicalPlanCode(code) {
 __name(canonicalPlanCode, "canonicalPlanCode");
 __name2(canonicalPlanCode, "canonicalPlanCode");
 __name22(canonicalPlanCode, "canonicalPlanCode");
+__name222(canonicalPlanCode, "canonicalPlanCode");
 var FOUNDER_PRICE_POLICY = {
   active: true,
   label: "Precio fundador por tiempo limitado",
@@ -8046,6 +8311,7 @@ function getFounderPriceInfo(code, fallbackPrice = null) {
 __name(getFounderPriceInfo, "getFounderPriceInfo");
 __name2(getFounderPriceInfo, "getFounderPriceInfo");
 __name22(getFounderPriceInfo, "getFounderPriceInfo");
+__name222(getFounderPriceInfo, "getFounderPriceInfo");
 function applyFounderPricing(plan) {
   if (!plan || typeof plan !== "object") return plan;
   const planCode = canonicalPlanCode(plan.code || plan.plan_code || "");
@@ -8070,6 +8336,7 @@ function applyFounderPricing(plan) {
 __name(applyFounderPricing, "applyFounderPricing");
 __name2(applyFounderPricing, "applyFounderPricing");
 __name22(applyFounderPricing, "applyFounderPricing");
+__name222(applyFounderPricing, "applyFounderPricing");
 function getPlanPreset(code) {
   const key = canonicalPlanCode(code);
   const presets = {
@@ -8185,6 +8452,7 @@ function getPlanPreset(code) {
 __name(getPlanPreset, "getPlanPreset");
 __name2(getPlanPreset, "getPlanPreset");
 __name22(getPlanPreset, "getPlanPreset");
+__name222(getPlanPreset, "getPlanPreset");
 function buildPlanDistrictSlots(plan) {
   const normales = clampPlanLimit(plan?.max_distritos_normales, 1, 5, 1);
   const emergencia = clampPlanLimit(plan?.max_distritos_emergencia, 0, 2, 0);
@@ -8218,6 +8486,7 @@ function buildPlanDistrictSlots(plan) {
 __name(buildPlanDistrictSlots, "buildPlanDistrictSlots");
 __name2(buildPlanDistrictSlots, "buildPlanDistrictSlots");
 __name22(buildPlanDistrictSlots, "buildPlanDistrictSlots");
+__name222(buildPlanDistrictSlots, "buildPlanDistrictSlots");
 function buildPlanCargoSlots(maxCargos) {
   const total = clampPlanLimit(maxCargos, 1, 10, 2);
   const slots = [];
@@ -8233,6 +8502,7 @@ function buildPlanCargoSlots(maxCargos) {
 __name(buildPlanCargoSlots, "buildPlanCargoSlots");
 __name2(buildPlanCargoSlots, "buildPlanCargoSlots");
 __name22(buildPlanCargoSlots, "buildPlanCargoSlots");
+__name222(buildPlanCargoSlots, "buildPlanCargoSlots");
 async function resolverPlanUsuario(env, userId) {
   const catalogo = await cargarPlanesCatalogo(env);
   const planMap = new Map(
@@ -8280,6 +8550,7 @@ async function resolverPlanUsuario(env, userId) {
 __name(resolverPlanUsuario, "resolverPlanUsuario");
 __name2(resolverPlanUsuario, "resolverPlanUsuario");
 __name22(resolverPlanUsuario, "resolverPlanUsuario");
+__name222(resolverPlanUsuario, "resolverPlanUsuario");
 function elegirSuscripcionVigente(rows) {
   const permitidos = /* @__PURE__ */ new Set(["ACTIVE", "TRIALING", "AUTHORIZED", "PENDING", "PAUSED", "BETA"]);
   const nowTs = Date.now();
@@ -8309,6 +8580,7 @@ function elegirSuscripcionVigente(rows) {
 __name(elegirSuscripcionVigente, "elegirSuscripcionVigente");
 __name2(elegirSuscripcionVigente, "elegirSuscripcionVigente");
 __name22(elegirSuscripcionVigente, "elegirSuscripcionVigente");
+__name222(elegirSuscripcionVigente, "elegirSuscripcionVigente");
 async function cargarPlanesCatalogo(env) {
   try {
     const rows = await supabaseSelect(
@@ -8325,6 +8597,7 @@ async function cargarPlanesCatalogo(env) {
 __name(cargarPlanesCatalogo, "cargarPlanesCatalogo");
 __name2(cargarPlanesCatalogo, "cargarPlanesCatalogo");
 __name22(cargarPlanesCatalogo, "cargarPlanesCatalogo");
+__name222(cargarPlanesCatalogo, "cargarPlanesCatalogo");
 function defaultPlansCatalog() {
   return ["TRIAL_7D", "PLUS", "PREMIUM", "INSIGNE"].map((code) => {
     const preset = getPlanPreset(code);
@@ -8340,6 +8613,7 @@ function defaultPlansCatalog() {
 __name(defaultPlansCatalog, "defaultPlansCatalog");
 __name2(defaultPlansCatalog, "defaultPlansCatalog");
 __name22(defaultPlansCatalog, "defaultPlansCatalog");
+__name222(defaultPlansCatalog, "defaultPlansCatalog");
 function planPorCode(code) {
   const key = canonicalPlanCode(code);
   return defaultPlansCatalog().find((plan) => canonicalPlanCode(plan.code) === key) || defaultPlansCatalog().find((plan) => plan.code === "PLUS") || defaultPlansCatalog()[0];
@@ -8347,6 +8621,7 @@ function planPorCode(code) {
 __name(planPorCode, "planPorCode");
 __name2(planPorCode, "planPorCode");
 __name22(planPorCode, "planPorCode");
+__name222(planPorCode, "planPorCode");
 function normalizePlanOut(plan) {
   const originalCode = String(plan?.code || "PLUS").trim().toUpperCase();
   const internalCode = canonicalPlanCode(originalCode);
@@ -8408,6 +8683,7 @@ function normalizePlanOut(plan) {
 __name(normalizePlanOut, "normalizePlanOut");
 __name2(normalizePlanOut, "normalizePlanOut");
 __name22(normalizePlanOut, "normalizePlanOut");
+__name222(normalizePlanOut, "normalizePlanOut");
 function buildPlanFeatures(plan) {
   const flags = typeof plan?.feature_flags === "object" && plan?.feature_flags ? plan.feature_flags : {};
   const normales = clampPlanLimit(plan?.max_distritos_normales, 1, 5, 1);
@@ -8443,6 +8719,7 @@ function buildPlanFeatures(plan) {
 __name(buildPlanFeatures, "buildPlanFeatures");
 __name2(buildPlanFeatures, "buildPlanFeatures");
 __name22(buildPlanFeatures, "buildPlanFeatures");
+__name222(buildPlanFeatures, "buildPlanFeatures");
 function resolveSubscriptionEndDate(row) {
   const status = String(row?.status || "").trim().toUpperCase();
   const planCode = String(row?.plan_code || "").trim().toUpperCase();
@@ -8474,6 +8751,7 @@ function resolveSubscriptionEndDate(row) {
 __name(resolveSubscriptionEndDate, "resolveSubscriptionEndDate");
 __name2(resolveSubscriptionEndDate, "resolveSubscriptionEndDate");
 __name22(resolveSubscriptionEndDate, "resolveSubscriptionEndDate");
+__name222(resolveSubscriptionEndDate, "resolveSubscriptionEndDate");
 function calculateSubscriptionDaysRemaining(row) {
   const resolved = resolveSubscriptionEndDate(row);
   if (!resolved.ends_at) {
@@ -8517,6 +8795,7 @@ function calculateSubscriptionDaysRemaining(row) {
 __name(calculateSubscriptionDaysRemaining, "calculateSubscriptionDaysRemaining");
 __name2(calculateSubscriptionDaysRemaining, "calculateSubscriptionDaysRemaining");
 __name22(calculateSubscriptionDaysRemaining, "calculateSubscriptionDaysRemaining");
+__name222(calculateSubscriptionDaysRemaining, "calculateSubscriptionDaysRemaining");
 function normalizeSubscriptionOut(row) {
   const planCode = String(row?.plan_code || "PLUS").trim().toUpperCase();
   const status = String(row?.status || "active").trim().toLowerCase();
@@ -8546,6 +8825,7 @@ function normalizeSubscriptionOut(row) {
 __name(normalizeSubscriptionOut, "normalizeSubscriptionOut");
 __name2(normalizeSubscriptionOut, "normalizeSubscriptionOut");
 __name22(normalizeSubscriptionOut, "normalizeSubscriptionOut");
+__name222(normalizeSubscriptionOut, "normalizeSubscriptionOut");
 function sanitizarPreferenciasEntrada(raw, plan) {
   const distritos = uniqueUpper([
     raw?.distrito_principal,
@@ -8599,6 +8879,7 @@ function sanitizarPreferenciasEntrada(raw, plan) {
 __name(sanitizarPreferenciasEntrada, "sanitizarPreferenciasEntrada");
 __name2(sanitizarPreferenciasEntrada, "sanitizarPreferenciasEntrada");
 __name22(sanitizarPreferenciasEntrada, "sanitizarPreferenciasEntrada");
+__name222(sanitizarPreferenciasEntrada, "sanitizarPreferenciasEntrada");
 function canonicalizarNivelPreferencia(value) {
   const s = norm(value);
   if (!s) return "";
@@ -8617,6 +8898,7 @@ function canonicalizarNivelPreferencia(value) {
 __name(canonicalizarNivelPreferencia, "canonicalizarNivelPreferencia");
 __name2(canonicalizarNivelPreferencia, "canonicalizarNivelPreferencia");
 __name22(canonicalizarNivelPreferencia, "canonicalizarNivelPreferencia");
+__name222(canonicalizarNivelPreferencia, "canonicalizarNivelPreferencia");
 function canonicalizarTurnoPreferencia(value) {
   const x = norm(value);
   if (!x) return "";
@@ -8630,6 +8912,7 @@ function canonicalizarTurnoPreferencia(value) {
 __name(canonicalizarTurnoPreferencia, "canonicalizarTurnoPreferencia");
 __name2(canonicalizarTurnoPreferencia, "canonicalizarTurnoPreferencia");
 __name22(canonicalizarTurnoPreferencia, "canonicalizarTurnoPreferencia");
+__name222(canonicalizarTurnoPreferencia, "canonicalizarTurnoPreferencia");
 function uniqueUpper(items) {
   const out = [];
   const seen = /* @__PURE__ */ new Set();
@@ -8644,6 +8927,7 @@ function uniqueUpper(items) {
 __name(uniqueUpper, "uniqueUpper");
 __name2(uniqueUpper, "uniqueUpper");
 __name22(uniqueUpper, "uniqueUpper");
+__name222(uniqueUpper, "uniqueUpper");
 function clampPlanLimit(raw, min, max, fallback) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
@@ -8652,6 +8936,7 @@ function clampPlanLimit(raw, min, max, fallback) {
 __name(clampPlanLimit, "clampPlanLimit");
 __name2(clampPlanLimit, "clampPlanLimit");
 __name22(clampPlanLimit, "clampPlanLimit");
+__name222(clampPlanLimit, "clampPlanLimit");
 function parsearCargosDesdeHTML(html) {
   const limpio = String(html || "").replace(/<[^>]+>/g, "\n");
   const lineas = limpio.split("\n").map((item) => item.trim()).filter((item) => item.length > 10 && item.includes(","));
@@ -8673,12 +8958,14 @@ function parsearCargosDesdeHTML(html) {
 __name(parsearCargosDesdeHTML, "parsearCargosDesdeHTML");
 __name2(parsearCargosDesdeHTML, "parsearCargosDesdeHTML");
 __name22(parsearCargosDesdeHTML, "parsearCargosDesdeHTML");
+__name222(parsearCargosDesdeHTML, "parsearCargosDesdeHTML");
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 __name(sleep, "sleep");
 __name2(sleep, "sleep");
 __name22(sleep, "sleep");
+__name222(sleep, "sleep");
 function clampInt(raw, min, max, fallback) {
   const n = Number.parseInt(String(raw || ""), 10);
   if (!Number.isFinite(n)) return fallback;
@@ -8687,6 +8974,7 @@ function clampInt(raw, min, max, fallback) {
 __name(clampInt, "clampInt");
 __name2(clampInt, "clampInt");
 __name22(clampInt, "clampInt");
+__name222(clampInt, "clampInt");
 function pickFirstNonEmpty(...values) {
   for (const v of values) {
     const s = String(v || "").trim();
@@ -8696,11 +8984,13 @@ function pickFirstNonEmpty(...values) {
 }
 __name(pickFirstNonEmpty, "pickFirstNonEmpty");
 __name2(pickFirstNonEmpty, "pickFirstNonEmpty");
+__name22(pickFirstNonEmpty, "pickFirstNonEmpty");
 function simplifyNorm(value) {
   return norm(value).replace(/\bDE\b/g, " ").replace(/\bDEL\b/g, " ").replace(/\bLA\b/g, " ").replace(/\bLAS\b/g, " ").replace(/\bLOS\b/g, " ").replace(/\bEL\b/g, " ").replace(/\bY\b/g, " ").replace(/\s+/g, " ").trim();
 }
 __name(simplifyNorm, "simplifyNorm");
 __name2(simplifyNorm, "simplifyNorm");
+__name22(simplifyNorm, "simplifyNorm");
 function tokenBag(value) {
   const stop = /* @__PURE__ */ new Set(["DE", "DEL", "LA", "LAS", "LOS", "EL", "Y", "EN", "A", "AL", "PARA", "POR", "CON"]);
   return [...new Set(
@@ -8709,6 +8999,7 @@ function tokenBag(value) {
 }
 __name(tokenBag, "tokenBag");
 __name2(tokenBag, "tokenBag");
+__name22(tokenBag, "tokenBag");
 function buildDistrictCatalogIndex(catalogos) {
   const rows = Array.isArray(catalogos?.distritos) ? catalogos.distritos : [];
   const byCode = /* @__PURE__ */ new Map();
@@ -8739,11 +9030,13 @@ function buildDistrictCatalogIndex(catalogos) {
 }
 __name(buildDistrictCatalogIndex, "buildDistrictCatalogIndex");
 __name2(buildDistrictCatalogIndex, "buildDistrictCatalogIndex");
+__name22(buildDistrictCatalogIndex, "buildDistrictCatalogIndex");
 function normalizeCode(value) {
   return norm(String(value || "")).replace(/[()\s]/g, "").replace(/^\//, "");
 }
 __name(normalizeCode, "normalizeCode");
 __name2(normalizeCode, "normalizeCode");
+__name22(normalizeCode, "normalizeCode");
 function extractExplicitCodesFromPreference(value) {
   const s = String(value || "");
   const out = /* @__PURE__ */ new Set();
@@ -8757,6 +9050,7 @@ function extractExplicitCodesFromPreference(value) {
 }
 __name(extractExplicitCodesFromPreference, "extractExplicitCodesFromPreference");
 __name2(extractExplicitCodesFromPreference, "extractExplicitCodesFromPreference");
+__name22(extractExplicitCodesFromPreference, "extractExplicitCodesFromPreference");
 function buildCargoCatalogIndex(catalogos) {
   const rows = Array.isArray(catalogos?.cargos) ? catalogos.cargos : [];
   const byCanonical = /* @__PURE__ */ new Map();
@@ -8837,6 +9131,7 @@ function buildCargoCatalogIndex(catalogos) {
 }
 __name(buildCargoCatalogIndex, "buildCargoCatalogIndex");
 __name2(buildCargoCatalogIndex, "buildCargoCatalogIndex");
+__name22(buildCargoCatalogIndex, "buildCargoCatalogIndex");
 function buildCatalogContext(catalogos) {
   return {
     districtIndex: buildDistrictCatalogIndex(catalogos),
@@ -8845,6 +9140,7 @@ function buildCatalogContext(catalogos) {
 }
 __name(buildCatalogContext, "buildCatalogContext");
 __name2(buildCatalogContext, "buildCatalogContext");
+__name22(buildCatalogContext, "buildCatalogContext");
 function resolveDistrictValue(input, districtIndex) {
   const raw = String(input || "").trim();
   if (!raw) return null;
@@ -8866,6 +9162,7 @@ function resolveDistrictValue(input, districtIndex) {
 }
 __name(resolveDistrictValue, "resolveDistrictValue");
 __name2(resolveDistrictValue, "resolveDistrictValue");
+__name22(resolveDistrictValue, "resolveDistrictValue");
 function resolveCargoValue(input, cargoIndex) {
   const raw = String(input || "").trim();
   if (!raw) return null;
@@ -8949,6 +9246,7 @@ function resolveCargoValue(input, cargoIndex) {
 }
 __name(resolveCargoValue, "resolveCargoValue");
 __name2(resolveCargoValue, "resolveCargoValue");
+__name22(resolveCargoValue, "resolveCargoValue");
 function buildApdLabelFromResolved(originalValue, resolvedItem) {
   const original = String(originalValue || "").trim();
   const explicitCodes = extractExplicitCodesFromPreference(original).map((c) => normalizeCode(c)).filter(Boolean);
@@ -8969,6 +9267,7 @@ function buildApdLabelFromResolved(originalValue, resolvedItem) {
 __name(buildApdLabelFromResolved, "buildApdLabelFromResolved");
 __name2(buildApdLabelFromResolved, "buildApdLabelFromResolved");
 __name22(buildApdLabelFromResolved, "buildApdLabelFromResolved");
+__name222(buildApdLabelFromResolved, "buildApdLabelFromResolved");
 function buildResolvedApdList(originalList, resolvedList) {
   const originals = Array.isArray(originalList) ? originalList : [];
   const resolved = Array.isArray(resolvedList) ? resolvedList : [];
@@ -8981,6 +9280,7 @@ function buildResolvedApdList(originalList, resolvedList) {
 __name(buildResolvedApdList, "buildResolvedApdList");
 __name2(buildResolvedApdList, "buildResolvedApdList");
 __name22(buildResolvedApdList, "buildResolvedApdList");
+__name222(buildResolvedApdList, "buildResolvedApdList");
 function resolveOfferDistrict(oferta) {
   return normDistritoABC(
     oferta?.descdistrito || oferta?.distrito || oferta?.raw?.descdistrito || oferta?.raw?.distrito || ""
@@ -8988,6 +9288,7 @@ function resolveOfferDistrict(oferta) {
 }
 __name(resolveOfferDistrict, "resolveOfferDistrict");
 __name2(resolveOfferDistrict, "resolveOfferDistrict");
+__name22(resolveOfferDistrict, "resolveOfferDistrict");
 function buscarEnCatalogo(lista, valor) {
   const raw = String(valor || "").trim();
   if (!raw) return null;
@@ -9013,6 +9314,7 @@ function buscarEnCatalogo(lista, valor) {
 __name(buscarEnCatalogo, "buscarEnCatalogo");
 __name2(buscarEnCatalogo, "buscarEnCatalogo");
 __name22(buscarEnCatalogo, "buscarEnCatalogo");
+__name222(buscarEnCatalogo, "buscarEnCatalogo");
 function canonizarListaDistritos(lista, catalogo) {
   const districtIndex = buildDistrictCatalogIndex({ distritos: catalogo || [] });
   const resolved = (lista || []).map((item) => resolveDistrictValue(item, districtIndex)).filter(Boolean);
@@ -9025,6 +9327,7 @@ function canonizarListaDistritos(lista, catalogo) {
 __name(canonizarListaDistritos, "canonizarListaDistritos");
 __name2(canonizarListaDistritos, "canonizarListaDistritos");
 __name22(canonizarListaDistritos, "canonizarListaDistritos");
+__name222(canonizarListaDistritos, "canonizarListaDistritos");
 function cargoTokensExpanded(value) {
   const stop = /* @__PURE__ */ new Set([
     "DE",
@@ -9060,6 +9363,7 @@ function cargoTokensExpanded(value) {
 }
 __name(cargoTokensExpanded, "cargoTokensExpanded");
 __name2(cargoTokensExpanded, "cargoTokensExpanded");
+__name22(cargoTokensExpanded, "cargoTokensExpanded");
 function canonizarListaCargosOMaterias(lista, catalogo) {
   const cargoIndex = buildCargoCatalogIndex({ cargos: catalogo || [] });
   const resolved = (lista || []).map((item) => resolveCargoValue(item, cargoIndex)).filter(Boolean);
@@ -9072,6 +9376,7 @@ function canonizarListaCargosOMaterias(lista, catalogo) {
 __name(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
 __name2(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
 __name22(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
+__name222(canonizarListaCargosOMaterias, "canonizarListaCargosOMaterias");
 function canonizarPreferenciasConCatalogo(prefs, catalogos) {
   const ctx = buildCatalogContext(catalogos);
   const principalResolved = resolveDistrictValue(
@@ -9104,6 +9409,7 @@ function canonizarPreferenciasConCatalogo(prefs, catalogos) {
 __name(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 __name2(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 __name22(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
+__name222(canonizarPreferenciasConCatalogo, "canonizarPreferenciasConCatalogo");
 async function traerOfertasAPDPorDistritos(prefs) {
   const distritos = distritosPrefsAPD(prefs);
   const todas = [];
@@ -9142,6 +9448,7 @@ async function traerOfertasAPDPorDistritos(prefs) {
 __name(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
 __name2(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
 __name22(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
+__name222(traerOfertasAPDPorDistritos, "traerOfertasAPDPorDistritos");
 function districtQueryVariants(distrito) {
   const base = normDistritoABC(distrito || "");
   if (!base) return [];
@@ -9171,6 +9478,7 @@ function districtQueryVariants(distrito) {
 }
 __name(districtQueryVariants, "districtQueryVariants");
 __name2(districtQueryVariants, "districtQueryVariants");
+__name22(districtQueryVariants, "districtQueryVariants");
 async function traerOfertasAPDDeUnDistrito(distrito) {
   const distritoNorm = normDistritoABC(distrito || "");
   const variantes = districtQueryVariants(distritoNorm);
@@ -9238,6 +9546,7 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
 __name(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
 __name2(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
 __name22(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
+__name222(traerOfertasAPDDeUnDistrito, "traerOfertasAPDDeUnDistrito");
 async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
   const q = [
     `descdistrito:"${escaparSolr(distritoAPD)}"`,
@@ -9276,6 +9585,7 @@ async function debugBuscarCargoExactoEnABC(distritoAPD, textoCargoBusqueda) {
 }
 __name(debugBuscarCargoExactoEnABC, "debugBuscarCargoExactoEnABC");
 __name2(debugBuscarCargoExactoEnABC, "debugBuscarCargoExactoEnABC");
+__name22(debugBuscarCargoExactoEnABC, "debugBuscarCargoExactoEnABC");
 function normDistritoABC(value) {
   let v = norm(value || "");
   const aliases = {
@@ -9294,6 +9604,7 @@ function normDistritoABC(value) {
 }
 __name(normDistritoABC, "normDistritoABC");
 __name2(normDistritoABC, "normDistritoABC");
+__name22(normDistritoABC, "normDistritoABC");
 async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
   const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
   const cargoNorm = norm(cargoMateria);
@@ -9339,6 +9650,7 @@ async function traerOfertasAPDDeUnDistritoYCargo(distritoAPD, cargoMateria) {
 __name(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
 __name2(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
 __name22(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
+__name222(traerOfertasAPDDeUnDistritoYCargo, "traerOfertasAPDDeUnDistritoYCargo");
 function buildSourceOfferKeyFromOferta(oferta) {
   const detalle = sanitizeSolrNumber(oferta?.iddetalle || oferta?.id || "");
   if (detalle) return `D_${detalle}`;
@@ -9349,18 +9661,21 @@ function buildSourceOfferKeyFromOferta(oferta) {
 __name(buildSourceOfferKeyFromOferta, "buildSourceOfferKeyFromOferta");
 __name2(buildSourceOfferKeyFromOferta, "buildSourceOfferKeyFromOferta");
 __name22(buildSourceOfferKeyFromOferta, "buildSourceOfferKeyFromOferta");
+__name222(buildSourceOfferKeyFromOferta, "buildSourceOfferKeyFromOferta");
 function sanitizeKeyText(value) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 __name(sanitizeKeyText, "sanitizeKeyText");
 __name2(sanitizeKeyText, "sanitizeKeyText");
 __name22(sanitizeKeyText, "sanitizeKeyText");
+__name222(sanitizeKeyText, "sanitizeKeyText");
 function escaparSolr(text) {
   return String(text || "").replace(/(["\\])/g, "\\$1");
 }
 __name(escaparSolr, "escaparSolr");
 __name2(escaparSolr, "escaparSolr");
 __name22(escaparSolr, "escaparSolr");
+__name222(escaparSolr, "escaparSolr");
 function ofertaEsVisibleParaAlerta(oferta) {
   const estado = norm(
     oferta?.estado || oferta?.estado_oferta || oferta?.estado_actual || ""
@@ -9376,6 +9691,7 @@ function ofertaEsVisibleParaAlerta(oferta) {
 __name(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 __name2(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 __name22(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
+__name222(ofertaEsVisibleParaAlerta, "ofertaEsVisibleParaAlerta");
 function ofertaEsVisibleParaHistoricoUsuario(oferta) {
   const fin = parseFechaFlexible(oferta?.finoferta)?.getTime() || 0;
   const ahora = Date.now();
@@ -9385,12 +9701,14 @@ function ofertaEsVisibleParaHistoricoUsuario(oferta) {
 __name(ofertaEsVisibleParaHistoricoUsuario, "ofertaEsVisibleParaHistoricoUsuario");
 __name2(ofertaEsVisibleParaHistoricoUsuario, "ofertaEsVisibleParaHistoricoUsuario");
 __name22(ofertaEsVisibleParaHistoricoUsuario, "ofertaEsVisibleParaHistoricoUsuario");
+__name222(ofertaEsVisibleParaHistoricoUsuario, "ofertaEsVisibleParaHistoricoUsuario");
 function norm(value) {
   return String(value || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s/().,-]/gu, " ").replace(/\s+/g, " ").trim();
 }
 __name(norm, "norm");
 __name2(norm, "norm");
 __name22(norm, "norm");
+__name222(norm, "norm");
 function arrNorm(value) {
   if (Array.isArray(value)) return value.map((item) => norm(item)).filter(Boolean);
   if (typeof value === "string" && value.trim()) return value.split(",").map((item) => norm(item)).filter(Boolean);
@@ -9399,18 +9717,21 @@ function arrNorm(value) {
 __name(arrNorm, "arrNorm");
 __name2(arrNorm, "arrNorm");
 __name22(arrNorm, "arrNorm");
+__name222(arrNorm, "arrNorm");
 function unique(arr) {
   return [...new Set((arr || []).filter(Boolean))];
 }
 __name(unique, "unique");
 __name2(unique, "unique");
 __name22(unique, "unique");
+__name222(unique, "unique");
 function adaptarPreferenciasRow(row) {
   return { user_id: row.user_id || "", distrito_principal: norm(row.distrito_principal || ""), otros_distritos: unique(arrNorm(row.otros_distritos)), cargos: unique(arrNorm(row.cargos)), materias: unique(arrNorm(row.materias)), niveles: unique(arrNorm(row.niveles)), turnos: unique(arrNorm(row.turnos)), alertas_activas: !!row.alertas_activas, alertas_email: !!row.alertas_email, alertas_telegram: !!row.alertas_telegram, alertas_whatsapp: !!row.alertas_whatsapp };
 }
 __name(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 __name2(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 __name22(adaptarPreferenciasRow, "adaptarPreferenciasRow");
+__name222(adaptarPreferenciasRow, "adaptarPreferenciasRow");
 function distritosPrefsAPD(prefs) {
   return unique([
     normDistritoABC(prefs?.distrito_principal_apd || prefs?.distrito_principal || ""),
@@ -9420,6 +9741,7 @@ function distritosPrefsAPD(prefs) {
 __name(distritosPrefsAPD, "distritosPrefsAPD");
 __name2(distritosPrefsAPD, "distritosPrefsAPD");
 __name22(distritosPrefsAPD, "distritosPrefsAPD");
+__name222(distritosPrefsAPD, "distritosPrefsAPD");
 function extraerSiglasEntreParentesis(texto) {
   const raw = String(texto || "");
   if (!raw) return [];
@@ -9432,6 +9754,7 @@ function extraerSiglasEntreParentesis(texto) {
 __name(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 __name2(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 __name22(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
+__name222(extraerSiglasEntreParentesis, "extraerSiglasEntreParentesis");
 function cargosMateriasPrefsAPD(prefs) {
   const items = [
     ...Array.isArray(prefs?.cargos_apd) ? prefs.cargos_apd : [],
@@ -9448,6 +9771,7 @@ function cargosMateriasPrefsAPD(prefs) {
 __name(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 __name2(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 __name22(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
+__name222(cargosMateriasPrefsAPD, "cargosMateriasPrefsAPD");
 function siglasOfertaCargoMateria(oferta) {
   const campos = [
     oferta?.descripcioncargo,
@@ -9466,6 +9790,7 @@ function siglasOfertaCargoMateria(oferta) {
 __name(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 __name2(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 __name22(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
+__name222(siglasOfertaCargoMateria, "siglasOfertaCargoMateria");
 function turnosPrefs(prefs) {
   return unique((prefs?.turnos || []).map((item) => {
     const x = norm(item);
@@ -9482,6 +9807,7 @@ function turnosPrefs(prefs) {
 __name(turnosPrefs, "turnosPrefs");
 __name2(turnosPrefs, "turnosPrefs");
 __name22(turnosPrefs, "turnosPrefs");
+__name222(turnosPrefs, "turnosPrefs");
 function categoriasNivel(texto) {
   const t = norm(texto);
   const out = /* @__PURE__ */ new Set();
@@ -9503,6 +9829,7 @@ function categoriasNivel(texto) {
 __name(categoriasNivel, "categoriasNivel");
 __name2(categoriasNivel, "categoriasNivel");
 __name22(categoriasNivel, "categoriasNivel");
+__name222(categoriasNivel, "categoriasNivel");
 function matchDistritos(oferta, prefs) {
   const prefsD = distritosPrefsAPD(prefs);
   if (!prefsD.length) {
@@ -9521,6 +9848,7 @@ function matchDistritos(oferta, prefs) {
 __name(matchDistritos, "matchDistritos");
 __name2(matchDistritos, "matchDistritos");
 __name22(matchDistritos, "matchDistritos");
+__name222(matchDistritos, "matchDistritos");
 function extraerSigla(texto) {
   const t = String(texto || "").toUpperCase();
   const m = t.match(/\(([^)]+)\)/);
@@ -9528,11 +9856,13 @@ function extraerSigla(texto) {
 }
 __name(extraerSigla, "extraerSigla");
 __name2(extraerSigla, "extraerSigla");
+__name22(extraerSigla, "extraerSigla");
 function normalizarTextoSimple(texto) {
   return String(texto || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, " ").replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 __name(normalizarTextoSimple, "normalizarTextoSimple");
 __name2(normalizarTextoSimple, "normalizarTextoSimple");
+__name22(normalizarTextoSimple, "normalizarTextoSimple");
 function matchCargosMaterias(oferta, prefs) {
   const textoOferta = String(
     oferta?.descripcioncargo || oferta?.cargo || oferta?.descripcionarea || oferta?.materia || ""
@@ -9583,6 +9913,7 @@ function matchCargosMaterias(oferta, prefs) {
 __name(matchCargosMaterias, "matchCargosMaterias");
 __name2(matchCargosMaterias, "matchCargosMaterias");
 __name22(matchCargosMaterias, "matchCargosMaterias");
+__name222(matchCargosMaterias, "matchCargosMaterias");
 function matchTurno(oferta, prefs) {
   const prefsT = turnosPrefs(prefs);
   if (!prefsT.length) {
@@ -9603,6 +9934,7 @@ function matchTurno(oferta, prefs) {
 __name(matchTurno, "matchTurno");
 __name2(matchTurno, "matchTurno");
 __name22(matchTurno, "matchTurno");
+__name222(matchTurno, "matchTurno");
 function matchNivelModalidad(oferta, prefs) {
   const prefsN = prefs?.niveles || [];
   if (!prefsN.length) return { ok: true, motivo: "Sin filtro de nivel o modalidad" };
@@ -9626,6 +9958,7 @@ function matchNivelModalidad(oferta, prefs) {
 __name(matchNivelModalidad, "matchNivelModalidad");
 __name2(matchNivelModalidad, "matchNivelModalidad");
 __name22(matchNivelModalidad, "matchNivelModalidad");
+__name222(matchNivelModalidad, "matchNivelModalidad");
 function coincideOfertaConPreferencias(oferta, prefs) {
   const distrito = matchDistritos(oferta, prefs);
   if (!distrito.ok) {
@@ -9651,6 +9984,7 @@ function coincideOfertaConPreferencias(oferta, prefs) {
 __name(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
 __name2(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
 __name22(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
+__name222(coincideOfertaConPreferencias, "coincideOfertaConPreferencias");
 function mapTurnoAPD(turno) {
   const x = norm(turno);
   if (x === "M" || x === "MANANA") return "MANANA";
@@ -9665,6 +9999,7 @@ function mapTurnoAPD(turno) {
 __name(mapTurnoAPD, "mapTurnoAPD");
 __name2(mapTurnoAPD, "mapTurnoAPD");
 __name22(mapTurnoAPD, "mapTurnoAPD");
+__name222(mapTurnoAPD, "mapTurnoAPD");
 function coincideOfertaConPreferenciasAPD(oferta, prefs) {
   const distrito = matchDistritos(oferta, prefs);
   if (!distrito.ok) {
@@ -9707,12 +10042,14 @@ function coincideOfertaConPreferenciasAPD(oferta, prefs) {
 __name(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
 __name2(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
 __name22(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
+__name222(coincideOfertaConPreferenciasAPD, "coincideOfertaConPreferenciasAPD");
 function historicoRowToOferta(row) {
   return { descdistrito: row?.distrito || "", descripcioncargo: row?.cargo || "", descripcionarea: row?.area || "", turno: row?.turno || "", descnivelmodalidad: row?.nivel_modalidad || "" };
 }
 __name(historicoRowToOferta, "historicoRowToOferta");
 __name2(historicoRowToOferta, "historicoRowToOferta");
 __name22(historicoRowToOferta, "historicoRowToOferta");
+__name222(historicoRowToOferta, "historicoRowToOferta");
 function historicoRowKey(row) {
   const sourceKey = String(row?.source_offer_key || "").trim();
   if (sourceKey) return sourceKey;
@@ -9723,6 +10060,7 @@ function historicoRowKey(row) {
 __name(historicoRowKey, "historicoRowKey");
 __name2(historicoRowKey, "historicoRowKey");
 __name22(historicoRowKey, "historicoRowKey");
+__name222(historicoRowKey, "historicoRowKey");
 function estadoHistoricoKey(value) {
   const raw = typeof value === "string" ? value : value?.estado;
   const estado = norm(raw || "");
@@ -9738,6 +10076,7 @@ function estadoHistoricoKey(value) {
 __name(estadoHistoricoKey, "estadoHistoricoKey");
 __name2(estadoHistoricoKey, "estadoHistoricoKey");
 __name22(estadoHistoricoKey, "estadoHistoricoKey");
+__name222(estadoHistoricoKey, "estadoHistoricoKey");
 function estadoHistoricoLabel(value) {
   switch (estadoHistoricoKey(value)) {
     case "ACTIVA":
@@ -9759,6 +10098,7 @@ function estadoHistoricoLabel(value) {
 __name(estadoHistoricoLabel, "estadoHistoricoLabel");
 __name2(estadoHistoricoLabel, "estadoHistoricoLabel");
 __name22(estadoHistoricoLabel, "estadoHistoricoLabel");
+__name222(estadoHistoricoLabel, "estadoHistoricoLabel");
 function ofertaHistoricaActiva(row) {
   const estadoKey = estadoHistoricoKey(row);
   const fin = parseFechaFlexible(row?.finoferta)?.getTime() || 0;
@@ -9770,12 +10110,14 @@ function ofertaHistoricaActiva(row) {
 __name(ofertaHistoricaActiva, "ofertaHistoricaActiva");
 __name2(ofertaHistoricaActiva, "ofertaHistoricaActiva");
 __name22(ofertaHistoricaActiva, "ofertaHistoricaActiva");
+__name222(ofertaHistoricaActiva, "ofertaHistoricaActiva");
 function tituloHistoricoRow(row) {
   return unique([row?.cargo || "", row?.area || ""].filter(Boolean)).join(" \xB7 ") || "Oferta APD";
 }
 __name(tituloHistoricoRow, "tituloHistoricoRow");
 __name2(tituloHistoricoRow, "tituloHistoricoRow");
 __name22(tituloHistoricoRow, "tituloHistoricoRow");
+__name222(tituloHistoricoRow, "tituloHistoricoRow");
 function topCountItems(values, limit = 5) {
   const counts = /* @__PURE__ */ new Map();
   for (const raw of Array.isArray(values) ? values : []) {
@@ -9788,6 +10130,7 @@ function topCountItems(values, limit = 5) {
 __name(topCountItems, "topCountItems");
 __name2(topCountItems, "topCountItems");
 __name22(topCountItems, "topCountItems");
+__name222(topCountItems, "topCountItems");
 function promedioNumerico(values, digits = 1) {
   const nums = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
   if (!nums.length) return null;
@@ -9798,6 +10141,7 @@ function promedioNumerico(values, digits = 1) {
 __name(promedioNumerico, "promedioNumerico");
 __name2(promedioNumerico, "promedioNumerico");
 __name22(promedioNumerico, "promedioNumerico");
+__name222(promedioNumerico, "promedioNumerico");
 function sortHistoricoDesc(a, b) {
   const ta = parseFechaFlexible(a?.captured_at || a?.last_seen_at)?.getTime() || 0;
   const tb = parseFechaFlexible(b?.captured_at || b?.last_seen_at)?.getTime() || 0;
@@ -9806,6 +10150,7 @@ function sortHistoricoDesc(a, b) {
 __name(sortHistoricoDesc, "sortHistoricoDesc");
 __name2(sortHistoricoDesc, "sortHistoricoDesc");
 __name22(sortHistoricoDesc, "sortHistoricoDesc");
+__name222(sortHistoricoDesc, "sortHistoricoDesc");
 function estadoOfertaEsPublicada(oferta) {
   const estado = String(
     oferta?.estado || oferta?.estado_oferta || oferta?.estado_actual || ""
@@ -9814,6 +10159,7 @@ function estadoOfertaEsPublicada(oferta) {
 }
 __name(estadoOfertaEsPublicada, "estadoOfertaEsPublicada");
 __name2(estadoOfertaEsPublicada, "estadoOfertaEsPublicada");
+__name22(estadoOfertaEsPublicada, "estadoOfertaEsPublicada");
 function parseFechaFlexible(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -9833,6 +10179,7 @@ function parseFechaFlexible(value) {
 __name(parseFechaFlexible, "parseFechaFlexible");
 __name2(parseFechaFlexible, "parseFechaFlexible");
 __name22(parseFechaFlexible, "parseFechaFlexible");
+__name222(parseFechaFlexible, "parseFechaFlexible");
 function parsePartesFechaAbc(raw) {
   const value = String(raw || "").trim();
   if (!value || value.includes("9999")) return null;
@@ -9851,6 +10198,7 @@ function parsePartesFechaAbc(raw) {
 __name(parsePartesFechaAbc, "parsePartesFechaAbc");
 __name2(parsePartesFechaAbc, "parsePartesFechaAbc");
 __name22(parsePartesFechaAbc, "parsePartesFechaAbc");
+__name222(parsePartesFechaAbc, "parsePartesFechaAbc");
 function formatearFechaAbc(raw, mode = "auto") {
   const value = String(raw || "").trim();
   if (!value) return "";
@@ -9866,6 +10214,7 @@ function formatearFechaAbc(raw, mode = "auto") {
 __name(formatearFechaAbc, "formatearFechaAbc");
 __name2(formatearFechaAbc, "formatearFechaAbc");
 __name22(formatearFechaAbc, "formatearFechaAbc");
+__name222(formatearFechaAbc, "formatearFechaAbc");
 function normalizarCursoDivisionServidor(value) {
   let s = String(value || "").trim();
   if (!s) return "";
@@ -9877,18 +10226,21 @@ function normalizarCursoDivisionServidor(value) {
 __name(normalizarCursoDivisionServidor, "normalizarCursoDivisionServidor");
 __name2(normalizarCursoDivisionServidor, "normalizarCursoDivisionServidor");
 __name22(normalizarCursoDivisionServidor, "normalizarCursoDivisionServidor");
+__name222(normalizarCursoDivisionServidor, "normalizarCursoDivisionServidor");
 function sanitizeSolrNumber(value) {
   return String(value || "").replace(/[^\d]/g, "");
 }
 __name(sanitizeSolrNumber, "sanitizeSolrNumber");
 __name2(sanitizeSolrNumber, "sanitizeSolrNumber");
 __name22(sanitizeSolrNumber, "sanitizeSolrNumber");
+__name222(sanitizeSolrNumber, "sanitizeSolrNumber");
 function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders() });
 }
 __name(json, "json");
 __name2(json, "json");
 __name22(json, "json");
+__name222(json, "json");
 async function sendPendingEmailDigests(env, options = {}) {
   const users = await supabaseSelect(
     env,
@@ -9993,6 +10345,7 @@ async function sendPendingEmailDigests(env, options = {}) {
 __name(sendPendingEmailDigests, "sendPendingEmailDigests");
 __name2(sendPendingEmailDigests, "sendPendingEmailDigests");
 __name22(sendPendingEmailDigests, "sendPendingEmailDigests");
+__name222(sendPendingEmailDigests, "sendPendingEmailDigests");
 function buildDigestHtml(alerts, user, options = {}) {
   const panelUrl = String(options?.panel_url || "https://alertasapd.com.ar").trim();
   const normalizedAlerts = (Array.isArray(alerts) ? alerts : []).map((item) => ({
@@ -10072,6 +10425,7 @@ Resumen personalizado                  </div>
 }
 __name(buildDigestHtml, "buildDigestHtml");
 __name2(buildDigestHtml, "buildDigestHtml");
+__name22(buildDigestHtml, "buildDigestHtml");
 function buildTop5NuevasHtml(alerts, user) {
   return buildDigestHtml(alerts, user, {
     max_visible: 5,
@@ -10081,6 +10435,7 @@ function buildTop5NuevasHtml(alerts, user) {
 }
 __name(buildTop5NuevasHtml, "buildTop5NuevasHtml");
 __name2(buildTop5NuevasHtml, "buildTop5NuevasHtml");
+__name22(buildTop5NuevasHtml, "buildTop5NuevasHtml");
 function mailInfoBox(label, value) {
   return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
@@ -10115,6 +10470,7 @@ function mailInfoBox(label, value) {
 }
 __name(mailInfoBox, "mailInfoBox");
 __name2(mailInfoBox, "mailInfoBox");
+__name22(mailInfoBox, "mailInfoBox");
 function mailMiniBox(label, value) {
   return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="
@@ -10149,6 +10505,7 @@ function mailMiniBox(label, value) {
 }
 __name(mailMiniBox, "mailMiniBox");
 __name2(mailMiniBox, "mailMiniBox");
+__name22(mailMiniBox, "mailMiniBox");
 var API_URL_PREFIX3 = "/api";
 var LEGACY_GAS_URL = "https://script.google.com/macros/s/AKfycbwFtHAZ8ItzTK7MQdqn-FaVVO6s4s4HTIttZDC0daJgn6TgkJvFBafgNLTG_PcG0HxMbg/exec";
 var HOTFIX_VERSION = "2026-09-15-backfill-telemetry-2";
@@ -10164,43 +10521,50 @@ function corsHeaders2() {
 }
 __name(corsHeaders2, "corsHeaders2");
 __name2(corsHeaders2, "corsHeaders2");
-__name22(corsHeaders2, "corsHeaders");
+__name22(corsHeaders2, "corsHeaders2");
+__name222(corsHeaders2, "corsHeaders");
 function json2(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), { status, headers: corsHeaders2() });
 }
 __name(json2, "json2");
 __name2(json2, "json2");
-__name22(json2, "json");
+__name22(json2, "json2");
+__name222(json2, "json");
 function normalizeEmail2(v) {
   return String(v || "").trim().toLowerCase();
 }
 __name(normalizeEmail2, "normalizeEmail2");
 __name2(normalizeEmail2, "normalizeEmail2");
-__name22(normalizeEmail2, "normalizeEmail");
+__name22(normalizeEmail2, "normalizeEmail2");
+__name222(normalizeEmail2, "normalizeEmail");
 function normalizeText2(v) {
   return String(v || "").trim();
 }
 __name(normalizeText2, "normalizeText2");
 __name2(normalizeText2, "normalizeText2");
-__name22(normalizeText2, "normalizeText");
+__name22(normalizeText2, "normalizeText2");
+__name222(normalizeText2, "normalizeText");
 function norm2(v) {
   return String(v || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s/().,-]/gu, " ").replace(/\s+/g, " ").trim();
 }
 __name(norm2, "norm2");
 __name2(norm2, "norm2");
-__name22(norm2, "norm");
+__name22(norm2, "norm2");
+__name222(norm2, "norm");
 function unique2(arr) {
   return [...new Set((Array.isArray(arr) ? arr : []).filter(Boolean))];
 }
 __name(unique2, "unique2");
 __name2(unique2, "unique2");
-__name22(unique2, "unique");
+__name22(unique2, "unique2");
+__name222(unique2, "unique");
 function sanitizeSolrNumber2(value) {
   return String(value || "").replace(/[^\d]/g, "");
 }
 __name(sanitizeSolrNumber2, "sanitizeSolrNumber2");
 __name2(sanitizeSolrNumber2, "sanitizeSolrNumber2");
-__name22(sanitizeSolrNumber2, "sanitizeSolrNumber");
+__name22(sanitizeSolrNumber2, "sanitizeSolrNumber2");
+__name222(sanitizeSolrNumber2, "sanitizeSolrNumber");
 function mapTurnoAPD2(turno) {
   const x = norm2(turno);
   if (x === "M" || x === "MANANA") return "MANANA";
@@ -10212,7 +10576,8 @@ function mapTurnoAPD2(turno) {
 }
 __name(mapTurnoAPD2, "mapTurnoAPD2");
 __name2(mapTurnoAPD2, "mapTurnoAPD2");
-__name22(mapTurnoAPD2, "mapTurnoAPD");
+__name22(mapTurnoAPD2, "mapTurnoAPD2");
+__name222(mapTurnoAPD2, "mapTurnoAPD");
 function canonicalizarNivelPreferencia2(value) {
   const s = norm2(value);
   if (!s) return "";
@@ -10230,7 +10595,8 @@ function canonicalizarNivelPreferencia2(value) {
 }
 __name(canonicalizarNivelPreferencia2, "canonicalizarNivelPreferencia2");
 __name2(canonicalizarNivelPreferencia2, "canonicalizarNivelPreferencia2");
-__name22(canonicalizarNivelPreferencia2, "canonicalizarNivelPreferencia");
+__name22(canonicalizarNivelPreferencia2, "canonicalizarNivelPreferencia2");
+__name222(canonicalizarNivelPreferencia2, "canonicalizarNivelPreferencia");
 function nivelOfertaKeys(texto) {
   const t = norm2(texto);
   const out = /* @__PURE__ */ new Set();
@@ -10250,6 +10616,7 @@ function nivelOfertaKeys(texto) {
 __name(nivelOfertaKeys, "nivelOfertaKeys");
 __name2(nivelOfertaKeys, "nivelOfertaKeys");
 __name22(nivelOfertaKeys, "nivelOfertaKeys");
+__name222(nivelOfertaKeys, "nivelOfertaKeys");
 function parseFechaFlexible2(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -10268,7 +10635,8 @@ function parseFechaFlexible2(value) {
 }
 __name(parseFechaFlexible2, "parseFechaFlexible2");
 __name2(parseFechaFlexible2, "parseFechaFlexible2");
-__name22(parseFechaFlexible2, "parseFechaFlexible");
+__name22(parseFechaFlexible2, "parseFechaFlexible2");
+__name222(parseFechaFlexible2, "parseFechaFlexible");
 function parsePartesFechaAbc2(raw) {
   const value = String(raw || "").trim();
   if (!value || value.includes("9999")) return null;
@@ -10294,7 +10662,8 @@ function parsePartesFechaAbc2(raw) {
 }
 __name(parsePartesFechaAbc2, "parsePartesFechaAbc2");
 __name2(parsePartesFechaAbc2, "parsePartesFechaAbc2");
-__name22(parsePartesFechaAbc2, "parsePartesFechaAbc");
+__name22(parsePartesFechaAbc2, "parsePartesFechaAbc2");
+__name222(parsePartesFechaAbc2, "parsePartesFechaAbc");
 function formatearFechaAbc2(raw, mode = "auto") {
   const value = String(raw || "").trim();
   if (!value) return "";
@@ -10309,7 +10678,8 @@ function formatearFechaAbc2(raw, mode = "auto") {
 }
 __name(formatearFechaAbc2, "formatearFechaAbc2");
 __name2(formatearFechaAbc2, "formatearFechaAbc2");
-__name22(formatearFechaAbc2, "formatearFechaAbc");
+__name22(formatearFechaAbc2, "formatearFechaAbc2");
+__name222(formatearFechaAbc2, "formatearFechaAbc");
 function buildSourceOfferKeyFromOferta2(oferta) {
   const detalle = sanitizeSolrNumber2(oferta?.iddetalle || oferta?.id || "");
   if (detalle) return `D_${detalle}`;
@@ -10319,7 +10689,8 @@ function buildSourceOfferKeyFromOferta2(oferta) {
 }
 __name(buildSourceOfferKeyFromOferta2, "buildSourceOfferKeyFromOferta2");
 __name2(buildSourceOfferKeyFromOferta2, "buildSourceOfferKeyFromOferta2");
-__name22(buildSourceOfferKeyFromOferta2, "buildSourceOfferKeyFromOferta");
+__name22(buildSourceOfferKeyFromOferta2, "buildSourceOfferKeyFromOferta2");
+__name222(buildSourceOfferKeyFromOferta2, "buildSourceOfferKeyFromOferta");
 function buildAbcPostulantesUrl2(ofertaId, detalleId) {
   const params = new URLSearchParams();
   const ofertaSafe = sanitizeSolrNumber2(ofertaId);
@@ -10330,7 +10701,8 @@ function buildAbcPostulantesUrl2(ofertaId, detalleId) {
 }
 __name(buildAbcPostulantesUrl2, "buildAbcPostulantesUrl2");
 __name2(buildAbcPostulantesUrl2, "buildAbcPostulantesUrl2");
-__name22(buildAbcPostulantesUrl2, "buildAbcPostulantesUrl");
+__name22(buildAbcPostulantesUrl2, "buildAbcPostulantesUrl2");
+__name222(buildAbcPostulantesUrl2, "buildAbcPostulantesUrl");
 async function sha256Hex2(text) {
   const data = new TextEncoder().encode(String(text || ""));
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -10338,13 +10710,15 @@ async function sha256Hex2(text) {
 }
 __name(sha256Hex2, "sha256Hex2");
 __name2(sha256Hex2, "sha256Hex2");
-__name22(sha256Hex2, "sha256Hex");
+__name22(sha256Hex2, "sha256Hex2");
+__name222(sha256Hex2, "sha256Hex");
 async function passwordMatches2(storedPassword, plainPassword) {
   return (await accountVerifyPasswordV1(storedPassword, plainPassword)).ok;
 }
 __name(passwordMatches2, "passwordMatches2");
 __name2(passwordMatches2, "passwordMatches2");
-__name22(passwordMatches2, "passwordMatches");
+__name22(passwordMatches2, "passwordMatches2");
+__name222(passwordMatches2, "passwordMatches");
 async function supabaseRequest(env, path, init = {}) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
@@ -10363,32 +10737,37 @@ async function supabaseRequest(env, path, init = {}) {
 __name(supabaseRequest, "supabaseRequest");
 __name2(supabaseRequest, "supabaseRequest");
 __name22(supabaseRequest, "supabaseRequest");
+__name222(supabaseRequest, "supabaseRequest");
 async function supabaseSelect2(env, query) {
   return await supabaseRequest(env, query, { method: "GET", headers: { Prefer: "return=representation" } });
 }
 __name(supabaseSelect2, "supabaseSelect2");
 __name2(supabaseSelect2, "supabaseSelect2");
-__name22(supabaseSelect2, "supabaseSelect");
+__name22(supabaseSelect2, "supabaseSelect2");
+__name222(supabaseSelect2, "supabaseSelect");
 async function supabaseInsertReturning2(env, table, data) {
   const rows = await supabaseRequest(env, table, { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(data) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
 __name(supabaseInsertReturning2, "supabaseInsertReturning2");
 __name2(supabaseInsertReturning2, "supabaseInsertReturning2");
-__name22(supabaseInsertReturning2, "supabaseInsertReturning");
+__name22(supabaseInsertReturning2, "supabaseInsertReturning2");
+__name222(supabaseInsertReturning2, "supabaseInsertReturning");
 async function supabasePatch2(env, table, filter, data) {
   return await supabaseRequest(env, `${table}?${filter}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(data) });
 }
 __name(supabasePatch2, "supabasePatch2");
 __name2(supabasePatch2, "supabasePatch2");
-__name22(supabasePatch2, "supabasePatch");
+__name22(supabasePatch2, "supabasePatch2");
+__name222(supabasePatch2, "supabasePatch");
 async function findUserByEmail2(env, email) {
   const rows = await supabaseSelect2(env, `users?email=ilike.${encodeURIComponent(email)}&select=id,nombre,apellido,email,celular,password_hash,activo&limit=1`).catch(() => []);
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 __name(findUserByEmail2, "findUserByEmail2");
 __name2(findUserByEmail2, "findUserByEmail2");
-__name22(findUserByEmail2, "findUserByEmail");
+__name22(findUserByEmail2, "findUserByEmail2");
+__name222(findUserByEmail2, "findUserByEmail");
 async function getUserById(env, userId) {
   const rows = await supabaseSelect2(env, `users?id=eq.${encodeURIComponent(userId)}&select=id,nombre,apellido,email,celular,activo,ultimo_login&limit=1`).catch(() => []);
   return Array.isArray(rows) ? rows[0] || null : null;
@@ -10396,6 +10775,7 @@ async function getUserById(env, userId) {
 __name(getUserById, "getUserById");
 __name2(getUserById, "getUserById");
 __name22(getUserById, "getUserById");
+__name222(getUserById, "getUserById");
 async function ensureTrialIfNoSubscriptions2(env, userId, email, source = "trial_auto_hotfix") {
   const existing = await supabaseSelect2(env, `user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`).catch(() => []);
   if (Array.isArray(existing) && existing.length > 0) return { ok: true, created: false };
@@ -10404,13 +10784,15 @@ async function ensureTrialIfNoSubscriptions2(env, userId, email, source = "trial
 }
 __name(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions2");
 __name2(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions2");
-__name22(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions");
+__name22(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions2");
+__name222(ensureTrialIfNoSubscriptions2, "ensureTrialIfNoSubscriptions");
 async function touchUltimoLogin2(env, userId) {
   await supabasePatch2(env, "users", `id=eq.${encodeURIComponent(userId)}`, { ultimo_login: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => null);
 }
 __name(touchUltimoLogin2, "touchUltimoLogin2");
 __name2(touchUltimoLogin2, "touchUltimoLogin2");
-__name22(touchUltimoLogin2, "touchUltimoLogin");
+__name22(touchUltimoLogin2, "touchUltimoLogin2");
+__name222(touchUltimoLogin2, "touchUltimoLogin");
 async function verifyGoogleCredential2(idToken, expectedAud) {
   if (!expectedAud) throw new Error("Falta GOOGLE_CLIENT_ID en Cloudflare");
   const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
@@ -10431,7 +10813,8 @@ async function verifyGoogleCredential2(idToken, expectedAud) {
 }
 __name(verifyGoogleCredential2, "verifyGoogleCredential2");
 __name2(verifyGoogleCredential2, "verifyGoogleCredential2");
-__name22(verifyGoogleCredential2, "verifyGoogleCredential");
+__name22(verifyGoogleCredential2, "verifyGoogleCredential2");
+__name222(verifyGoogleCredential2, "verifyGoogleCredential");
 async function ensureLocalUser(env, payload) {
   const email = normalizeEmail2(payload?.email || "");
   if (!email) throw new Error("Falta email");
@@ -10454,6 +10837,7 @@ async function ensureLocalUser(env, payload) {
 __name(ensureLocalUser, "ensureLocalUser");
 __name2(ensureLocalUser, "ensureLocalUser");
 __name22(ensureLocalUser, "ensureLocalUser");
+__name222(ensureLocalUser, "ensureLocalUser");
 async function tryLegacyPasswordLogin(email, password) {
   const payloads = [{ action: "login_password", email, password }, { action: "login", email, password }];
   for (const payload of payloads) {
@@ -10475,6 +10859,7 @@ async function tryLegacyPasswordLogin(email, password) {
 __name(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
 __name2(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
 __name22(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
+__name222(tryLegacyPasswordLogin, "tryLegacyPasswordLogin");
 async function accountCreateSessionV1(env, userId, metodo = "password") {
   const token = accountRandomHexV1(32);
   const createdAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -10492,6 +10877,7 @@ async function accountCreateSessionV1(env, userId, metodo = "password") {
 __name(accountCreateSessionV1, "accountCreateSessionV1");
 __name2(accountCreateSessionV1, "accountCreateSessionV1");
 __name22(accountCreateSessionV1, "accountCreateSessionV1");
+__name222(accountCreateSessionV1, "accountCreateSessionV1");
 async function handleLoginHotfix(request, env) {
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail2(body?.email);
@@ -10531,6 +10917,7 @@ async function handleLoginHotfix(request, env) {
 __name(handleLoginHotfix, "handleLoginHotfix");
 __name2(handleLoginHotfix, "handleLoginHotfix");
 __name22(handleLoginHotfix, "handleLoginHotfix");
+__name222(handleLoginHotfix, "handleLoginHotfix");
 async function handleGoogleAuthHotfix(request, env) {
   const body = await request.json().catch(() => ({}));
   const credential = String(body?.credential || "").trim();
@@ -10546,8 +10933,9 @@ async function handleGoogleAuthHotfix(request, env) {
 __name(handleGoogleAuthHotfix, "handleGoogleAuthHotfix");
 __name2(handleGoogleAuthHotfix, "handleGoogleAuthHotfix");
 __name22(handleGoogleAuthHotfix, "handleGoogleAuthHotfix");
+__name222(handleGoogleAuthHotfix, "handleGoogleAuthHotfix");
 function adaptarPreferenciasRow2(row) {
-  const arrNorm2 = /* @__PURE__ */ __name22((value) => {
+  const arrNorm2 = /* @__PURE__ */ __name222((value) => {
     if (Array.isArray(value)) return value.map((item) => norm2(item)).filter(Boolean);
     if (typeof value === "string" && value.trim()) return value.split(",").map((item) => norm2(item)).filter(Boolean);
     return [];
@@ -10556,7 +10944,8 @@ function adaptarPreferenciasRow2(row) {
 }
 __name(adaptarPreferenciasRow2, "adaptarPreferenciasRow2");
 __name2(adaptarPreferenciasRow2, "adaptarPreferenciasRow2");
-__name22(adaptarPreferenciasRow2, "adaptarPreferenciasRow");
+__name22(adaptarPreferenciasRow2, "adaptarPreferenciasRow2");
+__name222(adaptarPreferenciasRow2, "adaptarPreferenciasRow");
 async function getUserPrefs(env, userId) {
   const rows = await supabaseSelect2(env, `user_preferences?user_id=eq.${encodeURIComponent(userId)}&select=*`).catch(() => []);
   return rows?.[0] ? adaptarPreferenciasRow2(rows[0]) : null;
@@ -10564,6 +10953,7 @@ async function getUserPrefs(env, userId) {
 __name(getUserPrefs, "getUserPrefs");
 __name2(getUserPrefs, "getUserPrefs");
 __name22(getUserPrefs, "getUserPrefs");
+__name222(getUserPrefs, "getUserPrefs");
 async function getCatalogDistricts(env) {
   const rows = await supabaseSelect2(env, "catalogo_distritos?select=nombre,apd_nombre&order=nombre.asc").catch(() => []);
   return Array.isArray(rows) ? rows : [];
@@ -10571,6 +10961,7 @@ async function getCatalogDistricts(env) {
 __name(getCatalogDistricts, "getCatalogDistricts");
 __name2(getCatalogDistricts, "getCatalogDistricts");
 __name22(getCatalogDistricts, "getCatalogDistricts");
+__name222(getCatalogDistricts, "getCatalogDistricts");
 function resolveDistrictsForQuery(prefs, catalog) {
   const raw = [prefs?.distrito_principal || "", ...Array.isArray(prefs?.otros_distritos) ? prefs.otros_distritos : []].map(norm2).filter(Boolean);
   const out = [];
@@ -10587,6 +10978,7 @@ function resolveDistrictsForQuery(prefs, catalog) {
 __name(resolveDistrictsForQuery, "resolveDistrictsForQuery");
 __name2(resolveDistrictsForQuery, "resolveDistrictsForQuery");
 __name22(resolveDistrictsForQuery, "resolveDistrictsForQuery");
+__name222(resolveDistrictsForQuery, "resolveDistrictsForQuery");
 function matchesTurno(oferta, prefs) {
   const turnos = unique2((prefs?.turnos || []).map((item) => mapTurnoAPD2(item)).filter(Boolean));
   if (!turnos.length) return true;
@@ -10595,6 +10987,7 @@ function matchesTurno(oferta, prefs) {
 __name(matchesTurno, "matchesTurno");
 __name2(matchesTurno, "matchesTurno");
 __name22(matchesTurno, "matchesTurno");
+__name222(matchesTurno, "matchesTurno");
 function matchesNivel(oferta, prefs) {
   const niveles = unique2((prefs?.niveles || []).map(canonicalizarNivelPreferencia2).filter(Boolean));
   if (!niveles.length) return true;
@@ -10604,6 +10997,7 @@ function matchesNivel(oferta, prefs) {
 __name(matchesNivel, "matchesNivel");
 __name2(matchesNivel, "matchesNivel");
 __name22(matchesNivel, "matchesNivel");
+__name222(matchesNivel, "matchesNivel");
 function ofertaVigente(oferta) {
   const estado = norm2(oferta?.estado || "");
   if (["ANULADA", "DESIGNADA", "DESIERTA", "CERRADA", "FINALIZADA", "NO VIGENTE"].includes(estado)) return false;
@@ -10614,6 +11008,7 @@ function ofertaVigente(oferta) {
 __name(ofertaVigente, "ofertaVigente");
 __name2(ofertaVigente, "ofertaVigente");
 __name22(ofertaVigente, "ofertaVigente");
+__name222(ofertaVigente, "ofertaVigente");
 function adaptOffer(oferta) {
   const cargo = oferta?.descripcioncargo || oferta?.cargo || "";
   const area = oferta?.descripcionarea || oferta?.area || oferta?.materia || "";
@@ -10623,6 +11018,7 @@ function adaptOffer(oferta) {
 __name(adaptOffer, "adaptOffer");
 __name2(adaptOffer, "adaptOffer");
 __name22(adaptOffer, "adaptOffer");
+__name222(adaptOffer, "adaptOffer");
 async function fetchOffersForDistrict(distritoAPD) {
   const docs = [];
   for (let i = 0; i < ALERT_MAX_PAGES; i += 1) {
@@ -10647,6 +11043,7 @@ async function fetchOffersForDistrict(distritoAPD) {
 __name(fetchOffersForDistrict, "fetchOffersForDistrict");
 __name2(fetchOffersForDistrict, "fetchOffersForDistrict");
 __name22(fetchOffersForDistrict, "fetchOffersForDistrict");
+__name222(fetchOffersForDistrict, "fetchOffersForDistrict");
 async function buildAlertResultsFallback(env, userId) {
   const user = await getUserById(env, userId);
   if (!user) {
@@ -10750,6 +11147,7 @@ async function buildAlertResultsFallback(env, userId) {
 __name(buildAlertResultsFallback, "buildAlertResultsFallback");
 __name2(buildAlertResultsFallback, "buildAlertResultsFallback");
 __name22(buildAlertResultsFallback, "buildAlertResultsFallback");
+__name222(buildAlertResultsFallback, "buildAlertResultsFallback");
 async function delegateJson(originalWorker, request, env, ctx) {
   const response = await originalWorker.fetch(request, env, ctx);
   const text = await response.text();
@@ -10764,30 +11162,35 @@ async function delegateJson(originalWorker, request, env, ctx) {
 __name(delegateJson, "delegateJson");
 __name2(delegateJson, "delegateJson");
 __name22(delegateJson, "delegateJson");
+__name222(delegateJson, "delegateJson");
 function getChannelStateStore(env) {
   return env.EMAIL_SWEEP_STATE || env.CHANNEL_STATE || null;
 }
 __name(getChannelStateStore, "getChannelStateStore");
 __name2(getChannelStateStore, "getChannelStateStore");
 __name22(getChannelStateStore, "getChannelStateStore");
+__name222(getChannelStateStore, "getChannelStateStore");
 function telegramStateKey(userId) {
   return `telegram:user:${String(userId || "").trim().toUpperCase()}`;
 }
 __name(telegramStateKey, "telegramStateKey");
 __name2(telegramStateKey, "telegramStateKey");
 __name22(telegramStateKey, "telegramStateKey");
+__name222(telegramStateKey, "telegramStateKey");
 function telegramChatStateKey(chatId) {
   return `telegram:chat:${String(chatId || "").trim()}`;
 }
 __name(telegramChatStateKey, "telegramChatStateKey");
 __name2(telegramChatStateKey, "telegramChatStateKey");
 __name22(telegramChatStateKey, "telegramChatStateKey");
+__name222(telegramChatStateKey, "telegramChatStateKey");
 function whatsappStateKey(userId) {
   return `whatsapp:user:${String(userId || "").trim().toUpperCase()}`;
 }
 __name(whatsappStateKey, "whatsappStateKey");
 __name2(whatsappStateKey, "whatsappStateKey");
 __name22(whatsappStateKey, "whatsappStateKey");
+__name222(whatsappStateKey, "whatsappStateKey");
 async function getTelegramState(env, userId) {
   const kv = getChannelStateStore(env);
   if (!kv || !userId) return null;
@@ -10802,6 +11205,7 @@ async function getTelegramState(env, userId) {
 __name(getTelegramState, "getTelegramState");
 __name2(getTelegramState, "getTelegramState");
 __name22(getTelegramState, "getTelegramState");
+__name222(getTelegramState, "getTelegramState");
 async function saveTelegramState(env, userId, patch) {
   const kv = getChannelStateStore(env);
   if (!kv || !userId) return null;
@@ -10816,6 +11220,7 @@ async function saveTelegramState(env, userId, patch) {
 __name(saveTelegramState, "saveTelegramState");
 __name2(saveTelegramState, "saveTelegramState");
 __name22(saveTelegramState, "saveTelegramState");
+__name222(saveTelegramState, "saveTelegramState");
 async function getTelegramUserIdByChat(env, chatId) {
   const kv = getChannelStateStore(env);
   if (!kv || !chatId) return "";
@@ -10824,6 +11229,7 @@ async function getTelegramUserIdByChat(env, chatId) {
 __name(getTelegramUserIdByChat, "getTelegramUserIdByChat");
 __name2(getTelegramUserIdByChat, "getTelegramUserIdByChat");
 __name22(getTelegramUserIdByChat, "getTelegramUserIdByChat");
+__name222(getTelegramUserIdByChat, "getTelegramUserIdByChat");
 async function getWhatsAppState(env, userId) {
   const kv = getChannelStateStore(env);
   if (!kv || !userId) return null;
@@ -10838,6 +11244,7 @@ async function getWhatsAppState(env, userId) {
 __name(getWhatsAppState, "getWhatsAppState");
 __name2(getWhatsAppState, "getWhatsAppState");
 __name22(getWhatsAppState, "getWhatsAppState");
+__name222(getWhatsAppState, "getWhatsAppState");
 async function saveWhatsAppState(env, userId, patch) {
   const kv = getChannelStateStore(env);
   if (!kv || !userId) return null;
@@ -10849,6 +11256,7 @@ async function saveWhatsAppState(env, userId, patch) {
 __name(saveWhatsAppState, "saveWhatsAppState");
 __name2(saveWhatsAppState, "saveWhatsAppState");
 __name22(saveWhatsAppState, "saveWhatsAppState");
+__name222(saveWhatsAppState, "saveWhatsAppState");
 function maskChatId(chatId) {
   const raw = String(chatId || "").trim();
   if (!raw) return "";
@@ -10858,6 +11266,7 @@ function maskChatId(chatId) {
 __name(maskChatId, "maskChatId");
 __name2(maskChatId, "maskChatId");
 __name22(maskChatId, "maskChatId");
+__name222(maskChatId, "maskChatId");
 function maskPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
@@ -10867,6 +11276,7 @@ function maskPhone(value) {
 __name(maskPhone, "maskPhone");
 __name2(maskPhone, "maskPhone");
 __name22(maskPhone, "maskPhone");
+__name222(maskPhone, "maskPhone");
 function buildTelegramBotLink(env, userId) {
   const username = String(env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@+/, "");
   const normalizedUserId = String(userId || "").trim();
@@ -10876,6 +11286,7 @@ function buildTelegramBotLink(env, userId) {
 __name(buildTelegramBotLink, "buildTelegramBotLink");
 __name2(buildTelegramBotLink, "buildTelegramBotLink");
 __name22(buildTelegramBotLink, "buildTelegramBotLink");
+__name222(buildTelegramBotLink, "buildTelegramBotLink");
 function buildWhatsAppBotNumber(env) {
   const raw = String(
     env.WHATSAPP_BOT_NUMBER || env.WHATSAPP_BOT_PHONE || env.WHATSAPP_BUSINESS_PHONE || env.WHATSAPP_DISPLAY_PHONE || env.WHATSAPP_FROM_PHONE || env.WHATSAPP_PHONE || env.WHATSAPP_NUMBER || ""
@@ -10903,6 +11314,7 @@ function buildWhatsAppBotNumber(env) {
 __name(buildWhatsAppBotNumber, "buildWhatsAppBotNumber");
 __name2(buildWhatsAppBotNumber, "buildWhatsAppBotNumber");
 __name22(buildWhatsAppBotNumber, "buildWhatsAppBotNumber");
+__name222(buildWhatsAppBotNumber, "buildWhatsAppBotNumber");
 function buildWhatsAppBotLink(env) {
   const directLink = String(
     env.WHATSAPP_BOT_LINK || env.WHATSAPP_LINK || env.WHATSAPP_CONNECT_URL || ""
@@ -10917,6 +11329,7 @@ function buildWhatsAppBotLink(env) {
 __name(buildWhatsAppBotLink, "buildWhatsAppBotLink");
 __name2(buildWhatsAppBotLink, "buildWhatsAppBotLink");
 __name22(buildWhatsAppBotLink, "buildWhatsAppBotLink");
+__name222(buildWhatsAppBotLink, "buildWhatsAppBotLink");
 async function sendTelegramText(env, chatId, text) {
   const token = String(env.TELEGRAM_BOT_TOKEN || "").trim();
   if (!token) throw new Error("Falta TELEGRAM_BOT_TOKEN");
@@ -10940,13 +11353,14 @@ async function sendTelegramText(env, chatId, text) {
 __name(sendTelegramText, "sendTelegramText");
 __name2(sendTelegramText, "sendTelegramText");
 __name22(sendTelegramText, "sendTelegramText");
+__name222(sendTelegramText, "sendTelegramText");
 function splitTelegramText(text, maxLen = 3500) {
   const raw = String(text || "").trim();
   if (!raw) return [];
   const chunks = [];
   const blocks = raw.split("\n\n");
   let current = "";
-  const pushCurrent = /* @__PURE__ */ __name2(() => {
+  const pushCurrent = /* @__PURE__ */ __name22(() => {
     if (current.trim()) chunks.push(current.trim());
     current = "";
   }, "pushCurrent");
@@ -10993,6 +11407,7 @@ ${line}` : line;
 }
 __name(splitTelegramText, "splitTelegramText");
 __name2(splitTelegramText, "splitTelegramText");
+__name22(splitTelegramText, "splitTelegramText");
 async function sendTelegramLongText(env, chatId, text, maxLen = 3500) {
   const parts = splitTelegramText(text, maxLen);
   let last = null;
@@ -11003,6 +11418,7 @@ async function sendTelegramLongText(env, chatId, text, maxLen = 3500) {
 }
 __name(sendTelegramLongText, "sendTelegramLongText");
 __name2(sendTelegramLongText, "sendTelegramLongText");
+__name22(sendTelegramLongText, "sendTelegramLongText");
 function requireTelegramWebhookSecret(request, env) {
   const configured = String(env.TELEGRAM_WEBHOOK_SECRET || "").trim();
   if (!configured) return;
@@ -11016,18 +11432,21 @@ function requireTelegramWebhookSecret(request, env) {
 __name(requireTelegramWebhookSecret, "requireTelegramWebhookSecret");
 __name2(requireTelegramWebhookSecret, "requireTelegramWebhookSecret");
 __name22(requireTelegramWebhookSecret, "requireTelegramWebhookSecret");
+__name222(requireTelegramWebhookSecret, "requireTelegramWebhookSecret");
 function telegramUpdateDedupeKey(updateId) {
   return `telegram:update:${String(updateId || "").trim()}`;
 }
 __name(telegramUpdateDedupeKey, "telegramUpdateDedupeKey");
 __name2(telegramUpdateDedupeKey, "telegramUpdateDedupeKey");
 __name22(telegramUpdateDedupeKey, "telegramUpdateDedupeKey");
+__name222(telegramUpdateDedupeKey, "telegramUpdateDedupeKey");
 function whatsappMessageDedupeKey(messageId) {
   return `whatsapp:message:${String(messageId || "").trim()}`;
 }
 __name(whatsappMessageDedupeKey, "whatsappMessageDedupeKey");
 __name2(whatsappMessageDedupeKey, "whatsappMessageDedupeKey");
 __name22(whatsappMessageDedupeKey, "whatsappMessageDedupeKey");
+__name222(whatsappMessageDedupeKey, "whatsappMessageDedupeKey");
 async function wasInboundEventProcessed(env, key) {
   const kv = getChannelStateStore(env);
   if (!kv || !key) return false;
@@ -11036,6 +11455,7 @@ async function wasInboundEventProcessed(env, key) {
 __name(wasInboundEventProcessed, "wasInboundEventProcessed");
 __name2(wasInboundEventProcessed, "wasInboundEventProcessed");
 __name22(wasInboundEventProcessed, "wasInboundEventProcessed");
+__name222(wasInboundEventProcessed, "wasInboundEventProcessed");
 async function markInboundEventProcessed(env, key, ttlSeconds) {
   const kv = getChannelStateStore(env);
   if (!kv || !key) return;
@@ -11044,6 +11464,7 @@ async function markInboundEventProcessed(env, key, ttlSeconds) {
 __name(markInboundEventProcessed, "markInboundEventProcessed");
 __name2(markInboundEventProcessed, "markInboundEventProcessed");
 __name22(markInboundEventProcessed, "markInboundEventProcessed");
+__name222(markInboundEventProcessed, "markInboundEventProcessed");
 async function resolveTelegramEntitlement(env, userId) {
   const resolved = await resolverPlanUsuario(env, userId);
   return {
@@ -11057,6 +11478,7 @@ async function resolveTelegramEntitlement(env, userId) {
 __name(resolveTelegramEntitlement, "resolveTelegramEntitlement");
 __name2(resolveTelegramEntitlement, "resolveTelegramEntitlement");
 __name22(resolveTelegramEntitlement, "resolveTelegramEntitlement");
+__name222(resolveTelegramEntitlement, "resolveTelegramEntitlement");
 async function resolveWhatsAppEntitlement(env, userId) {
   const resolved = await resolverPlanUsuario(env, userId);
   const planCode = String(resolved?.plan?.code || resolved?.subscription?.plan_code || "TRIAL_7D").trim().toUpperCase();
@@ -11071,6 +11493,7 @@ async function resolveWhatsAppEntitlement(env, userId) {
 __name(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
 __name2(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
 __name22(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
+__name222(resolveWhatsAppEntitlement, "resolveWhatsAppEntitlement");
 function extractTelegramCommand(text) {
   const raw = String(text || "").trim();
   if (!raw) return { kind: "empty", payload: "" };
@@ -11084,18 +11507,19 @@ function extractTelegramCommand(text) {
 __name(extractTelegramCommand, "extractTelegramCommand");
 __name2(extractTelegramCommand, "extractTelegramCommand");
 __name22(extractTelegramCommand, "extractTelegramCommand");
+__name222(extractTelegramCommand, "extractTelegramCommand");
 function buildRichTextAlertLines(payload, index) {
   const p = normalizeOfferPayload(payload || {});
   const title = [String(p.cargo || "").trim(), String(p.materia || "").trim()].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).join(" \xB7 ") || "Oferta APD";
-  const safe = /* @__PURE__ */ __name2((v, fallback = "\u2014") => {
+  const safe = /* @__PURE__ */ __name22((v, fallback = "\u2014") => {
     const s = String(v ?? "").trim();
     return s ? s : fallback;
   }, "safe");
-  const num = /* @__PURE__ */ __name2((v) => {
+  const num = /* @__PURE__ */ __name22((v) => {
     const n = typeof parseMailNumber === "function" ? parseMailNumber(v) : Number(v);
     return Number.isFinite(n) ? n : null;
   }, "num");
-  const fmt = /* @__PURE__ */ __name2((v, fallback = "\u2014") => {
+  const fmt = /* @__PURE__ */ __name22((v, fallback = "\u2014") => {
     const n = num(v);
     if (!Number.isFinite(n)) return fallback;
     return typeof formatMailNumber === "function" ? formatMailNumber(n) : String(n);
@@ -11118,6 +11542,7 @@ function buildRichTextAlertLines(payload, index) {
   }
   __name(tgPostuladosUrl, "tgPostuladosUrl");
   __name2(tgPostuladosUrl, "tgPostuladosUrl");
+  __name22(tgPostuladosUrl, "tgPostuladosUrl");
   const lines = [`${index + 1}) ${title}`];
   if (p.distrito) lines.push(`\u{1F4CD} Distrito: ${safe(p.distrito)}`);
   if (p.escuela) lines.push(`\u{1F3EB} Escuela: ${safe(p.escuela)}`);
@@ -11182,6 +11607,7 @@ function buildRichTextAlertLines(payload, index) {
 __name(buildRichTextAlertLines, "buildRichTextAlertLines");
 __name2(buildRichTextAlertLines, "buildRichTextAlertLines");
 __name22(buildRichTextAlertLines, "buildRichTextAlertLines");
+__name222(buildRichTextAlertLines, "buildRichTextAlertLines");
 function buildTelegramQueryDigest(alerts) {
   const all = Array.isArray(alerts) ? alerts : [];
   if (!all.length) {
@@ -11212,9 +11638,10 @@ Escrib\xED ALERTAS para refrescar.`;
 __name(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 __name2(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 __name22(buildTelegramQueryDigest, "buildTelegramQueryDigest");
+__name222(buildTelegramQueryDigest, "buildTelegramQueryDigest");
 function buildWhatsAppQueryDigestParts(alerts) {
-  const safe = /* @__PURE__ */ __name2((v) => String(v ?? "").trim(), "safe");
-  const pick = /* @__PURE__ */ __name2((obj, keys) => {
+  const safe = /* @__PURE__ */ __name22((v) => String(v ?? "").trim(), "safe");
+  const pick = /* @__PURE__ */ __name22((obj, keys) => {
     for (const k of keys) {
       const val = safe(obj?.[k]);
       if (val) return val;
@@ -11346,6 +11773,7 @@ Link: ${link}
 __name(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
 __name2(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
 __name22(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
+__name222(buildWhatsAppQueryDigestParts, "buildWhatsAppQueryDigestParts");
 async function sendWhatsAppText(env, destination, text) {
   const response = await fetch(
     `https://graph.facebook.com/${env.WHATSAPP_GRAPH_VERSION || "v23.0"}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
@@ -11385,6 +11813,7 @@ async function sendWhatsAppText(env, destination, text) {
 __name(sendWhatsAppText, "sendWhatsAppText");
 __name2(sendWhatsAppText, "sendWhatsAppText");
 __name22(sendWhatsAppText, "sendWhatsAppText");
+__name222(sendWhatsAppText, "sendWhatsAppText");
 async function trySendWhatsAppText(env, destination, text, context = "unknown") {
   try {
     return await sendWhatsAppText(env, destination, text);
@@ -11404,6 +11833,7 @@ async function trySendWhatsAppText(env, destination, text, context = "unknown") 
 __name(trySendWhatsAppText, "trySendWhatsAppText");
 __name2(trySendWhatsAppText, "trySendWhatsAppText");
 __name22(trySendWhatsAppText, "trySendWhatsAppText");
+__name222(trySendWhatsAppText, "trySendWhatsAppText");
 async function findUserByWhatsAppNumber(env, waId) {
   const digits = String(waId || "").replace(/\D/g, "");
   if (!digits) return null;
@@ -11418,6 +11848,7 @@ async function findUserByWhatsAppNumber(env, waId) {
 __name(findUserByWhatsAppNumber, "findUserByWhatsAppNumber");
 __name2(findUserByWhatsAppNumber, "findUserByWhatsAppNumber");
 __name22(findUserByWhatsAppNumber, "findUserByWhatsAppNumber");
+__name222(findUserByWhatsAppNumber, "findUserByWhatsAppNumber");
 async function handleTelegramStatus(request, env) {
   const url = new URL(request.url);
   const authUser = await getSessionUserByBearer(env, request);
@@ -11462,6 +11893,7 @@ async function handleTelegramStatus(request, env) {
 __name(handleTelegramStatus, "handleTelegramStatus");
 __name2(handleTelegramStatus, "handleTelegramStatus");
 __name22(handleTelegramStatus, "handleTelegramStatus");
+__name222(handleTelegramStatus, "handleTelegramStatus");
 async function handleTelegramWebhook(request, env) {
   requireTelegramWebhookSecret(request, env);
   async function loadTelegramStoredAlerts(env2, userId, limit = 10) {
@@ -11482,6 +11914,7 @@ async function handleTelegramWebhook(request, env) {
   }
   __name(loadTelegramStoredAlerts, "loadTelegramStoredAlerts");
   __name2(loadTelegramStoredAlerts, "loadTelegramStoredAlerts");
+  __name22(loadTelegramStoredAlerts, "loadTelegramStoredAlerts");
   async function loadTelegramLiveAlertsWithTimeout(env2, userId, timeoutMs = 12e3) {
     const timeout = new Promise((_, reject) => {
       setTimeout(() => reject(new Error("timeout_consultando_alertas")), timeoutMs);
@@ -11500,6 +11933,7 @@ async function handleTelegramWebhook(request, env) {
   }
   __name(loadTelegramLiveAlertsWithTimeout, "loadTelegramLiveAlertsWithTimeout");
   __name2(loadTelegramLiveAlertsWithTimeout, "loadTelegramLiveAlertsWithTimeout");
+  __name22(loadTelegramLiveAlertsWithTimeout, "loadTelegramLiveAlertsWithTimeout");
   function tgCleanId(value) {
     const s = String(value || "").trim();
     if (!s) return "";
@@ -11508,6 +11942,7 @@ async function handleTelegramWebhook(request, env) {
   }
   __name(tgCleanId, "tgCleanId");
   __name2(tgCleanId, "tgCleanId");
+  __name22(tgCleanId, "tgCleanId");
   function tgGetOfertaDetalle(payload) {
     const p = normalizeOfferPayload(payload || {});
     const raw = p?.raw || {};
@@ -11521,6 +11956,7 @@ async function handleTelegramWebhook(request, env) {
   }
   __name(tgGetOfertaDetalle, "tgGetOfertaDetalle");
   __name2(tgGetOfertaDetalle, "tgGetOfertaDetalle");
+  __name22(tgGetOfertaDetalle, "tgGetOfertaDetalle");
   async function enrichTelegramAlertsWithPostulantes(env2, alerts, maxEnrich = 30) {
     const source = Array.isArray(alerts) ? alerts : [];
     const limit = Math.max(0, Math.min(Number(maxEnrich || 0), source.length));
@@ -11571,6 +12007,7 @@ async function handleTelegramWebhook(request, env) {
   }
   __name(enrichTelegramAlertsWithPostulantes, "enrichTelegramAlertsWithPostulantes");
   __name2(enrichTelegramAlertsWithPostulantes, "enrichTelegramAlertsWithPostulantes");
+  __name22(enrichTelegramAlertsWithPostulantes, "enrichTelegramAlertsWithPostulantes");
   const update = await request.json().catch(() => ({}));
   const updateId = update?.update_id != null ? String(update.update_id).trim() : "";
   if (updateId) {
@@ -11845,6 +12282,7 @@ Escrib\xED ALERTAS otra vez si quer\xE9s refrescar.`
 __name(handleTelegramWebhook, "handleTelegramWebhook");
 __name2(handleTelegramWebhook, "handleTelegramWebhook");
 __name22(handleTelegramWebhook, "handleTelegramWebhook");
+__name222(handleTelegramWebhook, "handleTelegramWebhook");
 async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
   const rawText = await request.text();
   let payload = {};
@@ -11942,6 +12380,7 @@ async function handleGuardarPreferenciasChannelsAware(request, env, ctx) {
 __name(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
 __name2(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
 __name22(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
+__name222(handleGuardarPreferenciasChannelsAware, "handleGuardarPreferenciasChannelsAware");
 async function handleWhatsAppStatus(request, env) {
   const url = new URL(request.url);
   const authUser = await getSessionUserByBearer(env, request);
@@ -11986,6 +12425,7 @@ async function handleWhatsAppStatus(request, env) {
 __name(handleWhatsAppStatus, "handleWhatsAppStatus");
 __name2(handleWhatsAppStatus, "handleWhatsAppStatus");
 __name22(handleWhatsAppStatus, "handleWhatsAppStatus");
+__name222(handleWhatsAppStatus, "handleWhatsAppStatus");
 async function handleWhatsAppWebhookVerify(request, env) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
@@ -12019,18 +12459,21 @@ async function handleWhatsAppWebhookVerify(request, env) {
 __name(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 __name2(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 __name22(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
+__name222(handleWhatsAppWebhookVerify, "handleWhatsAppWebhookVerify");
 async function handleWhatsAppWebhook(request, env) {
   function waNormText(value) {
     return String(value || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   }
   __name(waNormText, "waNormText");
   __name2(waNormText, "waNormText");
+  __name22(waNormText, "waNormText");
   function waIsAlertasCommand(value) {
     const t = waNormText(value);
     return t === "ALERTAS" || t === "ALERTA" || t.startsWith("ALERTAS ") || t.startsWith("ALERTA ");
   }
   __name(waIsAlertasCommand, "waIsAlertasCommand");
   __name2(waIsAlertasCommand, "waIsAlertasCommand");
+  __name22(waIsAlertasCommand, "waIsAlertasCommand");
   function waCleanId(value) {
     const s = String(value || "").trim();
     if (!s) return "";
@@ -12039,6 +12482,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waCleanId, "waCleanId");
   __name2(waCleanId, "waCleanId");
+  __name22(waCleanId, "waCleanId");
   function waGetOfertaDetalle(payload) {
     const p = normalizeOfferPayload(payload || {});
     const raw = p?.raw || {};
@@ -12052,6 +12496,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waGetOfertaDetalle, "waGetOfertaDetalle");
   __name2(waGetOfertaDetalle, "waGetOfertaDetalle");
+  __name22(waGetOfertaDetalle, "waGetOfertaDetalle");
   function waBuildPostuladosUrl(payload) {
     const ids = waGetOfertaDetalle(payload);
     if (!ids.oferta || !ids.detalle) {
@@ -12064,6 +12509,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waBuildPostuladosUrl, "waBuildPostuladosUrl");
   __name2(waBuildPostuladosUrl, "waBuildPostuladosUrl");
+  __name22(waBuildPostuladosUrl, "waBuildPostuladosUrl");
   function waAlertTime(item) {
     const p = item?.offer_payload || item || {};
     const raw = p?.raw || {};
@@ -12096,6 +12542,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waAlertTime, "waAlertTime");
   __name2(waAlertTime, "waAlertTime");
+  __name22(waAlertTime, "waAlertTime");
   function waFormatNumber(value) {
     const n = typeof parseMailNumber === "function" ? parseMailNumber(value) : Number(value);
     if (!Number.isFinite(n)) return "Sin datos";
@@ -12106,29 +12553,31 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waFormatNumber, "waFormatNumber");
   __name2(waFormatNumber, "waFormatNumber");
+  __name22(waFormatNumber, "waFormatNumber");
   function waValue(value, fallback = "\u2014") {
     const s = String(value ?? "").trim();
     return s ? s : fallback;
   }
   __name(waValue, "waValue");
   __name2(waValue, "waValue");
+  __name22(waValue, "waValue");
   function waOfferText(item, index, totalShown) {
     const p = normalizeOfferPayload(item?.offer_payload || item || {});
     const raw = p?.raw || {};
-    const safe = /* @__PURE__ */ __name2((value, fallback = "\u2014") => {
+    const safe = /* @__PURE__ */ __name22((value, fallback = "\u2014") => {
       const s = String(value ?? "").trim();
       return s ? s : fallback;
     }, "safe");
-    const clip = /* @__PURE__ */ __name2((value, max = 700) => {
+    const clip = /* @__PURE__ */ __name22((value, max = 700) => {
       const s = safe(value, "");
       if (!s) return "";
       return s.length > max ? `${s.slice(0, max).trim()}...` : s;
     }, "clip");
-    const num = /* @__PURE__ */ __name2((value) => {
+    const num = /* @__PURE__ */ __name22((value) => {
       const n = typeof parseMailNumber === "function" ? parseMailNumber(value) : Number(value);
       return Number.isFinite(n) ? n : null;
     }, "num");
-    const fmt = /* @__PURE__ */ __name2((value, fallback = "\u2014") => {
+    const fmt = /* @__PURE__ */ __name22((value, fallback = "\u2014") => {
       const n = num(value);
       if (!Number.isFinite(n)) return fallback;
       return typeof formatMailNumber === "function" ? formatMailNumber(n) : String(n);
@@ -12215,6 +12664,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waOfferText, "waOfferText");
   __name2(waOfferText, "waOfferText");
+  __name22(waOfferText, "waOfferText");
   async function waSend(env2, to, text, context = "wa_send") {
     try {
       if (typeof trySendWhatsAppText === "function") {
@@ -12244,6 +12694,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waSend, "waSend");
   __name2(waSend, "waSend");
+  __name22(waSend, "waSend");
   async function waLoadStoredAlerts(env2, userId, limit = 50) {
     const rows = await supabaseSelect(
       env2,
@@ -12263,6 +12714,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waLoadStoredAlerts, "waLoadStoredAlerts");
   __name2(waLoadStoredAlerts, "waLoadStoredAlerts");
+  __name22(waLoadStoredAlerts, "waLoadStoredAlerts");
   async function waEnrichVisibleAlerts(env2, alerts) {
     const source = Array.isArray(alerts) ? alerts : [];
     const enriched = await Promise.all(
@@ -12308,6 +12760,7 @@ async function handleWhatsAppWebhook(request, env) {
   }
   __name(waEnrichVisibleAlerts, "waEnrichVisibleAlerts");
   __name2(waEnrichVisibleAlerts, "waEnrichVisibleAlerts");
+  __name22(waEnrichVisibleAlerts, "waEnrichVisibleAlerts");
   try {
     if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) {
       return json2({
@@ -12561,18 +13014,21 @@ https://alertasapd.com.ar`,
 __name(handleWhatsAppWebhook, "handleWhatsAppWebhook");
 __name2(handleWhatsAppWebhook, "handleWhatsAppWebhook");
 __name22(handleWhatsAppWebhook, "handleWhatsAppWebhook");
+__name222(handleWhatsAppWebhook, "handleWhatsAppWebhook");
 function safeProvinciaBackfillStatus(message = null) {
   return { ok: true, scope: "PROVINCIA_FULL", status: "idle", district_index: 0, district_name: null, next_page: 0, pages_processed: 0, districts_completed: 0, offers_processed: 0, last_batch_count: 0, total_districts: 0, progress_pct: 0, started_at: null, finished_at: null, last_run_at: null, updated_at: null, last_error: message || null, retryable: false, stale_running: false, failed_page: 0 };
 }
 __name(safeProvinciaBackfillStatus, "safeProvinciaBackfillStatus");
 __name2(safeProvinciaBackfillStatus, "safeProvinciaBackfillStatus");
 __name22(safeProvinciaBackfillStatus, "safeProvinciaBackfillStatus");
+__name222(safeProvinciaBackfillStatus, "safeProvinciaBackfillStatus");
 function safeProvinciaResumen(message = null) {
   return { ok: true, empty: true, ventana_dias: 30, total_ofertas: 0, activas_estimadas: 0, cerradas_estimadas: 0, districts_with_activity: 0, coverage_hint: null, nuevas_7d: 0, top_distritos: [], top_cargos: [], top_turnos: [], top_escuelas: [], state_breakdown: { activas: 0, designadas: 0, anuladas: 0, desiertas: 0, cerradas: 0 }, leaders: { matematica: null, ingles: null }, latest_rows: [], banner_items: [{ title: "Radar provincial", text: message || "Todavia no hay suficiente historial provincial para construir insights serios." }], scan_state: null };
 }
 __name(safeProvinciaResumen, "safeProvinciaResumen");
 __name2(safeProvinciaResumen, "safeProvinciaResumen");
 __name22(safeProvinciaResumen, "safeProvinciaResumen");
+__name222(safeProvinciaResumen, "safeProvinciaResumen");
 async function debugLomasPreceptor(env, userId) {
   const user = await obtenerUsuario(env, userId);
   if (!user) {
@@ -12639,6 +13095,7 @@ async function debugLomasPreceptor(env, userId) {
 }
 __name(debugLomasPreceptor, "debugLomasPreceptor");
 __name2(debugLomasPreceptor, "debugLomasPreceptor");
+__name22(debugLomasPreceptor, "debugLomasPreceptor");
 var SENSITIVE_TEST_PATHS = /* @__PURE__ */ new Set(["/test-mail", "/test-email-sweep", "/test-digest", "/api/test-db", "/api/whatsapp/test-send", "/api/debug-lomas-pr", "/api/provincia/backfill-kick"]);
 function requireAdminTestSecret(env, request) {
   const configured = String(env.ADMIN_TEST_SECRET || "").trim();
@@ -12654,6 +13111,7 @@ function requireAdminTestSecret(env, request) {
 __name(requireAdminTestSecret, "requireAdminTestSecret");
 __name2(requireAdminTestSecret, "requireAdminTestSecret");
 __name22(requireAdminTestSecret, "requireAdminTestSecret");
+__name222(requireAdminTestSecret, "requireAdminTestSecret");
 async function handleEmailAlertsHealth(env) {
   const latest = await supabaseSelect(
     env,
@@ -12677,6 +13135,7 @@ async function handleEmailAlertsHealth(env) {
 }
 __name(handleEmailAlertsHealth, "handleEmailAlertsHealth");
 __name2(handleEmailAlertsHealth, "handleEmailAlertsHealth");
+__name22(handleEmailAlertsHealth, "handleEmailAlertsHealth");
 async function telemetrySupabaseRequest(env, path, method = "GET", payload = null, returnRepresentation = false) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     method,
@@ -12696,6 +13155,7 @@ async function telemetrySupabaseRequest(env, path, method = "GET", payload = nul
 }
 __name(telemetrySupabaseRequest, "telemetrySupabaseRequest");
 __name2(telemetrySupabaseRequest, "telemetrySupabaseRequest");
+__name22(telemetrySupabaseRequest, "telemetrySupabaseRequest");
 async function safeInsertSystemError(env, origin, err, detail = null) {
   try {
     const message = String(err?.message || err || "Error desconocido").slice(0, 900);
@@ -12712,6 +13172,7 @@ async function safeInsertSystemError(env, origin, err, detail = null) {
 }
 __name(safeInsertSystemError, "safeInsertSystemError");
 __name2(safeInsertSystemError, "safeInsertSystemError");
+__name22(safeInsertSystemError, "safeInsertSystemError");
 function parseEmailCronHealthDetail(value) {
   if (value && typeof value === "object") return value;
   if (typeof value !== "string" || !value.trim()) return {};
@@ -12724,6 +13185,7 @@ function parseEmailCronHealthDetail(value) {
 __name(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
 __name2(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
 __name22(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
+__name222(parseEmailCronHealthDetail, "parseEmailCronHealthDetail");
 function summarizeEmailCronSlotHealth(rows, slotKey) {
   const wanted = String(slotKey || "").trim();
   const matching = (Array.isArray(rows) ? rows : []).map((row) => ({
@@ -12749,6 +13211,7 @@ function summarizeEmailCronSlotHealth(rows, slotKey) {
 __name(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
 __name2(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
 __name22(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
+__name222(summarizeEmailCronSlotHealth, "summarizeEmailCronSlotHealth");
 async function checkEmailCronSlotHealth(env, kv, slotKey) {
   const key = "email:health:" + String(slotKey || "").trim() + ":checked";
   if (!kv || !slotKey) return { ok: false, skipped: true, reason: "missing_state" };
@@ -12771,6 +13234,7 @@ async function checkEmailCronSlotHealth(env, kv, slotKey) {
 __name(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
 __name2(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
 __name22(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
+__name222(checkEmailCronSlotHealth, "checkEmailCronSlotHealth");
 async function recordObservedEmailCron(env, startedAt, result, slotKey) {
   try {
     const failed = Number(result?.failed_count || 0);
@@ -12820,12 +13284,14 @@ async function recordObservedEmailCron(env, startedAt, result, slotKey) {
 }
 __name(recordObservedEmailCron, "recordObservedEmailCron");
 __name2(recordObservedEmailCron, "recordObservedEmailCron");
+__name22(recordObservedEmailCron, "recordObservedEmailCron");
 var ACCOUNT_PBKDF2_ITERATIONS_V1 = 1e5;
 function accountToHexV1(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 __name(accountToHexV1, "accountToHexV1");
 __name2(accountToHexV1, "accountToHexV1");
+__name22(accountToHexV1, "accountToHexV1");
 function accountFromHexV1(hex) {
   const clean = String(hex || "").trim();
   if (!clean || clean.length % 2 !== 0 || !/^[a-f0-9]+$/i.test(clean)) throw new Error("Salt/hash inv\xE1lido");
@@ -12835,6 +13301,7 @@ function accountFromHexV1(hex) {
 }
 __name(accountFromHexV1, "accountFromHexV1");
 __name2(accountFromHexV1, "accountFromHexV1");
+__name22(accountFromHexV1, "accountFromHexV1");
 function accountRandomHexV1(bytes = 16) {
   const value = new Uint8Array(bytes);
   crypto.getRandomValues(value);
@@ -12842,6 +13309,7 @@ function accountRandomHexV1(bytes = 16) {
 }
 __name(accountRandomHexV1, "accountRandomHexV1");
 __name2(accountRandomHexV1, "accountRandomHexV1");
+__name22(accountRandomHexV1, "accountRandomHexV1");
 async function accountSha256HexV1(text) {
   const data = new TextEncoder().encode(String(text || ""));
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -12849,6 +13317,7 @@ async function accountSha256HexV1(text) {
 }
 __name(accountSha256HexV1, "accountSha256HexV1");
 __name2(accountSha256HexV1, "accountSha256HexV1");
+__name22(accountSha256HexV1, "accountSha256HexV1");
 async function accountPbkdf2HexV1(password, saltHex, iterations) {
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -12866,6 +13335,7 @@ async function accountPbkdf2HexV1(password, saltHex, iterations) {
 }
 __name(accountPbkdf2HexV1, "accountPbkdf2HexV1");
 __name2(accountPbkdf2HexV1, "accountPbkdf2HexV1");
+__name22(accountPbkdf2HexV1, "accountPbkdf2HexV1");
 async function accountHashPasswordV1(password) {
   const plain = String(password || "");
   if (!plain) throw new Error("Contrase\xF1a vac\xEDa");
@@ -12875,6 +13345,7 @@ async function accountHashPasswordV1(password) {
 }
 __name(accountHashPasswordV1, "accountHashPasswordV1");
 __name2(accountHashPasswordV1, "accountHashPasswordV1");
+__name22(accountHashPasswordV1, "accountHashPasswordV1");
 async function accountVerifyPasswordV1(storedPassword, plainPassword) {
   const stored = String(storedPassword || "").trim();
   const plain = String(plainPassword || "");
@@ -12905,8 +13376,9 @@ async function accountVerifyPasswordV1(storedPassword, plainPassword) {
 }
 __name(accountVerifyPasswordV1, "accountVerifyPasswordV1");
 __name2(accountVerifyPasswordV1, "accountVerifyPasswordV1");
+__name22(accountVerifyPasswordV1, "accountVerifyPasswordV1");
 async function accountReadUserV1(env, userId, includePassword = false) {
-  const select = includePassword ? "id,nombre,apellido,email,celular,password_hash,activo" : "id,nombre,apellido,email,celular,activo";
+  const select = includePassword ? "id,nombre,apellido,email,celular,password_hash,activo,ultimo_login" : "id,nombre,apellido,email,celular,activo,ultimo_login";
   const rows = await supabaseSelect(
     env,
     `users?id=eq.${encodeURIComponent(userId)}&select=${select}&limit=1`
@@ -12915,13 +13387,14 @@ async function accountReadUserV1(env, userId, includePassword = false) {
 }
 __name(accountReadUserV1, "accountReadUserV1");
 __name2(accountReadUserV1, "accountReadUserV1");
+__name22(accountReadUserV1, "accountReadUserV1");
 async function handleAccountProfileSecureV1(request, env) {
   const authUser = await getSessionUserByBearer(env, request);
   if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
   if (request.method === "GET") {
     const user2 = await accountReadUserV1(env, authUser.id, false);
     if (!user2?.id) return json2({ ok: false, message: "Usuario no encontrado" }, 404);
-    return json2({ ok: true, user: { id: user2.id, nombre: user2.nombre || "", apellido: user2.apellido || "", email: user2.email || "", celular: user2.celular || "" } });
+    return json2({ ok: true, user: { id: user2.id, nombre: user2.nombre || "", apellido: user2.apellido || "", email: user2.email || "", celular: user2.celular || "", activo: user2.activo !== false, ultimo_login: user2.ultimo_login || null } });
   }
   if (request.method !== "PATCH") return json2({ ok: false, message: "M\xE9todo no permitido" }, 405);
   const body = await request.json().catch(() => ({}));
@@ -12944,6 +13417,23 @@ async function handleAccountProfileSecureV1(request, env) {
 }
 __name(handleAccountProfileSecureV1, "handleAccountProfileSecureV1");
 __name2(handleAccountProfileSecureV1, "handleAccountProfileSecureV1");
+__name22(handleAccountProfileSecureV1, "handleAccountProfileSecureV1");
+async function handleAccountPreferencesSecureV1(request, env) {
+  if (request.method !== "GET") return json2({ ok: false, message: "M\xE9todo no permitido" }, 405);
+  const authUser = await getSessionUserByBearer(env, request);
+  if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
+  try {
+    const rows = await supabaseSelect(
+      env,
+      "user_preferences?user_id=eq." + encodeURIComponent(authUser.id) + "&select=user_id,distrito_principal,otros_distritos,cargos,materias,niveles,turnos,alertas_activas,alertas_email,alertas_whatsapp,alertas_telegram&limit=1"
+    );
+    if (!Array.isArray(rows)) throw new Error("invalid_preferences_response");
+    return json2({ ok: true, preferences: rows[0] || null });
+  } catch (_) {
+    return json2({ ok: false, message: "No se pudieron cargar las preferencias" }, 502);
+  }
+}
+__name(handleAccountPreferencesSecureV1, "handleAccountPreferencesSecureV1");
 async function handleAccountChangePasswordSecureV1(request, env) {
   const authUser = await getSessionUserByBearer(env, request);
   if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
@@ -12966,6 +13456,7 @@ async function handleAccountChangePasswordSecureV1(request, env) {
 }
 __name(handleAccountChangePasswordSecureV1, "handleAccountChangePasswordSecureV1");
 __name2(handleAccountChangePasswordSecureV1, "handleAccountChangePasswordSecureV1");
+__name22(handleAccountChangePasswordSecureV1, "handleAccountChangePasswordSecureV1");
 var worker_hotfix_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });
@@ -12973,6 +13464,9 @@ var worker_hotfix_default = {
     const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/account/profile`) {
       return await handleAccountProfileSecureV1(request, env);
+    }
+    if (path === API_URL_PREFIX3 + "/account/preferences") {
+      return await handleAccountPreferencesSecureV1(request, env);
     }
     if (path === `${API_URL_PREFIX3}/account/change-password`) {
       return await handleAccountChangePasswordSecureV1(request, env);
@@ -13344,12 +13838,14 @@ async function handleTestMail(env) {
 }
 __name(handleTestMail, "handleTestMail");
 __name2(handleTestMail, "handleTestMail");
+__name22(handleTestMail, "handleTestMail");
 async function handleTestEmailSweep(env) {
   const r = await runEmailAlertsSweep(env, { source: "manual_test" });
   return jsonResponse(r, 200);
 }
 __name(handleTestEmailSweep, "handleTestEmailSweep");
 __name2(handleTestEmailSweep, "handleTestEmailSweep");
+__name22(handleTestEmailSweep, "handleTestEmailSweep");
 async function handleTestDigest(request, env) {
   try {
     const url = new URL(request.url);
@@ -13400,6 +13896,7 @@ async function handleTestDigest(request, env) {
 }
 __name(handleTestDigest, "handleTestDigest");
 __name2(handleTestDigest, "handleTestDigest");
+__name22(handleTestDigest, "handleTestDigest");
 export {
   worker_hotfix_default as default
 };
