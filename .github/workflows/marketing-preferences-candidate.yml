@@ -1,0 +1,34 @@
+name: Marketing preferences candidate (no deploy, no email)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-marketing-preferences-candidate.mjs'
+      - 'scripts/test-marketing-preferences-candidate.mjs'
+      - 'scripts/brevo-marketing-suppression-readonly.mjs'
+      - 'scripts/test-brevo-marketing-suppression.mjs'
+      - 'docs/APD_MARKETING_CONSENT_PRIVATE_20261022.md'
+      - '.github/workflows/marketing-preferences-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staged-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify production Worker source capture
+        run: node scripts/test-live-source-equivalence.mjs
+      - name: Generate isolated private preferences API
+        run: node scripts/build-marketing-preferences-candidate.mjs
+      - name: Check generated Worker syntax
+        run: node --check tmp/apd-marketing-consent-candidate/worker_hotfix.mjs
+      - name: Test authorization, opt-out and default denial (all mocked)
+        run: node --test scripts/test-marketing-preferences-candidate.mjs
+      - name: Test read-only Brevo blocklist sync policy (all mocked)
+        run: node --test scripts/test-brevo-marketing-suppression.mjs
