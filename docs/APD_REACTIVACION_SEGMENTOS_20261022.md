@@ -1,6 +1,6 @@
 # APDocente — audiencia de reactivación (22/10/2026)
 
-**Estado:** solo preparación. **0 envíos**. Sin cambios en producción, usuarios, suscripciones, consentimiento o notificaciones.
+**Estado:** solo preparación. **0 envíos**. No se enviaron correos. Sin cambios en producción, usuarios, suscripciones, consentimiento o notificaciones.
 
 ## Cruce de base: 43 cuentas históricamente vencidas
 
