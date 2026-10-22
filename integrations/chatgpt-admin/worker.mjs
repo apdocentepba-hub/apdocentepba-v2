@@ -40,6 +40,7 @@ async function countRows(env, table, filters = {}) {
   const count = Number(range.split("/").pop());
   if (!range.includes("/") || !Number.isSafeInteger(count) || count < 0) throw new Error("missing_count");
   return count;
+}
 
 export default {
   async fetch(request, env) {
