@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
   "worker_name": "ancient-wildflower-cd37",
-  "version_id": "4bcad51e-8554-4a8a-88a1-b3ed457a8d61",
+  "version_id": "99cc6898-3ee0-4feb-bd42-ba1c5722b8f3",
   "main_module": "worker_hotfix.js",
   "compatibility_date": "2026-04-01",
-  "captured_at": "2026-10-22T15:24:06.998Z",
+  "captured_at": "2026-10-22T22:42:41.929Z",
   "modules": [
     {
       "name": "worker_hotfix.js",
-      "sha256": "c58cc7121e078ee9f5fe5d69dcdc879594fa9b71b79c7899c87b390c2100248b",
-      "bytes": 575503
+      "sha256": "b3be6931cbb7a5bb59dd6a43c4e951441ba7c91d2b7da413240d3100beedf202",
+      "bytes": 606704
     }
   ],
   "bindings": [
