@@ -1,0 +1,124 @@
+name: Authenticated preferences backend preview
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-authenticated-preferences-backend.mjs'
+      - 'scripts/build-authenticated-dashboard-candidate.mjs'
+      - 'scripts/test-authenticated-preferences-backend.mjs'
+      - '.github/workflows/authenticated-preferences-backend-preview.yml'
+      - 'scripts/verify-authenticated-dashboard-candidate-bindings.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-candidate:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      PREVIEW_ALIAS: apd-auth-backend
+      PREVIEW_URL: https://apd-auth-backend-ancient-wildflower-cd37.apdocentepba.workers.dev
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify mock-auth regressions
+        run: |
+          node scripts/build-authenticated-dashboard-candidate.mjs
+          node --test scripts/test-authenticated-preferences-backend.mjs
+
+      - name: Install Wrangler dependencies
+        run: npm install
+
+      - name: Resolve account and record current production version
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN}"
+          mkdir -p tmp/authenticated-dashboard-candidate
+          ROOT=tmp/authenticated-dashboard-candidate
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" > "${ROOT}/accounts.json"
+          ROOT="${ROOT}" node - <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync(process.env.ROOT+'/accounts.json', 'utf8'));
+          const accounts = Array.isArray(j.result) ? j.result : [];
+          const selected = String(process.env.CONFIGURED_ACCOUNT_ID || '').trim();
+          const id = selected || (accounts.length === 1 ? accounts[0]?.id : '');
+          if (!j.success || !id || !accounts.some(a=>a.id===id)) {
+            throw new Error('Cloudflare account ambiguous or not accessible');
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV, 'CLOUDFLARE_ACCOUNT_ID='+id+'\n');
+          NODE
+          CLOUDFLARE_ACCOUNT_ID=$(grep '^CLOUDFLARE_ACCOUNT_ID=' "$GITHUB_ENV" | tail -n1 | cut -d= -f2-)
+          export CLOUDFLARE_ACCOUNT_ID
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "${ROOT}/before.json"
+          ROOT="${ROOT}" node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(process.env.ROOT+'/before.json','utf8'));
+          const d=j.result?.deployments?.[0];
+          const active=(d?.versions||[]).filter(x=>Number(x.percentage)>0);
+          if (!j.success || active.length!==1 || Number(active[0].percentage)!==100 || !active[0].version_id) {
+            throw new Error('Production version not pinned at 100%; candidate upload blocked');
+          }
+          const manifest=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
+          if (active[0].version_id!==manifest.version_id) {
+            throw new Error('Captured Worker no longer matches active production. Refresh baseline before uploading candidate.');
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV, 'PRODUCTION_VERSION_BEFORE='+active[0].version_id+'\n');
+          NODE
+
+      - name: Upload candidate at zero traffic (never deploy)
+        run: |
+          set -euo pipefail
+          CANDIDATE_TAG="auth-backend-${GITHUB_SHA:0:8}"
+          echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
+          npx wrangler versions upload tmp/authenticated-dashboard-candidate/worker_hotfix.mjs \
+            --preview-alias "${PREVIEW_ALIAS}" \
+            --tag "${CANDIDATE_TAG}" \
+            --message "Isolated account endpoint candidate - no production traffic" \
+            --keep-vars
+
+      - name: Verify active production version was not changed
+        run: |
+          set -euo pipefail
+          ROOT=tmp/authenticated-dashboard-candidate
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments" > "${ROOT}/after.json"
+          ROOT="${ROOT}" node - <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(process.env.ROOT+'/after.json','utf8'));
+          const d=j.result?.deployments?.[0];
+          const active=(d?.versions||[]).filter(x=>Number(x.percentage)>0);
+          if (!j.success || active.length!==1 || Number(active[0].percentage)!==100 ||
+              active[0].version_id!==process.env.PRODUCTION_VERSION_BEFORE) {
+            throw new Error('Production traffic changed: failing candidate validation');
+          }
+          console.log('Verified: production version unchanged with 100% traffic.');
+          NODE
+
+      - name: Verify all production bindings and KV IDs were preserved
+        run: node scripts/verify-authenticated-dashboard-candidate-bindings.mjs
+
+      - name: Live read-only smoke against candidate URL (no user sessions)
+        run: |
+          set -euo pipefail
+          check() {
+            expected="$1"; shift
+            code=$(curl --retry 4 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$@")
+            echo "Endpoint returned HTTP ${code} (expected ${expected})"
+            test "${code}" = "${expected}"
+          }
+          check 401 "${PREVIEW_URL}/api/account/preferences"
+          check 401 -H 'Authorization: Bearer invalid-synthetic-session' "${PREVIEW_URL}/api/account/preferences?user_id=11111111-1111-4111-8111-111111111111"
+          check 405 -X POST "${PREVIEW_URL}/api/account/preferences"
+          check 401 "${PREVIEW_URL}/api/account/profile"
+          check 200 "${PREVIEW_URL}/api/version"
+          check 200 "${PREVIEW_URL}/api/planes"
+          echo "Candidate route smoke complete; no production traffic shifted."
