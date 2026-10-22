@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 // The exported production bundle is self-contained ESM. Import it without
 // touching Cloudflare, Supabase or any public network endpoint.
-const source = readFileSync("worker-live/worker_hotfix.js", "utf8");
+const source = readFileSync("tmp/authenticated-dashboard-candidate/worker_hotfix.mjs", "utf8");
 const frontend = readFileSync("app_v2.js", "utf8");
 const moduleURL = "data:text/javascript;base64," + Buffer.from(source, "utf8").toString("base64");
 const { default: worker } = await import(moduleURL);
