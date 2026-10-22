@@ -12906,7 +12906,7 @@ async function accountVerifyPasswordV1(storedPassword, plainPassword) {
 __name(accountVerifyPasswordV1, "accountVerifyPasswordV1");
 __name2(accountVerifyPasswordV1, "accountVerifyPasswordV1");
 async function accountReadUserV1(env, userId, includePassword = false) {
-  const select = includePassword ? "id,nombre,apellido,email,celular,password_hash,activo" : "id,nombre,apellido,email,celular,activo";
+  const select = includePassword ? "id,nombre,apellido,email,celular,password_hash,activo,ultimo_login" : "id,nombre,apellido,email,celular,activo,ultimo_login";
   const rows = await supabaseSelect(
     env,
     `users?id=eq.${encodeURIComponent(userId)}&select=${select}&limit=1`
@@ -12921,7 +12921,7 @@ async function handleAccountProfileSecureV1(request, env) {
   if (request.method === "GET") {
     const user2 = await accountReadUserV1(env, authUser.id, false);
     if (!user2?.id) return json2({ ok: false, message: "Usuario no encontrado" }, 404);
-    return json2({ ok: true, user: { id: user2.id, nombre: user2.nombre || "", apellido: user2.apellido || "", email: user2.email || "", celular: user2.celular || "" } });
+    return json2({ ok: true, user: { id: user2.id, nombre: user2.nombre || "", apellido: user2.apellido || "", email: user2.email || "", celular: user2.celular || "", activo: user2.activo !== false, ultimo_login: user2.ultimo_login || null } });
   }
   if (request.method !== "PATCH") return json2({ ok: false, message: "M\xE9todo no permitido" }, 405);
   const body = await request.json().catch(() => ({}));
@@ -12944,6 +12944,23 @@ async function handleAccountProfileSecureV1(request, env) {
 }
 __name(handleAccountProfileSecureV1, "handleAccountProfileSecureV1");
 __name2(handleAccountProfileSecureV1, "handleAccountProfileSecureV1");
+// Security: preferences are only available to the user identified by a server-validated session.
+// Ignore any user_id supplied in the request URL; never use the public Supabase key here.
+async function handleAccountPreferencesSecureV1(request, env) {
+  if (request.method !== "GET") return json2({ ok: false, message: "Método no permitido" }, 405);
+  const authUser = await getSessionUserByBearer(env, request);
+  if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
+  try {
+    const rows = await supabaseSelect(
+      env,
+      `user_preferences?user_id=eq.${encodeURIComponent(authUser.id)}&select=user_id,distrito_principal,otros_distritos,cargos,materias,niveles,turnos,alertas_activas,alertas_email,alertas_whatsapp,alertas_telegram&limit=1`
+    );
+    if (!Array.isArray(rows)) throw new Error("invalid_preferences_response");
+    return json2({ ok: true, preferences: rows[0] || null });
+  } catch (_) {
+    return json2({ ok: false, message: "No se pudieron cargar las preferencias" }, 502);
+  }
+}
 async function handleAccountChangePasswordSecureV1(request, env) {
   const authUser = await getSessionUserByBearer(env, request);
   if (!authUser?.id) return json2({ ok: false, message: "No autenticado" }, 401);
@@ -12973,6 +12990,9 @@ var worker_hotfix_default = {
     const path = url.pathname;
     if (path === `${API_URL_PREFIX3}/account/profile`) {
       return await handleAccountProfileSecureV1(request, env);
+    }
+    if (path === `${API_URL_PREFIX3}/account/preferences`) {
+      return await handleAccountPreferencesSecureV1(request, env);
     }
     if (path === `${API_URL_PREFIX3}/account/change-password`) {
       return await handleAccountChangePasswordSecureV1(request, env);
