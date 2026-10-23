@@ -156,6 +156,6 @@ test("dashboard keeps a valid session on transient API failures", () => {
 
 test("HTML invalidates the legacy dashboard bundle cache", () => {
   const html = readFileSync("index.html", "utf8");
-  assert.match(html, /app_v2\.js\?v=18/, "dashboard script version must change on rollout");
+  assert.match(html, /app_v2\.js\?v=19/, "dashboard script version must change on rollout");
   assert.match(html, /auth_session_patch\.js/, "session-based API wrapper must remain loaded");
 });
