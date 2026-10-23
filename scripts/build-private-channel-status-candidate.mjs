@@ -73,6 +73,12 @@ const check=[
 const fn=candidate.slice(start,end);
 assert.equal(fn.split(original).length,2,'Missing WhatsApp entitlement insertion anchor');
 candidate=candidate.slice(0,start)+fn.replace(original,check)+candidate.slice(end);
+// Publish an innocuous version marker so the release can reliably detect
+// propagation of this exact code across Cloudflare edges before finalizing.
+const publicVersionAnchor='        version: HOTFIX_VERSION,\n        worker_version: env.WORKER_URL || "ancient-wildflower-cd37"';
+const versionStamp='        version: HOTFIX_VERSION,\n        channel_status_security_revision: "channel-authz-v1",\n        worker_version: env.WORKER_URL || "ancient-wildflower-cd37"';
+assert.equal(candidate.split(publicVersionAnchor).length,2,'Public version marker anchor changed');
+candidate=candidate.replace(publicVersionAnchor,versionStamp);
 const output='tmp/apd-private-channel-status-candidate/worker_hotfix.mjs';
 fs.mkdirSync(path.dirname(output),{recursive:true});
 fs.writeFileSync(output,candidate);
