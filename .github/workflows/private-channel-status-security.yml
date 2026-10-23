@@ -5,6 +5,9 @@ on:
     paths:
       - 'scripts/build-private-channel-status-candidate.mjs'
       - 'scripts/test-private-channel-status-candidate.mjs'
+      - 'scripts/release-private-channel-status-worker.mjs'
+      - 'scripts/test-private-channel-release-guard.mjs'
+      - '.github/workflows/release-private-channel-status-worker.yml'
       - '.github/workflows/private-channel-status-security.yml'
   workflow_dispatch:
 
@@ -27,3 +30,7 @@ jobs:
         run: node --check tmp/apd-private-channel-status-candidate/worker_hotfix.mjs
       - name: Verify no anonymous cross-account reads and enforce plan expiry
         run: node --test scripts/test-private-channel-status-candidate.mjs
+      - name: Verify syntax and manual-only deployment guards
+        run: |
+          node --check scripts/release-private-channel-status-worker.mjs
+          node scripts/test-private-channel-release-guard.mjs
