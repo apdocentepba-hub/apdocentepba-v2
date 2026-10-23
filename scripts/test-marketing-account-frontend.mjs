@@ -91,7 +91,7 @@ test('marketing preference follows login and account switches without cross-user
   pending.get('Bearer session-B')(respond({ok:true,marketing:{
     status:'not_requested', eligible_for_campaign:false
   }}));
-  for(let i=0;i<5;i++)await Promise.resolve();
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(fakeWindow.__apdAccountProfileState.marketing.status,'not_requested');
   assert.equal(fullRenders,afterRender,
     'Async preferences must not overwrite unsaved profile edits');
@@ -99,7 +99,7 @@ test('marketing preference follows login and account switches without cross-user
   pending.get('Bearer session-A')(respond({ok:true,marketing:{
     status:'subscribed',eligible_for_campaign:true
   }}));
-  for(let i=0;i<5;i++)await Promise.resolve();
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(fakeWindow.__apdAccountProfileState.marketing.status,'not_requested',
     'A stale request must never display an earlier account preference');
 
