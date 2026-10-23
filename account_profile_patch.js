@@ -1,7 +1,7 @@
 (()=>{
   'use strict';
 
-  const PATCH_VERSION = '2026-09-16-account-session-api-1';
+  const PATCH_VERSION = '2026-10-22-account-marketing-privacy-2';
   const WORKER_URL = window.API_URL || 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
   const state = window.__apdAccountProfileState || {
     profile: null,
@@ -13,7 +13,9 @@
     }
   };
   window.__apdAccountProfileState = state;
-  state.marketing = state.marketing || { status: 'loading', message: '', loading: false };
+  state.marketing = state.marketing || { status: 'loading', message: '', loading: false, eligibleForCampaign: false };
+  // Only kept in module scope, never rendered, logged or persisted.
+  let marketingSessionToken = null;
 
 
   function esc(value) {
@@ -151,9 +153,9 @@
             <span class="plan-pill plan-pill-neutral">Comunicaciones promocionales</span>
           </div>
           <p class="plan-note" style="margin:0;">Estas comunicaciones son distintas de tus alertas docentes. No estás inscripto automáticamente para recibir publicidad.</p>
-          <p id="apd-marketing-status" role="status" style="margin:0;">${esc(state.marketing.status === 'unsubscribed' ? 'Elegiste no recibir promociones.' : state.marketing.status === 'pending_confirmation' ? 'Tu solicitud está pendiente de confirmación; no recibís publicidad.' : state.marketing.status === 'subscribed' ? 'Consentimiento comercial confirmado.' : state.marketing.status === 'loading' ? 'Consultando preferencias...' : 'No estás inscripto para promociones.')}</p>
+          <p id="apd-marketing-status" role="status" style="margin:0;">${esc(marketingStatusText())}</p>
           <p class="plan-note" style="margin:0;">La inscripción a promociones estará disponible cuando habilitemos la confirmación independiente por correo.</p>
-          <button type="button" id="btn-apd-marketing-optout" class="btn btn-secondary" ${state.marketing.loading ? 'disabled' : ''}>No recibir comunicaciones promocionales</button>
+          <button type="button" id="btn-apd-marketing-optout" class="btn btn-secondary" ${state.marketing.loading || state.marketing.status === 'unsubscribed' ? 'disabled' : ''}>No recibir comunicaciones promocionales</button>
           <p id="apd-marketing-message" role="status" class="plan-note" style="margin:0;">${esc(state.marketing.message || '')}</p>
         </section>
         <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
@@ -277,36 +279,94 @@
     }
   }
 
-  async function loadMarketingPreference() {
+  function marketingStatusText() {
+    switch (state.marketing.status) {
+      case 'unsubscribed': return 'Elegiste no recibir promociones.';
+      case 'pending_confirmation': return 'La confirmación está pendiente; no estás habilitado para campañas.';
+      case 'subscribed': return state.marketing.eligibleForCampaign
+        ? 'Suscripción comercial confirmada y habilitada.'
+        : 'Existe una suscripción registrada, pero no habilitada para campañas.';
+      case 'loading': return 'Consultando preferencias...';
+      case 'unavailable': return 'No se pudo consultar tu preferencia comercial.';
+      default: return 'No estás inscripto para promociones.';
+    }
+  }
+
+  // Update only the marketing controls, never overwrite an in-progress profile edit.
+  function renderMarketingState() {
+    const status = document.getElementById('apd-marketing-status');
+    const message = document.getElementById('apd-marketing-message');
+    const button = document.getElementById('btn-apd-marketing-optout');
+    if (status) status.textContent = marketingStatusText();
+    if (message) message.textContent = state.marketing.message || '';
+    if (button) button.disabled = !!state.marketing.loading || state.marketing.status === 'unsubscribed';
+  }
+
+  function marketingSessionStillCurrent(token) {
+    return marketingSessionToken === token && getSessionToken() === token;
+  }
+
+  function ensureMarketingPreferenceLoaded() {
+    const token = getSessionToken();
+    if (marketingSessionToken === token) return;
+    marketingSessionToken = token;
+    state.marketing = {
+      status: token ? 'loading' : 'unavailable',
+      message: token ? '' : 'Iniciá sesión para consultar tus preferencias comerciales.',
+      loading: false,
+      eligibleForCampaign: false
+    };
+    renderMarketingState();
+    if (token) loadMarketingPreference(token).catch(() => {});
+  }
+
+  async function loadMarketingPreference(sessionToken) {
     try {
-      const data = await accountApi('/api/account/marketing-preferences',{method:'GET'});
-      state.marketing.status = String(data?.marketing?.status || 'not_requested');
-      state.marketing.message = '';
+      const data = await accountApi('/api/account/marketing-preferences', { method: 'GET' });
+      if (!marketingSessionStillCurrent(sessionToken)) return;
+      const allowed = new Set(['not_requested', 'unsubscribed', 'pending_confirmation', 'subscribed']);
+      const status = String(data?.marketing?.status || 'not_requested');
+      state.marketing.status = allowed.has(status) ? status : 'unavailable';
+      state.marketing.eligibleForCampaign = data?.marketing?.eligible_for_campaign === true;
+      state.marketing.message = state.marketing.status === 'unavailable'
+        ? 'No se pudo interpretar la preferencia comercial.' : '';
     } catch (_) {
-      state.marketing.status = 'loading';
+      if (!marketingSessionStillCurrent(sessionToken)) return;
+      state.marketing.status = 'unavailable';
+      state.marketing.eligibleForCampaign = false;
       state.marketing.message = 'No se pudo verificar la preferencia comercial. No se habilita publicidad.';
     }
-    renderAccountBox();
+    renderMarketingState();
   }
 
   async function optOutMarketing() {
+    if (state.marketing.loading || state.marketing.status === 'unsubscribed') return;
+    const token = getSessionToken();
+    if (!token || !marketingSessionStillCurrent(token)) {
+      state.marketing.message = 'Iniciá sesión para solicitar la baja.';
+      renderMarketingState();
+      return;
+    }
     state.marketing.loading = true;
     state.marketing.message = 'Guardando tu solicitud de baja...';
-    renderAccountBox();
+    renderMarketingState();
     try {
-      const data = await accountApi('/api/account/marketing-preferences',{
-        method:'POST',
-        body:JSON.stringify({action:'opt_out'})
+      const data = await accountApi('/api/account/marketing-preferences', {
+        method: 'POST', body: JSON.stringify({action:'opt_out'})
       });
-      if (data?.status !== 'unsubscribed')
-        throw new Error('No se pudo confirmar la baja');
+      if (!marketingSessionStillCurrent(token)) return;
+      if (data?.status !== 'unsubscribed') throw new Error('No se pudo confirmar la baja');
       state.marketing.status = 'unsubscribed';
-      state.marketing.message = 'Tu baja local se registró. No recibirás campañas gestionadas por APDocente. La baja de Brevo se gestiona por separado.';
+      state.marketing.eligibleForCampaign = false;
+      state.marketing.message = 'Registramos tu baja en APDocente. La exclusión de listas de Brevo debe verificarse por separado; esta confirmación no acredita esa gestión.';
     } catch(err) {
+      if (!marketingSessionStillCurrent(token)) return;
       state.marketing.message = err?.message || 'No se pudo registrar la baja.';
     } finally {
-      state.marketing.loading = false;
-      renderAccountBox();
+      if (marketingSessionStillCurrent(token)) {
+        state.marketing.loading = false;
+        renderMarketingState();
+      }
     }
   }
 
@@ -356,6 +416,7 @@
     const wrapped = function patchedRenderDashboard(data) {
       const result = originalRenderDashboard.apply(this, arguments);
       try {
+        ensureMarketingPreferenceLoaded();
         updateProfileState(data?.docente || {}, false);
         renderAccountBox();
       } catch (err) {
@@ -372,7 +433,7 @@
   function bootPatch(attempts = 40) {
     if (patchRenderDashboard()) {
       renderAccountBox();
-      loadMarketingPreference().catch(() => {});
+      ensureMarketingPreferenceLoaded();
       getCurrentUserRow().then(user => {
         if (user) {
           updateProfileState(user, true);
