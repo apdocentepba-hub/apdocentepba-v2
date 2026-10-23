@@ -91,3 +91,10 @@ test('payment is not triggered by merely viewing the paywall',()=>{
   assert.equal(h.clickedPlan(),0);
   assert.equal(h.scrolledPlan(),0);
 });
+
+
+test('production HTML loads the current session-aware alert and renewal client',()=>{
+  const html=fs.readFileSync('index.html','utf8');
+  assert.match(html,/app_v2\\.js\\?v=19/);
+  assert.doesNotMatch(html,/app_v2\\.js\\?v=18/);
+});
