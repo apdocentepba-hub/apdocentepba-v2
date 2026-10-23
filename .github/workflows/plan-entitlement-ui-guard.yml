@@ -1,0 +1,29 @@
+name: APDocente expired-plan paywall and authenticated alert regression
+
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-expired-plan-paywall.mjs'
+      - '.github/workflows/plan-entitlement-ui-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  entitlement-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify panel syntax
+        run: node --check app_v2.js
+      - name: Verify plan expiry and protected alerts
+        run: node --test scripts/test-expired-plan-paywall.mjs
+      - name: Verify account security and canonical Worker unchanged
+        run: |
+          node scripts/test-auth-session-regression.mjs
+          node scripts/test-live-source-equivalence.mjs

@@ -965,25 +965,20 @@ async function handleGoogleCredential(response) {
 }
 
 async function obtenerMisAlertas(userId) {
-  const res = await fetch(`${API_URL}/api/mis-alertas?user_id=${encodeURIComponent(userId)}`);
-
-  let data = null;
-
-  try {
-    data = await res.json();
-  } catch {
-    throw new Error("El Worker no devolvió JSON válido en /api/mis-alertas");
-  }
-
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.message || data?.error || "No se pudieron cargar las alertas");
-  }
-
-  return filtrarAlertasVigentes(Array.isArray(data.resultados) ? data.resultados : []);
+  // Never call a protected route without the active session bearer. The
+  // auth_session_patch.js shim also covers legacy callers, but this core
+  // function must remain safe independently of script load order.
+  const data = await workerFetchJson(
+    `/api/mis-alertas?user_id=${encodeURIComponent(userId)}`
+  );
+  return filtrarAlertasVigentes(Array.isArray(data?.resultados) ? data.resultados : []);
 }
 
 function renderAlertasAPD(alertas) {
-  alertasState.items = filtrarAlertasVigentes(alertas);
+  // Do not retain or render alert details for a non-entitled account.
+  alertasState.items = planActual?.access_active === false
+    ? []
+    : filtrarAlertasVigentes(alertas);
   alertasState.index = 0;
   renderAlertaActual();
 }
@@ -1341,7 +1336,10 @@ function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
   const items = alertasState.items;
-  const total = items.length;
+  // Authoritative flag from the authenticated /api/mi-plan response.
+  // A missing flag (e.g. temporary network failure) is NOT a known expiry.
+  const needsRenewal = planActual?.access_active === false;
+  const total = needsRenewal ? 0 : items.length;
 
   if (!box) return;
 
@@ -1353,6 +1351,28 @@ function renderAlertaActual() {
       badge.textContent = "";
       badge.classList.add("hidden");
     }
+  }
+
+  if (needsRenewal) {
+    box.innerHTML = `
+      <div class="empty-state" role="status">
+        <h3>Tu plan ya no está vigente</h3>
+        <p>Para volver a recibir y consultar alertas personalizadas, renová o elegí un plan.</p>
+        <p class="empty-hint">Tus preferencias se conservan. Si acabás de pagar, actualizá el panel para consultar la acreditación.</p>
+        <button type="button" class="btn btn-primary" id="apd-renovar-plan-desde-alertas">Ver planes y activar mi cuenta</button>
+      </div>
+    `;
+    box.querySelector("#apd-renovar-plan-desde-alertas")?.addEventListener("click", () => {
+      // Reuse the existing Plan tab, where the checkout flow is already defined.
+      const tab = document.querySelector('.apd-top-tab[data-top-tab-key="plan"]:not(.hidden)')
+        || document.querySelector('.panel-tab-btn[data-tab-key="plan"]:not(.hidden)');
+      if (tab) {
+        tab.click();
+      } else {
+        document.getElementById("panel-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    return;
   }
 
   if (!total) {
