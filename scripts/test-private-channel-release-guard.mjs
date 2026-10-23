@@ -42,7 +42,7 @@ assert.match(release,/for \(const b of snapshot\.bindings/);
 assert.match(release,/await activeVersion\(\) !== candidateId/);
 assert.match(release,/worker-live\/manifest\.json/);
 assert.match(release,/git',\['push','origin','HEAD:main'/);
-assert.match(release,/getSessionUserByBearer/); // logics verified by candidate tests
+assert.match(release,/test-private-channel-status-candidate\.mjs/); // auth logic verified by candidate tests
 
 const badEnv={
  ...process.env,GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'workflow_dispatch',
