@@ -1,0 +1,28 @@
+name: Account marketing opt-out frontend (no deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'account_profile_patch.js'
+      - 'index.html'
+      - 'scripts/test-marketing-account-frontend.mjs'
+      - '.github/workflows/account-marketing-frontend-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax and account marketing controls
+        run: |
+          node --check account_profile_patch.js
+          node --test scripts/test-marketing-account-frontend.mjs
+      - name: Verify production Worker is not modified
+        run: node scripts/test-live-source-equivalence.mjs
