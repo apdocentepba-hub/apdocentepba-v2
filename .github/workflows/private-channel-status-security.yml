@@ -1,0 +1,29 @@
+name: Private channel status and entitlement security (no deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-private-channel-status-candidate.mjs'
+      - 'scripts/test-private-channel-status-candidate.mjs'
+      - '.github/workflows/private-channel-status-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify canonical Worker matches captured release
+        run: node scripts/test-live-source-equivalence.mjs
+      - name: Build isolated hardening candidate
+        run: node scripts/build-private-channel-status-candidate.mjs
+      - name: Verify generated Worker syntax
+        run: node --check tmp/apd-private-channel-status-candidate/worker_hotfix.mjs
+      - name: Verify no anonymous cross-account reads and enforce plan expiry
+        run: node --test scripts/test-private-channel-status-candidate.mjs
