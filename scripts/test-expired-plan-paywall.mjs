@@ -55,7 +55,7 @@ function harness(accessActive,items=[{id:'previous-offer',secret:'ALERTA-PREVIA'
 
 test('expired plan shows paywall, does not expose cached alerts and opens Plan tab',()=>{
   const h=harness(false);
-  assert.deepEqual(h.alertasState.items,[]);
+  assert.equal(h.alertasState.items.length,0);
   assert.match(h.box.innerHTML,/Tu plan ya no está vigente/);
   assert.match(h.box.innerHTML,/Ver planes y activar mi cuenta/);
   assert.doesNotMatch(h.box.innerHTML,/ALERTA-PREVIA/);
