@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'app_v2.js'
+      - 'index.html'
       - 'scripts/test-expired-plan-paywall.mjs'
       - '.github/workflows/plan-entitlement-ui-guard.yml'
   workflow_dispatch:
