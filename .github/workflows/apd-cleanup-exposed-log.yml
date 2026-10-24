@@ -1,0 +1,33 @@
+name: Remove exposed deployment log (one-time)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apd-cleanup-exposed-log.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  remove-affected-log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete only the identified deployment log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -eu
+          response=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --request DELETE \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GH_REPOSITORY}/actions/runs/40100457788/logs")
+          case "$response" in
+            204) echo "Affected deployment logs deleted." ;;
+            404) echo "Affected deployment logs already unavailable." ;;
+            *) echo "Log cleanup failed: HTTP ${response}"; exit 1 ;;
+          esac
