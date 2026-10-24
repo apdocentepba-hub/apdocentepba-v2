@@ -13,7 +13,9 @@ function between(startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const emailTelemetry = between('async function recordObservedEmailCron(', 'var worker_hotfix_default =');
+// The Worker bundle contains account/marketing handlers after this function.
+// Limit schema checks to the telemetry function, not the rest of the bundled module.
+const emailTelemetry = between('async function recordObservedEmailCron(', '__name(recordObservedEmailCron, "recordObservedEmailCron");');
 const sweep = between('async function runEmailAlertsSweep(', 'async function handleTestMail(');
 
 for (const invalid of ['worker_name:', 'started_at:', 'finished_at:', 'status:', 'usuarios_procesados:', 'alertas_enviadas:', 'mensaje:']) {
