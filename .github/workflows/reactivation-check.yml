@@ -1,0 +1,21 @@
+name: Plan reactivation regression
+on:
+  pull_request:
+    paths:
+      - 'plan_checkout_patch.js'
+      - 'index.html'
+      - 'scripts/test-plan-reactivation-ui.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check plan_checkout_patch.js
+      - run: node --test scripts/test-plan-reactivation-ui.mjs
+      - run: node --test scripts/test-expired-plan-paywall.mjs
