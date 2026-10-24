@@ -5,7 +5,7 @@ import {pathToFileURL} from 'node:url';
 import {hardenMessagingStatus} from './create-messaging-status-auth-candidate.mjs';
 import {compareWorkerModules} from './audit-apd-worker-drift.mjs';
 const worker='ancient-wildflower-cd37';
-const tag='apd-msg-auth-a3098c3a';
+const tag='apd-msg-auth-2e605fd5';
 
 export function evaluatePromotionGate(live,candidate,liveBindings,candidateBindings) {
   const expected=hardenMessagingStatus(live);
