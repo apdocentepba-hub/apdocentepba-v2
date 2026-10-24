@@ -49,6 +49,9 @@ export async function inspectMpReadiness({env, manifest, fetcher}) {
   const signatureReady=bindings.has("MERCADOPAGO_WEBHOOK_SECRET:secret_text");
   const webhookConfigured=bindings.has("MERCADOPAGO_WEBHOOK_URL:plain_text")||bindings.has("MERCADOPAGO_WEBHOOK_URL:secret_text");
   const providerToken=bindings.has("MERCADOPAGO_ACCESS_TOKEN:secret_text");
+  // Inspect metadata ONLY. Never read or print Telegram token values.
+  const telegramBotTokenSecret=bindings.has("TELEGRAM_BOT_TOKEN:secret_text");
+  const telegramBotTokenPlaintext=bindings.has("TELEGRAM_BOT_TOKEN:plain_text");
   return {
     verified:true,ready:baselineMatch&&signatureReady&&webhookConfigured&&providerToken,
     liveMatchesCanonical:baselineMatch,
@@ -56,7 +59,9 @@ export async function inspectMpReadiness({env, manifest, fetcher}) {
     deployChangedBindingsOnly:!baselineMatch && moduleCodeUnchanged===true,
     signatureSecretBound:signatureReady,
     webhookUrlBound:webhookConfigured,
-    providerTokenBound:providerToken
+    providerTokenBound:providerToken,
+    telegramBotTokenSecretBound:telegramBotTokenSecret,
+    telegramBotTokenPlaintextBound:telegramBotTokenPlaintext
   };
 }
 
