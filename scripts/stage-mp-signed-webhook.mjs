@@ -98,10 +98,18 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
   // This command uploads an UNDEPLOYED version. Never use 'wrangler deploy' here.
   const tag='apd-mp-verified-'+String(process.env.GITHUB_SHA||'').slice(0,8);
   if(tag.length<20)throw Error('Missing checked-out release commit');
-  execFileSync('npx',['wrangler','versions','upload',
-    '--config','./wrangler-mp-stage.toml','--keep-vars','--strict',
-    '--preview-alias',alias,'--tag',tag,
-    '--message','APDocente signed payments - preview only'],{stdio:'inherit'});
+  // Wrangler prints remote configuration values in strict-mode diff warnings.
+  // Never allow those values (including old plaintext bot tokens) into GitHub logs.
+  try {
+    execFileSync('npx',['wrangler','versions','upload',
+      '--config','./wrangler-mp-stage.toml','--keep-vars',
+      '--preview-alias',alias,'--tag',tag,
+      '--message','APDocente signed payments - preview only'],{
+        stdio:['ignore','pipe','pipe'],encoding:'utf8',maxBuffer:6*1024*1024
+      });
+  } catch (err) {
+    throw Error('Preview upload failed (Wrangler output redacted); exit status '+String(err?.status ?? 'unknown'));
+  }
   const after=await deploymentState(token,account);
   if(after.version!==first.version)throw Error('Production version changed unexpectedly during candidate upload');
   confirmSafeBaseline(snapshot,after.ds,after.detail);
