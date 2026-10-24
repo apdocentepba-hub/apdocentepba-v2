@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-04-05-plans-ui-10';
+  const PLAN_PATCH_VERSION = '2026-10-24-reactivation-11';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -185,7 +185,9 @@
   }
 
   function isCurrentPlan(plan, planInfo) {
-    return normalizePlanCodeSafe(plan?.code || plan?.display_code || '') === planActualCode(planInfo);
+    // A lapsed plan is no longer the active selection, even if its code matches.
+    return planInfo?.access_active !== false &&
+      normalizePlanCodeSafe(plan?.code || plan?.display_code || '') === planActualCode(planInfo);
   }
 
   function transitionPolicy(plan, planInfo) {
@@ -194,6 +196,37 @@
     const currentPrice = currentPlanPrice(planInfo);
     const targetPrice = Number(plan?.price_ars || 0) || 0;
     const targetName = String(plan?.display_name || plan?.nombre || plan?.code || 'este plan');
+
+    // The authenticated Worker is the sole source for entitlement status.
+    // A definitely expired plan must be eligible for a NEW paid checkout:
+    // never offer a prorated upgrade or schedule a downgrade from an expired cycle.
+    if (planInfo?.access_active === false) {
+      if (targetCode === 'TRIAL_7D') {
+        return {
+          allowed: false,
+          mode: 'trial_blocked',
+          label: 'Prueba finalizada',
+          actionLabel: 'No volver a prueba',
+          reason: 'La prueba gratis es única. Elegí un plan pago para reactivar las alertas.'
+        };
+      }
+      if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+        return {
+          allowed: false,
+          mode: 'invalid_price',
+          label: 'Precio no disponible',
+          actionLabel: 'Consultar disponibilidad',
+          reason: 'No se puede iniciar un pago sin un precio válido.'
+        };
+      }
+      return {
+        allowed: true,
+        mode: 'reactivation_checkout',
+        label: 'Reactivar plan',
+        actionLabel: `Reactivar ${targetName}`,
+        reason: 'El acceso se recupera cuando Mercado Pago confirme el pago. No se cobra automáticamente al entrar.'
+      };
+    }
 
     if (targetCode === currentCode) {
       return {
