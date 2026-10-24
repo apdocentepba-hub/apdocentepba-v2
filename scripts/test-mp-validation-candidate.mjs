@@ -23,13 +23,14 @@ const sign=(dataId,requestId,ts,secret)=>{
   return createHmac("sha256",secret).update(message).digest("hex");
 };
 const secret="synthetic-test-only";
-const ts="1742505638683", reqId="synthetic-request-id", id="789321";
+const ts=String(Date.now()), reqId="synthetic-request-id", id="789321";
 const notification=(options={})=>{
  const selected=options.id||id,requestId=options.requestId===undefined?reqId:options.requestId;
- const signature=options.signature===undefined?sign(selected,requestId,ts,secret):options.signature;
+ const signedTs=options.ts||ts;
+ const signature=options.signature===undefined?sign(selected,requestId,signedTs,secret):options.signature;
  return new Request("https://example.invalid/api/mercadopago/webhook?data.id="+selected,{
   method:"POST",
-  headers:{"content-type":"application/json","x-request-id":requestId,"x-signature":"ts="+ts+",v1="+signature},
+  headers:{"content-type":"application/json","x-request-id":requestId,"x-signature":"ts="+signedTs+",v1="+signature},
   body:JSON.stringify({type:"payment",data:{id:selected}})
  });
 };
@@ -42,6 +43,17 @@ test("signed notification accepted and altered signature rejected",async()=>{
  assert.equal(await check(notification({requestId:"changed-request"}),payload,{MERCADOPAGO_WEBHOOK_SECRET:secret}),true);
  const tampered=new Request("https://example.invalid/api/mercadopago/webhook?data.id=789322",{method:"POST",headers:{"x-request-id":reqId,"x-signature":"ts="+ts+",v1="+sign(id,reqId,ts,secret)}});
  assert.equal(await check(tampered,payload,{MERCADOPAGO_WEBHOOK_SECRET:secret}),false);
+ const stale=notification({ts:String(Date.now()-15*60*1000)});
+ assert.equal(await check(stale,payload,{MERCADOPAGO_WEBHOOK_SECRET:secret}),false,"stale valid HMAC is rejected");
+ const future=notification({ts:String(Date.now()+15*60*1000)});
+ assert.equal(await check(future,payload,{MERCADOPAGO_WEBHOOK_SECRET:secret}),false,"far-future valid HMAC is rejected");
+ const bodyMismatch={type:"payment",data:{id:"different-id"}};
+ assert.equal(await check(req,bodyMismatch,{MERCADOPAGO_WEBHOOK_SECRET:secret}),false,"payload must match signed query id");
+ const noQuery=new Request("https://example.invalid/api/mercadopago/webhook",{
+   method:"POST",headers:{"x-request-id":reqId,"x-signature":"ts="+ts+",v1="+sign(id,reqId,ts,secret)},
+   body:JSON.stringify(payload)
+ });
+ assert.equal(await check(noQuery,payload,{MERCADOPAGO_WEBHOOK_SECRET:secret}),false,"unsigned body-only ID is not accepted");
 });
 
 test("unauthenticated webhook never writes logs or processes payments",async()=>{
