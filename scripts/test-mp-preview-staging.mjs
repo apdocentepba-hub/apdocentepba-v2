@@ -51,4 +51,7 @@ test('staging code has no production promotion call or payment submission',()=>{
   assert.doesNotMatch(code,/\/v1\/payments\//);
   assert.match(code,/if\(preview\)/);
   assert.match(code,/Unsigned webhook rejected/);
+  assert.match(code,/\/accounts\?per_page=50/,'account discovery must support GitHub with no account ID');
+  assert.match(code,/payload\.result\.length!==1/,'account resolution must require exactly one account');
+  assert.match(code,/account=String\(payload\.result\[0\]\.id/,'never fabricate a Cloudflare account ID');
 });
