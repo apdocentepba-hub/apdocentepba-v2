@@ -33,7 +33,11 @@ for (const table of ['users', 'user_preferences']) {
 for (const path of [
   '/api/account/profile',
   '/api/account/preferences',
-  '/api/account/marketing-preferences'
+  '/api/account/marketing-preferences',
+  '/api/telegram/status',
+  '/api/whatsapp/status',
+  '/api/mi-plan',
+  '/api/mis-alertas'
 ]) {
   const url = new URL(path, workerUrl);
   url.searchParams.set('user_id', '00000000-0000-4000-8000-000000000000');
