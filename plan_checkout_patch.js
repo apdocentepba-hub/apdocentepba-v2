@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-10-24-reactivation-11';
+  const PLAN_PATCH_VERSION = '2026-10-24-mp-return-12';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -159,7 +159,7 @@
   function mpReturnMessage() {
     const params = new URLSearchParams(window.location.search || '');
     const state = String(params.get('mp') || '').trim().toLowerCase();
-    if (state === 'success') return { type: 'ok', text: 'Pago aprobado. Tocá “Actualizar plan” para refrescar tu suscripción.' };
+    if (state === 'success') return { type: 'info', text: 'Regresaste de Mercado Pago. El resultado del pago debe confirmarse en tu cuenta. Consultá Mi plan y, si todavía no figura vigente, tocá “Actualizar plan”.' };
     if (state === 'pending') return { type: 'info', text: 'Tu pago quedó pendiente. Cuando Mercado Pago confirme, tocá “Actualizar plan”.' };
     if (state === 'failure') return { type: 'error', text: 'El pago no se completó. Podés intentar nuevamente desde acá.' };
     return null;
