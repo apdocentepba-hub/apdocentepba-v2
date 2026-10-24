@@ -38,7 +38,7 @@ export function verifiedCapture(snapshot, previousBytes, deployment, candidate, 
     let remainder=code;
     for(const name of expected) {
       const start=remainder.indexOf('async function '+name+'(');
-      const end=start<0?-1:remainder.indexOf('\\n__name('+name+',',start);
+      const end=start<0?-1:remainder.indexOf('\n__name('+name+',',start);
       if(start<0||end<0)throw Error('Audited function boundaries unavailable');
       remainder=remainder.slice(0,start)+'/*APD_AUDITED_BODY:'+name+'*/'+remainder.slice(end);
     }
