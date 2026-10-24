@@ -1,0 +1,26 @@
+name: Messaging status authorization candidate
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/create-messaging-status-auth-candidate.mjs'
+      - 'scripts/test-messaging-status-auth-candidate.mjs'
+      - '.github/workflows/messaging-status-auth-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-messaging-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/create-messaging-status-auth-candidate.mjs
+      - run: node --check tmp/messaging-auth-candidate/worker_hotfix.js
+      - run: node --test scripts/test-messaging-status-auth-candidate.mjs
+      - run: node scripts/test-live-source-equivalence.mjs
+      - run: git diff --exit-code -- worker-live/worker_hotfix.js worker-live/manifest.json
