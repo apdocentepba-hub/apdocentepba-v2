@@ -1,0 +1,44 @@
+name: Gate messaging release by live Worker parity
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check-messaging-release-gate.mjs'
+      - 'scripts/test-messaging-release-gate.mjs'
+      - '.github/workflows/messaging-release-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check-messaging-release-gate.mjs'
+      - 'scripts/test-messaging-release-gate.mjs'
+      - '.github/workflows/messaging-release-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/check-messaging-release-gate.mjs
+      - run: node --test scripts/test-messaging-release-gate.mjs
+  inspect-cloudflare:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only comparison of active and staged source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-messaging-release-gate.mjs
