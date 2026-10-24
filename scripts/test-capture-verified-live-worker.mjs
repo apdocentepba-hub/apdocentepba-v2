@@ -42,7 +42,7 @@ test('reject unknown candidate or mixed live traffic',()=>{
 test('reject any changed payment code outside previously audited six functions',()=>{
  const bad=structuredClone(detail);
  bad.modules[0].content_base64=Buffer.from(source+'// unrelated change').toString('base64');
- assert.throws(()=>capture(deployment,candidate,bad),/previously audited/);
+ assert.throws(()=>capture(deployment,candidate,bad),/unaudited changes|previously audited/);
 });
 test('reject missing secret, binding change or modified KV namespace',()=>{
  const gone=structuredClone(detail);
