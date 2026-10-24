@@ -25,6 +25,7 @@ test('prevents accidental leak or deploying from preview script',()=>{
  assert.match(s,/stdio:\['ignore','pipe','pipe'\]/);
  assert.match(s,/output redacted/);
  assert.match(s,/['"]versions['"],['"]upload['"]/);
+ assert.match(s,/['"]--no-bundle['"]/,'upstream Worker is already packaged; skip esbuild');
  assert.doesNotMatch(s,/['"]versions['"],['"]deploy['"]/);
  assert.doesNotMatch(s,/['"]wrangler['"],['"]deploy['"]/);
  assert.doesNotMatch(s,/console\.log\(\s*(before|after|source|token|account)\s*\)/);

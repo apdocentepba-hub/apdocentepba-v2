@@ -91,7 +91,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(tag.length<20)throw Error('Missing release reference');
   try{
     execFileSync('npx',['wrangler','versions','upload',
-      '--config','./wrangler-live-messaging-auth.toml','--keep-vars',
+      '--config','./wrangler-live-messaging-auth.toml','--keep-vars','--no-bundle',
       '--preview-alias',alias,'--tag',tag,
       '--message','Live-based messaging authorization fix, preview only'],{
         stdio:['ignore','pipe','pipe'],encoding:'utf8',maxBuffer:6*1024*1024
