@@ -1,5 +1,6 @@
 // Read-only Cloudflare billing readiness audit. Never output credential contents.
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 export async function inspectMpReadiness({env, manifest, fetcher}) {
@@ -34,12 +35,25 @@ export async function inspectMpReadiness({env, manifest, fetcher}) {
   const detail=await get("/accounts/"+encodeURIComponent(accountId)+"/workers/workers/"+encodeURIComponent(worker)+"/versions/"+encodeURIComponent(liveVersion)+"?include=modules");
   const bindings=new Set((detail?.bindings||[]).map(x=>String(x.name||"")+":"+String(x.type||"")));
   const baselineMatch=liveVersion===baseline;
+  // A new secret binding may create a new Cloudflare version without changing Worker code.
+  // Compute only a SHA-256 boolean; never log source bytes or credential contents.
+  const baselineModule=(manifest.modules||[]).find(x=>x.name===manifest.main_module);
+  const activeModule=(detail?.modules||[]).find(x=>x.name===manifest.main_module);
+  const content=activeModule?.content_base64;
+  const moduleHash=typeof content==="string" && content.length
+    ? crypto.createHash("sha256").update(Buffer.from(content,"base64")).digest("hex")
+    : null;
+  const moduleCodeUnchanged=moduleHash && baselineModule?.sha256
+    ? moduleHash.toLowerCase()===String(baselineModule.sha256).toLowerCase()
+    : null;
   const signatureReady=bindings.has("MERCADOPAGO_WEBHOOK_SECRET:secret_text");
   const webhookConfigured=bindings.has("MERCADOPAGO_WEBHOOK_URL:plain_text")||bindings.has("MERCADOPAGO_WEBHOOK_URL:secret_text");
   const providerToken=bindings.has("MERCADOPAGO_ACCESS_TOKEN:secret_text");
   return {
     verified:true,ready:baselineMatch&&signatureReady&&webhookConfigured&&providerToken,
     liveMatchesCanonical:baselineMatch,
+    liveWorkerCodeMatchesSnapshot:moduleCodeUnchanged,
+    deployChangedBindingsOnly:!baselineMatch && moduleCodeUnchanged===true,
     signatureSecretBound:signatureReady,
     webhookUrlBound:webhookConfigured,
     providerTokenBound:providerToken

@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { inspectMpReadiness } from "./check-mp-cloudflare-readiness.mjs";
 
-const base={worker_name:"synthetic-worker",version_id:"baseline-version"};
-function mock({live="baseline-version",withSecret=false,withWebhook=true}={}) {
+const testModule=Buffer.from("synthetic Worker source only");
+const expectedHash=crypto.createHash("sha256").update(testModule).digest("hex");
+const base={worker_name:"synthetic-worker",version_id:"baseline-version",
+  main_module:"worker_hotfix.js",modules:[{name:"worker_hotfix.js",sha256:expectedHash}]};
+function mock({live="baseline-version",withSecret=false,withWebhook=true,withSource=true,changeSource=false}={}) {
   const calls=[];
   const fetcher=async (url,options)=>{
     assert.equal(options.method,"GET","preflight is read-only");
@@ -11,7 +15,8 @@ function mock({live="baseline-version",withSecret=false,withWebhook=true}={}) {
     calls.push(url);
     const resource=url.includes("/deployments")?
       {deployments:[{versions:[{percentage:100,version_id:live}]}]}:
-      {bindings:[
+      {modules:withSource?[{name:"worker_hotfix.js",content_base64:Buffer.from(changeSource?"modified source":"synthetic Worker source only").toString("base64")}]:[],
+       bindings:[
         {name:"MERCADOPAGO_ACCESS_TOKEN",type:"secret_text"},
         ...(withWebhook?[{name:"MERCADOPAGO_WEBHOOK_URL",type:"plain_text"}]:[]),
         ...(withSecret?[{name:"MERCADOPAGO_WEBHOOK_SECRET",type:"secret_text"}]:[])
@@ -41,6 +46,20 @@ test("a drifting live release is never claimed ready",async()=>{
  const m=mock({withSecret:true,live:"different-version"});
  const x=await inspectMpReadiness({env,manifest:base,fetcher:m.fetcher});
  assert.equal(x.ready,false);assert.equal(x.liveMatchesCanonical,false);
+ assert.equal(x.liveWorkerCodeMatchesSnapshot,true);
+ assert.equal(x.deployChangedBindingsOnly,true);
+});
+test("unexpected Worker source is not mistaken for a configuration-only deploy",async()=>{
+ const m=mock({withSecret:true,live:"different-version",changeSource:true});
+ const x=await inspectMpReadiness({env,manifest:base,fetcher:m.fetcher});
+ assert.equal(x.liveWorkerCodeMatchesSnapshot,false);
+ assert.equal(x.deployChangedBindingsOnly,false);
+});
+test("unavailable Worker source is reported as unverified, not equal",async()=>{
+ const m=mock({withSecret:true,live:"different-version",withSource:false});
+ const x=await inspectMpReadiness({env,manifest:base,fetcher:m.fetcher});
+ assert.equal(x.liveWorkerCodeMatchesSnapshot,null);
+ assert.equal(x.deployChangedBindingsOnly,false);
 });
 test("missing webhook notification URL binding prevents readiness",async()=>{
  const m=mock({withSecret:true,withWebhook:false});
