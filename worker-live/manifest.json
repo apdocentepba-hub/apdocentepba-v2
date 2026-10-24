@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "worker_name": "ancient-wildflower-cd37",
-  "version_id": "99cc6898-3ee0-4feb-bd42-ba1c5722b8f3",
+  "version_id": "279994f6-b467-4587-8b83-18dd5c41843f",
   "main_module": "worker_hotfix.js",
   "compatibility_date": "2026-04-01",
-  "captured_at": "2026-10-22T22:42:41.929Z",
+  "captured_at": "2026-10-24T13:52:29.936Z",
   "modules": [
     {
       "name": "worker_hotfix.js",
@@ -65,6 +65,10 @@
     {
       "name": "MERCADOPAGO_SUCCESS_URL",
       "type": "plain_text"
+    },
+    {
+      "name": "MERCADOPAGO_WEBHOOK_SECRET",
+      "type": "secret_text"
     },
     {
       "name": "MERCADOPAGO_WEBHOOK_URL",
