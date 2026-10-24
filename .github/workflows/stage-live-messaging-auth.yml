@@ -1,0 +1,52 @@
+name: Stage live-based messaging authorization preview
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/stage-live-messaging-auth.mjs'
+      - 'scripts/test-stage-live-messaging-auth.mjs'
+      - '.github/workflows/stage-live-messaging-auth.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/stage-live-messaging-auth.mjs'
+      - 'scripts/test-stage-live-messaging-auth.mjs'
+      - '.github/workflows/stage-live-messaging-auth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apd-live-messaging-staging
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/stage-live-messaging-auth.mjs
+      - run: node --test scripts/test-stage-live-messaging-auth.mjs
+      - run: node scripts/create-messaging-status-auth-candidate.mjs
+      - run: node --check tmp/messaging-auth-candidate/worker_hotfix.js
+      - run: node --test scripts/test-messaging-status-auth-candidate.mjs
+  stage-undeployed:
+    needs: unit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Upload isolated version from LIVE source; no production deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/stage-live-messaging-auth.mjs
