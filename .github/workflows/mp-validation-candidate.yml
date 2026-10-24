@@ -1,0 +1,30 @@
+name: Mercado Pago signature and checkout candidate
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/create-mp-validation-candidate.mjs'
+      - 'scripts/test-mp-validation-candidate.mjs'
+      - '.github/workflows/mp-validation-candidate.yml'
+      - 'worker-live/worker_hotfix.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate isolated Worker candidate
+        run: node scripts/create-mp-validation-candidate.mjs
+      - name: Confirm candidate Worker syntax
+        run: node --check tmp/mp-validation-candidate/worker_hotfix.js
+      - name: Check signed webhooks and checkout ownership with synthetic data
+        run: node --test scripts/test-mp-validation-candidate.mjs
+      - name: Verify canonical Worker was not modified
+        run: git diff --exit-code -- worker-live/worker_hotfix.js worker-live/manifest.json
