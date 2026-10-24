@@ -11,7 +11,7 @@ function slice(from, to) {
 }
 const policyScript = [
   slice('function normalizePlanCodeSafe(', 'function canalesBox('),
-  slice('function planActualCode(', 'function buildPlanCards('),
+  slice('function planActualCode(', 'function planCardButtonHtml('),
   slice('function planCardButtonHtml(', 'function buildPlanFeatureList(')
 ].join('\n');
 // Includes currentPlanPrice, isCurrentPlan and transitionPolicy in the bounded section.
