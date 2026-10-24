@@ -13,7 +13,7 @@ const publishableKey = getLiteral('APD_SUPABASE_KEY');
 const workerUrl = getLiteral('API_URL');
 
 assert.match(supabaseUrl, /^https:\/\/[a-z0-9-]+\.supabase\.co$/, 'Unexpected Supabase host');
-assert.match(workerUrl, /^https:\/\/[a-z0-9-]+\.workers\.dev$/, 'Unexpected Worker host');
+assert.match(workerUrl, /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+\.workers\.dev$/, 'Unexpected Worker host');
 assert.ok(publishableKey.startsWith('sb_publishable_') || publishableKey.startsWith('eyJ'), 'Only public keys are allowed');
 
 // APDocente uses its own Worker sessions, not Supabase Auth tokens.
