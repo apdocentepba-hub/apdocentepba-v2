@@ -93,8 +93,20 @@ test('payment is not triggered by merely viewing the paywall',()=>{
 });
 
 
+test('expired plans are labeled correctly in the Plan tab without modifying stored subscriptions', () => {
+  const display = section('function planEstadoHumano(subscription, accessActive)', '\nfunction planPrecioHumano(');
+  const fn = vm.runInNewContext(display + '\nplanEstadoHumano');
+  assert.equal(fn({status:'available',plan_code:'TRIAL_7D'},false),'Sin plan vigente');
+  assert.equal(fn({status:'ACTIVE',plan_code:'PLUS'},false),'Vencido');
+  assert.equal(fn({status:'ACTIVE',plan_code:'INSIGNE'},true),'Activo');
+  assert.equal(fn({status:'available'},undefined),'Disponible');
+  const plan = section('function renderPlanUI(planInfo)', '\nfunction planNombreHumano(');
+  assert.ok(plan.includes('planEstadoHumano(subscription, info.access_active)'));
+  assert.ok(plan.includes('No tenés un plan vigente'));
+});
+
 test('production HTML loads the current session-aware alert and renewal client',()=>{
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(html,/app_v2\.js\?v=19/);
+  assert.match(html,/app_v2\.js\?v=20/);
   assert.doesNotMatch(html,/app_v2\.js\?v=18/);
 });
