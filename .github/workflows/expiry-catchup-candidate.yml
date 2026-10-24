@@ -1,0 +1,28 @@
+name: Expiry catch-up candidate (no traffic or sends)
+
+on:
+  pull_request:
+    paths:
+      - scripts/create-expiry-catchup-candidate.mjs
+      - scripts/test-expiry-catchup-candidate.mjs
+      - .github/workflows/expiry-catchup-candidate.yml
+      - worker-live/worker_hotfix.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate candidate without deployment
+        run: node scripts/create-expiry-catchup-candidate.mjs
+      - name: Check candidate syntax
+        run: node --check tmp/expiry-catchup-candidate/worker_hotfix.js
+      - name: Test standard window, exceptional accounts, and disabled catch-up
+        run: node scripts/test-expiry-catchup-candidate.mjs
