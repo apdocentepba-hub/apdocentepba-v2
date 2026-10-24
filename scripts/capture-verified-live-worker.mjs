@@ -30,9 +30,24 @@ export function verifiedCapture(snapshot, previousBytes, deployment, candidate, 
   if(/\b[0-9]{8,12}:[a-zA-Z0-9_-]{30,}\b/.test(content) ||
      /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(content))
     throw Error('Potential embedded credential in live module; refuse canonical capture');
-  const diff=compareWorkerModules(previousBytes,bytes);
   const expected=['handleTelegramStatus','handleWhatsAppStatus','handleTelegramWebhook',
     'handleWhatsAppWebhook','handleMercadoPagoWebhook','applyMercadoPagoPayment'].sort();
+  // Compare EVERY byte outside the six previously audited function bodies.
+  // A suffix, import, cron handler, unrelated function, or top-level change is NEVER allowed.
+  function withoutApprovedBodies(code) {
+    let remainder=code;
+    for(const name of expected) {
+      const start=remainder.indexOf('async function '+name+'(');
+      const end=start<0?-1:remainder.indexOf('\\n__name('+name+',',start);
+      if(start<0||end<0)throw Error('Audited function boundaries unavailable');
+      remainder=remainder.slice(0,start)+'/*APD_AUDITED_BODY:'+name+'*/'+remainder.slice(end);
+    }
+    return remainder;
+  }
+  if(withoutApprovedBodies(previousBytes.toString('utf8'))!==withoutApprovedBodies(content)) {
+    throw Error('Live Worker has unaudited changes outside approved function bodies');
+  }
+  const diff=compareWorkerModules(previousBytes,bytes);
   if(diff.exactCodeMatch||JSON.stringify([...diff.functionsChanged].sort())!==JSON.stringify(expected) ||
      diff.functionsMissing.length!==0 || diff.telegramStatusUnsafeIdFallback!==false ||
      diff.whatsappStatusUnsafeIdFallback!==false)
