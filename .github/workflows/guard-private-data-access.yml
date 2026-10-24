@@ -8,6 +8,7 @@ on:
     paths:
       - app_v2.js
       - scripts/test-live-private-data-denial.mjs
+      - worker-live/worker_hotfix.js
       - .github/workflows/guard-private-data-access.yml
 
 permissions:
