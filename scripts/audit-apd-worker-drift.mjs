@@ -22,7 +22,7 @@ export function compareWorkerModules(local, remote) {
   const textLocal=expected.toString('utf8');
   const textRemote=actual.toString('utf8');
   function body(src,name) {
-    const m=new RegExp('(?:async\\\\s+)?function\\\\s+'+name+'\\\\s*\\\\(').exec(src);
+    const m=new RegExp('(?:async\\s+)?function\\s+'+name+'\\s*\\(').exec(src);
     if(!m)return null;
     const start=m.index;
     const end=src.indexOf('\n__name('+name+',',start);
