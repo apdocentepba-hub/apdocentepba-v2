@@ -67,8 +67,20 @@ test('unknown entitlement is not classified as expired',()=>{
   assert.equal(decision.mode,'current');
 });
 
+test('payment redirect alone is never proof of payment',()=>{
+  const src = slice('function mpReturnMessage()', 'async function obtenerPlanesDisponiblesUI()');
+  const call = state => vm.runInNewContext(src + '\nmpReturnMessage()', {
+    window:{location:{search:'?mp='+state}}, URLSearchParams
+  });
+  const success = call('success');
+  assert.equal(success.type,'info');
+  assert.doesNotMatch(success.text,/Pago aprobado/i);
+  assert.equal(call('pending').type,'info');
+  assert.equal(call('failure').type,'error');
+});
+
 test('page loads the refreshed plan checkout patch',()=>{
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(html,/plan_checkout_patch\.js\?v=3/);
-  assert.doesNotMatch(html,/plan_checkout_patch\.js\?v=2/);
+  assert.match(html,/plan_checkout_patch\.js\?v=4/);
+  assert.doesNotMatch(html,/plan_checkout_patch\.js\?v=3/);
 });
