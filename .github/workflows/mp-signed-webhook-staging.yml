@@ -1,0 +1,55 @@
+name: Preview Mercado Pago signed webhook (no live deployment)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/stage-mp-signed-webhook.mjs'
+      - 'scripts/test-mp-preview-staging.mjs'
+      - '.github/workflows/mp-signed-webhook-staging.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/stage-mp-signed-webhook.mjs'
+      - 'scripts/test-mp-preview-staging.mjs'
+      - '.github/workflows/mp-signed-webhook-staging.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apd-canonical-worker-baseline
+  cancel-in-progress: false
+
+jobs:
+  preview-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/stage-mp-signed-webhook.mjs
+      - run: node --test scripts/test-mp-preview-staging.mjs
+      - run: node scripts/test-live-source-equivalence.mjs
+      - run: node scripts/create-mp-validation-candidate.mjs
+      - run: node --check tmp/mp-validation-candidate/worker_hotfix.js
+      - run: node --test scripts/test-mp-validation-candidate.mjs
+
+  stage-to-version-url:
+    needs: preview-contract
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Worker CLI
+        run: npm install
+      - name: Upload undeployed version and test only non-mutating routes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/stage-mp-signed-webhook.mjs
