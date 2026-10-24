@@ -1882,7 +1882,7 @@ function renderPlanUI(planInfo) {
   const plan = info.plan || {};
   const subscription = info.subscription || {};
   const nombre = planNombreHumano(plan, subscription);
-  const estado = planEstadoHumano(subscription);
+  const estado = planEstadoHumano(subscription, info.access_active);
   const precio = planPrecioHumano(plan, subscription);
   const descripcion = planDescripcionHumana(plan, subscription);
   const limits = getPlanLimits(info);
@@ -1903,6 +1903,7 @@ function renderPlanUI(planInfo) {
         <span class="plan-pill">Hasta ${limits.maxCargos} cargo(s)/materia(s)</span>
       </div>
       <p class="plan-note">${esc(descripcion)}</p>
+      ${info.access_active === false ? '<p class="plan-note" role="status"><strong>No tenés un plan vigente.</strong> Para volver a recibir alertas, elegí un plan en las opciones de esta sección. Tus preferencias están guardadas.</p>' : ''}
     </div>
   `);
 
@@ -1934,9 +1935,10 @@ function planNombreHumano(plan, subscription) {
 }
 
 
-function planEstadoHumano(subscription) {
+function planEstadoHumano(subscription, accessActive) {
   const status = String(subscription?.status || "").trim().toLowerCase();
-
+  // Only the session-authenticated Worker can confirm expiry. Unknown is not expired.
+  if (accessActive === false) return status === "available" ? "Sin plan vigente" : "Vencido";
   if (status === "beta") return "Beta abierta";
   if (status === "trialing") return "En prueba";
   if (status === "active" || status === "authorized") return "Activo";
