@@ -1,0 +1,26 @@
+name: Guard private data access in production
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '31 11 * * *'
+  pull_request:
+    paths:
+      - app_v2.js
+      - scripts/test-live-private-data-denial.mjs
+      - .github/workflows/guard-private-data-access.yml
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-data-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assert anonymous Data API and Worker reads are denied (read-only)
+        run: node scripts/test-live-private-data-denial.mjs
