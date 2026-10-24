@@ -1,0 +1,44 @@
+name: Diagnose live Worker drift (read only)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-worker-drift.mjs'
+      - 'scripts/test-apd-worker-drift.mjs'
+      - '.github/workflows/audit-apd-worker-drift.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/audit-apd-worker-drift.mjs'
+      - 'scripts/test-apd-worker-drift.mjs'
+      - '.github/workflows/audit-apd-worker-drift.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/audit-apd-worker-drift.mjs
+      - run: node --test scripts/test-apd-worker-drift.mjs
+  live-metadata:
+    needs: unit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compare active code only, never expose source or credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/audit-apd-worker-drift.mjs
