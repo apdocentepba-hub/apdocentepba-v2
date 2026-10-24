@@ -70,8 +70,22 @@ async function smoke(base,preview=false) {
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
   if(process.env.GITHUB_REF_NAME!=='main'||process.env.GITHUB_EVENT_NAME!=='push')throw Error('Staging allowed only after merge to main');
   const token=String(process.env.CLOUDFLARE_API_TOKEN||'');
-  const account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'');
-  if(!token||!account)throw Error('No authenticated Cloudflare deployment context');
+  let account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim();
+  if(!token)throw Error('Missing authenticated Cloudflare deployment token');
+  if(!account) {
+    // Some GitHub environments keep only the API token; use the single accessible account.
+    // Never print account metadata or select an arbitrary account.
+    const response=await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=50',{
+      method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)
+    });
+    if(!response.ok)throw Error('Cannot inspect Cloudflare accounts: HTTP '+response.status);
+    const payload=await response.json();
+    if(payload?.success!==true||!Array.isArray(payload.result)||payload.result.length!==1) {
+      throw Error('Cloudflare account selection not unique; refuse staging');
+    }
+    account=String(payload.result[0].id||'').trim();
+    if(!account)throw Error('Cloudflare account ID unavailable');
+  }
   const snapshot=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
   if(snapshot.worker_name!==worker)throw Error('Wrong Worker in snapshot');
   const first=await deploymentState(token,account);
