@@ -73,12 +73,12 @@
     <section id="inicio" class="section apd-home-2026">
       <div class="container">
         <div class="hero-card apd-hero-2026">
-          <div class="apd-hero-main">
+          <div class="apd-public-copy-2026">
             <div class="hero-eyebrow"><span class="apd-online-dot" aria-hidden="true"></span> PENSADO PARA DOCENTES DE BUENOS AIRES</div>
             <h2 class="hero-title">Tus búsquedas docentes, <span class="apd-accent-text">más organizadas.</span></h2>
             <p class="hero-desc">Elegí los distritos y cargos o materias que te interesan. Configurá tus preferencias, consultá las alertas disponibles en tu plan y dedicá menos esfuerzo a revisar información que no necesitás.</p>
             <div class="hero-actions">
-              <button type="button" class="btn btn-primary btn-lg apd-main-cta" onclick="mostrarSeccion('panel-docente')">Configurar mis alertas <span aria-hidden="true">↗</span></button>
+              <button type="button" class="btn btn-primary btn-lg apd-main-cta" onclick="if (typeof obtenerToken === 'function' &amp;&amp; obtenerToken()) { cargarDashboard(); } else { mostrarSeccion('registro'); }">Configurar mis alertas <span aria-hidden="true">↗</span></button>
               <a class="btn btn-outline btn-lg apd-second-cta" href="./herramientas.html">Explorar herramientas gratis</a>
             </div>
             <p class="apd-hero-disclaimer"><span aria-hidden="true">ⓘ</span> Plataforma independiente. Las ofertas y postulaciones se verifican siempre en ABC.</p>
