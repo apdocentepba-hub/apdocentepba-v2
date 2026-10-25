@@ -9,7 +9,7 @@ body{font-family:"Manrope","DM Sans",system-ui,-apple-system,sans-serif;backgrou
 #inicio.apd-home-2026{padding:40px 0 64px}
 .apd-hero-2026{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);align-items:center;gap:36px 45px;text-align:left;padding:clamp(34px,5vw,66px);border-radius:32px;background:radial-gradient(ellipse at 85% 16%,#1d5598 0%,transparent 44%),linear-gradient(126deg,#061a39 0%,#0e3161 60%,#12416e 100%);box-shadow:0 24px 75px rgba(4,31,77,.23);border:1px solid #234b7a}
 .apd-hero-2026:before{content:"";position:absolute;z-index:-1;pointer-events:none;width:420px;height:420px;right:-175px;top:-110px;border:1px solid rgba(172,226,255,.11);border-radius:50%;box-shadow:0 0 0 48px rgba(172,226,255,.028),0 0 0 99px rgba(172,226,255,.019)}
-.apd-hero-2026 .apd-hero-main{min-width:0}
+.apd-hero-2026 .apd-public-copy-2026{min-width:0}
 .apd-hero-2026 .hero-eyebrow{display:inline-flex;align-items:center;gap:10px;padding:9px 13px;border-radius:999px;border:1px solid #477395;background:rgba(11,76,117,.54);color:#e1f5ff;font-size:11px;font-weight:800;letter-spacing:.08em;margin:0 0 24px}
 .apd-online-dot{height:9px;width:9px;border-radius:50%;background:#77dfc7;box-shadow:0 0 0 4px rgba(119,223,199,.12)}
 .apd-hero-2026 .hero-title{font-size:clamp(36px,4.15vw,59px);font-weight:800;letter-spacing:-.047em;line-height:1.1;margin:0 0 24px;max-width:650px;text-wrap:balance;color:#fff}
