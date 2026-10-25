@@ -36,6 +36,10 @@
     @media(min-width:1720px){#panel-docente:not(.hidden) .apd-safe-side-ad{display:block;}}
     @media(max-width:1719px){#panel-docente:not(.hidden) .apd-safe-side-ad{display:block!important;position:static!important;width:auto!important;margin:0 14px 14px!important;top:auto!important;left:auto!important;right:auto!important;z-index:1!important;border-radius:18px!important;padding:16px!important;box-shadow:0 12px 28px rgba(16,36,61,.10);}#panel-docente:not(.hidden) .apd-safe-side-left{margin-top:10px!important;}#panel-docente:not(.hidden) .apd-safe-side-right{margin-bottom:18px!important;}}
   </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="conversion-ux-2026.css?v=1">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -66,15 +70,36 @@
   </header>
 
   <main>
-    <section id="inicio" class="section">
+    <section id="inicio" class="section apd-home-2026">
       <div class="container">
-        <div class="hero-card">
-          <div class="hero-eyebrow">🎯 Plataforma docente PBA</div>
-          <h2 class="hero-title">Alertas de Actos Públicos Digitales según tus preferencias</h2>
-          <p class="hero-desc">Configurá distritos y cargos o materias de interés. Consultá las opciones de alertas según tu plan y usá herramientas para organizar tu trabajo docente. Antes de postularte, verificá siempre la información en ABC.</p>
-          <div class="hero-actions">
-            <button class="btn btn-primary btn-lg" onclick="mostrarSeccion('panel-docente')">🔔 Configurar mis alertas</button>
-            <a class="btn btn-outline btn-lg" href="./herramientas.html">🧰 Ver herramientas gratis</a>
+        <div class="hero-card apd-hero-2026">
+          <div class="apd-hero-main">
+            <div class="hero-eyebrow"><span class="apd-online-dot" aria-hidden="true"></span> PENSADO PARA DOCENTES DE BUENOS AIRES</div>
+            <h2 class="hero-title">Tus búsquedas docentes, <span class="apd-accent-text">más organizadas.</span></h2>
+            <p class="hero-desc">Elegí los distritos y cargos o materias que te interesan. Configurá tus preferencias, consultá las alertas disponibles en tu plan y dedicá menos esfuerzo a revisar información que no necesitás.</p>
+            <div class="hero-actions">
+              <button type="button" class="btn btn-primary btn-lg apd-main-cta" onclick="mostrarSeccion('panel-docente')">Configurar mis alertas <span aria-hidden="true">↗</span></button>
+              <a class="btn btn-outline btn-lg apd-second-cta" href="./herramientas.html">Explorar herramientas gratis</a>
+            </div>
+            <p class="apd-hero-disclaimer"><span aria-hidden="true">ⓘ</span> Plataforma independiente. Las ofertas y postulaciones se verifican siempre en ABC.</p>
+          </div>
+          <div class="apd-hero-visual" aria-label="Representación ilustrativa de cómo organizar preferencias de alertas">
+            <div class="apd-example-window">
+              <div class="apd-example-bar"><span class="apd-example-icon" aria-hidden="true">✳</span><strong>Mi búsqueda docente</strong><span class="apd-example-tag">VISTA DE EJEMPLO</span></div>
+              <div class="apd-example-content">
+                <div class="apd-example-caption">TUS PREFERENCIAS</div>
+                <div class="apd-example-field"><span><span class="apd-field-symbol" aria-hidden="true">⌖</span> Distrito</span><strong>Elegí tu zona</strong></div>
+                <div class="apd-example-field"><span><span class="apd-field-symbol" aria-hidden="true">▤</span> Cargo o materia</span><strong>Elegí lo que buscás</strong></div>
+                <div class="apd-example-flow"><span class="apd-flow-symbol" aria-hidden="true">✓</span><span><strong>Preferencias configuradas</strong><small>Consultá las alertas y canales habilitados para tu plan</small></span></div>
+              </div>
+              <div class="apd-example-footer"><span aria-hidden="true">🔔</span> Información enfocada en tus criterios</div>
+            </div>
+            <p class="apd-visual-note">Ilustración orientativa. No representa una oferta real ni un aviso en tiempo real.</p>
+          </div>
+          <div class="apd-hero-process" aria-label="Cómo funciona APDocente">
+            <div><span class="apd-process-number">01</span><p><strong>Elegí</strong><small>Distritos, cargos y materias</small></p></div>
+            <div><span class="apd-process-number">02</span><p><strong>Consultá</strong><small>Alertas según tu plan</small></p></div>
+            <div><span class="apd-process-number">03</span><p><strong>Verificá</strong><small>Siempre en fuentes oficiales</small></p></div>
           </div>
         </div>
       </div>
