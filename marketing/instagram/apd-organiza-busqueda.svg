@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#073044"/><stop offset="1" stop-color="#0B5261"/></linearGradient><filter id="shade" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="28" flood-opacity=".23"/></filter></defs>
+<rect width="1080" height="1080" fill="url(#bg)"/>
+<circle cx="1000" cy="40" r="380" fill="#5EDBC4" opacity=".09"/><circle cx="-40" cy="980" r="450" fill="#5EDBC4" opacity=".055"/>
+<g opacity=".14" stroke="#5EDBC4" fill="none"><circle cx="930" cy="825" r="260" stroke-width="2"/><circle cx="930" cy="825" r="200" stroke-width="2"/><circle cx="930" cy="825" r="130" stroke-width="2"/></g>
+<rect x="70" y="67" width="70" height="70" rx="18" fill="#5EDBC4"/><path d="M97 112q-5-7-2-14c4-11 17-11 21 0q3 7-2 14l7 9H90z" fill="#073044"/><circle cx="105" cy="124" r="4" fill="#073044"/>
+<text x="162" y="115" font-family="Arial,DejaVu Sans,sans-serif" font-size="41" font-weight="800" fill="#FFFFFF">APDocentePBA</text>
+<rect x="70" y="197" width="405" height="48" rx="24" fill="#5EDBC4" opacity=".17" stroke="#5EDBC4" stroke-opacity=".55"/>
+<text x="94" y="230" font-family="Arial,DejaVu Sans,sans-serif" font-size="19" font-weight="800" letter-spacing="2" fill="#5EDBC4">ALERTAS PERSONALIZADAS</text>
+<text x="72" y="357" font-family="Arial,DejaVu Sans,sans-serif" font-size="65" font-weight="800" fill="#FFFFFF">Tu búsqueda docente,</text>
+<text x="72" y="443" font-family="Arial,DejaVu Sans,sans-serif" font-size="65" font-weight="800" fill="#5EDBC4">más organizada.</text>
+<text x="72" y="534" font-family="Arial,DejaVu Sans,sans-serif" font-size="30" fill="#E3F0F1">Elegí tus distritos y cargos o materias.</text>
+<text x="72" y="583" font-family="Arial,DejaVu Sans,sans-serif" font-size="30" fill="#E3F0F1">Consultá alertas según tu plan.</text>
+<rect x="66" y="655" width="948" height="220" rx="34" fill="#FFFFFF" filter="url(#shade)"/>
+<text x="104" y="711" font-family="Arial,DejaVu Sans,sans-serif" font-size="22" font-weight="800" fill="#073044">ENFOCATE EN LO QUE IMPORTA</text>
+<rect x="104" y="747" width="274" height="83" rx="15" fill="#ECF7F7" stroke="#D4E8E8"/><circle cx="131" cy="788" r="10" fill="#5EDBC4" stroke="#073044" stroke-width="2"/><text x="153" y="797" font-family="Arial,DejaVu Sans,sans-serif" font-size="20" font-weight="800" fill="#073044">DISTRITOS</text>
+<rect x="402" y="747" width="274" height="83" rx="15" fill="#ECF7F7" stroke="#D4E8E8"/><circle cx="429" cy="788" r="10" fill="#5EDBC4" stroke="#073044" stroke-width="2"/><text x="451" y="797" font-family="Arial,DejaVu Sans,sans-serif" font-size="20" font-weight="800" fill="#073044">CARGOS / MATERIAS</text>
+<rect x="700" y="747" width="274" height="83" rx="15" fill="#ECF7F7" stroke="#D4E8E8"/><circle cx="727" cy="788" r="10" fill="#5EDBC4" stroke="#073044" stroke-width="2"/><text x="749" y="797" font-family="Arial,DejaVu Sans,sans-serif" font-size="20" font-weight="800" fill="#073044">ALERTAS</text>
+<rect x="69" y="904" width="943" height="2" fill="#CBE6E8" opacity=".45"/>
+<text x="75" y="958" font-family="Arial,DejaVu Sans,sans-serif" font-size="33" font-weight="800" fill="#5EDBC4">alertasapd.com.ar</text>
+<text x="75" y="1015" font-family="Arial,DejaVu Sans,sans-serif" font-size="22" fill="#D8E8E9">Plataforma independiente. Verificá cada oferta en ABC.</text>
+</svg>
