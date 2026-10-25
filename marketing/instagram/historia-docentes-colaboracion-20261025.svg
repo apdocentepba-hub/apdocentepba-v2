@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#09273E"/><stop offset="1" stop-color="#0D5B69"/></linearGradient></defs>
+<rect width="1080" height="1920" fill="url(#g)"/>
+<circle cx="1080" cy="160" r="470" fill="#76E6D3" opacity=".10"/>
+<circle cx="-200" cy="1730" r="630" fill="#F5C780" opacity=".07"/>
+<g fill="none" stroke="#A4F5E7" opacity=".13" stroke-width="3"><circle cx="920" cy="1300" r="490"/><circle cx="920" cy="1300" r="360"/><circle cx="920" cy="1300" r="230"/></g>
+<rect x="76" y="280" width="72" height="72" rx="20" fill="#6CE5D2"/>
+<text x="101" y="329" font-family="DejaVu Sans,Arial,sans-serif" font-size="44" fill="#0B3446">✓</text>
+<text x="177" y="331" font-family="DejaVu Sans,Arial,sans-serif" font-size="40" font-weight="bold" fill="white">APDocentePBA</text>
+<rect x="74" y="476" rx="22" width="635" height="62" fill="#81E4D5" fill-opacity=".15" stroke="#81E4D5" stroke-opacity=".65"/>
+<text x="105" y="517" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="bold" fill="#9AEFE3">COMUNIDAD DOCENTE · PBA</text>
+<text x="72" y="670" font-family="DejaVu Sans,Arial,sans-serif" font-size="89" font-weight="bold" fill="#FFFFFF">¿Sos docente</text>
+<text x="72" y="779" font-family="DejaVu Sans,Arial,sans-serif" font-size="89" font-weight="bold" fill="#98E9D7">de Buenos Aires?</text>
+<text x="76" y="903" font-family="DejaVu Sans,Arial,sans-serif" font-size="42" fill="#E9FAFA">Queremos preparar guías útiles</text>
+<text x="76" y="964" font-family="DejaVu Sans,Arial,sans-serif" font-size="42" fill="#E9FAFA">sobre APD, PID y listados.</text>
+<rect x="74" y="1079" width="932" height="340" rx="33" fill="#FFFFFF"/>
+<text x="114" y="1161" font-family="DejaVu Sans,Arial,sans-serif" font-size="38" font-weight="bold" fill="#124458">¿Tenés una idea o duda?</text>
+<text x="114" y="1221" font-family="DejaVu Sans,Arial,sans-serif" font-size="32" fill="#284A5A">Escribinos por mensaje privado.</text>
+<rect x="114" y="1279" width="810" height="87" rx="20" fill="#167082"/>
+<text x="146" y="1338" font-family="DejaVu Sans,Arial,sans-serif" font-size="32" font-weight="bold" fill="#FFFFFF">También buscamos colaboradores</text>
+<text x="79" y="1552" font-family="DejaVu Sans,Arial,sans-serif" font-size="35" font-weight="bold" fill="#AEF0E3">Docentes + cuentas educativas</text>
+<text x="79" y="1615" font-family="DejaVu Sans,Arial,sans-serif" font-size="29" fill="#DFEEF2">Para crear contenido útil y compartido.</text>
+<text x="79" y="1702" font-family="DejaVu Sans,Arial,sans-serif" font-size="30" fill="#AEF0E3">alertasapd.com.ar</text>
+<text x="79" y="1752" font-family="DejaVu Sans,Arial,sans-serif" font-size="20" fill="#B7CFD5">Herramienta independiente de la DGCyE</text>
+</svg>
