@@ -26,7 +26,20 @@
   function install(){
     mountStyles();
     tidyResourcePlacement();
-    [200,900,1800,3500].forEach(function(delay){
+    // El script de extras agrega la tarjeta de herramientas de forma diferida.
+    // Observamos solo el grid de Inicio para moverla sin alterar sus funciones.
+    var homeGrid=document.querySelector('#panel-tab-pane-inicio .panel-tab-grid');
+    if(homeGrid && typeof MutationObserver==='function'){
+      var observer=new MutationObserver(function(){
+        tidyResourcePlacement();
+        var future=document.getElementById('apd-next-tools-card');
+        var repo=document.querySelector('#panel-tab-pane-repo .panel-tab-grid');
+        if(future && repo && future.parentElement===repo) observer.disconnect();
+      });
+      observer.observe(homeGrid,{childList:true});
+      setTimeout(function(){observer.disconnect();tidyResourcePlacement();},15000);
+    }
+    [200,900,1800,3500,6000,10000].forEach(function(delay){
       setTimeout(tidyResourcePlacement,delay);
     });
   }
