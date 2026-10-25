@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071E35"/><stop offset="1" stop-color="#115368"/></linearGradient></defs>
+<rect width="1080" height="1080" fill="url(#bg)"/><circle cx="1100" cy="170" r="440" fill="#2DD5C4" opacity=".07"/><circle cx="-130" cy="940" r="355" fill="#F3C67A" opacity=".07"/>
+<g fill="none" stroke="#59CFC4" stroke-opacity=".16" stroke-width="2"><circle cx="860" cy="775" r="330"/><circle cx="860" cy="775" r="258"/><circle cx="860" cy="775" r="188"/></g>
+<rect x="69" y="70" width="67" height="67" rx="18" fill="#69E1D2"/><text x="90" y="112" font-size="38" fill="#0C2942" font-family="DejaVu Sans,Arial">✓</text>
+<text x="161" y="118" font-family="DejaVu Sans,Arial" font-size="37" font-weight="bold" fill="#FFFFFF">APDocentePBA</text>
+<rect x="69" y="195" rx="20" width="610" height="46" fill="#6CE3D3" fill-opacity=".12" stroke="#57E5D5" stroke-opacity=".5"/>
+<text x="95" y="226" font-family="DejaVu Sans,Arial" font-size="22" font-weight="bold" letter-spacing="1" fill="#8EEADD">GUÍA DOCENTE  ·  01 / 04</text>
+<text x="69" y="396" font-family="DejaVu Sans,Arial" font-size="80" font-weight="bold" fill="#FFFFFF">Antes de</text>
+<text x="69" y="495" font-family="DejaVu Sans,Arial" font-size="78" font-weight="bold" fill="#8EEADD">postularte a APD</text>
+<rect x="69" y="572" width="940" height="214" rx="29" fill="#FFFFFF"/>
+<text x="99" y="622" font-family="DejaVu Sans,Arial" font-size="25" font-weight="bold" fill="#176985">PARA TENER EN CUENTA</text>
+<text x="99" y="679" font-family="DejaVu Sans,Arial" font-size="26" fill="#123A4D">4 preguntas clave para revisar con calma.</text>
+<rect x="69" y="916" width="940" height="2" fill="#7BBFBE" opacity=".7"/>
+<text x="70" y="970" font-family="DejaVu Sans,Arial" font-size="31" font-weight="bold" fill="#9DEBDA">alertasapd.com.ar</text>
+<text x="70" y="1018" font-family="DejaVu Sans,Arial" font-size="20" fill="#C8DFE4">Herramienta independiente · Información oficial en ABC/DGCyE</text>
+</svg>
