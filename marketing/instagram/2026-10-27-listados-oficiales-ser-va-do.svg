@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071F34"/><stop offset="1" stop-color="#11536A"/></linearGradient>
+  <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF6F5"/></linearGradient>
+</defs>
+<rect width="1080" height="1350" fill="url(#bg)"/>
+<circle cx="1100" cy="110" r="365" fill="#6FE5D6" opacity=".08"/>
+<circle cx="-70" cy="1250" r="370" fill="#F8C76C" opacity=".07"/>
+<rect x="64" y="65" width="67" height="67" rx="17" fill="#8CF0D9"/>
+<text x="83" y="111" font-family="Arial,DejaVu Sans,sans-serif" font-size="41" font-weight="bold" fill="#0C3D52">✓</text>
+<text x="155" y="112" font-family="Arial,DejaVu Sans,sans-serif" font-size="47" font-weight="bold" fill="#FFFFFF">APDocente<tspan fill="#8CF0D9">PBA</tspan></text>
+<rect x="65" y="174" width="450" height="55" rx="25" fill="#204C5D" stroke="#73DCCB" stroke-width="2"/>
+<text x="97" y="211" font-family="Arial,DejaVu Sans,sans-serif" font-size="24" font-weight="bold" fill="#AEF8E9">GUÍA DOCENTE · SERVADO</text>
+<text x="65" y="344" font-family="Arial,DejaVu Sans,sans-serif" font-size="79" font-weight="bold" fill="#FFFFFF">Listados oficiales</text>
+<text x="66" y="433" font-family="Arial,DejaVu Sans,sans-serif" font-size="53" font-weight="bold" fill="#8EF2DD">¿Por qué aparecen</text>
+<text x="66" y="502" font-family="Arial,DejaVu Sans,sans-serif" font-size="53" font-weight="bold" fill="#8EF2DD">varias veces?</text>
+<rect x="65" y="565" width="950" height="117" rx="24" fill="#16465A" stroke="#3D8791" stroke-width="2"/>
+<text x="94" y="613" font-family="Arial,DejaVu Sans,sans-serif" font-size="32" font-weight="bold" fill="#FFFFFF">Puede haber un listado diferente</text>
+<text x="94" y="659" font-family="Arial,DejaVu Sans,sans-serif" font-size="32" font-weight="bold" fill="#F9D88A">por cada AÑO y DISTRITO.</text>
+<rect x="65" y="719" width="950" height="405" rx="28" fill="url(#panel)"/>
+<text x="103" y="783" font-family="Arial,DejaVu Sans,sans-serif" font-size="30" font-weight="bold" fill="#17465A">CÓMO CONSULTARLOS</text>
+<g font-family="Arial,DejaVu Sans,sans-serif" fill="#143A4B">
+<circle cx="130" cy="859" r="32" fill="#C9F4E5"/><text x="119" y="871" font-size="31" font-weight="bold">1</text>
+<text x="186" y="869" font-size="34" font-weight="bold">Buscá por nombre o DNI.</text>
+<line x1="104" y1="914" x2="976" y2="914" stroke="#CEDFE2" stroke-width="2"/>
+<circle cx="130" cy="974" r="32" fill="#C9F4E5"/><text x="119" y="986" font-size="31" font-weight="bold">2</text>
+<text x="186" y="984" font-size="34" font-weight="bold">Usá los filtros disponibles.</text>
+<line x1="104" y1="1029" x2="976" y2="1029" stroke="#CEDFE2" stroke-width="2"/>
+<circle cx="130" cy="1084" r="32" fill="#C9F4E5"/><text x="119" y="1096" font-size="31" font-weight="bold">3</text>
+<text x="186" y="1094" font-size="34" font-weight="bold">Revisá año y distrito.</text>
+</g>
+<text x="68" y="1194" font-family="Arial,DejaVu Sans,sans-serif" font-size="29" font-weight="bold" fill="#A7F7DF">Fuente oficial: servado.abc.gob.ar/ayuda</text>
+<text x="68" y="1250" font-family="Arial,DejaVu Sans,sans-serif" font-size="28" fill="#FFFFFF">Alertas y búsquedas: alertasapd.com.ar/empezar.html</text>
+<text x="68" y="1301" font-family="Arial,DejaVu Sans,sans-serif" font-size="22" fill="#C9E6E7">APDocentePBA es una plataforma independiente de ABC/DGCyE.</text>
+</svg>
