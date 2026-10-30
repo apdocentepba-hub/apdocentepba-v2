@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071E30"/><stop offset="1" stop-color="#0F4355"/></linearGradient>
+<linearGradient id="badge" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#7EE1D0"/><stop offset="1" stop-color="#B9F0C2"/></linearGradient>
+</defs>
+<rect width="1080" height="1350" fill="url(#bg)"/>
+<circle cx="1120" cy="60" r="370" fill="#80E8D0" opacity=".06"/>
+<circle cx="-95" cy="1280" r="330" fill="#F3CA6B" opacity=".08"/>
+<rect x="65" y="66" width="292" height="54" rx="27" fill="#1A5361" stroke="#6CC5BE" stroke-width="2"/>
+<text x="90" y="102" font-family="DejaVu Sans,Arial,sans-serif" font-size="23" font-weight="700" fill="#B5F4DE" letter-spacing="1.2">GUÍA DOCENTE PBA</text>
+<rect x="65" y="151" width="55" height="55" rx="15" fill="url(#badge)"/>
+<path d="M81 180 L92 191 L107 169" fill="none" stroke="#103748" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="141" y="193" font-family="DejaVu Sans,Arial,sans-serif" font-size="40" font-weight="800" fill="#FFFFFF">APDocente<tspan fill="#9FEFD7">PBA</tspan></text>
+<text x="65" y="327" font-family="DejaVu Sans,Arial,sans-serif" font-size="73" font-weight="800" fill="#FFFFFF" letter-spacing="-1">¿TU PID MUESTRA</text>
+<text x="65" y="416" font-family="DejaVu Sans,Arial,sans-serif" font-size="76" font-weight="800" fill="#F4D17A" letter-spacing="-1">VARIAS RAMAS?</text>
+<text x="68" y="482" font-family="DejaVu Sans,Arial,sans-serif" font-size="30" fill="#D8F2EF">No te quedes con el primer resultado.</text>
+<g>
+<rect x="65" y="535" width="950" height="173" rx="24" fill="#F7FBF8"/>
+<rect x="87" y="560" width="86" height="86" rx="23" fill="#D8F7EB"/>
+<text x="107" y="619" font-family="DejaVu Sans,Arial,sans-serif" font-size="41" font-weight="800" fill="#0C4E5B">01</text>
+<text x="205" y="601" font-family="DejaVu Sans,Arial,sans-serif" font-size="40" font-weight="800" fill="#123B4B">Buscá tu PID</text>
+<text x="205" y="653" font-family="DejaVu Sans,Arial,sans-serif" font-size="29" fill="#315C66">Ingresá DNI y seleccioná el año.</text>
+</g>
+<g>
+<rect x="65" y="728" width="950" height="173" rx="24" fill="#F7FBF8"/>
+<rect x="87" y="753" width="86" height="86" rx="23" fill="#D8F7EB"/>
+<text x="107" y="812" font-family="DejaVu Sans,Arial,sans-serif" font-size="41" font-weight="800" fill="#0C4E5B">02</text>
+<text x="205" y="794" font-family="DejaVu Sans,Arial,sans-serif" font-size="40" font-weight="800" fill="#123B4B">Abrí cada RAMA</text>
+<text x="205" y="846" font-family="DejaVu Sans,Arial,sans-serif" font-size="29" fill="#315C66">Revisá las secciones desplegables.</text>
+</g>
+<g>
+<rect x="65" y="921" width="950" height="173" rx="24" fill="#F7FBF8"/>
+<rect x="87" y="946" width="86" height="86" rx="23" fill="#D8F7EB"/>
+<text x="107" y="1005" font-family="DejaVu Sans,Arial,sans-serif" font-size="41" font-weight="800" fill="#0C4E5B">03</text>
+<text x="205" y="987" font-family="DejaVu Sans,Arial,sans-serif" font-size="40" font-weight="800" fill="#123B4B">Cambiá la vista</text>
+<text x="205" y="1039" font-family="DejaVu Sans,Arial,sans-serif" font-size="29" fill="#315C66">Alterná entre TABLA y TARJETA.</text>
+</g>
+<text x="69" y="1174" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="700" fill="#B9F4DC">Fuente oficial: servado.abc.gob.ar/ayuda</text>
+<path d="M65 1206 H1015" stroke="#7DB9B6" stroke-opacity=".5" stroke-width="2"/>
+<text x="68" y="1255" font-family="DejaVu Sans,Arial,sans-serif" font-size="26" font-weight="700" fill="#FFFFFF">Guardá esta guía para tu próxima consulta.</text>
+<text x="68" y="1302" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" fill="#D2E9E6">APDocentePBA es independiente de ABC/DGCyE.</text>
+</svg>
