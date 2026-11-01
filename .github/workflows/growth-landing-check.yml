@@ -9,6 +9,7 @@ on:
       - 'scripts/test-growth-landing.mjs'
       - 'scripts/test-growth-activation.mjs'
       - 'scripts/test-growth-registration.mjs'
+      - 'scripts/test-growth-browser.mjs'
       - 'app_v2.js'
       - 'growth_activation_guide.js'
       - '.github/workflows/growth-landing-check.yml'
@@ -30,3 +31,13 @@ jobs:
           node-version: '22'
       - name: Validate landing and campaign entry routing
         run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs
+      - name: Smoke en navegador Chrome real (sin backend)
+        run: node scripts/test-growth-browser.mjs
+      - name: Adjuntar capturas de revisión visual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-growth-landing-browser
+          path: tmp/growth-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
