@@ -51,7 +51,7 @@ main{padding:0 16px 50px}.panel-header{padding-top:18px}.panel-header h2{margin:
 .panel-card{background:white;border:1px solid #d8e6ec;border-radius:16px;padding:20px;box-shadow:0 7px 20px #1233}
 .panel-card h3{margin:0 0 10px}.panel-card p{font-size:14px;line-height:1.5;margin:8px 0}
 .field{display:flex;flex-direction:column;gap:6px;margin:12px 0}.field input,.field select{font:inherit;padding:12px;border:1px solid #c2d7dc;border-radius:8px;max-width:460px}
-.notice{font-size:12px;color:#5c7481;margin-top:8px}
+.notice{font-size:12px;color:#5c7481;margin-top:8px}.checks-grid{display:flex;flex-wrap:wrap;gap:8px 13px}.checks-grid label{display:inline-flex;align-items:center;gap:5px;background:#f2f8fa;padding:7px 9px;border:1px solid #d4e3e7;border-radius:8px;font-size:13px;cursor:pointer}.checks-grid input{accent-color:#0a5366}
 .demo-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 18px}
 @media(max-width:660px){.cards{grid-template-columns:1fr}nav button{flex:1}}
 </style></head>
@@ -70,6 +70,14 @@ main{padding:0 16px 50px}.panel-header{padding-top:18px}.panel-header h2{margin:
 <div class="panel-card" style="max-width:760px"><h3>🧩 Elegí qué buscás</h3>
 <form id="form-preferencias"><div class="field"><label for="pref-distrito-principal">Distrito principal</label><input id="pref-distrito-principal" value="" list="apd-preview-distritos" placeholder="Ejemplo: AVELLANEDA" autocomplete="off"><datalist id="apd-preview-distritos"><option value="AVELLANEDA"><option value="LANÚS"><option value="QUILMES"><option value="LOMAS DE ZAMORA"><option value="LA MATANZA"><option value="BERAZATEGUI"></datalist><small class="notice">Sugerencias ilustrativas; no son el catálogo completo del sistema real.</small></div>
 <div class="field"><label for="pref-cargo-1">Cargo o materia</label><input id="pref-cargo-1" list="apd-preview-cargos" placeholder="Ejemplo: PRECEPTOR" autocomplete="off"><datalist id="apd-preview-cargos"><option value="PRECEPTOR"><option value="MAESTRO DE GRADO"><option value="MATEMÁTICA"><option value="INGLÉS"><option value="INFORMÁTICA"></datalist><small class="notice">Escribí o seleccioná una sugerencia de ejemplo.</small></div>
+<div class="field"><label for="pref-turnos">Turno (opcional)</label><select id="pref-turnos"><option value="">Cualquier turno</option><option value="M">Mañana</option><option value="T">Tarde</option><option value="V">Vespertino</option><option value="N">Noche</option><option value="ALTERNADO">Alternado</option></select></div>
+<div class="field"><span id="apd-preview-niveles-label">Nivel o modalidad (opcional)</span><div class="checks-grid" role="group" aria-labelledby="apd-preview-niveles-label">
+<label><input type="checkbox" name="pref-nivel-modalidad" value="INICIAL">Inicial</label>
+<label><input type="checkbox" name="pref-nivel-modalidad" value="PRIMARIO">Primario</label>
+<label><input type="checkbox" name="pref-nivel-modalidad" value="SECUNDARIO">Secundario</label>
+<label><input type="checkbox" name="pref-nivel-modalidad" value="SUPERIOR">Superior / Formación Docente</label>
+<label><input type="checkbox" name="pref-nivel-modalidad" value="TECNICO PROFESIONAL">Técnico-Profesional</label>
+<label><input type="checkbox" name="pref-nivel-modalidad" value="ADULTOS">Jóvenes y Adultos</label></div><small class="notice">Ejemplos de modalidades de prueba; no son todos los filtros disponibles en producción.</small></div>
 <div class="field"><label for="pref-alertas-activas">Estado de alerta</label><select id="pref-alertas-activas"><option value="no">Pausadas</option><option value="si">Activas (solo simulación)</option></select></div>
 <div class="field"><label for="pref-alertas-email">¿Querés recibir avisos por email?</label><select id="pref-alertas-email"><option value="no">No (solo alertas en pantalla)</option><option value="si">Sí (solo simulación, sin envíos)</option></select><small class="notice">En el sistema real, los canales dependen del plan y deben confirmarse en Preferencias.</small></div>
 <div class="demo-actions"><button type="submit">Simular guardado</button><button type="button" id="reset-demo">Restablecer ejemplo</button></div>
@@ -94,6 +102,8 @@ function updateDemo(values) {
   }
   updateRow(0, values.district || '(sin filtro)');
   updateRow(1, values.cargo || '(sin filtro)');
+  updateRow(2, values.levels && values.levels.length ? values.levels.join(', ') : '(cualquiera)');
+  updateRow(3, values.turn || '(cualquiera)');
   updateRow(4, values.active ? 'Activas (demo)' : 'Pausadas');
   updateRow(5, values.email ? 'Sí (demo)' : 'No');
 }
@@ -102,10 +112,13 @@ document.getElementById('form-preferencias').addEventListener('submit', function
   event.preventDefault();
   var district = document.getElementById('pref-distrito-principal').value.trim().toUpperCase();
   var cargo = document.getElementById('pref-cargo-1').value.trim().toUpperCase();
+  var turnSelect = document.getElementById('pref-turnos');
+  var turn = turnSelect.value ? turnSelect.options[turnSelect.selectedIndex].text : '';
+  var levels = Array.from(document.querySelectorAll('input[name="pref-nivel-modalidad"]:checked'), function(el) { return el.value; });
   var active = document.getElementById('pref-alertas-activas').value === 'si';
   var email = document.getElementById('pref-alertas-email').value === 'si';
   // No datos privados: demostración solamente, sin llamadas de red ni almacenamiento.
-  updateDemo({ district: district, cargo: cargo, active: active, email: email });
+  updateDemo({ district: district, cargo: cargo, levels: levels, turn: turn, active: active, email: email });
   document.getElementById('demo-msg').textContent = active && !email
     ? 'Vista actualizada. Ojo: marcaste alertas activas, pero email sigue desactivado. No se enviaron avisos.'
     : 'Vista simulada actualizada. No se guardó ni envió nada.';
@@ -113,7 +126,7 @@ document.getElementById('form-preferencias').addEventListener('submit', function
 });
 document.getElementById('reset-demo').addEventListener('click', function() {
   document.getElementById('form-preferencias').reset();
-  updateDemo({ district: '', cargo: '', active: false, email: false });
+  updateDemo({ district: '', cargo: '', levels: [], turn: '', active: false, email: false });
   window.APD_activatePanelTab('inicio');
 });
 </script>
