@@ -9,6 +9,7 @@ on:
       - 'scripts/test-growth-landing.mjs'
       - 'scripts/test-growth-activation.mjs'
       - 'scripts/test-growth-registration.mjs'
+      - 'scripts/test-growth-preferences-roundtrip.mjs'
       - 'scripts/test-growth-browser.mjs'
       - 'scripts/build-growth-preview.mjs'
       - 'scripts/test-growth-preview.mjs'
@@ -32,7 +33,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate landing and campaign entry routing
-        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs
+        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs
       - name: Verificar construcción aislada sin backend ni contraseñas
         run: node --test scripts/test-growth-preview.mjs
       - name: Smoke en navegador Chrome real (sin backend)
