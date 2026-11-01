@@ -8,6 +8,8 @@ on:
       - 'index.html'
       - 'scripts/test-growth-landing.mjs'
       - 'scripts/test-growth-activation.mjs'
+      - 'scripts/test-growth-registration.mjs'
+      - 'app_v2.js'
       - 'growth_activation_guide.js'
       - '.github/workflows/growth-landing-check.yml'
   workflow_dispatch:
@@ -27,4 +29,4 @@ jobs:
         with:
           node-version: '22'
       - name: Validate landing and campaign entry routing
-        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs
+        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs
