@@ -10,6 +10,8 @@ on:
       - 'scripts/test-growth-activation.mjs'
       - 'scripts/test-growth-registration.mjs'
       - 'scripts/test-growth-browser.mjs'
+      - 'scripts/build-growth-preview.mjs'
+      - 'scripts/test-growth-preview.mjs'
       - 'app_v2.js'
       - 'growth_activation_guide.js'
       - '.github/workflows/growth-landing-check.yml'
@@ -31,6 +33,8 @@ jobs:
           node-version: '22'
       - name: Validate landing and campaign entry routing
         run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs
+      - name: Verificar construcción aislada sin backend ni contraseñas
+        run: node --test scripts/test-growth-preview.mjs
       - name: Smoke en navegador Chrome real (sin backend)
         run: node scripts/test-growth-browser.mjs
       - name: Adjuntar capturas de revisión visual
