@@ -157,7 +157,7 @@ async function demoFlow() {
     document.getElementById('form-preferencias').requestSubmit(); true`);
   await sleep(100);
   const second = await js('document.getElementById("panel-preferencias-resumen").textContent');
-  assert.match(second, /Email:\\s*Sí/);
+  assert.match(second, /Email:\s*Sí/);
   assert.equal(await js('document.getElementById("apd-growth-activation-guide").hidden'), true);
   console.log('PASÓ demo: sugerencias, guardado ficticio, advertencia sin email y canal activado');
 }
