@@ -11,6 +11,7 @@ on:
       - 'scripts/test-growth-registration.mjs'
       - 'scripts/test-growth-preferences-roundtrip.mjs'
       - 'scripts/test-growth-worker-preferences.mjs'
+      - 'scripts/test-growth-plan-parity.mjs'
       - 'scripts/test-growth-browser.mjs'
       - 'scripts/build-growth-preview.mjs'
       - 'scripts/test-growth-preview.mjs'
@@ -35,11 +36,19 @@ jobs:
         with:
           node-version: '22'
       - name: Validate landing and campaign entry routing
-        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs
+        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs scripts/test-growth-plan-parity.mjs
       - name: Verificar construcción aislada sin backend ni contraseñas
         run: node --test scripts/test-growth-preview.mjs
       - name: Smoke en navegador Chrome real (sin backend)
         run: node scripts/test-growth-browser.mjs
+      - name: Adjuntar informe de paridad de planes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-growth-plan-parity
+          path: tmp/growth-audit/plan-parity.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Adjuntar capturas de revisión visual
         if: always()
         uses: actions/upload-artifact@v4
