@@ -2098,7 +2098,7 @@ function turnoSelectValue(v) {
   if (t === "TARDE") return "T";
   if (t === "VESPERTINO") return "V";
   if (t === "NOCHE") return "N";
-  if (t === "ALTERNADO") return "ALTERNADO";
+  if (t === "ALTERNADO" || t === "A") return "ALTERNADO";
   return t;
 }
 
@@ -2208,7 +2208,8 @@ function normalizarCursoDivision(v) {
 }
 
 function turnoTexto(v) {
-  const items = String(v || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+  const items = String(v || "").split(",").map(x => x.trim().toUpperCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")).filter(Boolean);
 
   if (!items.length) return "";
 
