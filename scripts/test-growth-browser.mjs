@@ -123,6 +123,45 @@ async function guide() {
   console.log('PASÓ guía de activación en DOM real y navegación a Preferencias');
 }
 
+
+async function demoFlow() {
+  const url = pathToFileURL(path.join(ROOT, 'dist-growth-preview', 'panel-demo.html')).href;
+  await cdp('Page.navigate', { url });
+  await loaded();
+  await sleep(160);
+  assert.equal(await js('document.getElementById("apd-growth-activation-guide")?.hidden'), false);
+  await js('document.getElementById("apd-growth-guide-action").click(); true');
+  assert.equal(await js('document.querySelector("#panel-tab-pane-preferencias").classList.contains("active")'), true);
+  const lists = await js('document.querySelectorAll("datalist").length');
+  assert.equal(lists, 2);
+  await js(`document.getElementById('pref-distrito-principal').value = 'AVELLANEDA';
+    document.getElementById('pref-cargo-1').value = 'PRECEPTOR';
+    document.getElementById('pref-alertas-activas').value = 'si';
+    document.getElementById('pref-alertas-email').value = 'no';
+    document.getElementById('form-preferencias').requestSubmit(); true`);
+  await sleep(140);
+  const first = await js(`({
+    summary: document.getElementById('panel-preferencias-resumen').textContent,
+    guideHidden: document.getElementById('apd-growth-activation-guide').hidden,
+    hint: document.getElementById('demo-msg').textContent
+  })`);
+  assert.match(first.summary, /AVELLANEDA/);
+  assert.match(first.summary, /PRECEPTOR/);
+  assert.match(first.summary, /Activas/);
+  assert.match(first.hint, /email sigue desactivado/i);
+  assert.equal(first.guideHidden, true);
+  const shot = await cdp('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
+  writeFileSync(path.join(OUTPUT, 'apd-preview-activated-no-email.png'), Buffer.from(shot.data, 'base64'));
+  await js(`document.querySelector('[data-tab="preferencias"]').click();
+    document.getElementById('pref-alertas-email').value = 'si';
+    document.getElementById('form-preferencias').requestSubmit(); true`);
+  await sleep(100);
+  const second = await js('document.getElementById("panel-preferencias-resumen").textContent');
+  assert.match(second, /Email:\\s*Sí/);
+  assert.equal(await js('document.getElementById("apd-growth-activation-guide").hidden'), true);
+  console.log('PASÓ demo: sugerencias, guardado ficticio, advertencia sin email y canal activado');
+}
+
 try {
   const port = await awaitPort();
   const targets = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
@@ -148,6 +187,7 @@ try {
   await viewport(390, 844, 'apd-landing-mobile.png');
   await viewport(1280, 900, 'apd-landing-desktop.png');
   await guide();
+  await demoFlow();
   console.log('BROWSER_SMOKE_OK');
 } finally {
   if (socket) socket.close();
