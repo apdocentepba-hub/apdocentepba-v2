@@ -1,0 +1,28 @@
+name: Growth landing and Instagram routing regression
+
+on:
+  pull_request:
+    paths:
+      - 'empezar.html'
+      - 'instagram_entry_patch.js'
+      - 'index.html'
+      - 'scripts/test-growth-landing.mjs'
+      - '.github/workflows/growth-landing-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  landing-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate landing and campaign entry routing
+        run: node --test scripts/test-growth-landing.mjs
