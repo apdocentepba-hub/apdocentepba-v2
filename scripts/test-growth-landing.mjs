@@ -78,6 +78,15 @@ test('el index productivo referencia versión nueva del parche de campañas', ()
   assert.match(index, /id="login"/);
 });
 
+test('la landing muestra precios y prueba del catálogo vigente, sin prometer gratuidad ilimitada', () => {
+  assert.match(landing, /Prueba gratuita de 7 días/);
+  assert.match(landing, /\$1\.000 ARS \/ mes/);
+  assert.match(landing, /\$2\.000 ARS \/ mes/);
+  assert.match(landing, /\$3\.000 ARS \/ mes/);
+  assert.match(landing, /verificarse en tu cuenta antes de pagar/);
+  assert.doesNotMatch(landing, /14 días gratis|prueba para siempre|gratis de por vida/i);
+});
+
 test('invitado abre registro desde Instagram', () => {
   assert.deepEqual(harness().events, [['show', 'registro']]);
 });
