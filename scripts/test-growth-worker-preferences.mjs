@@ -156,3 +156,29 @@ test('no aceptar Content-Type distinto de JSON antes de guardar',async()=>{
   assert.equal(res.status,415);
   assert.ok(!mock.calls.some(c=>c.method!=='GET'));
 });
+
+test('guardar email activado en preferencias existentes no duplica alta ni envía emails',async()=>{
+  const mock=fakeBackend();
+  const response=await worker.fetch(request('/api/guardar-preferencias',{
+    method:'POST',json:{user_id:OWNER,preferencias:{...payload,alertas_email:true}}
+  }),env,{});
+  const body=await response.json();
+  assert.equal(response.status,200,JSON.stringify(body).slice(0,700));
+  assert.equal(mock.read().alertas_email,true);
+  assert.equal(mock.calls.filter(c=>c.name==='user_preferences'&&c.method==='POST').length,1);
+  assert.equal(mock.calls.filter(c=>c.name==='user_subscriptions'&&c.method!=='GET').length,0);
+  const recovered=await worker.fetch(request('/api/account/preferences'),env,{});
+  assert.equal(recovered.status,200);
+  const saved=(await recovered.json()).preferences;
+  assert.equal(saved.alertas_email,true);
+  assert.deepEqual(saved.niveles,['SECUNDARIO','TECNICO PROFESIONAL']);
+});
+
+test('no se permiten escrituras cuando el plan existente está vencido',async()=>{
+  const mock=fakeBackend({expiredPlan:true});
+  const response=await worker.fetch(request('/api/guardar-preferencias',{
+    method:'POST',json:{user_id:OWNER,preferencias:payload}
+  }),env,{});
+  assert.equal(response.status,403);
+  assert.equal(mock.calls.filter(c=>c.name==='user_preferences'&&c.method==='POST').length,0);
+});
