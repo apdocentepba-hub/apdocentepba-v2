@@ -152,8 +152,11 @@ const catalogoAutocomplete = {
 };
 
 function buildPlanFallback() {
+  // No suplantar una suscripción real cuando falla la verificación del Worker.
+  // En este estado nunca se permite guardar filtros de forma destructiva.
   return {
-    ok: true,
+    ok: false,
+    verification_failed: true,
     subscription: {
       id: null,
       user_id: null,
@@ -169,7 +172,7 @@ function buildPlanFallback() {
       code: "PLUS",
       nombre: "Plan Plus",
       descripcion: "Más alcance para combinar distritos y materias sin perder oportunidades. Alertas por email y Telegram próximamente.",
-      price_ars: 0,
+      price_ars: null,
       trial_days: 0,
       max_distritos: 2,
       max_distritos_normales: 2,
@@ -1886,6 +1889,12 @@ function renderDashboard(data) {
 
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
+  if (info.verification_failed) {
+    setHTML("panel-plan", '<p class="plan-note" role="alert"><strong>No pudimos verificar tu plan.</strong> Tus preferencias no se modificaron. Volvé a cargar el panel para consultar los límites reales.</p>');
+    const hint = document.getElementById("prefs-plan-hint");
+    if (hint) hint.textContent = "Límites del plan sin verificar: no se guardarán cambios hasta recuperar la conexión.";
+    return;
+  }
   const plan = info.plan || {};
   const subscription = info.subscription || {};
   const nombre = planNombreHumano(plan, subscription);
@@ -2012,6 +2021,10 @@ async function guardarPreferencias(e) {
   const token = obtenerToken();
   if (!token) {
     showMsg("preferencias-msg", "Sesión no válida", "error");
+    return;
+  }
+  if (planActual?.verification_failed) {
+    showMsg("preferencias-msg", "No pudimos verificar tu plan. No guardamos cambios para evitar perder filtros. Actualizá el panel e intentá nuevamente.", "error");
     return;
   }
 
