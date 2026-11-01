@@ -37,3 +37,21 @@ test('Robots y metadatos previenen indexación accidental', () => {
   assert.match(readFileSync(path.join(out, 'robots.txt'), 'utf8'), /Disallow: \/$/m);
   assert.match(readFileSync(path.join(out, '_headers'), 'utf8'), /X-Robots-Tag: noindex, nofollow/);
 });
+
+test('la demo informa canales independientes de activar alertas', () => {
+  const html = readFileSync(path.join(out, 'panel-demo.html'), 'utf8');
+  assert.match(html, /id="pref-alertas-email"/);
+  assert.match(html, /id="pref-alertas-activas"/);
+  assert.match(html, /email sigue desactivado/);
+  assert.match(html, /No se enviaron avisos/);
+});
+
+test('la demo ofrece listas de ejemplo y no ejecuta HTML del docente', () => {
+  const html = readFileSync(path.join(out, 'panel-demo.html'), 'utf8');
+  assert.match(html, /<datalist id="apd-preview-distritos"/);
+  assert.match(html, /<datalist id="apd-preview-cargos"/);
+  assert.match(html, /<option value="AVELLANEDA"/);
+  assert.match(html, /<option value="PRECEPTOR"/);
+  assert.match(html, /document\.createTextNode\(' ' \+ text\)/);
+  assert.doesNotMatch(html, /lines\[0\]\.innerHTML|lines\[1\]\.innerHTML/);
+});
