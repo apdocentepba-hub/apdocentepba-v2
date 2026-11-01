@@ -9,13 +9,14 @@ const end = app.indexOf('\nasync function loginPassword(e) {', start);
 if (start < 0 || end < 0) throw new Error('No se encontró la función de registro existente');
 const registerSource = app.slice(start, end);
 
-async function setup({ ok = true, serverMessage = 'Listo' } = {}) {
+async function setup({ ok = true, serverMessage = 'Listo', fieldOverrides = {} } = {}) {
   const fields = {
     'reg-nombre': 'Docente',
     'reg-apellido': 'Ejemplo',
     'reg-email': 'Docente.Test@Ejemplo.org',
     'reg-celular': '',
-    'reg-password': 'clave-prueba-no-real'
+    'reg-password': 'clave-prueba-no-real',
+    ...fieldOverrides
   };
   const events = [];
   const loginEmail = {
@@ -77,6 +78,15 @@ test('login solo se abre después de una respuesta satisfactoria', async () => {
 });
 
 test('campos incompletos bloquean el registro antes del POST', async () => {
+  for (const field of ['reg-nombre', 'reg-apellido', 'reg-email', 'reg-password']) {
+    const h = await setup({ fieldOverrides: { [field]: '' } });
+    assert.equal(h.network.length, 0, field + ' no bloqueó el POST');
+    assert.equal(h.pending.length, 0);
+    assert.ok(h.messages.some(m => m.kind === 'error'), field + ' sin error visible');
+  }
+});
+
+test('el único POST del registro mantiene el contrato vigente', async () => {
   const h = await setup();
   assert.equal(h.network.length, 1);
   const body = JSON.parse(h.network[0].options.body);
