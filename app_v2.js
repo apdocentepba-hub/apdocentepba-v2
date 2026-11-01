@@ -818,9 +818,16 @@ async function registrarDocente(e) {
     }
 
     if (data?.ok) {
-      showMsg("registro-msg", data.message || "Registro exitoso", "ok");
+      showMsg("registro-msg", data.message || "Registro exitoso. Ingresá para configurar tus alertas.", "ok");
+      // Conservamos el correo solo en el campo de login de esta página.
+      // Nunca copiamos ni almacenamos la contraseña.
+      const loginEmail = document.getElementById("login-email");
+      if (loginEmail) loginEmail.value = email;
       document.getElementById("form-registro")?.reset();
-      setTimeout(() => mostrarSeccion("login"), 1200);
+      setTimeout(() => {
+        mostrarSeccion("login");
+        if (loginEmail && typeof loginEmail.focus === "function") loginEmail.focus();
+      }, 1200);
     } else {
       showMsg("registro-msg", data?.error || data?.message || "No se pudo registrar", "error");
     }
