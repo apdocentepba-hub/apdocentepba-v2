@@ -55,3 +55,14 @@ test('la demo ofrece listas de ejemplo y no ejecuta HTML del docente', () => {
   assert.match(html, /document\.createTextNode\(' ' \+ text\)/);
   assert.doesNotMatch(html, /lines\[0\]\.innerHTML|lines\[1\]\.innerHTML/);
 });
+
+test('niveles y turnos opcionales respetan opciones del panel real sin escribir datos', () => {
+  const html = readFileSync(path.join(out, 'panel-demo.html'), 'utf8');
+  assert.match(html, /id="pref-turnos"/);
+  assert.match(html, /name="pref-nivel-modalidad"/);
+  assert.match(html, /value="SECUNDARIO"/);
+  assert.match(html, /value="TECNICO PROFESIONAL"/);
+  assert.match(html, /option value="T">Tarde/);
+  assert.match(html, /values\.levels\.join\(', '\)/);
+  assert.match(html, /values\.turn \|\| '\(cualquiera\)'/);
+});
