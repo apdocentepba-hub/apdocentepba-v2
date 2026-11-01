@@ -68,9 +68,10 @@ main{padding:0 16px 50px}.panel-header{padding-top:18px}.panel-header h2{margin:
 </section><section class="panel-card"><h3>📊 Estadísticas</h3><p>0 alertas en esta demostración.</p><p class="notice">Las ofertas reales y las suscripciones no se muestran en la demo.</p></section></div></div>
 <div id="panel-tab-pane-preferencias" class="panel-tab-pane">
 <div class="panel-card" style="max-width:760px"><h3>🧩 Elegí qué buscás</h3>
-<form id="form-preferencias"><div class="field"><label for="pref-distrito-principal">Distrito principal</label><input id="pref-distrito-principal" value="" placeholder="Ejemplo: AVELLANEDA" autocomplete="off"></div>
-<div class="field"><label for="pref-cargo-1">Cargo o materia</label><input id="pref-cargo-1" placeholder="Ejemplo: PRECEPTOR" autocomplete="off"></div>
+<form id="form-preferencias"><div class="field"><label for="pref-distrito-principal">Distrito principal</label><input id="pref-distrito-principal" value="" list="apd-preview-distritos" placeholder="Ejemplo: AVELLANEDA" autocomplete="off"><datalist id="apd-preview-distritos"><option value="AVELLANEDA"><option value="LANÚS"><option value="QUILMES"><option value="LOMAS DE ZAMORA"><option value="LA MATANZA"><option value="BERAZATEGUI"></datalist><small class="notice">Sugerencias ilustrativas; no son el catálogo completo del sistema real.</small></div>
+<div class="field"><label for="pref-cargo-1">Cargo o materia</label><input id="pref-cargo-1" list="apd-preview-cargos" placeholder="Ejemplo: PRECEPTOR" autocomplete="off"><datalist id="apd-preview-cargos"><option value="PRECEPTOR"><option value="MAESTRO DE GRADO"><option value="MATEMÁTICA"><option value="INGLÉS"><option value="INFORMÁTICA"></datalist><small class="notice">Escribí o seleccioná una sugerencia de ejemplo.</small></div>
 <div class="field"><label for="pref-alertas-activas">Estado de alerta</label><select id="pref-alertas-activas"><option value="no">Pausadas</option><option value="si">Activas (solo simulación)</option></select></div>
+<div class="field"><label for="pref-alertas-email">¿Querés recibir avisos por email?</label><select id="pref-alertas-email"><option value="no">No (solo alertas en pantalla)</option><option value="si">Sí (solo simulación, sin envíos)</option></select><small class="notice">En el sistema real, los canales dependen del plan y deben confirmarse en Preferencias.</small></div>
 <div class="demo-actions"><button type="submit">Simular guardado</button><button type="button" id="reset-demo">Restablecer ejemplo</button></div>
 <p class="notice" id="demo-msg" role="status">No se guarda ni se envía ninguna información.</p></form></div></div>
 </div></main>
@@ -83,23 +84,36 @@ window.APD_activatePanelTab = function(key) {
 document.querySelectorAll('[data-tab]').forEach(function(el) { el.addEventListener('click', function() { window.APD_activatePanelTab(el.dataset.tab); }); });
 function updateDemo(values) {
   var lines = document.getElementById('panel-preferencias-resumen').querySelectorAll('p');
-  lines[0].innerHTML = '<strong>Distritos:</strong> ' + (values.district || '(sin filtro)');
-  lines[1].innerHTML = '<strong>Cargos/Materias:</strong> ' + (values.cargo || '(sin filtro)');
-  lines[4].innerHTML = '<strong>Alertas:</strong> ' + (values.active ? 'Activas' : 'Pausadas');
+  function updateRow(index, text) {
+    var row = lines[index];
+    var strong = row.querySelector('strong');
+    if (!strong) return;
+    // Usar textContent: el texto del visitante nunca se interpreta como HTML.
+    while (strong.nextSibling) strong.nextSibling.remove();
+    row.appendChild(document.createTextNode(' ' + text));
+  }
+  updateRow(0, values.district || '(sin filtro)');
+  updateRow(1, values.cargo || '(sin filtro)');
+  updateRow(4, values.active ? 'Activas (demo)' : 'Pausadas');
+  updateRow(5, values.email ? 'Sí (demo)' : 'No');
 }
+
 document.getElementById('form-preferencias').addEventListener('submit', function(event) {
   event.preventDefault();
   var district = document.getElementById('pref-distrito-principal').value.trim().toUpperCase();
   var cargo = document.getElementById('pref-cargo-1').value.trim().toUpperCase();
   var active = document.getElementById('pref-alertas-activas').value === 'si';
+  var email = document.getElementById('pref-alertas-email').value === 'si';
   // No datos privados: demostración solamente, sin llamadas de red ni almacenamiento.
-  updateDemo({ district: district.replace(/[<>]/g, ''), cargo: cargo.replace(/[<>]/g, ''), active: active });
-  document.getElementById('demo-msg').textContent = 'Vista simulada actualizada. No se guardó nada.';
+  updateDemo({ district: district, cargo: cargo, active: active, email: email });
+  document.getElementById('demo-msg').textContent = active && !email
+    ? 'Vista actualizada. Ojo: marcaste alertas activas, pero email sigue desactivado. No se enviaron avisos.'
+    : 'Vista simulada actualizada. No se guardó ni envió nada.';
   window.APD_activatePanelTab('inicio');
 });
 document.getElementById('reset-demo').addEventListener('click', function() {
   document.getElementById('form-preferencias').reset();
-  updateDemo({ district: '', cargo: '', active: false });
+  updateDemo({ district: '', cargo: '', active: false, email: false });
   window.APD_activatePanelTab('inicio');
 });
 </script>
