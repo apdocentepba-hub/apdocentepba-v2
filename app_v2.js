@@ -2090,7 +2090,10 @@ function limpiarListaAC(id) {
 }
 
 function turnoSelectValue(v) {
-  const t = String(v || "").trim().toUpperCase();
+  // Compatibilidad con turnos heredados guardados como texto o código.
+  // Normalizamos tildes (incluida MAÑANA) antes de elegir la opción del formulario.
+  const t = String(v || "").trim().toUpperCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (t === "MANANA") return "M";
   if (t === "TARDE") return "T";
   if (t === "VESPERTINO") return "V";
