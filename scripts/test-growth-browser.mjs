@@ -136,6 +136,9 @@ async function demoFlow() {
   assert.equal(lists, 2);
   await js(`document.getElementById('pref-distrito-principal').value = 'AVELLANEDA';
     document.getElementById('pref-cargo-1').value = 'PRECEPTOR';
+    document.getElementById('pref-turnos').value = 'T';
+    document.querySelector('input[name="pref-nivel-modalidad"][value="SECUNDARIO"]').checked = true;
+    document.querySelector('input[name="pref-nivel-modalidad"][value="TECNICO PROFESIONAL"]').checked = true;
     document.getElementById('pref-alertas-activas').value = 'si';
     document.getElementById('pref-alertas-email').value = 'no';
     document.getElementById('form-preferencias').requestSubmit(); true`);
@@ -147,6 +150,9 @@ async function demoFlow() {
   })`);
   assert.match(first.summary, /AVELLANEDA/);
   assert.match(first.summary, /PRECEPTOR/);
+  assert.match(first.summary, /SECUNDARIO/);
+  assert.match(first.summary, /TECNICO PROFESIONAL/);
+  assert.match(first.summary, /Tarde/);
   assert.match(first.summary, /Activas/);
   assert.match(first.hint, /email sigue desactivado/i);
   assert.equal(first.guideHidden, true);
