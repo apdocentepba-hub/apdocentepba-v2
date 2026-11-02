@@ -16,6 +16,7 @@ let tokenMem = null;
 let googleInitDone = false;
 let planActual = buildPlanFallback();
 let dashboardLoadSequence = 0;
+let dashboardLoadedOwner = null;
 
 const alertasState = {
   items: [],
@@ -77,9 +78,10 @@ function adminSetCards(resumen) {
   `;
 }
 
-async function adminCheckAccess() {
+async function adminCheckAccess(expectedToken = getAdminToken()) {
   try {
     const data = await adminApiGet("/api/admin/me");
+    if (!expectedToken || getAdminToken() !== expectedToken) return false;
     const isAdmin = !!data?.user?.es_admin;
 
     ADMIN.enabled = isAdmin;
@@ -93,6 +95,7 @@ async function adminCheckAccess() {
 
     return isAdmin;
   } catch (e) {
+    if (expectedToken && getAdminToken() !== expectedToken) return false;
     ADMIN.enabled = false;
     window.APD_adminAccessConfirmed = false;
     window.APD_refreshPanelTabs?.();
@@ -418,6 +421,14 @@ function obtenerToken() {
 function borrarToken() {
   tokenMem = null;
   localStorage.removeItem(TOKEN_KEY);
+  dashboardLoadedOwner = null;
+  dashboardLoadSequence++;
+  window.APD_adminAccessConfirmed = false;
+  alertasState.items = [];
+  alertasState.index = 0;
+  ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas", "panel-alertas"]
+    .forEach(id => { const node = document.getElementById(id); if (node) node.textContent = ""; });
+  window.APD_refreshPanelTabs?.();
 }
 
 function actualizarNav() {
@@ -1725,6 +1736,14 @@ async function cargarDashboard() {
 
   mostrarSeccion("panel-docente");
   const sequence = ++dashboardLoadSequence;
+  if (dashboardLoadedOwner && dashboardLoadedOwner !== token) {
+    // Evita exhibir datos de otra cuenta mientras responde una sesión nueva.
+    ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas", "panel-alertas"]
+      .forEach(id => { const node = document.getElementById(id); if (node) node.textContent = ""; });
+    alertasState.items = [];
+    alertasState.index = 0;
+  }
+  dashboardLoadedOwner = token;
   setPanelLoading(true);
   // La cuenta y los filtros se muestran sin esperar alertas ni autorización admin.
   window.APD_adminAccessConfirmed = false;
