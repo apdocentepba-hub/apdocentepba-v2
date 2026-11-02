@@ -37,6 +37,7 @@
   <div class="location"><span>Propuesta visual integral</span><strong id="header-location">Resumen</strong></div>
   <div class="top-actions">
     <label class="search-global"><span aria-hidden="true">⌕</span><input id="global-search" type="search" placeholder="Buscar herramientas…" aria-label="Buscar herramientas" autocomplete="off"><span style="font-size:11px">↵</span></label>
+    <button class="btn secondary" id="help-button" type="button" data-go="ayuda" aria-label="Abrir ayuda y diagnóstico">ⓘ Ayuda</button>
     <button class="btn secondary" id="theme-toggle" type="button" aria-label="Alternar modo oscuro" aria-pressed="false">☾ <span id="theme-label">Oscuro</span></button>
     <div class="user-chip" aria-label="Cuenta de demostración"><div class="avatar">D</div><div class="chip-name"><strong style="font-size:12px">Docente (ejemplo)</strong><small>Datos ficticios</small></div></div>
   </div>
@@ -76,6 +77,17 @@
           <div class="timeline-item"><strong>Estadísticas personales</strong><small>No simulamos datos de tu cuenta</small></div>
         </div>
         <div class="actions"><button class="btn secondary" data-go="estadisticas">Revisar fuentes</button></div>
+      </div>
+      <div class="card span-12" id="activation-card">
+        <div class="card-header"><div><h3>Comprobá tu configuración antes de esperar avisos</h3>
+        <p>Lista de comprobación orientativa. No valida tu cuenta, no se guarda y se reinicia al recargar.</p></div>
+        <span class="pill neutral" id="activation-progress" aria-live="polite">0 de 3 pasos marcados</span></div>
+        <div class="activation-steps">
+          <label class="activation-item"><input type="checkbox" data-check-step="prefs"><span><strong>Elegí mis distritos, cargos y niveles</strong><small> Revisá que los filtros no sean demasiado restrictivos.</small></span></label>
+          <label class="activation-item"><input type="checkbox" data-check-step="email"><span><strong>Comprobé mis canales de alerta</strong><small> Activar las alertas y permitir email son controles diferentes.</small></span></label>
+          <label class="activation-item"><input type="checkbox" data-check-step="abc"><span><strong>Verifiqué la fuente oficial ABC</strong><small> Confirmá condiciones y fechas de postulación en APD.</small></span></label>
+        </div>
+        <div class="actions"><button class="btn primary" data-go="preferencias">Configurar filtros</button><button class="btn secondary" data-go="ayuda">¿No llegan avisos?</button><a class="btn secondary" href="https://misservicios.abc.gob.ar/actos.publicos.digitales/" target="_blank" rel="noopener noreferrer">Consultar APD oficial ↗</a></div>
       </div>
     </div>
   </div>
@@ -190,6 +202,41 @@
     <div class="tabs-inline" aria-label="Accesos de búsqueda rápida"><button class="active" data-query="" type="button">Todos</button><button data-query="licencias" type="button">Licencias</button><button data-query="actas" type="button">Actas</button><button data-query="haberes" type="button">Haberes</button><button data-query="apd" type="button">APD</button><button data-query="planificador" type="button">Aula</button></div>
     <div class="result-total" id="search-count" aria-live="polite">Catálogo disponible</div><div class="tools-grid" id="search-results"></div></div>
   </div>
+<div class="section" id="section-ayuda" hidden>
+  <div class="title-row"><div><div class="eyebrow">AYUDA Y ESTADO DE DATOS</div><h1>Resolvé lo que te impide avanzar</h1><p class="subtitle">Guías concretas para las consultas habituales. En esta demo no podemos verificar el estado de tu sesión, los envíos de correo ni el APD en tiempo real.</p></div><div class="title-tools"><button class="btn secondary" data-go="resumen">← Volver al resumen</button></div></div>
+  <div class="grid">
+    <div class="card span-7">
+      <h3>¿Qué necesitás resolver?</h3>
+      <div class="help-choices" role="group" aria-label="Elegir un problema">
+        <button type="button" class="btn secondary" data-help-topic="emails">No recibo emails</button>
+        <button type="button" class="btn secondary" data-help-topic="offers">No aparecen ofertas</button>
+        <button type="button" class="btn secondary" data-help-topic="slow">El panel tarda o falla</button>
+        <button type="button" class="btn secondary" data-help-topic="plan">Plan y vencimiento</button>
+        <button type="button" class="btn secondary" data-help-topic="historic">Listado o estadísticas antiguas</button>
+      </div>
+      <div id="help-result" class="status" style="margin-top:15px" aria-live="polite">
+        <strong>Elegí un problema para ver cómo resolverlo.</strong>
+        Las instrucciones distinguen lo que podés comprobar vos de lo que debe verificarse desde el servidor.
+      </div>
+      <div class="actions"><button type="button" class="btn primary" id="help-action" data-go="preferencias" hidden>Ir a preferencias</button><a href="https://misservicios.abc.gob.ar/actos.publicos.digitales/" class="btn secondary" rel="noopener noreferrer" target="_blank">Abrir APD oficial ↗</a></div>
+    </div>
+    <div class="card span-5"><h3>Qué sabemos de la plataforma</h3>
+      <div class="list">
+        <div class="list-row"><div class="left"><span class="bubble">✓</span><div><strong>Barrido provincial registrado</strong><p>Completado 137/137 el 1/11/2026</p></div></div><span class="pill neutral">Corte</span></div>
+        <div class="list-row"><div class="left"><span class="bubble">!</span><div><strong>Histórico</strong><p>Última captura: 18/9/2026</p></div></div><span class="pill warn">Desactualizado</span></div>
+        <div class="list-row"><div class="left"><span class="bubble">?</span><div><strong>Notificaciones personales</strong><p>Requieren sesión y logs reales</p></div></div><span class="pill neutral">No evaluadas</span></div>
+      </div>
+      <p class="small" style="margin:14px 0 0">Datos congelados del corte indicado: no es un monitor en vivo ni promete disponibilidad actual de ABC.</p>
+    </div>
+    <div class="card span-12">
+      <h3>Estado de las 34 herramientas</h3>
+      <p class="small">Clasificación declarada en el catálogo del repositorio. «Activo» es una etiqueta del catálogo, no una garantía de pruebas funcionales, actualización normativa ni disponibilidad permanente.</p>
+      <div id="tool-state-summary" class="tool-state-summary" aria-label="Clasificación de herramientas"></div>
+      <div class="status warn"><strong>No confundimos «Existe un enlace» con «Funciona correctamente».</strong> Los recursos «Experimental», «Preparado» y «Próximamente» se identificarán en las tarjetas. Las funcionalidades nuevas requieren pruebas y aprobación antes de publicarse como operativas.</div>
+      <div class="actions"><button type="button" class="btn primary" data-go="recursos">Ver catálogo y estados</button><button type="button" class="btn secondary" data-go="buscar">Buscar un recurso concreto</button></div>
+    </div>
+  </div>
+</div>
 </main>
 <footer class="footer"><span>APDocentePBA · Propuesta visual integral · Solo evaluación, sin sesión</span><span>GitHub Pages + Cloudflare Workers + Supabase en producción · Render solo vista previa</span></footer>
 </div></div>
