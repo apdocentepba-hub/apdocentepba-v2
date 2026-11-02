@@ -56,6 +56,24 @@
   function ensureCard() {
     const root = byId("panel-content");
     if (!root) return null;
+    // La página existente ya tiene este bloque: conservarlo y no duplicar tarjetas.
+    const nativeRadar = byId("panel-radar-provincia");
+    if (nativeRadar) {
+      if (!byId("apd-radar-vivo-title")) {
+        nativeRadar.replaceChildren();
+        nativeRadar.insertAdjacentHTML("afterbegin",
+          '<div class="apd-radar-vivo" aria-live="polite">' +
+          '<strong id="apd-radar-vivo-title">Sin consultar</strong>' +
+          '<div id="apd-radar-vivo-stats" class="stats"></div>' +
+          '<small id="apd-radar-vivo-detail">Consulta de datos agregados del escáner provincial.</small>' +
+          '<small>Las ofertas detectadas no equivalen a vacantes abiertas. Antes de postularte, verificá siempre en ABC.</small>' +
+          '</div>');
+      }
+      const nativeButton = byId("btn-refresh-provincia");
+      if (nativeButton) nativeButton.textContent = "Consultar ahora";
+      return nativeRadar;
+    }
+    // Compatibilidad con páginas de pruebas donde aún no existe el radar fijo.
     let card = byId("panel-radar-combinado-card");
     if (!card) {
       const html = '<div id="panel-radar-combinado-card" class="panel-card span-12">' +
@@ -127,7 +145,7 @@
     if (state.controller) state.controller.abort();
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     state.controller = controller;
-    const btn = byId("btn-refresh-radar-combinado");
+    const btn = byId("btn-refresh-provincia") || byId("btn-refresh-radar-combinado");
     if (btn) btn.disabled = true;
     render({ kind: "loading" });
     try {
@@ -152,7 +170,7 @@
   function boot() {
     ensureStyle();
     if (!ensureCard()) return;
-    const btn = byId("btn-refresh-radar-combinado");
+    const btn = byId("btn-refresh-provincia") || byId("btn-refresh-radar-combinado");
     if (btn && !btn.dataset.apdRadarBound) {
       btn.dataset.apdRadarBound = "1";
       btn.addEventListener("click", function () { void refresh(); });
