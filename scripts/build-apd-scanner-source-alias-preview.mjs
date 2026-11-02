@@ -41,10 +41,15 @@ export function buildDistrictSourceAliasPreview(live,source){
    "function buildGlobalSnapshotRow(oferta, capturedAt) {",
    "function buildGlobalSnapshotRow(oferta, capturedAt, canonicalDistrict = null) {",
    "snapshot function");
- out=changeOnce(out,
+ const snapshotStart=out.indexOf("function buildGlobalSnapshotRow(");
+ const snapshotEnd=out.indexOf("\n__name(buildGlobalSnapshotRow",snapshotStart);
+ if(snapshotStart<0||snapshotEnd<0)throw Error("Snapshot function boundaries changed");
+ const snapshotBody=out.slice(snapshotStart,snapshotEnd);
+ const patchedSnapshot=changeOnce(snapshotBody,
    'distrito: norm(oferta.descdistrito || ""),',
    'distrito: canonicalDistrict ? norm(canonicalDistrict) : norm(oferta.descdistrito || ""),',
-   "district database storage");
+   "district database storage inside snapshot function");
+ out=out.slice(0,snapshotStart)+patchedSnapshot+out.slice(snapshotEnd);
  return out;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
