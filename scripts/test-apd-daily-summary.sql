@@ -34,7 +34,7 @@ BEGIN
  IF summary.total_districts<>137 OR summary.offers_total<>3
    OR summary.district_offer_counts->>'AVELLANEDA'<>'2'
    OR summary.district_offer_counts->>'QUILMES'<>'1'
-   OR jsonb_object_length(summary.district_offer_counts)<>2 THEN
+   OR (SELECT count(*) FROM jsonb_object_keys(summary.district_offer_counts))<>2 THEN
   RAISE EXCEPTION 'counts error %',to_jsonb(summary);
  END IF;
  -- Idempotente: un reintento NO crea ni reescribe el mismo día.
