@@ -26,6 +26,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Verify production scripts parse (no database access)
+        run: |
+          bash -n scripts/apd_gha_backup_crypto.sh
+          bash -n scripts/apd_gha_production_backup.sh
       - name: Validate encryption, decryption, SHA-256 and tamper resistance offline
         run: bash scripts/test-apd-gha-backup-offline.sh
 
