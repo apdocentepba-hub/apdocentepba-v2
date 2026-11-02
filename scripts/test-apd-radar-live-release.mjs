@@ -7,8 +7,8 @@ import {createHash} from "node:crypto";
 const source = readFileSync("index.html","utf8");
 const candidate = readFileSync("candidates/radar_provincia_live_20261102.js","utf8");
 const prior = execFileSync("git",["show","origin/main:index.html"],{encoding:"utf8"});
-const OLD='<script src="radar_provincia_patch_semaforo.js?v=2"></script>';
-const NEW='<script src="candidates/radar_provincia_live_20261102.js?v=1"></script>';
+const OLD='<script src="candidates/radar_provincia_live_20261102.js?v=1"></script>';
+const NEW='<script src="candidates/radar_provincia_live_20261102.js?v=2"></script>';
 const url="https://alertasapd.com.ar/candidates/radar_provincia_live_20261102.js";
 const hash=x=>createHash("sha256").update(x).digest("hex");
 
