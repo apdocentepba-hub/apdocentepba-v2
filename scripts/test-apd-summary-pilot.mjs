@@ -38,3 +38,25 @@ test('no acepta integrar dos veces ni ejecutar helper con imports', () => {
 test('archivo productivo permanece como fuente inalterada', () => {
  assert.doesNotMatch(live,/maybeCaptureDailyProvinceSummary|APD_DAILY_SUMMARY_ENABLED/);
 });
+
+test('el error inesperado de histórico no puede convertir un barrido finalizado en fallo', async () => {
+ const output=buildPilotWorker(live,hook);
+ const anchor=output.indexOf('    // Piloto opt-in: solo después de persistir estado finished.');
+ const end=output.indexOf('    return {',anchor);
+ assert.ok(anchor>0 && end>anchor);
+ const block=output.slice(anchor,end);
+ const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+ const run=new AsyncFunction('finished','env','nextNotes','maybeCaptureDailyProvinceSummary','supabaseFetchWithRetry','console',block+String.fromCharCode(10)+'return "scanner_ok";');
+ const logs=[],warnings=[];
+ const logger={log:(...a)=>logs.push(a),warn:(...a)=>warnings.push(a)};
+ let invoked=0;
+ const bomb=async()=>{invoked++;throw Error('unexpected exception');};
+ const env={APD_DAILY_SUMMARY_ENABLED:'true'};
+ assert.equal(await run(true,env,{completed_scan_date:'2026-11-02'},bomb,null,logger),'scanner_ok');
+ assert.equal(invoked,1);
+ assert.equal(warnings.length,1);
+ assert.equal(await run(false,env,{completed_scan_date:'2026-11-02'},bomb,null,logger),'scanner_ok');
+ assert.equal(await run(true,{APD_DAILY_SUMMARY_ENABLED:'false'}, {completed_scan_date:'2026-11-02'},bomb,null,logger),'scanner_ok');
+ assert.equal(invoked,1);
+ assert.equal(logs.length,0);
+});

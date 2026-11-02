@@ -2,7 +2,8 @@
 -- Base aislada temporal del CI. JAMAS ejecutar contra Supabase productivo.
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN;
+-- El rol real de Supabase posee BYPASSRLS: simularlo en CI.
+CREATE ROLE service_role NOLOGIN BYPASSRLS;
 CREATE TABLE public.apd_global_scan_state (
   scope text PRIMARY KEY, status text, mode text, started_at timestamptz,
   finished_at timestamptz, total_districts integer,
@@ -12,6 +13,12 @@ CREATE TABLE public.apd_ofertas_global_current (
   source_offer_key text PRIMARY KEY, distrito text,
   last_seen_at timestamptz NOT NULL
 );
+-- El servicio obtiene lectura del estado y de las ofertas, igual que el Worker real.
+GRANT USAGE ON SCHEMA public TO service_role;
+-- SELECT FOR UPDATE requires UPDATE privilege on the locked table.
+-- Real Supabase service_role has this; the CI simulation must mirror it.
+GRANT SELECT, UPDATE ON public.apd_global_scan_state TO service_role;
+GRANT SELECT ON public.apd_ofertas_global_current TO service_role;
 \ir ../sql/apd_daily_province_summary_20261102.sql
 INSERT INTO public.apd_global_scan_state
 (scope,status,mode,started_at,finished_at,total_districts,districts_completed,offers_processed,notes)
@@ -51,6 +58,25 @@ BEGIN
  END IF;
 END;
 $test$;
+
+-- Repetir la escritura con el rol REAL del Worker, no solamente postgres.
+-- Solo en la base efímera de CI: borrar la fila ficticia y volver a capturarla.
+DELETE FROM public.apd_daily_province_summary WHERE scan_date='2026-11-02';
+SET ROLE service_role;
+DO $test$
+DECLARE r record; saved_count bigint;
+BEGIN
+ SELECT * INTO r FROM public.capture_apd_daily_province_summary('2026-11-02');
+ IF r.saved IS DISTINCT FROM true OR r.offers<>3 OR r.districts_with_offers<>2 THEN
+  RAISE EXCEPTION 'service_role no pudo guardar resumen: %',to_jsonb(r);
+ END IF;
+ SELECT count(*) INTO saved_count FROM public.apd_daily_province_summary;
+ IF saved_count<>1 THEN RAISE EXCEPTION 'service_role no puede leer su resumen'; END IF;
+ SELECT * INTO r FROM public.capture_apd_daily_province_summary('2026-11-02');
+ IF r.saved IS DISTINCT FROM false THEN RAISE EXCEPTION 'service_role duplicó resumen'; END IF;
+END;
+$test$;
+RESET ROLE;
 
 -- Un escaneo parcial se rechaza, sin escribir la tabla.
 UPDATE public.apd_global_scan_state SET status='running';
