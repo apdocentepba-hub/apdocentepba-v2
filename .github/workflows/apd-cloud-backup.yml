@@ -12,7 +12,8 @@ on:
       - 'scripts/apd_gha_backup_crypto.sh'
       - 'scripts/apd_gha_production_backup.sh'
       - 'scripts/test-apd-gha-backup-offline.sh'
-      - 'scripts/test-apd-gha-backup-restore-sql.sh'\n      - 'scripts/test-apd-gha-consistent-pg17.sh'
+      - 'scripts/test-apd-gha-backup-restore-sql.sh'
+      - 'scripts/test-apd-gha-consistent-pg17.sh'
 
 permissions:
   contents: read
@@ -48,7 +49,8 @@ jobs:
       - name: Validate encryption, decryption, SHA-256 and tamper resistance offline
         run: bash scripts/test-apd-gha-backup-offline.sh
       - name: Verify real PostgreSQL17 restoration with mock encrypted SQL
-        run: bash scripts/test-apd-gha-backup-restore-sql.sh\n      - name: Verify real PostgreSQL 17 single-snapshot dump & restore\n        run: bash scripts/test-apd-gha-consistent-pg17.sh
+        run: bash scripts/test-apd-gha-backup-restore-sql.sh
+      - name: Verify real PostgreSQL 17 single-snapshot dump & restore\n        run: bash scripts/test-apd-gha-consistent-pg17.sh
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
