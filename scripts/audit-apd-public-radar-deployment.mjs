@@ -7,7 +7,8 @@ import {createHash} from "node:crypto";
 
 const SITE="https://alertasapd.com.ar/";
 const LEGACY="radar_provincia_patch_semaforo.js?v=2";
-const CANDIDATE="candidates/radar_provincia_live_20261102.js?v=1";
+const CANDIDATE="candidates/radar_provincia_live_20261102.js?v=2";
+const PREVIOUS_CANDIDATE="candidates/radar_provincia_live_20261102.js?v=1";
 const htmlRepo=readFileSync("index.html","utf8");
 const candidateSource=readFileSync("candidates/radar_provincia_live_20261102.js","utf8");
 function sha(text){return createHash("sha256").update(text).digest("hex");}
@@ -25,10 +26,10 @@ async function get(url){
 const deployed=await get(SITE+"?apd_radaraudit="+Date.now());
 const scripts=[...deployed.matchAll(/<script\s+[^>]*src=["']([^"']+)["']/g)].map(x=>x[1]);
 const oldScripts=scripts.filter(x=>x===LEGACY);
-const newScripts=scripts.filter(x=>x===CANDIDATE);
+const newScripts=scripts.filter(x=>x===CANDIDATE || x===PREVIOUS_CANDIDATE);
 assert.equal(oldScripts.length+newScripts.length,1,"Public site must load precisely one provincial radar");
 const current= newScripts.length===1 ? "candidate" : "legacy";
-const sourceName=current==="candidate" ? CANDIDATE : LEGACY;
+const sourceName=current==="candidate" ? newScripts[0] : LEGACY;
 const assetUrl=new URL(sourceName.split("?")[0],SITE);
 assetUrl.searchParams.set("apd_radar_asset_audit",String(Date.now()));
 const source=await get(assetUrl.href);
@@ -40,7 +41,7 @@ const output={
  production_source_sha256:sha(source),
  current_repo_source_sha256:sha(expected),
  published_script_matches_repository:sha(source)===sha(expected),
- published_index_matches_main_radar_tag:current==="legacy" && htmlRepo.includes('<script src="'+LEGACY+'"></script>'),
+ published_index_matches_main_radar_tag:htmlRepo.includes('<script src="'+sourceName+'"></script>'),
  no_duplicate_script:true
 };
 console.log(JSON.stringify(output,null,2));
