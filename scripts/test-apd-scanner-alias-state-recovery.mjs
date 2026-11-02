@@ -13,9 +13,11 @@ const source=buildDistrictSourceAliasPreview(
   readFileSync("worker-live/worker_hotfix.js","utf8"),
   readFileSync("worker-live/apd_scanner_source_district_alias_candidate.mjs","utf8"));
 const fn=(name)=>{
-  const a=source.indexOf("function "+name+"(");
-  const b=source.indexOf("\n__name("+name+",",a);
-  assert.ok(a>=0&&b>a,"Cannot extract canonical Worker function "+name);
+  const start=source.indexOf("function "+name+"(");
+  const b=source.indexOf("\n__name("+name+",",start);
+  assert.ok(start>=0&&b>start,"Cannot extract canonical Worker function "+name);
+  // The original code uses async function declarations for the scanner/state machine.
+  const a=source.slice(start-6,start)==="async "?start-6:start;
   return source.slice(a,b);
 };
 const compiled=[
