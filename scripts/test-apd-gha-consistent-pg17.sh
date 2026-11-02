@@ -14,7 +14,9 @@ CREATE TABLE public.apd_mock_ofertas (id integer PRIMARY KEY, descripcion text N
 INSERT INTO public.apd_mock_ofertas VALUES (1,'Ficticia A'), (2,'Ficticia B');
 SQL
 APD_INVENTORY_DB_URL="$source_uri" bash scripts/apd_gha_public_inventory.sh > "$tmp/source-inventory.tsv"
-[[ "$(wc -l < "$tmp/source-inventory.tsv")" == 2 ]]
+[[ "$(wc -l < "$tmp/source-inventory.tsv")" -ge 2 ]]
+grep -q $'public.apd_mock_preferences\t2' "$tmp/source-inventory.tsv"
+grep -q $'public.apd_mock_ofertas\t2' "$tmp/source-inventory.tsv"
 createdb -h 127.0.0.1 -U postgres apd_backup_restore
 # Exactly ONE pg_dump command for DDL and rows, using PostgreSQL 17 client.
 # On the GitHub hosted runner, docker is available. Postgres17 service stays isolated.
