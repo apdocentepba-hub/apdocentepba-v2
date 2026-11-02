@@ -19,7 +19,7 @@ assert.match(landing, /<\/body>/i);
 const banner = `<div class="apd-preview-ribbon" role="status" style="position:sticky;top:0;z-index:9999;background:#ffedb7;color:#402a02;padding:13px 20px;font:700 14px system-ui;text-align:center;border-bottom:2px solid #d29d30">
   VISTA PREVIA · Diseño de prueba sin conexión a cuentas ni envíos.
   <a href="./panel-demo.html" style="color:#402a02;margin-left:12px">Probar panel simulado</a>
-  <a href="./platform-visual.html" style="color:#402a02;margin-left:12px">Ver rediseño completo</a>
+  <a href="./platform-completa.html" style="color:#402a02;margin-left:12px">Ver propuesta visual integral</a>
   <a href="./insigne-laboratorio.html" style="color:#402a02;margin-left:12px">Probar Insigne LAB</a>
   <a href="https://alertasapd.com.ar/" style="color:#402a02;margin-left:12px">Sitio real</a>
 </div>`;
@@ -138,6 +138,10 @@ copyFileSync(path.join(root, 'growth_activation_guide.js'), path.join(out, 'grow
 copyFileSync(path.join(root, 'insigne_rules_lab.js'), path.join(out, 'insigne_rules_lab.js'));
 copyFileSync(path.join(root, 'scripts/previews/platform-visual.html'), path.join(out, 'platform-visual.html'));
 copyFileSync(path.join(root, 'platform_refresh_v1.css'), path.join(out, 'platform_refresh_v1.css'));
+copyFileSync(path.join(root, 'scripts/previews/platform-completa.html'), path.join(out, 'platform-completa.html'));
+copyFileSync(path.join(root, 'scripts/previews/platform-completa.css'), path.join(out, 'platform-completa.css'));
+copyFileSync(path.join(root, 'scripts/previews/platform-completa.js'), path.join(out, 'platform-completa.js'));
+copyFileSync(path.join(root, 'assets/js/herramientas-catalogo.js'), path.join(out, 'herramientas-catalogo.js'));
 
 copyFileSync(path.join(root, 'scripts/previews/insigne-laboratorio.html'), path.join(out, 'insigne-laboratorio.html'));
 writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n', 'utf8');
