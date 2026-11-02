@@ -5,6 +5,7 @@
  */
 import assert from "node:assert/strict";
 import {createHmac} from "node:crypto";
+import {spawn} from "node:child_process";
 
 const BASE="http://127.0.0.1:3300/";
 const SECRET=process.env.APD_CI_FAKE_JWT_SECRET;
@@ -74,13 +75,41 @@ await stageRun(runs.A,"MATANZA",...moments.A,keysA);
 await stageRun(runs.B,"MATANZA",...moments.B,keysB);
 await stageRun(runs.AV,"AVELLANEDA",...moments.AV,["SIM_AV_NEW"]);
 
-// CI holds the MATANZA advisory lock for a few seconds while these
-// requests begin. Requests issue at once. Only one can complete.
-const result=await Promise.allSettled([
- call("commit_capture",{p_run_id:runs.A}),
- call("commit_capture",{p_run_id:runs.B}),
- call("commit_capture",{p_run_id:runs.AV})
+// Acquire the real PostgreSQL advisory lock in a separate session before
+// issuing both HTTP requests. The holder releases it when its session ends.
+const holder=spawn("psql",["-X","-qAt","-v","ON_ERROR_STOP=1","-c",
+  "SELECT pg_advisory_lock(hashtextextended('MATANZA',0)); SELECT 'LOCKED'; SELECT pg_sleep(7);"],
+  {env:process.env,stdio:["ignore","pipe","pipe"]});
+const lockReady=await new Promise((resolve,reject)=>{
+ let output="",stderr="";
+ const guard=setTimeout(()=>reject(Error("Timed out acquiring isolated test lock")),5000);
+ holder.stdout.on("data",chunk=>{
+  output+=String(chunk);
+  if(output.includes("LOCKED")){clearTimeout(guard);resolve(true);}
+ });
+ holder.stderr.on("data",chunk=>{stderr+=String(chunk).slice(0,200);});
+ holder.on("error",err=>{clearTimeout(guard);reject(err);});
+ holder.on("exit",code=>{
+  if(!output.includes("LOCKED")){clearTimeout(guard);reject(Error("psql lock holder failed "+code+": "+stderr));}
+ });
+});
+assert.equal(lockReady,true);
+const matA=call("commit_capture",{p_run_id:runs.A});
+const matB=call("commit_capture",{p_run_id:runs.B});
+const independent=call("commit_capture",{p_run_id:runs.AV});
+// Confirm AVELLANEDA does not need to wait for the MATANZA lock.
+const independentResult=await Promise.race([
+ independent,
+ new Promise((_,reject)=>setTimeout(()=>reject(Error("Independent district blocked by MATANZA lock")),4500))
 ]);
+assert.deepEqual(independentResult,[{upserted:1,pruned:0}]);
+const result=await Promise.allSettled([matA,matB,independent]);
+const holderExit=await new Promise((resolve,reject)=>{
+ if(holder.exitCode!==null)return resolve(holder.exitCode);
+ holder.once("close",code=>resolve(code));
+ holder.once("error",reject);
+});
+assert.equal(holderExit,0);
 const [a,b,av]=result;
 const winnerCount=[a,b].filter(x=>x.status==="fulfilled").length;
 assert.equal(winnerCount,1,"Exactly one of two overlapping captures must commit");
