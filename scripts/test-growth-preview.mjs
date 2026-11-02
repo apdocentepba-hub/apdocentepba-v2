@@ -10,7 +10,7 @@ const out = path.join(root, 'dist-growth-preview');
 
 test('la construcción de la demo funciona sin bibliotecas externas', () => {
   execFileSync(process.execPath, [path.join(root, 'scripts/build-growth-preview.mjs')], { cwd: root, timeout: 10000 });
-  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'index.html', 'insigne-laboratorio.html', 'insigne_rules_lab.js', 'panel-demo.html', 'robots.txt'].sort());
+  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'index.html', 'insigne-laboratorio.html', 'insigne_rules_lab.js', 'panel-demo.html', 'platform-visual.html', 'platform_refresh_v1.css', 'robots.txt'].sort());
 });
 
 test('la landing no muestra botones de registro/login que usen backend real', () => {
@@ -82,4 +82,16 @@ test('Insigne LAB aparece sólo como experimento aislado en la preview',()=>{
   for (const text of [lab,engine]) {
     assert.doesNotMatch(text,/fetch\s*\(|XMLHttpRequest|navigator\.sendBeacon|localStorage|sessionStorage/);
   }
+});
+
+test('la propuesta de navegación es estática, accesible y sin sesiones reales',()=>{
+  const html=readFileSync(path.join(out,'platform-visual.html'),'utf8');
+  assert.match(html,/VISTA PREVIA VISUAL/);
+  assert.match(html,/datos ficticios/i);
+  assert.match(html,/Carrusel real NO fue modificado/);
+  for(const section of ['resumen','alertas','listados','recursos','plan','estadisticas','preferencias']){
+    assert.match(html,new RegExp('id="section-'+section+'"'));
+  }
+  assert.doesNotMatch(html,/type="password"|\/api\/login|\/api\/register|localStorage|sessionStorage|fetch\s*\(|sendBeacon|XMLHttpRequest/);
+  assert.match(html,/platform_refresh_v1\.css/);
 });
