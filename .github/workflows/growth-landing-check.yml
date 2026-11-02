@@ -16,6 +16,9 @@ on:
       - 'insigne_rules_lab.js'
       - 'scripts/previews/insigne-laboratorio.html'
       - 'scripts/test-insigne-rules-lab.mjs'
+      - 'scripts/test-platform-refresh.mjs'
+      - 'platform_refresh_v1.css'
+      - 'panel_tabs_patch.js'
       - 'scripts/test-growth-browser.mjs'
       - 'scripts/build-growth-preview.mjs'
       - 'scripts/test-growth-preview.mjs'
@@ -40,7 +43,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate landing and campaign entry routing
-        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs scripts/test-growth-plan-parity.mjs scripts/test-growth-plan-fallback.mjs scripts/test-insigne-rules-lab.mjs
+        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs scripts/test-growth-plan-parity.mjs scripts/test-growth-plan-fallback.mjs scripts/test-insigne-rules-lab.mjs scripts/test-platform-refresh.mjs
       - name: Verificar construcción aislada sin backend ni contraseñas
         run: node --test scripts/test-growth-preview.mjs
       - name: Smoke en navegador Chrome real (sin backend)
