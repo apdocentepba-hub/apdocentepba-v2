@@ -33,7 +33,7 @@ test('centro ABC vincula exclusivamente portales institucionales verificados',()
  'https://servado.abc.gob.ar/cya',
  'https://misservicios.abc.gob.ar/actos.publicos.digitales/',
  'https://srv4.abc.gob.ar/?i=AGENTES',
- 'https://mapaescolar.abc.gob.ar/'
+ 'https://mapaescolar.abc.gob.ar/mapaescolar/'
  ])assert.ok(official.includes(url),url);
  assert.match(official,/Verificada el 1\/11\/2026/);
  assert.match(official,/no.*monitor en tiempo real/i);
