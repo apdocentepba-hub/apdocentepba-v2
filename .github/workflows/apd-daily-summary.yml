@@ -8,6 +8,7 @@ on:
       - 'sql/apd_daily_province_summary_20261102.sql'
       - 'scripts/test-apd-daily-summary.sql'
       - 'scripts/apd-daily-history-preflight.sql'
+      - 'scripts/apd-history-postflight.sql'
       - 'scripts/test-apd-history-ddl-recovery.sql'
       - 'scripts/test-apd-daily-worker-gate.mjs'
       - 'worker-live/apd_daily_summary_hook.mjs'
@@ -65,6 +66,26 @@ jobs:
           PGPASSWORD: tests_only
         run: |
           psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --file=scripts/test-apd-history-ddl-recovery.sql
+      - name: Verificar seguridad del esquema post-migración (solo DB de CI)
+        env:
+          PGPASSWORD: tests_only
+        run: |
+          read_check() {
+            psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --no-align --tuples-only --file=scripts/apd-history-postflight.sql | tail -n 1
+          }
+          before="$(read_check)"
+          echo "Postflight con fila de prueba: $before"
+          if [ "$(printf '%s' "$before" | awk -F '|' '{print $(NF-1)}')" != "t" ] || [ "$(printf '%s' "$before" | awk -F '|' '{print $NF}')" != "f" ]; then
+            echo "Postflight security or nonempty fixture condition failed" >&2
+            exit 1
+          fi
+          psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --command="DELETE FROM public.apd_daily_province_summary;"
+          after="$(read_check)"
+          echo "Postflight tras retirar solo la fila ficticia CI: $after"
+          if [ "$(printf '%s' "$after" | awk -F '|' '{print $(NF-1)}')" != "t" ] || [ "$(printf '%s' "$after" | awk -F '|' '{print $NF}')" != "t" ]; then
+            echo "Postflight empty fresh schema condition failed" >&2
+            exit 1
+          fi
       - name: Validar adaptador opt-in en aislamiento
         run: |
           node --check worker-live/apd_daily_summary_hook.mjs

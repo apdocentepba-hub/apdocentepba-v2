@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.apd_daily_province_summary (
 );
 ALTER TABLE public.apd_daily_province_summary ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.apd_daily_province_summary FROM PUBLIC, anon, authenticated;
+-- Los valores por defecto de Supabase pueden dar DELETE a service_role.
+-- Quitar todos los grants heredados por defecto sobre ESTA tabla nueva y reducir a los necesarios.
+REVOKE ALL ON TABLE public.apd_daily_province_summary FROM service_role;
 GRANT SELECT, INSERT, UPDATE ON public.apd_daily_province_summary TO service_role;
 
 -- La RPC debe invocarse exclusivamente con el service role *en el backend*.
