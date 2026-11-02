@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - 'scripts/**'
       - 'scripts/test-apd-manual-release-guards.mjs'
       - 'scripts/test-live-messaging-status-auth-current.mjs'
       - 'scripts/audit-apd-workflow-triggers.mjs'
