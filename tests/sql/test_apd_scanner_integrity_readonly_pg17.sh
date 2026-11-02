@@ -11,7 +11,7 @@ test -s "$sql"
 test -s "$sql_key"
 
 # Fail on any accidentally inserted SQL writing operation (exclude comments).
-if grep -Ev '^\s*--' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|COPY|CALL|DO)\b'; then
+if grep -Ev '^\s*--' "$sql" "$sql_key" | grep -Eiq '\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|COPY|CALL|DO)\b'; then
   echo 'Preflight must remain SELECT-only' >&2
   exit 10
 fi
