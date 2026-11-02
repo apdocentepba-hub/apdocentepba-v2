@@ -1,43 +1,44 @@
-# APDocentePBA — respaldo remoto por GitHub Actions
+# APDocentePBA — procedimiento de respaldo cifrado y restauración
 
-**Estado: preparado, pendiente de credenciales seguras y primera ejecución manual.** Fecha: 2026-11-02.
+**Fecha de revisión:** 2026-11-02. **Estado:** controles de laboratorio aprobados (PR #230 y #231); **sin constancia de primer respaldo restaurable de datos de producción**. Este documento no autoriza migraciones ni despliegues.
 
-Este procedimiento opera **exclusivamente** sobre Supabase APDocentePBA \`vvgkinkvojqwfuqaxijh\`. Es **de solo lectura** en producción: no hace migraciones, borrados, cron, deploy del Worker, ni modifica preferencias o usuarios.
+## Alcance verificado de la fuente (consulta de solo lectura)
 
-## Diseño de seguridad
-- Workflow: \`.github/workflows/apd-cloud-backup.yml\`. Exportaciones productivas **solo** desde \`main\`, por \`workflow_dispatch\`, y confirmación exacta \`RESPALDAR_APDOCENTEPBA\`.
-- Los PR ejecutan **únicamente** pruebas falsas de cifrado y corrupción; no disponen de credenciales ni tocan Supabase.
-- El origen se verifica por host + usuario del proyecto APD, evita apuntar a otro proyecto.
-- Usa Supabase CLI **2.122.0**, estable, y los comandos oficiales \`db dump\` para roles, esquema y datos. Nunca hace \`db push\`, \`db reset\` o \`apply_migration\`.
-- El paquete generado se cifra mediante GnuPG AES-256 y una contraseña larga de GitHub Secrets antes de ser publicado como **único artefacto**. GitHub NO almacena SQL plano en el repositorio ni en sus artifacts.
-- Los archivos cifrados incluyen \`roles.sql\`, \`schema.sql\`, \`data.sql\`, \`counts.tsv\`, \`SHA256SUMS\`; verifica suma SHA-256 y que el descifrado sea correcto.
-- Restaura en PostgreSQL 17 de un **Supabase local efímero en GitHub runner**; compara cantidades de \`public.users\`, \`public.user_subscriptions\` y \`public.apd_ofertas_global_current\`. Si falla exportación, cifrado, descifrado, restauración o conteos: el trabajo falla y **no sube artifact**.
-- Solo conserva un archivo \`.tar.gpg\` cifrado como GitHub Actions artifact, **30 días**. En producción solo lee datos; los SQL temporales existen durante el job en el runner y se eliminan al terminar; GitHub hospedará temporalmente plaintext mientras se ejecuta el job.
-- No agrega tareas programadas ni cobros. Mantener la frase de cifrado fuera de chats y del código; preferir un gestor de contraseñas y una copia de recuperación segura. **Sin esa clave el artifact no puede restaurarse.**
+- Supabase APDocentePBA: `vvgkinkvojqwfuqaxijh`, PostgreSQL 17, plan Free.
+- Inventario observado el 02/11/2026: 33 tablas de `public`, 50 usuarios de la aplicación, 0 usuarios en `auth.users`, 0 buckets y 0 objetos de Storage.
+- Los 33 objetos de tabla de `public` tenían RLS activado. Estos conteos son una **observación puntual** y pueden cambiar.
+- `public` contiene datos operativos; NO se asume que un volcado de `public` equivalga a respaldo integral de Supabase. Fuera de alcance: otros esquemas gestionados, objetos físicos de Storage, Cloudflare, secretos, Edge Functions y servicios externos.
+- La herramienta aborta si detecta cualquier usuario en `auth.users` o algún bucket/objeto en `storage`. Si esta condición cambia, primero diseñar una copia con alcance ampliado; nunca omitir silenciosamente datos activos.
 
-## Qué cubre y qué NO
-El comando oficial \`supabase db dump\` excluye por diseño esquemas gestionados por Supabase (incluidos \`auth\`, \`storage\` y algunos de extensiones), aun solicitando esquema + datos. Por tanto, esta herramienta respalda los objetos/datos gestionados por **la aplicación**, no equivale por sí misma a una copia física integral del servicio Supabase. No descarga archivos reales de Supabase Storage, Edge Functions, KV, secretos de Cloudflare ni contraseñas externas. La prueba de restauración es **de datos de la aplicación en Postgres local**, no de producción ni de una instancia idéntica en la nube.
+## Flujo seguro vigente: formato cifrado v3
 
-**La migración del histórico queda pendiente hasta evaluar si el alcance de esta restauración cubre los datos en riesgo.** El punto de control anterior en Google Drive es complementario, no es un backup recuperable.
+1. El workflow `.github/workflows/apd-cloud-backup.yml` solo lee producción en ejecución manual `workflow_dispatch`, branch `main`, confirmación literal `RESPALDAR_APDOCENTEPBA`, environment `apd-backup`.
+2. Requiere GitHub Secrets `APD_SUPABASE_DB_URL` y `APD_BACKUP_ENCRYPTION_PASSPHRASE` (>= 32 caracteres). El destino PostgreSQL se valida por proyecto, usuario y nombre de base. **Nunca registrar secretos en chat, commits, logs o issues.**
+3. El origen se consulta para los tres controles críticos y para **todas las tablas públicas** mediante `scripts/apd_gha_public_inventory.sh`. La lista incluye cada tabla y cantidad de filas, no contenidos personales.
+4. Se exportan roles con Supabase CLI y el esquema+dato de `public` en **un solo `pg_dump` PostgreSQL 17**, con instantánea consistente. Antes de aceptar la copia, se reevalúan los conteos y el alcance de Auth/Storage. Si el inventario cambia, el trabajo falla de forma conservadora.
+5. Se incluyen `roles.sql`, `app.sql`, `counts.tsv`, `inventory.tsv` y `SHA256SUMS` en un único paquete GPG AES-256. Solo se sube el archivo cifrado `.tar.gpg`. El descifrador puede leer también archivos v1/v2 anteriores, pero las pruebas CI actuales cubren específicamente v2/v3.
+6. En un Supabase local descartable con PostgreSQL 17 se descifra, valida SHA-256, aplica el SQL y compara **todas** las tablas y cantidades de `public` con el inventario cifrado. Si la restauración o una comparación falla, no se publica el artifact.
+7. El artifact de GitHub caduca a los **30 días**; requiere descarga y almacenamiento externo privado. La frase de cifrado debe conservarse fuera de GitHub. La ejecución local no equivale a una restauración completa de toda la plataforma.
 
-## Única configuración externa necesaria (nunca compartir por chat)
+## Evidencia automatizada
 
-1. En [Supabase / Proyecto APDocentePBA / Connect](https://supabase.com/dashboard/project/vvgkinkvojqwfuqaxijh), obtener la **URI de conexión PostgreSQL** correspondiente al proyecto (directa o session pooler; usuario \`postgres\` o \`postgres.vvgkinkvojqwfuqaxijh\`).
-2. En [GitHub / Secrets de Actions](https://github.com/apdocentepba-hub/apdocentepba-v2/settings/secrets/actions) crear **repository secrets**:
-   - \`APD_SUPABASE_DB_URL\` — URI completa con contraseña de DB. Nunca pegarla en chat, logs, commits o issues.
-   - \`APD_BACKUP_ENCRYPTION_PASSPHRASE\` — frase aleatoria de **al menos 32 caracteres**, guardada también fuera de GitHub en un lugar seguro.
-3. En [GitHub / Actions / APDocentePBA — respaldo cifrado](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/workflows/apd-cloud-backup.yml), ejecutar **Run workflow**, branch \`main\`, confirmación \`RESPALDAR_APDOCENTEPBA\`. No iniciar si falta alguno de los secretos.
-4. Verificar que \`production-backup\` termine **success** y el artifact se haya cargado. Descargar y guardar el \`.tar.gpg\` en un medio privado y duradero antes de que GitHub lo borre tras 30 días. **GitHub Actions no sustituye una política de retención externa.**
-5. Si se necesita recuperar: descargar el artifact autorizado de GitHub, extraer el \`.tar.gpg\`, descifrar con la frase guardada, comprobar \`SHA256SUMS\`, restaurar SOLO en una base aislada y seguir el procedimiento controlado de restauración de Supabase. Nunca hacer esto directamente sobre producción sin evaluación y autorización.
+- [PR #230](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/230): volcados de una sola instantánea y restauración en PostgreSQL 17.
+- [PR #231](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/231): comprobación de todas las tablas, rechazo de datos Auth/Storage fuera de alcance y cifrado v3 compatible con v2.
+- Ambos PR tienen pruebas de GitHub Actions aprobadas con datos **ficticios**. Ninguno ejecutó respaldos reales de producción.
 
-No hay herramientas GitHub conectadas en ChatGPT para crear/leer estos Secrets, ni se conocen las contraseñas de producción mediante el conector Supabase. El conector permite leer SQL y aplicar migraciones, **pero no revela la contraseña de conexión**. No se deben inventar las credenciales ni pedir que el usuario las pegue en el chat.
+## Ejecución manual inicial (pendiente)
 
-## Criterios para declarar cierre
-- CI simulado del PR verde, sin secretos.
-- Trabajo manual productivo ejecutado efectivamente con Secrets disponibles.
-- GPG, SHA-256, restore local y conteos iguales verificados en logs seguros.
-- Artifact cifrado disponible y recuperable dentro de plazo de retención.
-- Confirmación de cobertura suficiente para la migración del histórico, considerando los objetos de \`auth\`/\`storage\` excluidos.
-- Solo entonces considerar la **migración** previamente autorizada. **No activar capturas ni publicar Worker automáticamente.**
+1. Abrir [Supabase / Connect](https://supabase.com/dashboard/project/vvgkinkvojqwfuqaxijh) y obtener la URI PostgreSQL del proyecto y su contraseña. No copiarla al chat.
+2. Configurar los dos [GitHub Secrets de Actions](https://github.com/apdocentepba-hub/apdocentepba-v2/settings/secrets/actions). Se desconoce desde el conector si ya existen; no se pueden leer ni configurar con las herramientas actualmente disponibles.
+3. Ir a [Actions / respaldo cifrado](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/workflows/apd-cloud-backup.yml) y elegir `Run workflow` desde `main`, escribiendo `RESPALDAR_APDOCENTEPBA`. No activar esta ejecución sin credenciales válidas ni fuera del ambiente controlado.
+4. Confirmar job `production-backup: success`, resumen de restauración y artifact cifrado disponible. Descargarlo en ubicación privada y conservar la clave de descifrado por separado. Registrar ID del run y fecha. Si falla, no declarar backup operativo.
+5. Validar que las tablas, funciones, roles, extensiones y flujos reales que se quieran migrar sean recuperables en un entorno separado. El `pg_dump --schema=public` tiene dependencias externas posibles; los tests con datos ficticios no cubren automáticamente todas las extensiones/roles de producción.
+6. **No** activar aún el escáner transaccional en Worker ni aplicar SQL productivo hasta que se verifique el respaldo real restaurable y exista plan de reversión.
 
-Fuentes: [Supabase GitHub Actions Backups](https://supabase.com/docs/guides/deployment/ci/backups), [Supabase CLI db dump](https://supabase.com/docs/reference/cli/supabase-db-dump), [Backups Supabase Free](https://supabase.com/docs/guides/platform/backups), [GitHub artifact retention](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository).
+## Limitaciones y criterios de aceptación
+
+El conteo idéntico de filas es una prueba de cobertura inicial, no una comparación byte a byte de cada registro. La consistencia temporal del volcado proviene de la instantánea única de `pg_dump`, no de que los conteos coincidan. El export de roles se ejecuta por separado. La copia de `public` no incluye Auth/Storage aunque hoy esos componentes estén vacíos. No hay respaldos diarios automáticos del plan Free; un artifact GitHub con 30 días de retención no reemplaza una política de copias periódicas y almacenamiento externo.
+
+**Estado correcto:** piloto de respaldo y restauración de laboratorio aprobado. **Pendiente:** primer artifact real cifrado, restauración comprobada, retención externa y autorización de migración.
+
+Fuentes: [Guía oficial de backups](https://supabase.com/docs/guides/platform/backups), [Backup/restore Supabase CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore), [PostgreSQL pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html).
