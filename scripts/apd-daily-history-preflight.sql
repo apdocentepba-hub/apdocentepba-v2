@@ -37,7 +37,7 @@ SELECT
  all_current, within_scan, missing_district, districts_with_offers,
  scan_consistent,
  pg_size_pretty(pg_database_size(current_database())) database_size,
- pg_size_pretty(pg_total_relation_size('public.apd_ofertas_global_snapshots')) legacy_snapshot_size,
+ pg_size_pretty(pg_total_relation_size(to_regclass('public.apd_ofertas_global_snapshots'))) legacy_snapshot_size,
  to_regclass('public.apd_daily_province_summary') IS NOT NULL summary_table_exists,
  to_regprocedure('public.capture_apd_daily_province_summary(date)') IS NOT NULL summary_rpc_exists,
  coalesce((SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass('public.apd_daily_province_summary')),false) summary_rls_enabled,
