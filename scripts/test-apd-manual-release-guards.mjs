@@ -10,7 +10,11 @@ const candidates = Object.freeze([
   { path: '.github/workflows/release-expiry-worker.yml', job: 'release', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/deploy-email-format-candidate.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/importar-escuelas-pba.yml', job: 'importar', confirmation: 'confirm_import', choice: 'IMPORTAR', ref: 'refs/heads/main', production: false },
-  { path: '.github/workflows/auto-apply-worker-export-default-replacement.yml', job: 'auto-apply-worker-export-default-replacement', confirmation: 'confirm_apply', choice: 'APLICAR', ref: 'refs/heads/refactor/worker-base-20260401', production: false }
+  { path: '.github/workflows/auto-apply-worker-export-default-replacement.yml', job: 'auto-apply-worker-export-default-replacement', confirmation: 'confirm_apply', choice: 'APLICAR', ref: 'refs/heads/refactor/worker-base-20260401', production: false },
+  { path: '.github/workflows/reconcile-mp-secret-baseline.yml', job: 'reconcile', confirmation: 'confirm_reconcile', choice: 'RECONCILIAR', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/capture-verified-live-worker.yml', job: 'capture', confirmation: 'confirm_capture', choice: 'CAPTURAR', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/run-apd-email-fix-candidate.yml', job: 'candidate', confirmation: 'confirm_candidate', choice: 'CREAR', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/build-email-format-candidate.yml', job: 'candidate', confirmation: 'confirm_candidate', choice: 'CREAR', ref: 'refs/heads/main', production: true }
 ]);
 
 function extractTrigger(contents) {
