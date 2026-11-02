@@ -7,6 +7,16 @@ export function normalizeDistrict(value) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
+// Equivalencias documentadas con nomenclatura municipal bonaerense.
+// NO convertir CAPITAN SARMIENTO en CORONEL SARMIENTO: no son nombres equivalentes.
+const ABC_TO_CATALOG = new Map([
+  ["LA MATANZA","MATANZA"],
+  ["GENERAL LAS HERAS","LAS HERAS"],
+  ["9 DE JULIO","NUEVE DE JULIO"],
+  ["GENERAL LA MADRID","GENERAL LAMADRID"],
+  ["HIPOLITO IRIGOYEN","HIPOLITO YRIGOYEN"],
+  ["BENITO JUAREZ","JUAREZ"]
+]);
 const nonNegative = n => typeof n==="number"&&Number.isSafeInteger(n)&&n>=0;
 const validTime = t => typeof t==="string"&&Number.isFinite(Date.parse(t));
 export function assessDistrictCoverage({snapshot,facet,observedAt,bracket=null}) {
@@ -34,12 +44,14 @@ export function assessDistrictCoverage({snapshot,facet,observedAt,bracket=null})
   if(!facet||!nonNegative(facet.numFound)||!Array.isArray(facet.buckets)){
     throw Error("ABC facet response invalid");
   }
-  const abc=new Map();
+  const abc=new Map(), aliasesApplied=[];
   let sum=0;
   for(const pair of facet.buckets){
-    const key=normalizeDistrict(pair.name);
+    const rawKey=normalizeDistrict(pair.name);
+    const key=ABC_TO_CATALOG.get(rawKey)||rawKey;
     if(!key||abc.has(key)||!nonNegative(pair.count))throw Error("ABC facet labels invalid or ambiguous");
     abc.set(key,{name:pair.name,count:pair.count});
+    if(key!==rawKey)aliasesApplied.push({abc_name:pair.name,catalog_key:key,count:pair.count});
     sum+=pair.count;
   }
   if(sum!==facet.numFound)throw Error("ABC facet is incomplete or multi-valued; cannot compare");
@@ -82,6 +94,7 @@ export function assessDistrictCoverage({snapshot,facet,observedAt,bracket=null})
       districts_with_offers:withOffers,age_minutes:ageMinutes},
     reconciliation:{mapped_abc_districts:abc.size-unmatched.length,
       unknown_abc_districts:unmatched,
+      documented_name_equivalences_applied:aliasesApplied.sort((a,b)=>b.count-a.count),
       abc_total_in_unmapped_districts:unmatched.reduce((n,x)=>n+x.count,0),
       abc_districts_with_nonzero_and_apd_zero:districts.filter(x=>x.apd_capture_count===0&&x.abc_published_at_observation>0).length,
       snapshot_districts_with_nonzero_and_abc_zero:districts.filter(x=>x.apd_capture_count>0&&x.abc_published_at_observation===0).length,
