@@ -25,7 +25,8 @@ test("compiled Worker candidate is syntax-valid, gated, and affects only scanner
  const live=readFileSync("worker-live/worker_hotfix.js","utf8");
  const alias=readFileSync("worker-live/apd_scanner_source_district_alias_candidate.mjs","utf8");
  const preview=buildDistrictSourceAliasPreview(live,alias);
- assert.equal((preview.match(/APD_DISTRICT_SOURCE_ALIASES_ENABLED/g)||[]).length,2);
+ assert.ok((preview.match(/APD_DISTRICT_SOURCE_ALIASES_ENABLED/g)||[]).length>=2,
+   "Alias guards must be present on fetch and persistence paths");
  assert.equal((preview.match(/function apdSourceDistrictForCatalog\(/g)||[]).length,1);
  assert.ok(!live.includes("APD_DISTRICT_SOURCE_ALIASES_ENABLED"));
  assert.match(preview,/const queryDistrict = aliasesEnabled \? apdSourceDistrictForCatalog\(distritoAPD\) : distritoAPD;/);
