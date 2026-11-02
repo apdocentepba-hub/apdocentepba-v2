@@ -1,0 +1,25 @@
+name: APD radar release candidate and rollback (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'scripts/prepare-apd-radar-frontend-release.mjs'
+      - 'scripts/test-apd-radar-frontend-release.mjs'
+      - '.github/workflows/apd-radar-release-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: JavaScript parse and exact release/rollback contract
+        run: |
+          node --check scripts/prepare-apd-radar-frontend-release.mjs
+          node --test scripts/test-apd-radar-frontend-release.mjs
+      - name: Production website and Worker must remain unchanged
+        run: |
+          git diff --exit-code origin/main -- index.html app_v2.js worker-live/worker_hotfix.js radar_provincia_patch_semaforo.js
