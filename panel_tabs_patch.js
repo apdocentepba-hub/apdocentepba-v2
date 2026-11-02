@@ -112,7 +112,7 @@
   }
 
   function hasCards(k){const g=grid(k); return !!(g&&[...g.children].some(el=>el instanceof HTMLElement&&!el.classList.contains('hidden')&&!(el.id==='admin-panel-card'&&el.classList.contains('hidden'))));}
-  function refreshVisibility(){TABS.forEach(t=>{const visible=t[0]==='admin'
+  function refreshVisibility(){const tabs=document.getElementById('apd-top-tabs'); const panelVisible=!document.getElementById('panel-docente')?.classList.contains('hidden'); tabs?.classList.toggle('hidden',!panelVisible); TABS.forEach(t=>{const visible=t[0]==='admin'
       ? window.APD_adminAccessConfirmed===true
       : (hasCards(t[0])||!!INTRO[t[0]]||t[0]==='inicio');document.querySelector('.panel-tab-btn[data-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);document.querySelector('.apd-top-tab[data-top-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);});activateTab(localStorage.getItem(TAB_STORAGE_KEY)||'inicio',{scrollTop:false});}
   function activateTab(k,opt){
