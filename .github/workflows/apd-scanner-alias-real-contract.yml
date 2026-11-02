@@ -1,0 +1,35 @@
+name: APD scanner district aliases - real ABC read-only validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-scanner-alias-solr-real.mjs'
+      - 'scripts/test-apd-scanner-alias-real-contract.mjs'
+      - '.github/workflows/apd-scanner-alias-real-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abc-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate isolated compiled Worker scanner and storage semantics
+        run: |
+          node --check scripts/audit-apd-scanner-alias-solr-real.mjs
+          node --check scripts/test-apd-scanner-alias-real-contract.mjs
+          node --test scripts/test-apd-scanner-alias-real-contract.mjs
+      - name: Twelve count-only requests (rows zero) to official ABC API
+        run: node scripts/audit-apd-scanner-alias-solr-real.mjs
+      - name: Store aggregated names and counts only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-scanner-alias-abc-counts
+          path: tmp/apd-scanner-abc-dryrun/counts.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Ensure no change to production Worker, web or database source
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js
