@@ -5,6 +5,7 @@ on:
       - 'worker-live/apd_history_admin_read.mjs'
       - 'scripts/build-apd-history-admin-read-preview.mjs'
       - 'scripts/test-apd-history-admin-read.mjs'
+      - 'scripts/test-apd-history-admin-full-worker.mjs'
       - '.github/workflows/apd-history-admin-preview.yml'
   workflow_dispatch:
 permissions:
@@ -22,5 +23,6 @@ jobs:
           node --check worker-live/apd_history_admin_read.mjs
           node --check scripts/build-apd-history-admin-read-preview.mjs
           node --test scripts/test-apd-history-admin-read.mjs
+          node --test scripts/test-apd-history-admin-full-worker.mjs
       - name: Confirm production bundle unchanged
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js

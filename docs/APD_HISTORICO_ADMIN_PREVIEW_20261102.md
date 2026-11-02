@@ -17,6 +17,10 @@ Versión de diseño: 2/11/2026. **Solo GitHub / pruebas, sin desplegar.**
 
 `scripts/test-apd-history-admin-read.mjs` prueba rutas desactivadas, 401, 403, tabla vacía, dos días válidos, validación de límites, corrupción de datos, fallo de Supabase, secretos ausentes, generación única y sintaxis ESM del bundle compilado, sin conexión a producción.
 
+## Prueba adicional del Worker compilado exportado
+
+`scripts/test-apd-history-admin-full-worker.mjs` genera un bundle temporal del Worker canónico completo y ejecuta su `default.fetch` real. Todas las peticiones a Supabase se interceptan con respuestas de prueba: **ninguna llega a red productiva**. Se prueban el enrutamiento por ambas capas del Worker, bandera apagada (404, sin consultas), sin Bearer (401), usuario no administrador (403), administrador con respuesta agregada (200), límite inválido (400), tabla inexistente (503, sin filtración del error interno). Se exige método GET en todas las consultas. Esta evidencia es más fuerte que evaluar solamente la función auxiliar, pero **no reemplaza un smoke autenticado contra producción tras un despliegue autorizado**.
+
 ## Condiciones todavía pendientes
 1. **Respaldo de producción completo y verificado para restauración**. El archivo de huellas en Google Drive no es un dump recuperable. La migración sigue bloqueada.
 2. Aplicar SQL del histórico cuando exista respaldo, verificar postflight/RLS y tabla inicialmente vacía.
