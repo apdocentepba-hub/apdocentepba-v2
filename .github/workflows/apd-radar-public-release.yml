@@ -1,0 +1,23 @@
+name: APD radar public release - verify before merge
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'scripts/test-apd-radar-live-release.mjs'
+      - '.github/workflows/apd-radar-public-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate one-line release, existing panel and public candidate asset
+        run: node --test scripts/test-apd-radar-live-release.mjs
+      - name: Preserve Worker, users, payments and Supabase integration
+        run: |
+          git diff --exit-code origin/main -- worker-live/worker_hotfix.js worker.js app_v2.js radar_provincia_patch_semaforo.js
