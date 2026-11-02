@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-scanner-integrity-readonly.sql'
+      - 'scripts/apd-scanner-source-key-parity-readonly.sql'
       - 'tests/sql/test_apd_scanner_integrity_readonly_pg17.sh'
       - '.github/workflows/apd-scanner-readonly-integrity.yml'
   workflow_dispatch:
