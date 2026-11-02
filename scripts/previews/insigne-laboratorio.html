@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es-AR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Insigne LAB · Combinaciones precisas | APDocentePBA</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#15384c;background:#f3f9fb}
+*{box-sizing:border-box}body{margin:0}
+header{background:linear-gradient(120deg,#06263d,#0a5663);color:white;padding:22px 18px}
+.wrap{max-width:1030px;margin:auto}a{color:inherit}
+small,.note{color:#58717d}.banner{background:#fff0bf;color:#3f2c02;padding:12px 16px;font-weight:700;border-bottom:2px solid #e0b04b;font-size:14px}
+main{padding:25px 18px 45px}h1{font-size:clamp(27px,4vw,42px);line-height:1.1;margin:14px 0}h2{font-size:21px}
+p{line-height:1.55}.grid{display:grid;grid-template-columns:minmax(300px,1fr) 1fr;gap:17px}
+.card{background:#fff;border:1px solid #d3e3e7;border-radius:17px;padding:20px;box-shadow:0 6px 20px #15384c0a}
+.field{margin:12px 0}.field label{display:block;font-weight:700;font-size:14px;margin-bottom:6px}
+select,button{font:inherit;min-height:43px}select{width:100%;background:white;border:1px solid #a8c4cf;border-radius:9px;padding:9px}
+button{border:1px solid #a2c6d0;border-radius:10px;background:#fff;color:#123f50;font-weight:750;cursor:pointer;padding:9px 14px}
+button.primary{background:#0b6170;color:white;border-color:#0b6170}
+button:focus-visible,select:focus-visible{outline:3px solid #eeb949;outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.rule{display:flex;justify-content:space-between;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #e0eaee;font-size:14px}
+.rule:last-child{border:0}.mode{display:block;font-size:12px;color:#56707d;margin-top:4px}
+.result{padding:11px;border-radius:9px;margin:9px 0;background:#eaf4f6;font-size:14px}
+.result.hit{background:#daf7e6;border:1px solid #8eceaa}.result.miss{background:#f5f5f5;border:1px solid #d8e3e5}
+.result .label{display:block;font-weight:800}.note{font-size:12px}
+#lab-message{padding:9px 0;min-height:37px;color:#9b3b18;font-weight:650;font-size:14px}
+h3{font-size:16px;margin:16px 0 10px}
+@media(max-width:730px){.grid{grid-template-columns:1fr}.card{padding:16px}}
+</style></head><body>
+<div class="banner" role="status">LABORATORIO DE PRODUCTO · Propuesta NO habilitada en APDocentePBA real · No almacena información ni envía alertas</div>
+<header><div class="wrap"><a href="./">← Volver a la landing de prueba</a>
+<h1>Insigne LAB: búsquedas específicas, no más ruido</h1>
+<p>Probá una alternativa al plan de cinco distritos generales: tres distritos habituales, hasta 20 combinaciones distrito–cargo y un distrito adicional exclusivamente para ofertas que la fuente clasifique expresamente como emergencia.</p>
+<p><strong>Estos cupos son una propuesta experimental, no un beneficio contratado ni disponible en producción.</strong></p></div></header>
+<main class="wrap">
+<div class="grid">
+<section class="card" aria-label="Configurar reglas"><h2>Mis combinaciones simuladas</h2>
+<form id="lab-form">
+<div class="field"><label for="lab-district">Distrito</label><select id="lab-district">
+<option value="AVELLANEDA">Avellaneda</option><option value="LANÚS">Lanús</option><option value="QUILMES">Quilmes</option><option value="LOMAS DE ZAMORA">Lomas de Zamora</option><option value="LA MATANZA">La Matanza</option><option value="BERAZATEGUI">Berazategui</option></select></div>
+<div class="field"><label for="lab-cargo">Cargo o materia</label><select id="lab-cargo">
+<option value="PRECEPTOR">Preceptor</option><option value="MATEMÁTICA">Matemática</option><option value="INGLÉS">Inglés</option><option value="INFORMÁTICA">Informática</option><option value="MAESTRO DE GRADO">Maestro de grado</option></select></div>
+<div class="field"><label for="lab-mode">Tipo de búsqueda</label><select id="lab-mode">
+<option value="normal">Habitual: coincidencia normal</option>
+<option value="emergency">Solo ofertas explícitamente clasificadas como emergencia</option>
+</select></div>
+<div class="row"><button type="submit" class="primary">Agregar combinación</button>
+<button id="lab-reset" type="button">Restablecer ejemplo</button></div>
+<p id="lab-message" role="status" aria-live="polite"></p>
+</form>
+<h3 id="lab-count">Mis reglas</h3><div id="lab-rules"></div>
+<p class="note">Máximo propuesto: 3 distritos habituales, 1 distrito adicional condicionado a emergencia y 20 reglas exactas. No se guarda nada.</p>
+</section>
+<section class="card"><h2>¿Qué ofertas aparecerían?</h2>
+<p class="note">Ofertas completamente ficticias para ensayar las reglas. No son publicaciones de ABC.</p>
+<div id="lab-offers"></div>
+<h3>Qué cambia frente al sistema actual</h3>
+<p>Hoy todos tus distritos se cruzan con todos tus cargos. Esta propuesta solo marcaría las <strong>parejas distrito–cargo</strong> que vos elijas.</p>
+<p>La etiqueta «emergencia» se aplicaría solo si la oferta trae una clasificación explícita; no se interpreta automáticamente desde palabras como «urgente».</p>
+<p class="note">Falta integrar almacenamiento autenticado, validación de beneficios contratados y el matching real del Worker antes de habilitarla. No requiere ni solicita datos de tu cuenta.</p>
+</section>
+</div>
+</main>
+<script src="./insigne_rules_lab.js"></script>
+<script>
+(function(){
+'use strict';
+const engine=globalThis.APD_InsigneLab;
+const form=document.getElementById('lab-form');
+const formDistrict=document.getElementById('lab-district');
+const formCargo=document.getElementById('lab-cargo');
+const formMode=document.getElementById('lab-mode');
+const message=document.getElementById('lab-message');
+const rulesList=document.getElementById('lab-rules');
+const count=document.getElementById('lab-count');
+const offerList=document.getElementById('lab-offers');
+const defaults=[
+  {district:'AVELLANEDA',cargo:'PRECEPTOR',mode:'normal'},
+  {district:'QUILMES',cargo:'MATEMÁTICA',mode:'normal'},
+  {district:'LANÚS',cargo:'PRECEPTOR',mode:'emergency'}
+];
+const offers=[
+  {district:'AVELLANEDA',cargo:'(PR) PRECEPTOR',classification:'ORDINARIA'},
+  {district:'AVELLANEDA',cargo:'(MTM) MATEMÁTICA',classification:'ORDINARIA'},
+  {district:'QUILMES',cargo:'MATEMÁTICA',classification:'ORDINARIA'},
+  {district:'LANÚS',cargo:'PRECEPTOR',classification:'ORDINARIA'},
+  {district:'LANÚS',cargo:'(PR) PRECEPTOR',classification:'EMERGENCIA'},
+  {district:'LANÚS',cargo:'PRECEPTOR',classification:''}
+];
+let rules=defaults.map(rule=>({...rule}));
+function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+function refresh(){
+  rulesList.replaceChildren();offerList.replaceChildren();
+  count.textContent='Mis reglas ('+rules.length+'/20)';
+  for(let i=0;i<rules.length;i++){
+    const rule=rules[i],line=el('div','rule');
+    const desc=el('div','',rule.district+' · '+rule.cargo);
+    desc.appendChild(el('span','mode',rule.mode==='emergency'?'Solo emergencias clasificadas':'Habitual'));
+    const remove=el('button','','Quitar');remove.type='button';
+    remove.setAttribute('aria-label','Quitar '+rule.district+' '+rule.cargo);
+    remove.addEventListener('click',()=>{rules.splice(i,1);message.textContent='Regla eliminada del simulador.';refresh();});
+    line.append(desc,remove);rulesList.appendChild(line);
+  }
+  for(const offer of offers){
+    const matched=engine.matches(offer,rules);
+    const hit=matched.matches.length>0;
+    const line=el('div','result '+(hit?'hit':'miss'));
+    line.appendChild(el('span','label',(hit?'✓ Coincide: ':'— No coincide: ')+offer.district+' / '+offer.cargo));
+    line.appendChild(el('span','mode',offer.classification||'Sin clasificación de emergencia'));
+    offerList.appendChild(line);
+  }
+}
+form.addEventListener('submit',(e)=>{
+  e.preventDefault();
+  const proposal={district:formDistrict.value,cargo:formCargo.value,mode:formMode.value};
+  const next=[...rules,proposal],result=engine.validate(next);
+  if(!result.ok){message.textContent=result.reason;return;}
+  rules=next;message.textContent='Combinación agregada solo a la demo.';refresh();
+});
+document.getElementById('lab-reset').addEventListener('click',()=>{
+  rules=defaults.map(rule=>({...rule}));message.textContent='Ejemplo restaurado.';refresh();
+});
+refresh();
+})();
+</script></body></html>

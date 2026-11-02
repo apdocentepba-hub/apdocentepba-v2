@@ -5,14 +5,14 @@
 
   const TAB_STORAGE_KEY='apd_panel_tab_v1';
   const TABS=[
-    ['inicio','Inicio'],['alertas','Alertas'],['perfil','Listados'],['repo','Repositorio'],['plan','Plan'],['mercado','Estadísticas'],['preferencias','Preferencias'],['admin','Admin']
+    ['inicio','Resumen'],['alertas','Alertas'],['perfil','Listados'],['repo','Recursos'],['plan','Mi plan'],['mercado','Estadísticas'],['preferencias','Preferencias'],['admin','Administración']
   ];
   const INTRO={
     alertas:['🔔','Alertas APD activas','Una bandeja clara para revisar oportunidades compatibles, publicaciones recientes y coincidencias con tu perfil docente.',['Oportunidades','Compatibilidad','Seguimiento']],
     perfil:['🪪','Listados y perfil docente','Datos personales, PID, cargos, materias y accesos rápidos para ordenar tu información docente.',['PID docente','Perfil','Listados']],
     repo:['📚','Repositorio docente PBA','Biblioteca de recursos, normativa, guías y materiales útiles para docentes y secretarías escolares.',['Normativa','Modelos','Guías']],
     plan:['💳','Mi plan y suscripción','Estado del plan, beneficios activos, vencimiento y opciones para actualizar o gestionar la suscripción.',['Plan activo','Beneficios','Pagos']],
-    mercado:['📊','Radar docente PBA','Lectura rápida de movimiento provincial, distritos, cargos y tendencias para decidir mejor.',['Radar','Tendencias','Mercado']],
+    mercado:['📊','Datos y actividad APD','Consultá ofertas encontradas y resúmenes históricos cuando existan datos verificables. Las estadísticas no predicen designaciones.',['Actividad','Histórico','Fuentes']],
     preferencias:['⚙️','Preferencias de alertas','Configurá distritos, cargos, niveles, turnos y canales para que las alertas lleguen con más precisión.',['Distritos','Cargos','Canales']],
     admin:['🛠️','Administración','Acciones técnicas, pagos, usuarios, backfill, vista previa de alertas y controles internos.',['Usuarios','Pagos','Backfill']]
   };
@@ -70,7 +70,7 @@
   function ensureShowcase(){
     const g=grid('inicio'); if(!g) return;
     let card=document.getElementById('apd-panel-showcase');
-    if(!card){card=document.createElement('div');card.id='apd-panel-showcase';card.className='panel-card span-12 apd-panel-showcase';card.innerHTML='<div class="apd-hero-main"><div class="apd-hero-copy"><h2>Tu acceso rápido a la información <span>docente de PBA</span></h2><p>Alertas de Actos Públicos Digitales, análisis de cargos, herramientas y mucho más.</p><div class="apd-panel-showcase-actions"><a class="primary" href="#" data-apd-go-tab="alertas">🔔 Ver mis alertas</a><a href="#" data-apd-go-tab="inicio">▦ Ir al panel</a></div></div><div class="apd-hero-art"><div class="apd-plant">🪴</div><div class="apd-monitor"><div class="apd-monitor-top">🔔 APDocentePBA</div><div class="apd-monitor-row"><i>🔔</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">12</em></div><div class="apd-monitor-row"><i>📋</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">8</em></div><div class="apd-monitor-row"><i>🧰</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">Ver más</em></div></div><div class="apd-float-bell">🔔</div><div class="apd-books">📚</div></div></div><div class="apd-panel-quick"><a href="./como-funciona.html"><i>🔔</i><b>Cómo funciona</b><span>Conocé cómo funciona el sistema.</span><em>→</em></a><a href="./actos-publicos-digitales.html"><i>📋</i><b>APD</b><span>Actos Públicos Digitales.</span><em>→</em></a><a href="./pid-docente.html"><i>🎓</i><b>PID docente</b><span>Planilla de Inscripción Digital.</span><em>→</em></a><a href="./herramientas-docentes.html"><i>🧰</i><b>Herramientas</b><span>Recursos y utilidades para docentes.</span><em>→</em></a><a href="./licencias-docentes.html"><i>🧾</i><b>Licencias</b><span>Asistente de licencias docentes PBA.</span><em>→</em></a></div>';card.querySelector('[data-apd-go-tab="alertas"]').addEventListener('click',e=>{e.preventDefault();activateTab('alertas',{scrollTop:false});setTimeout(()=>document.getElementById('panel-alertas')?.scrollIntoView({behavior:'smooth',block:'start'}),120);});card.querySelector('[data-apd-go-tab="inicio"]').addEventListener('click',e=>{e.preventDefault();activateTab('inicio',{scrollTop:false});setTimeout(()=>document.getElementById('panel-datos-docente')?.scrollIntoView({behavior:'smooth',block:'start'}),120);});}
+    if(!card){card=document.createElement('div');card.id='apd-panel-showcase';card.className='panel-card span-12 apd-panel-showcase';card.innerHTML='<div class="apd-hero-main"><div class="apd-hero-copy"><h2>Todo tu recorrido docente <span>en un solo lugar</span></h2><p>Consultá alertas compatibles, revisá tu plan, organizá preferencias y accedé a recursos de PBA. Las postulaciones se realizan en ABC.</p><div class="apd-panel-showcase-actions"><a class="primary" href="#" data-apd-go-tab="alertas">🔔 Ver mis alertas</a><a href="#" data-apd-go-tab="inicio">▦ Ir al panel</a></div></div><div class="apd-hero-art"><div class="apd-plant">🪴</div><div class="apd-monitor"><div class="apd-monitor-top">🔔 APDocentePBA</div><div class="apd-monitor-row"><i>🔔</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">APD</em></div><div class="apd-monitor-row"><i>📋</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">PID</em></div><div class="apd-monitor-row"><i>🧰</i><div class="apd-monitor-line"><b></b><span></span></div><em class="apd-monitor-badge">Ver más</em></div></div><div class="apd-float-bell">🔔</div><div class="apd-books">📚</div></div></div><div class="apd-panel-quick"><a href="./como-funciona.html"><i>🔔</i><b>Cómo funciona</b><span>Conocé cómo funciona el sistema.</span><em>→</em></a><a href="./actos-publicos-digitales.html"><i>📋</i><b>APD</b><span>Actos Públicos Digitales.</span><em>→</em></a><a href="./pid-docente.html"><i>🎓</i><b>PID docente</b><span>Planilla de Inscripción Digital.</span><em>→</em></a><a href="./herramientas-docentes.html"><i>🧰</i><b>Herramientas</b><span>Recursos y utilidades para docentes.</span><em>→</em></a><a href="./licencias-docentes.html"><i>🧾</i><b>Licencias</b><span>Asistente de licencias docentes PBA.</span><em>→</em></a></div>';card.querySelector('[data-apd-go-tab="alertas"]').addEventListener('click',e=>{e.preventDefault();activateTab('alertas',{scrollTop:false});setTimeout(()=>document.getElementById('panel-alertas')?.scrollIntoView({behavior:'smooth',block:'start'}),120);});card.querySelector('[data-apd-go-tab="inicio"]').addEventListener('click',e=>{e.preventDefault();activateTab('inicio',{scrollTop:false});setTimeout(()=>document.getElementById('panel-datos-docente')?.scrollIntoView({behavior:'smooth',block:'start'}),120);});}
     if(card.parentElement!==g) g.prepend(card); else if(g.firstElementChild!==card) g.prepend(card);
   }
 
@@ -82,8 +82,24 @@
 
   function ensureIntro(k){
     if(k==='inicio') return; const cfg=INTRO[k], g=grid(k); if(!cfg||!g) return; let card=document.getElementById('apd-tab-intro-'+k);
-    if(!card){card=document.createElement('div');card.id='apd-tab-intro-'+k;card.className='panel-card span-12 apd-tab-intro';card.innerHTML='<div class="apd-tab-copy"><div class="apd-tab-kicker">'+cfg[0]+' '+cfg[1]+'</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p><div class="apd-tab-chips">'+cfg[3].map(c=>'<span class="apd-tab-chip">'+c+'</span>').join('')+'</div></div><div class="apd-tab-side"><a href="#">Ver sección</a></div>';}
+    if(!card){card=document.createElement('div');card.id='apd-tab-intro-'+k;card.className='panel-card span-12 apd-tab-intro';card.innerHTML='<div class="apd-tab-copy"><div class="apd-tab-kicker">'+cfg[0]+' '+cfg[1]+'</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p><div class="apd-tab-chips">'+cfg[3].map(c=>'<span class="apd-tab-chip">'+c+'</span>').join('')+'</div></div>';}
     if(card.parentElement!==g) g.prepend(card); else if(g.firstElementChild!==card) g.prepend(card);
+  }
+
+  function ensureOfficialSources(){
+    const g=grid('perfil'); if(!g)return;
+    let card=document.getElementById('apd-official-listings-card');
+    if(!card){
+      card=document.createElement('section');
+      card.id='apd-official-listings-card';card.className='panel-card span-12';
+      card.innerHTML='<div class="card-lbl-row"><span class="card-lbl">🪪 Fuentes oficiales para listados y APD</span></div>'+
+        '<p class="prefs-hint">El listado y los puntajes oficiales se verifican en SerVaDo. El APD requiere el acceso correspondiente de ABC. APDocentePBA no reemplaza esos sistemas ni sincroniza tu legajo sin autorización.</p>'+
+        '<div class="apd-official-links" style="display:flex;gap:10px;flex-wrap:wrap">'+
+        '<a class="btn btn-primary" href="https://servado.abc.gob.ar/" target="_blank" rel="noopener noreferrer">Abrir SerVaDo oficial</a>'+
+        '<a class="btn btn-secondary" href="https://misservicios.abc.gob.ar/actos.publicos.digitales/" target="_blank" rel="noopener noreferrer">Abrir APD oficial</a>'+
+        '<a class="btn btn-secondary" href="./pid.html">Consultar orientación PID</a></div>';
+    }
+    if(card.parentElement!==g)g.appendChild(card);
   }
 
   function repartition(){
@@ -92,11 +108,13 @@
     moveByContent('panel-alertas','alertas');moveByContent('panel-estadisticas','alertas');
     moveByContent('panel-perfil-docente','perfil');moveByContent('panel-listados-docente','perfil');moveById('panel-listados-pid-card','perfil');
     moveById('panel-repositorio-card','repo');moveById('panel-plan-selector-card','plan');moveByContent('panel-historico-apd','mercado');moveById('panel-radar-combinado-card','mercado');moveById('panel-radar-provincia','mercado');
-    movePrefs();moveById('admin-panel-card','admin');moveByContent('panel-backfill-provincia','admin');refreshVisibility();
+    movePrefs();ensureOfficialSources();moveById('admin-panel-card','admin');moveByContent('panel-backfill-provincia','admin');refreshVisibility();
   }
 
   function hasCards(k){const g=grid(k); return !!(g&&[...g.children].some(el=>el instanceof HTMLElement&&!el.classList.contains('hidden')&&!(el.id==='admin-panel-card'&&el.classList.contains('hidden'))));}
-  function refreshVisibility(){TABS.forEach(t=>{const visible=hasCards(t[0])||!!INTRO[t[0]]||t[0]==='inicio';document.querySelector('.panel-tab-btn[data-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);document.querySelector('.apd-top-tab[data-top-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);});activateTab(localStorage.getItem(TAB_STORAGE_KEY)||'inicio',{scrollTop:false});}
+  function refreshVisibility(){const tabs=document.getElementById('apd-top-tabs'); const panelVisible=!document.getElementById('panel-docente')?.classList.contains('hidden'); tabs?.classList.toggle('hidden',!panelVisible); TABS.forEach(t=>{const visible=t[0]==='admin'
+      ? window.APD_adminAccessConfirmed===true
+      : (hasCards(t[0])||!!INTRO[t[0]]||t[0]==='inicio');document.querySelector('.panel-tab-btn[data-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);document.querySelector('.apd-top-tab[data-top-tab-key="'+t[0]+'"]')?.classList.toggle('hidden',!visible);});activateTab(localStorage.getItem(TAB_STORAGE_KEY)||'inicio',{scrollTop:false});}
   function activateTab(k,opt){
     opt=opt||{}; const btn=document.querySelector('.apd-top-tab[data-top-tab-key="'+k+'"]:not(.hidden)')||document.querySelector('.panel-tab-btn[data-tab-key="'+k+'"]:not(.hidden)'); const fb=btn||document.querySelector('.apd-top-tab[data-top-tab-key]:not(.hidden)')||document.querySelector('.panel-tab-btn[data-tab-key]:not(.hidden)'); const key=(fb&&(fb.dataset.topTabKey||fb.dataset.tabKey))||k||'inicio';
     localStorage.setItem(TAB_STORAGE_KEY,key); TABS.forEach(t=>{document.querySelector('.panel-tab-btn[data-tab-key="'+t[0]+'"]')?.classList.toggle('is-active',t[0]===key);document.querySelector('.apd-top-tab[data-top-tab-key="'+t[0]+'"]')?.classList.toggle('is-active',t[0]===key);document.getElementById('panel-tab-pane-'+t[0])?.classList.toggle('is-active',t[0]===key);});
@@ -112,10 +130,3 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>{schedule();observers();},{once:true}); else {schedule();observers();}
 })();
 
-(function(){
-  'use strict';
-  if(window.__apdAuthSessionPatchLoaderLoaded) return;
-  window.__apdAuthSessionPatchLoaderLoaded=true;
-  function load(){if(document.querySelector('script[data-apd-auth-session-patch="1"]')) return; const s=document.createElement('script');s.src='auth_session_patch.js?v=1';s.async=false;s.dataset.apdAuthSessionPatch='1';document.head.appendChild(s);}
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',load,{once:true}); else load();
-})();
