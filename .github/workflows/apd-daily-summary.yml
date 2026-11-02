@@ -31,6 +31,8 @@ jobs:
           --health-retries 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Verificar cliente PostgreSQL
         run: psql --version
       - name: Ejecutar migración y pruebas en base efímera de CI
