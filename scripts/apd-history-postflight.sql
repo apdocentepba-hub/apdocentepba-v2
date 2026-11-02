@@ -8,6 +8,7 @@ WITH access AS (
    has_table_privilege('service_role','public.apd_daily_province_summary','SELECT') AS svc_read,
    has_table_privilege('service_role','public.apd_daily_province_summary','INSERT') AS svc_insert,
    has_table_privilege('service_role','public.apd_daily_province_summary','UPDATE') AS svc_update,
+   NOT has_table_privilege('service_role','public.apd_daily_province_summary','DELETE') AS svc_no_delete,
    has_function_privilege('service_role','public.capture_apd_daily_province_summary(date)','EXECUTE') AS svc_execute,
    NOT (
      has_table_privilege('anon','public.apd_daily_province_summary','SELECT') OR
@@ -39,11 +40,11 @@ WITH access AS (
  SELECT count(*)::bigint AS daily_rows FROM public.apd_daily_province_summary
 )
 SELECT
- a.svc_read,a.svc_insert,a.svc_update,a.svc_execute,
+ a.svc_read,a.svc_insert,a.svc_update,a.svc_no_delete,a.svc_execute,
  a.no_client_table_access,a.no_client_rpc_access,
  s.rls_enabled,s.policy_count,s.primary_key_present,
  f.security_invoker,c.daily_rows,
- (a.svc_read AND a.svc_insert AND a.svc_update AND a.svc_execute
+ (a.svc_read AND a.svc_insert AND a.svc_update AND a.svc_no_delete AND a.svc_execute
    AND a.no_client_table_access AND a.no_client_rpc_access
    AND s.rls_enabled AND s.policy_count=0
    AND s.primary_key_present AND f.security_invoker) AS security_ok,
