@@ -1,0 +1,73 @@
+/* APDocentePBA 2.1 · Release visual aislado del motor APD.
+ * Sin selectores de las tarjetas y controles del carrusel original.
+ * Reversión: retirar este archivo y apd_ui_v21.js de index.html. */
+:root{--apd21-navy:#092c42;--apd21-deep:#062134;--apd21-teal:#087d87;--apd21-mint:#d8f4e9;--apd21-canvas:#f2f7f8;--apd21-ink:#18384a;--apd21-muted:#56707d;--apd21-line:#d5e3e7}
+body.apd-ui-v21-live{background:var(--apd21-canvas)!important;color:var(--apd21-ink)!important}
+body.apd-ui-v21-live .header{background:linear-gradient(110deg,#082f44,#0b4054)!important;box-shadow:0 4px 20px #0a34401b!important}
+body.apd-ui-v21-live .header-inner{max-width:none!important;margin-left:230px!important;gap:8px!important;padding:9px clamp(14px,2vw,32px)!important;min-height:67px}
+body.apd-ui-v21-live .brand-title{font-size:18px!important}
+body.apd-ui-v21-live .brand-sub{font-size:10px!important}
+body.apd-ui-v21-live .top-nav{gap:6px!important;justify-content:flex-end}
+body.apd-ui-v21-live .header #apd-top-tabs{display:none!important}
+body.apd-ui-v21-live .apd-v21-sidebar{position:fixed;inset:0 auto 0 0;width:230px;z-index:102;background:var(--apd21-deep);color:#eaf2f4;display:flex;flex-direction:column;padding:18px 10px;overflow-y:auto;scrollbar-width:thin}
+body.apd-ui-v21-live .apd-v21-sidebar-brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;padding:8px 9px 19px;font-size:15px;line-height:1.2;font-weight:850}
+body.apd-ui-v21-live .apd-v21-sidebar-brand span{display:grid;place-items:center;width:39px;height:39px;border-radius:12px;background:#174a59;font-size:22px;flex-shrink:0}
+body.apd-ui-v21-live .apd-v21-sidebar small{display:block;color:#a7c6d1;font-size:10px;font-weight:600;margin-top:4px}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tabs{display:flex!important;flex:1 0 auto;flex-direction:column;align-items:stretch;flex-wrap:nowrap!important;gap:4px!important;width:100%;margin:0!important;max-width:none!important;background:transparent!important;border:0!important;padding:0!important;overflow:visible!important}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab{display:flex;align-items:center;width:100%;min-height:43px;padding:11px 12px!important;border:0;border-radius:10px!important;background:transparent;color:#c8dfe7!important;text-align:left;font-size:13px!important;font-weight:720!important;letter-spacing:0!important;line-height:1.25}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab:hover{background:#184557!important;color:#fff!important}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab.is-active{background:var(--apd21-mint)!important;color:#0b404b!important;font-weight:850!important}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab.is-active:after{display:none!important}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab.hidden{display:none!important}
+body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab[data-top-tab-key="admin"]{display:none!important}
+body.apd-ui-v21-live.apd-ui-v21-admin .apd-v21-sidebar .apd-top-tab[data-top-tab-key="admin"]:not(.hidden){display:flex!important}
+body.apd-ui-v21-live .apd-v21-sidebar-footer{border-top:1px solid #24495b;padding:14px 8px 5px;margin-top:15px;font-size:12px}
+body.apd-ui-v21-live .apd-v21-sidebar-footer button{width:100%;margin-bottom:10px;text-align:left;border:1px solid #346475;border-radius:9px;background:#133e50;color:#e1f4f1;padding:10px 12px;cursor:pointer;font-weight:800}
+body.apd-ui-v21-live .apd-v21-sidebar-footer p{margin:0;color:#a7c8d2;font-size:11px}
+body.apd-ui-v21-live #panel-docente{margin-left:230px;min-width:0}
+body.apd-ui-v21-live #panel-docente>.container{max-width:1510px!important;padding:22px clamp(14px,2.3vw,38px) 0!important;margin:0 auto!important}
+body.apd-ui-v21-live .panel-tab-grid{gap:15px!important}
+body.apd-ui-v21-live .panel-card:not(.apd-panel-showcase):not(.apd-tab-intro):not(.apd-panel-benefits){border:1px solid var(--apd21-line)!important;border-radius:16px!important;box-shadow:0 9px 28px #092d4210!important}
+body.apd-ui-v21-live .apd-panel-showcase{border-radius:17px!important;box-shadow:0 10px 30px #092d4212!important}
+body.apd-ui-v21-live .apd-hero-main{padding:clamp(23px,3vw,42px)!important;background:linear-gradient(105deg,#fff,#eff9f7)!important}
+body.apd-ui-v21-live .apd-panel-showcase h2{font-size:clamp(27px,3.2vw,43px)!important;letter-spacing:-.035em!important}
+body.apd-ui-v21-live .apd-panel-showcase h2 span{color:#087d87!important}
+body.apd-ui-v21-live .apd-panel-quick{gap:10px!important;padding:19px clamp(16px,3vw,35px)!important}
+body.apd-ui-v21-live .apd-panel-quick a{border-radius:12px!important;box-shadow:none!important}
+body.apd-ui-v21-live .apd-panel-quick a:hover{border-color:#83c3ca!important}
+body.apd-ui-v21-live .apd-tab-intro{border-radius:16px!important;padding:22px!important}
+body.apd-ui-v21-live .apd-tab-intro h2{font-size:clamp(25px,2.6vw,36px)!important}
+body.apd-ui-v21-live .apd-tab-side a{display:none!important}
+body.apd-ui-v21-live .apd-tab-chip{border-radius:8px!important}
+body.apd-ui-v21-live .apd-v21-check{background:linear-gradient(125deg,#fff,#f0faf8)!important;border-color:#bcdad9!important}
+body.apd-ui-v21-live .apd-v21-check h3{font-size:21px;margin:0 0 7px;color:#133c4e}
+body.apd-ui-v21-live .apd-v21-check p{font-size:13px;color:var(--apd21-muted);line-height:1.5}
+body.apd-ui-v21-live .apd-v21-checkrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
+body.apd-ui-v21-live .apd-v21-checkrow label{display:flex;align-items:flex-start;gap:9px;padding:13px;background:#fff;border:1px solid #cde1e4;border-radius:11px;font-size:12px;line-height:1.4;font-weight:720;cursor:pointer}
+body.apd-ui-v21-live .apd-v21-checkrow label input{width:17px;height:17px;accent-color:#087d87;flex-shrink:0}
+body.apd-ui-v21-live .apd-v21-check-actions{display:flex;flex-wrap:wrap;gap:8px}
+body.apd-ui-v21-live .apd-v21-check-actions button,body.apd-ui-v21-live .apd-v21-check-actions a{border-radius:9px;padding:9px 13px;border:1px solid #b1d1d6;color:#075a65;background:#fff;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}
+body.apd-ui-v21-live .apd-v21-check-actions .primary{background:#087d87;color:#fff;border-color:#087d87}
+body.apd-ui-v21-live .apd-v21-help-dialog{border:1px solid #c9e3e5;border-radius:17px;box-shadow:0 28px 80px #001e2970;padding:0;width:min(700px,calc(100% - 26px));max-height:90vh;background:#fff;color:#18384a}
+body.apd-ui-v21-live .apd-v21-help-dialog::backdrop{background:#061a37ab}
+body.apd-ui-v21-live .apd-v21-help-header{padding:22px 25px;background:#f0f9f7;display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+body.apd-ui-v21-live .apd-v21-help-header h2{margin:0;font-size:25px}
+body.apd-ui-v21-live .apd-v21-help-header p{margin:5px 0 0;color:#56707d;font-size:12px}
+body.apd-ui-v21-live .apd-v21-help-body{padding:18px 24px 26px;overflow:auto}
+body.apd-ui-v21-live .apd-v21-help-choices{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:15px}
+body.apd-ui-v21-live .apd-v21-help-choices button{border-radius:9px;border:1px solid #bcd4db;background:#fff;color:#195268;padding:8px 11px;font-size:12px;font-weight:750;cursor:pointer}
+body.apd-ui-v21-live .apd-v21-help-choices button[aria-pressed="true"]{background:#087d87;border-color:#087d87;color:#fff}
+body.apd-ui-v21-live .apd-v21-help-result{border:1px solid #d1e3e4;padding:14px;background:#f7fbfa;border-radius:11px;font-size:13px;line-height:1.6}
+body.apd-ui-v21-live .apd-v21-help-result ol{margin-bottom:0}
+body.apd-ui-v21-live .apd-v21-help-close{border:0;background:#e3f2f1;color:#0a5664;border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:900}
+body.apd-ui-v21-live #panel-loading{display:flex;max-width:1250px;margin:6px auto 14px;background:#e7f6f3;border:1px solid #bde1de;border-radius:10px;min-height:39px;padding:8px 14px;align-items:center;gap:9px;font-size:12px;color:#28616a}
+body.apd-ui-v21-live #panel-loading.hidden{display:none!important}
+body.apd-ui-v21-live :is(button,a,input,select):focus-visible{outline:3px solid #ecbb54;outline-offset:2px}
+/* Al no tocar .alerta-* / #panel-alertas, conserva estructura y comportamiento original. */
+@media(max-width:1200px){body.apd-ui-v21-live .apd-v21-checkrow{grid-template-columns:1fr}}
+@media(max-width:780px){body.apd-ui-v21-live .apd-v21-sidebar{position:relative;inset:auto;width:100%;height:auto;z-index:49;display:block;padding:8px 12px;overflow:visible}body.apd-ui-v21-live .apd-v21-sidebar-brand{display:none}body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tabs{flex-direction:row;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:thin;gap:4px!important}body.apd-ui-v21-live .apd-v21-sidebar .apd-top-tab{flex:0 0 auto!important;width:auto!important;white-space:nowrap;padding:10px 13px!important}body.apd-ui-v21-live .apd-v21-sidebar-footer{margin-top:5px;padding:5px 0 0;border:0}body.apd-ui-v21-live .apd-v21-sidebar-footer p{display:none}body.apd-ui-v21-live .apd-v21-sidebar-footer button{width:auto;padding:7px 12px;margin:0;font-size:11px}body.apd-ui-v21-live .header-inner{margin-left:0!important}body.apd-ui-v21-live #panel-docente{margin-left:0!important}body.apd-ui-v21-live #panel-docente>.container{padding:15px 13px!important}body.apd-ui-v21-live .apd-hero-art{display:none!important}}
+@media(max-width:480px){body.apd-ui-v21-live .apd-panel-quick{grid-template-columns:1fr!important}body.apd-ui-v21-live .apd-v21-checkrow{grid-template-columns:1fr!important}body.apd-ui-v21-live .apd-v21-help-header{padding:17px}body.apd-ui-v21-live .apd-v21-help-body{padding:16px}}
+@media(prefers-reduced-motion:reduce){body.apd-ui-v21-live *{transition:none!important;scroll-behavior:auto!important}}
+
+/* El menú privado no puede asomar antes de confirmar la sesión. */
+.apd-v21-sidebar[hidden],body:not(.apd-ui-v21-live) .apd-v21-sidebar{display:none!important}

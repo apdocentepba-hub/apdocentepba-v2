@@ -1,0 +1,50 @@
+name: APDocentePBA UI V2.1 release safety
+on:
+  push:
+    branches:
+      - 'release/ui-v21-approved-20261101'
+  pull_request:
+    paths:
+      - 'apd_ui_v21.js'
+      - 'apd_ui_v21.css'
+      - 'panel_tabs_patch.js'
+      - 'tools_refresh_v1.css'
+      - 'herramientas.html'
+      - 'buscar-herramientas.html'
+      - 'herramientas-docentes.html'
+      - 'proximamente.html'
+      - 'pid.html'
+      - 'index.html'
+      - 'scripts/test-ui-v21-release.mjs'
+      - 'scripts/test-ui-v21-browser.mjs'
+      - '.github/workflows/ui-v21-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui-v21:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxis sin tocar servicios
+        run: |
+          node --check app_v2.js
+          node --check panel_tabs_patch.js
+          node --check apd_ui_v21.js
+          node --check scripts/test-ui-v21-browser.mjs
+      - name: Pruebas de aislamiento y reversión
+        run: node --test scripts/test-ui-v21-release.mjs
+      - name: Chrome real sin cuentas ni API
+        run: node scripts/test-ui-v21-browser.mjs
+      - name: Guardar capturas para revisión
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-ui-v21-browser
+          path: tmp/ui-v21-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
