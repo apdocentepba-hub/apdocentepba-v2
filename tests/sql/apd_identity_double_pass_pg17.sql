@@ -66,6 +66,16 @@ BEGIN
   IF r.source_total IS DISTINCT FROM n THEN
     RAISE EXCEPTION 'Manifest count differs from ABC source total';
   END IF;
+  -- Every filtered offer staged for capture must exist in the full raw
+  -- published-source manifest; otherwise the scanner staged unknown rows.
+  IF EXISTS (
+    SELECT 1
+    FROM apd_scanner_pilot.staged_offers staged
+    WHERE staged.run_id=p_run_id AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(canonical) entry(source_id)
+      WHERE entry.source_id=staged.source_offer_key
+    )
+  ) THEN RAISE EXCEPTION 'Staged offer is missing from source manifest'; END IF;
   IF EXISTS (SELECT 1 FROM apd_scanner_pilot.source_identity_manifests
        WHERE run_id=p_run_id) THEN
     RAISE EXCEPTION 'Source manifest already registered';
