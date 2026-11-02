@@ -92,4 +92,20 @@ test('Pull-request checks cannot cancel a different workflow or main deployment'
   }
 });
 
+
+const retiredWorkflows = [
+  {path:'.github/workflows/verify-apd-681-live.yml',job:'verify'},
+  {path:'.github/workflows/stage-live-messaging-auth.yml',job:'stage-undeployed'},
+  {path:'.github/workflows/mp-signed-webhook-staging.yml',job:'stage-to-version-url'}
+];
+for (const retired of retiredWorkflows) {
+  test(retired.path+' cannot stage, rollback or publish even with manual input', () => {
+    const src=readFileSync(retired.path,'utf8');
+    const triggers=extractTrigger(src);
+    assert.doesNotMatch(triggers,/^  (push|schedule|workflow_run|pull_request_target):/m);
+    const job=extractJob(src,retired.job);
+    assert.match(job,/^    if: false\s*$/m,'Retired job must be unreachable');
+  });
+}
+
 console.log('APD_MANUAL_RELEASE_GUARD: no production deployment performed');
