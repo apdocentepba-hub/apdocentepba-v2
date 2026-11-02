@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {maybeCaptureDailyProvinceSummary as capture} from '../worker-live/apd_daily_summary_hook.mjs';
 const worker=readFileSync('worker-live/worker_hotfix.js','utf8');
-function harness(flag=true,handler=async()=>({ok:true,status:200})){
+function harness(flag=true,handler=async()=>({ok:true,status:200,json:async()=>[{saved:true,captured_date:'2026-11-02',offers:3,districts_with_offers:2}]})){
  const calls=[],warnings=[];
  const env={
   APD_DAILY_SUMMARY_ENABLED: flag?'true':'false',
@@ -57,4 +57,30 @@ test('Worker principal sin integración prematura, con snapshots masivos apagado
  assert.doesNotMatch(worker,/maybeCaptureDailyProvinceSummary|APD_DAILY_SUMMARY_ENABLED/);
  assert.match(worker,/snapshot_writes: false/);
  assert.match(worker,/async function runProvinciaBackfillStep/);
+});
+
+test('RPC idempotente informa ya existente, no una nueva escritura',async()=>{
+ const h=harness(true,async()=>({ok:true,status:200,json:async()=>[
+  {saved:false,captured_date:'2026-11-02',offers:3,districts_with_offers:2}
+ ]}));
+ const r=await h.invoke('2026-11-02');
+ assert.deepEqual({ok:r.ok,captured:r.captured,already_present:r.already_present},
+  {ok:true,captured:false,already_present:true});
+});
+test('HTTP 200 con resultado vacío nunca se anuncia como captura',async()=>{
+ const h=harness(true,async()=>({ok:true,status:200,json:async()=>[]}));
+ const r=await h.invoke('2026-11-02');
+ assert.equal(r.ok,false);assert.equal(r.captured,false);
+});
+test('RPC de otra fecha nunca se anuncia como captura válida',async()=>{
+ const h=harness(true,async()=>({ok:true,status:200,json:async()=>[
+  {saved:true,captured_date:'2026-11-01',offers:3,districts_with_offers:2}
+ ]}));
+ const r=await h.invoke('2026-11-02');
+ assert.equal(r.ok,false);assert.equal(r.captured,false);
+});
+test('HTTP 200 sin JSON válido no interrumpe escáner',async()=>{
+ const h=harness(true,async()=>({ok:true,status:200,json:async()=>{throw Error('bad json')}}));
+ const r=await h.invoke('2026-11-02');
+ assert.equal(r.ok,false);assert.equal(r.captured,false);
 });
