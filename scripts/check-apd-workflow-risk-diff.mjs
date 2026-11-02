@@ -3,7 +3,7 @@
 // Protects PR review against newly introduced automatic privileged workflows.
 // This is a defense-in-depth check, not a substitute for branch protection.
 // It only reads local git objects and workflow files. No network or credentials.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -76,6 +76,29 @@ export function inspectChange(path,before,after) {
   return failures;
 }
 
+// Also block a changed script that an OLD privileged automatic workflow invokes.
+// Changing only a script can otherwise bypass a workflow-file-only diff check.
+export function executableScriptReferences(source) {
+  const regex=/(?:^|[^\w-])(?:node|bash|python3?|pwsh|powershell)(?:\s+--?[A-Za-z0-9_-]+)*\s+["']?(scripts\/[A-Za-z0-9_./-]+\.(?:mjs|js|sh|py|ps1))/gm;
+  return [...new Set([...source.matchAll(regex)].map(m=>m[1]))].sort();
+}
+export function linkedPrivilegedScriptRisks(changedScripts,workflowSources) {
+  const changed=new Set(changedScripts);
+  const failures=[];
+  for(const [file,source] of workflowSources) {
+    let active;
+    try {active=events(source).some(x=>UNSUPERVISED.has(x));}
+    catch {continue;}
+    if(!active) continue;
+    const features=signals(source);
+    if(!(features.tokens.length||features.mutations.length||features.privileged)) continue;
+    for(const script of executableScriptReferences(source)) {
+      if(changed.has(script)) failures.push(script+': changed entrypoint invoked by privileged automatic workflow '+file+'; remove its automatic trigger first');
+    }
+  }
+  return failures;
+}
+
 function git(args,allowMissing=false) {
   try {return execFileSync('git',args,{encoding:'utf8',maxBuffer:4*1024*1024,stdio:['ignore','pipe','pipe']}).trimEnd();}
   catch(e) {if(allowMissing) return null;throw Error('Cannot read git history required for safe diff');}
@@ -91,7 +114,13 @@ export function audit(baseSha) {
     const newText=existsSync(path)?readFileSync(path,'utf8'):null;
     failures.push(...inspectChange(path,oldText,newText));
   }
-  return {changed_workflows:list.length,failures};
+  const changedScripts=git(['diff','--name-only','--diff-filter=ACMR',baseSha,'HEAD','--','scripts/']).split('\n').filter(Boolean);
+  const activeSources=readdirSync(DIR).filter(name=>/\.ya?ml$/.test(name)).map(name=>{
+    const path=DIR+name;
+    return [path,readFileSync(path,'utf8')];
+  });
+  failures.push(...linkedPrivilegedScriptRisks(changedScripts,activeSources));
+  return {changed_workflows:list.length,changed_scripts:changedScripts.length,failures};
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   const result=audit(process.env.APD_CI_BASE_SHA);
