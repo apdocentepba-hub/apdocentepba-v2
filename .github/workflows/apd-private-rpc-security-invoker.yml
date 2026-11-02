@@ -1,4 +1,4 @@
-name: APD private API schema: scanner-only HTTP RPC with 24-column offers (PG17)
+name: "APD private API schema - scanner-only HTTP RPC with 24-column offers (PG17)"
 on:
   pull_request:
     paths:
