@@ -20,7 +20,7 @@ Archivo `sql/apd_daily_province_summary_20261102.sql`:
 - PK por fecha, `ON CONFLICT` sin reescritura idéntica: reintentos seguros, sin duplicar fechas.
 - RLS activado; tabla y RPC sin permisos para usuarios anónimos/autenticados. La información agregada destinada a usuarios se deberá exponer más adelante mediante un Worker de solo lectura y rate limit.
 - Estimación de almacenamiento: **aprox. unos KB por fecha**, frente a miles de filas de oferta por día. El tamaño real requiere prueba de carga y política de retención.
-- La migración **no crea cron**, no escribe ninguna fila y no expone datos. El Worker versionado quedó preparado para llamar la RPC **solamente al terminar** el escaneo, pero con `APD_DAILY_SUMMARY_ENABLED` desactivada por defecto: no se puede activar antes de aplicar el esquema y aprobar el despliegue. Si falla esa captura adicional, el escáner provincial continúa sin perder su estado `finished`.
+- La migración **no crea cron**, no escribe ninguna fila y no expone datos. Un adaptador aislado (`worker-live/apd_daily_summary_hook.mjs`) quedó preparado para llamar la RPC **solamente al terminar** el escaneo y con `APD_DAILY_SUMMARY_ENABLED` desactivada por defecto. **Todavía no se conecta al Worker ni puede ejecutarse en producción.**
 
 ## Prueba de integración automatizada
 - `scripts/test-apd-daily-summary.sql` crea tables de escaneo y usuarios de rol simulados en PostgreSQL 16 efímero, ejecuta la migración y comprueba: 3 ofertas en dos distritos, totales, fecha, idempotencia, RLS/permisos, rechazo de barrido incompleto, rechazo de conteos erróneos y fecha antigua, exclusión de ofertas fuera del escaneo.
@@ -52,9 +52,9 @@ El objetivo no es replicar el formulario APD sino hacer el **acceso rápido a un
 Esta entrega termina **la definición de tabla y prueba automatizada aislada**, no la automatización de producción ni la disponibilidad de tendencias al usuario. Porcentaje del histórico no debe declararse como completado hasta demostrar varias fechas de captura real y una vista autenticada coherente.
 
 ## Integración de backend preparada y rollback
-- `worker-live/worker_hotfix.js` incluye `maybeCaptureDailyProvinceSummary` y llama a la RPC **después** de `saveScanState` cuando `finished=true`.
+- `worker-live/apd_daily_summary_hook.mjs` exporta `maybeCaptureDailyProvinceSummary` pero **no está importado**; el Worker de producción y su archivo canónico son idénticos a `main`.
 - La opción `APD_DAILY_SUMMARY_ENABLED` no debe existir ni tener valor `true` en producción hasta la aprobación. No se desplegó este Worker.
-- El Worker conserva `snapshot_writes:false`: nunca reinicia las capturas masivas.
-- `scripts/test-apd-daily-worker-gate.mjs` verifica: bandera desactivada, escaneo incompleto, fechas inválidas, URL/service role, fallo HTTP y red no fatal, y orden correcto de persistencia.
-- **Activación futura segura:** (1) comprobar espacio/roles y aplicar migración; (2) probar RPC únicamente sobre el barrido completo y fecha actual; (3) revisar conteos/bytes y backups; (4) desplegar Worker con bandera desactivada; (5) activar `APD_DAILY_SUMMARY_ENABLED=true` solo cuando todo está validado y observar primer cierre diario; (6) añadir lectura autenticada en frontend en un PR separado.
+- El Worker principal conserva `snapshot_writes:false` y el adaptador no reinicia capturas masivas.
+- `scripts/test-apd-daily-worker-gate.mjs` verifica: bandera desactivada, escaneo incompleto, fechas inválidas, URL/service role, fallo HTTP y red no fatal, y **ausencia de integración prematura**.
+- **Activación futura segura:** (1) comprobar espacio/roles y aplicar migración; (2) probar RPC únicamente sobre el barrido completo y fecha actual; (3) revisar conteos/bytes y backups; (4) integrar adaptador al cierre de barrido en un PR separado y desplegar Worker con bandera desactivada; (5) activar `APD_DAILY_SUMMARY_ENABLED=true` solo cuando todo está validado y observar primer cierre diario; (6) añadir lectura autenticada en frontend en un PR separado.
 - **Reversión:** desactivar bandera sin revertir escáner; no borrar la tabla hasta conservar copia verificada. Un fallo de resumen jamás reintenta las páginas de origen.
