@@ -77,8 +77,10 @@ await stageRun(runs.AV,"AVELLANEDA",...moments.AV,["SIM_AV_NEW"]);
 
 // Acquire the real PostgreSQL advisory lock in a separate session before
 // issuing both HTTP requests. The holder releases it when its session ends.
-const holder=spawn("psql",["-X","-qAt","-v","ON_ERROR_STOP=1","-c",
-  "SELECT pg_advisory_lock(hashtextextended('MATANZA',0)); SELECT 'LOCKED'; SELECT pg_sleep(7);"],
+const holder=spawn("psql",["-X","-qAt","-v","ON_ERROR_STOP=1",
+  "-c","SELECT pg_advisory_lock(hashtextextended('MATANZA',0))",
+  "-c","SELECT 'LOCKED'",
+  "-c","SELECT pg_sleep(7)"],
   {env:process.env,stdio:["ignore","pipe","pipe"]});
 const lockReady=await new Promise((resolve,reject)=>{
  let output="",stderr="";
