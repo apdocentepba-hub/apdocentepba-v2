@@ -92,3 +92,28 @@ test("only aggregate data is fetched, no credentials and no private rows",()=>{
  assert.match(src,/method:"GET"/);
  assert.doesNotMatch(src,/Bearer |SUPABASE_SERVICE_ROLE|method:"POST"|Authorization:/);
 });
+
+test("documented Buenos Aires place names reconcile without guessing obsolete Sarmiento",()=>{
+ const pairs=[
+  ["la matanza",144],["general las heras",36],["9 de julio",24],
+  ["cañuelas",23],["general la madrid",16],
+  ["hipolito irigoyen",10],["benito juarez",7],
+  ["capitan sarmiento",7]
+ ];
+ const total=pairs.reduce((n,x)=>n+x[1],0);
+ const report=assessDistrictCoverage({
+  snapshot:reference,
+  facet:{numFound:total,buckets:pairs.map(([name,count])=>({name,count}))},
+  observedAt:"2026-11-02T17:25:17Z",
+  bracket:null
+ });
+ assert.equal(report.reconciliation.unknown_abc_districts.length,1);
+ assert.equal(normalizeDistrict(report.reconciliation.unknown_abc_districts[0].name),"CAPITAN SARMIENTO");
+ assert.equal(report.reconciliation.abc_total_in_unmapped_districts,7);
+ assert.equal(report.reconciliation.documented_name_equivalences_applied.length,6);
+ assert.equal(report.reconciliation.documented_name_equivalences_applied.reduce((n,x)=>n+x.count,0),237);
+ assert.equal(report.reconciliation.diagnostic_classification,"NOMBRES_ABC_NO_CONCILIADOS");
+ assert.equal(report.districts.find(x=>x.district==="MATANZA").abc_published_at_observation,144);
+ assert.equal(report.districts.find(x=>x.district==="CAÑUELAS").abc_published_at_observation,23);
+ assert.equal(report.reconciliation.matching_offers_or_lost_jobs_proven,false);
+});
