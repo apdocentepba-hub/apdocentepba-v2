@@ -111,6 +111,6 @@ function fixGlobalVisibleCopy(){
 
   function refreshTabs() { if (typeof window.APD_refreshPanelTabs === 'function') setTimeout(() => window.APD_refreshPanelTabs(), 0); }
   function bootPass() { ensurePrefsCard(); ensureHistoricoCard(); trimLegacyUiNoise(); loadUsefulPatches(); bindDynamicPanelEvents(); fixGlobalVisibleCopy(); refreshTabs(); }
-  function boot() { let tries = 0; const tick = () => { tries += 1; bootPass(); if (tries < 24) setTimeout(tick, 500); }; tick(); }
+  function boot() { let tries = 0; const tick = () => { tries += 1; bootPass(); if (tries < 8 && !byId('form-preferencias')) setTimeout(tick, 400); }; tick(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true }); else boot();
 })();
