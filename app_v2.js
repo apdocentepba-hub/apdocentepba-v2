@@ -1751,10 +1751,12 @@ async function cargarDashboard() {
   window.APD_refreshPanelTabs?.();
 
   try {
-    const alertasPromise = obtenerMisAlertas(token).catch(err => {
-      console.error("ERROR ALERTAS:", err);
-      return [];
-    });
+    const alertasPromise = obtenerMisAlertas(token)
+      .then(items => ({ ok: true, items }))
+      .catch(err => {
+        console.error("ERROR ALERTAS:", err);
+        return { ok: false, error: err };
+      });
     const [docente, prefRaw, planInfo] = await Promise.all([
       obtenerDocentePorId(token),
       obtenerPreferenciasPorUserId(token),
@@ -1785,7 +1787,16 @@ renderDashboard({
 // Lo costoso se completa después, sin mantener bloqueado el panel.
 void alertasPromise.then(alertasResult => {
   if (sequence !== dashboardLoadSequence || obtenerToken() !== token) return;
-  const alertasPanel = Array.isArray(alertasResult) ? alertasResult : [];
+  if (!alertasResult.ok) {
+    // Diferenciar fallo de red de cero coincidencias: una cifra "0" sería falsa.
+    alertasState.items = [];
+    alertasState.index = 0;
+    const panel = document.getElementById("panel-alertas");
+    if (panel) panel.textContent = "No pudimos verificar tus alertas vigentes. Reintentá con Recargar; ninguna preferencia fue modificada.";
+    renderResumenEstadistico(null);
+    return;
+  }
+  const alertasPanel = Array.isArray(alertasResult.items) ? alertasResult.items : [];
   renderAlertasAPD(alertasPanel);
   renderResumenEstadistico(alertasPanel.length);
   workerFetchJson('/api/sync-offers', {
