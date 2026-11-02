@@ -78,7 +78,10 @@ test("one compiled Worker returns 2609 via six PostgREST pages and browser shows
     if(u.pathname==="/rest/v1/apd_global_scan_state"){
       return mockJson([badState?{...STATE,status:"running"}:STATE]);
     }
-    if(u.pathname==="/rest/v1/catalogo_distritos"){\n      return mockJson(Array.from({length:137},(_,i)=>({nombre:"D"+i,apd_nombre:"D"+i})));\n    }\n    if(u.pathname==="/rest/v1/apd_ofertas_global_current"){
+    if(u.pathname==="/rest/v1/catalogo_distritos"){
+      return mockJson(Array.from({length:137},(_,i)=>({nombre:"D"+i,apd_nombre:"D"+i})));
+    }
+    if(u.pathname==="/rest/v1/apd_ofertas_global_current"){
       const offset=Number(u.searchParams.get("offset")||0);
       const limit=Number(u.searchParams.get("limit")||1000);
       assert.equal(limit,500,"Never permit a 1000+ row page");
