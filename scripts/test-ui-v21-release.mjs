@@ -8,8 +8,8 @@ const tabs=readFileSync('panel_tabs_patch.js','utf8');
 const core=readFileSync('app_v2.js','utf8');
 const worker=readFileSync('worker-live/worker_hotfix.js','utf8');
 test('se activa exclusivamente sobre panel existente y no sustituye el motor',()=>{
- assert.match(html,/apd_ui_v21\.css\?v=20261101/);
- assert.match(html,/apd_ui_v21\.js\?v=20261101/);
+ assert.match(html,/apd_ui_v21\.css\?v=20261102-clean/);
+ assert.match(html,/apd_ui_v21\.js\?v=20261102-clean/);
  assert.match(ui,/const p=\$\('panel-docente'\)/);
  assert.match(ui,/function attachTabs\(/);
  assert.match(ui,/APD_activatePanelTab/);
@@ -35,11 +35,10 @@ test('administración nunca aparece sin afirmación explícita del backend',()=>
  assert.match(ui,/nonce!==adminNonce/);
  assert.doesNotMatch(ui,/\/api\/admin\/usuarios|\/api\/admin\/pagos/);
 });
-test('ayuda y checklist orientan sin leer datos privados ni guardar preferencias',()=>{
+test('ayuda resuelve problemas sin guardar datos ni mostrar checklist inútil',()=>{
  for(const id of ['email','offers','slow','plan','history'])assert.match(ui,new RegExp('(?:^|\\n) '+id+':\\{'));
- assert.match(ui,/Comprobá tu configuración antes de esperar avisos/);
- assert.match(ui,/0 de 3 pasos marcados/);
- assert.match(ui,/no verifica el Worker ni envía notificaciones/);
+ assert.doesNotMatch(ui,/ensureChecklist|apd-v21-activation|Comprobá tu configuración/);
+ assert.doesNotMatch(css,/apd-v21-checkrow|apd-v21-check-actions/);
  assert.match(ui,/https:\/\/misservicios\.abc\.gob\.ar\/actos\.publicos\.digitales\//);
  for(const forbidden of ['localStorage.setItem(','sessionStorage.setItem(','/api/guardar-preferencias','/api/sync-offers','fetch(','XMLHttpRequest','WebSocket'])
   assert.ok(!ui.includes(forbidden),forbidden);
@@ -64,4 +63,12 @@ test('los módulos auxiliares usan diseño unificado sin introducir scripts nuev
  assert.match(theme,/focus-visible/);
  assert.match(theme,/@media\(max-width:580px\)/);
  assert.doesNotMatch(theme,/#panel-alertas|\.alerta-/);
+});
+
+test('Mi cuenta no expone identificadores técnicos al docente',()=>{
+ const profile=readFileSync('account_profile_patch.js','utf8');
+ assert.doesNotMatch(profile,/\$\{esc\(PATCH_VERSION\)\}/);
+ assert.match(profile,/function buildAccountMarkup/);
+ assert.match(html,/account_profile_patch\.js\?v=20261102-clean/);
+ assert.match(html,/apd_ui_v21\.js\?v=20261102-clean/);
 });
