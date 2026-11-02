@@ -29,7 +29,9 @@ const newScripts=scripts.filter(x=>x===CANDIDATE);
 assert.equal(oldScripts.length+newScripts.length,1,"Public site must load precisely one provincial radar");
 const current= newScripts.length===1 ? "candidate" : "legacy";
 const sourceName=current==="candidate" ? CANDIDATE : LEGACY;
-const source=await get(new URL(sourceName.split("?")[0],SITE).href);
+const assetUrl=new URL(sourceName.split("?")[0],SITE);
+assetUrl.searchParams.set("apd_radar_asset_audit",String(Date.now()));
+const source=await get(assetUrl.href);
 const expected=current==="candidate" ? candidateSource
  : readFileSync("radar_provincia_patch_semaforo.js","utf8");
 const output={
@@ -44,4 +46,13 @@ const output={
 console.log(JSON.stringify(output,null,2));
 assert.equal(output.published_script_matches_repository,true,
  "Public radar asset differs from repository — investigate before deploy");
+if(current==="candidate"){
+  assert.match(source,/Publicadas capturadas/,"Public radar must distinguish captured from live offers");
+  assert.match(source,/NO es el total de ofertas publicadas actualmente en ABC/,
+    "Public radar must carry a visible ABC freshness disclaimer");
+  assert.match(source,/Revisar última captura/,"Refresh label must not imply a new ABC scan");
+  assert.doesNotMatch(source,/SNAPSHOT\s*=/,"Live radar must not contain frozen metrics");
+  console.log("Verified live radar text: captured offers only, official ABC disclaimer, no stale snapshot");
+}
+
 if(current==="legacy")console.log("::notice::Public web is still on the old static radar; release preview not deployed.");
