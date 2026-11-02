@@ -112,7 +112,7 @@ test("one compiled Worker returns 2609 via six PostgREST pages and browser shows
   await ui.window.cargarExtrasProvincia();
   assert.equal(ui.node("apd-radar-vivo-title").textContent,"Último barrido registrado — no es en tiempo real");
   assert.ok(ui.node("apd-radar-vivo-stats").children.some(c=>c.textContent.includes("2.609")));
-  assert.match(ui.node("apd-radar-vivo-detail").textContent,/verificá|confirmación de disponibilidad/);
+  assert.match(ui.node("apd-radar-vivo-detail").textContent,/no es un conteo oficial en tiempo real/);
 
   calls.length=0;short=true;
   const incomplete=await worker.fetch(request(),env,{});
