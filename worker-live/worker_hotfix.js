@@ -6811,6 +6811,42 @@ __name22(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 __name222(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 __name2222(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
 __name22222(maybeRunProvinciaCurrentCron, "maybeRunProvinciaCurrentCron");
+async function maybeCaptureDailyProvinceSummary(env, scanDate, finished) {
+  // Rollout independiente: NO habilitar sin aplicar la migracion SQL y aprobar el despliegue.
+  // Las capturas masivas tradicionales permanecen deshabilitadas.
+  if (!finished || env?.APD_DAILY_SUMMARY_ENABLED !== "true") {
+    return { ok: true, skipped: true, reason: "feature_disabled_or_scan_incomplete" };
+  }
+  const day = String(scanDate || "").trim();
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)) {
+    return { ok: false, skipped: true, reason: "invalid_scan_date" };
+  }
+  try {
+    const response = await supabaseFetchWithRetry(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/rpc/capture_apd_daily_province_summary`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ p_scan_date: day })
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Summary RPC HTTP ${response.status}`);
+    }
+    return { ok: true, captured: true, scan_date: day };
+  } catch (err) {
+    // Fallar el resumen NO debe marcar el barrido provincial como fallido,
+    // reintentar paginas ni afectar la cobertura del feed actual.
+    console.warn("APD_DAILY_SUMMARY_FAILED", String(err?.message || err));
+    return { ok: false, captured: false, scan_date: day };
+  }
+}
+
 async function runProvinciaBackfillStep(env, options = {}) {
   let state = await obtenerScanState(env);
   const scanDate = String(options?.scan_date || "").trim();
@@ -6967,6 +7003,8 @@ async function runProvinciaBackfillStep(env, options = {}) {
       last_run_at: (/* @__PURE__ */ new Date()).toISOString(),
       notes: nextNotes
     });
+    // Ejecutar solo DESPUES de persistir el scan completo; fallo no fatal.
+    await maybeCaptureDailyProvinceSummary(env, nextNotes.completed_scan_date, finished);
     return {
       ok: true,
       mode: "current_published",
