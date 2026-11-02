@@ -9,10 +9,10 @@ El script actualmente cargado en `index.html` es `radar_provincia_patch_semaforo
 El candidato `candidates/radar_provincia_live_20261102.js` reemplaza exclusivamente esa visualización y **consulta en cada refresco** `GET /api/provincia/backfill-status`, una ruta agregada del Worker existente. Usa el `API_URL` definido en `app_v2.js` para evitar puntos de conexión inventados.
 
 - Estado `finished`, distritos completos y fecha válida: muestra **distritos procesados** y **ofertas detectadas durante el último barrido**.
-- Barrido finalizado hace más de 36 horas: advierte que es una **captura antigua**; no la presenta como información actual.
+- Barrido finalizado hace más de 6 horas: advierte que es una **captura antigua**; no la presenta como información actual.
 - Barrido en curso/incompleto/error: muestra progreso o incidencia **sin cifras de ofertas definitivas**.
 - Error de red o datos inesperados: muestra **estado no verificable**, sin conservar números anteriores ni fabricar ceros.
-- Botón «Consultar ahora» hace una nueva petición real de solo lectura; evita la sustitución de resultados nuevos por respuestas viejas mediante request ID y AbortController.
+- Botón «Revisar última captura» hace una nueva petición real de solo lectura; evita la sustitución de resultados nuevos por respuestas viejas mediante request ID y AbortController.
 - No se muestran identificadores de docentes, preferencias, listas privadas, datos de sesiones ni claves.
 - Los textos de respuestas se derivan exclusivamente de campos estrictamente verificados y se insertan con `textContent` (no se inyecta HTML de servidor).
 - Aclara que «ofertas detectadas» no significa «vacantes abiertas»; postulaciones siempre se verifican en ABC.
