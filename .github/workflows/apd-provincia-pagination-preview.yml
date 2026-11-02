@@ -1,0 +1,27 @@
+name: APD provincial full pagination - preview tests
+on:
+  pull_request:
+    paths:
+      - 'worker-live/apd_provincia_summary_pagination_hook.mjs'
+      - 'scripts/build-apd-provincia-paginated-preview.mjs'
+      - 'scripts/test-apd-provincia-paginated-preview.mjs'
+      - '.github/workflows/apd-provincia-pagination-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate hook and preview generator syntax
+        run: |
+          node --check worker-live/apd_provincia_summary_pagination_hook.mjs
+          node --check scripts/build-apd-provincia-paginated-preview.mjs
+      - name: Test 2609 rows, empty/partial/duplicate and race failure
+        run: node --test scripts/test-apd-provincia-paginated-preview.mjs
+      - name: Confirm production source unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js
