@@ -85,6 +85,9 @@ test("one compiled Worker returns 2609 via six PostgREST pages and browser shows
       const offset=Number(u.searchParams.get("offset")||0);
       const limit=Number(u.searchParams.get("limit")||1000);
       assert.equal(limit,500,"Never permit a 1000+ row page");
+      assert.deepEqual(u.searchParams.getAll("last_seen_at"),
+        ["gte."+STATE.started_at,"lte."+STATE.finished_at],
+        "Every page must use the exact completed scan window");
       assert.match(u.searchParams.get("order")||"",/source_offer_key\.asc/);
       let rows=OFFERS.slice(offset,Math.min(offset+limit,short?1000:2609));
       if(duplicated&&offset===500)rows=rows.map((x,i)=>i===0?OFFERS[0]:x);
