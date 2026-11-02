@@ -111,3 +111,62 @@ test("preview generator incorporates opt-in route exactly once and parses as JS"
  });
  assert.equal(check.status,0,check.stderr);
 });
+
+test("pages use the exact completed scan start, not arbitrary rolling days",async()=>{
+ const rows=fixture();
+ const deps=fakeDependencies(rows);
+ const res=await handler(url,base,deps);
+ assert.equal(res.status,200,await res.clone().text());
+ for(const query of deps.queries){
+   const params=new URLSearchParams(query.split("?")[1]);
+   const starts=[...params.getAll("last_seen_at")];
+   assert.deepEqual(starts,["gte."+before.started_at,"lte."+before.finished_at]);
+ }
+});
+
+test("older rows outside the scan are excluded even if inside requested days",async()=>{
+ const oldRows=Array.from({length:37},(_,i)=>({
+   source_offer_key:"old-key-"+i,last_seen_at:new Date(time-48*3600000).toISOString(),
+   estado:"PUBLICADA",distrito:"AVELLANEDA"
+ }));
+ const rows=[...oldRows,...fixture()];
+ const deps=fakeDependencies(rows,{
+   supabaseSelect:async(_env,query)=>{
+     deps.queries.push(query);
+     const params=new URLSearchParams(query.split("?")[1]);
+     const lower=params.getAll("last_seen_at").find(x=>x.startsWith("gte."));
+     const upper=params.getAll("last_seen_at").find(x=>x.startsWith("lte."));
+     assert.ok(lower&&upper);
+     const filtered=rows.filter(x=>Date.parse(x.last_seen_at)>=Date.parse(lower.slice(4))&&
+       Date.parse(x.last_seen_at)<=Date.parse(upper.slice(4)));
+     const off=Number(params.get("offset")), limit=Number(params.get("limit"));
+     return filtered.slice(off,off+limit);
+   }
+ });
+ const res=await handler(url,base,deps);
+ assert.equal(res.status,200,await res.clone().text());
+ assert.equal((await res.json()).total_ofertas,2609);
+ assert.equal(deps.queries.length,6);
+});
+
+test("finished scan older than requested time horizon fails without any offer read",async()=>{
+ const oldStart=new Date(time-20*86400000).toISOString();
+ const oldFinish=new Date(time-19*86400000).toISOString();
+ const deps=fakeDependencies(fixture(),{
+   getScanState:async()=>({...before,started_at:oldStart,finished_at:oldFinish})
+ });
+ const res=await handler(new URL("https://worker.test.invalid/api/provincia/resumen?days=7"),base,deps);
+ assert.equal(res.status,503);
+ assert.equal(deps.queries.length,0);
+ assert.equal((await res.json()).ok,false);
+});
+
+test("changes of scan progress metadata invalidate result even when dates and counts match",async()=>{
+ let n=0;
+ const deps=fakeDependencies(fixture(),{
+   getScanState:async()=>({...before,districts_completed:++n===1?137:136})
+ });
+ const res=await handler(url,base,deps);
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).ok,false);
+});
