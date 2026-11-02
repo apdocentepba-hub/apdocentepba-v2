@@ -230,6 +230,58 @@ async function platformVisualFlow() {
   console.log('PASÓ plataforma visual: pestañas, estadísticas honestas, carrusel intacto y responsive');
 }
 
+
+async function completePlatformFlow(){
+  const url=pathToFileURL(path.join(ROOT,'dist-growth-preview','platform-completa.html')).href;
+  await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await cdp('Page.navigate',{url});await loaded();await sleep(240);
+  const initial=await js("({tabs:document.querySelectorAll('#mock-tabs [data-tab]').length,section:document.querySelector('.section.active')?.id,width:innerWidth,scroll:document.documentElement.scrollWidth,tools:document.getElementById('tools-count')?.textContent,errors:!!document.querySelector('#toast')})");
+  assert.equal(initial.tabs,8);
+  assert.equal(initial.section,'section-resumen');
+  assert.ok(initial.scroll<=initial.width+2,'Maqueta móvil sin scroll horizontal '+JSON.stringify(initial));
+  assert.match(initial.tools,/34 de 34/);
+  const shot=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
+  writeFileSync(path.join(OUTPUT,'apd-platform-complete-mobile.png'),Buffer.from(shot.data,'base64'));
+  await js("document.querySelector('[data-tab=\"alertas\"]').click();true");
+  assert.equal(await js("document.querySelector('.section.active')?.id"),'section-alertas');
+  assert.match(await js("document.querySelector('#alert-state-view').textContent"),/Preceptor/);
+  await js("document.querySelector('#carousel-next').click();true");
+  assert.match(await js("document.querySelector('#alert-state-view').textContent"),/Matemática/);
+  await js("document.getElementById('alert-state').value='error';document.getElementById('alert-state').dispatchEvent(new Event('change'));true");
+  assert.match(await js("document.querySelector('#alert-state-view').textContent"),/No pudimos verificar tus alertas/);
+  await js("document.querySelector('#alert-state-view button').click();true");
+  assert.match(await js("document.querySelector('#alert-state-view').textContent"),/Preceptor|Matemática/);
+  await js("document.querySelector('[data-tab=\"preferencias\"]').click();true");
+  await js("document.getElementById('pref-district').value='QUILMES';document.getElementById('pref-cargo').value='MATEMÁTICA';document.getElementById('pref-turn').value='T';document.getElementById('pref-email').checked=false;document.getElementById('preferences-form').requestSubmit();true");
+  const summary=await js("document.getElementById('pref-summary').textContent");
+  assert.match(summary,/QUILMES/);assert.match(summary,/MATEMÁTICA/);assert.match(summary,/Email no/);
+  await js("document.querySelector('[data-tab=\"resumen\"]').click();true");
+  assert.match(await js("document.getElementById('dashboard-config-summary').textContent"),/QUILMES/);
+  await js("document.querySelector('[data-tab=\"estadisticas\"]').click();true");
+  const stats=await js("document.querySelector('#section-estadisticas').textContent");
+  assert.match(stats,/2\.617/);assert.match(stats,/137 \/ 137/);assert.match(stats,/18 sep 2026/);assert.match(stats,/no consulta Supabase/);
+  await js("document.querySelector('[data-tab=\"recursos\"]').click();true");
+  assert.match(await js("document.getElementById('tools-count').textContent"),/34 de 34/);
+  await js("document.getElementById('tools-state').value='Experimental';document.getElementById('tools-state').dispatchEvent(new Event('change'));true");
+  assert.ok((await js("document.getElementById('tools-count').textContent")).includes(' de 34'));
+  await js("document.querySelector('[data-tab=\"buscar\"]').click();true");
+  await js("document.getElementById('search-text').value='licencias';document.getElementById('search-text').dispatchEvent(new Event('input'));true");
+  assert.ok(await js("document.querySelectorAll('#search-results .resource-card').length > 0"));
+  await js("document.querySelector('[data-tab=\"plan\"]').click();true");
+  assert.match(await js("document.querySelector('#section-plan').textContent"),/Insigne/i);
+  await js("document.getElementById('theme-toggle').click();true");
+  assert.equal(await js("document.body.dataset.theme"),'dark');
+  await js("document.getElementById('theme-toggle').click();true");
+  assert.equal(await js("document.body.dataset.theme"),'light');
+  await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  await js("document.querySelector('[data-tab=\"resumen\"]').click();true");await sleep(120);
+  const desktop=await js("({width:innerWidth,scroll:document.documentElement.scrollWidth})");
+  assert.ok(desktop.scroll<=desktop.width+2,'Maqueta desktop sin scroll horizontal '+JSON.stringify(desktop));
+  const shot2=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
+  writeFileSync(path.join(OUTPUT,'apd-platform-complete-desktop.png'),Buffer.from(shot2.data,'base64'));
+  console.log('PASÓ plataforma integral: 8 pestañas, 34 recursos, filtros, preferencias, estados de alertas, planes y modo oscuro (móvil y desktop)');
+}
+
 try {
   const port = await awaitPort();
   const targets = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
@@ -258,6 +310,7 @@ try {
   await demoFlow();
   await insigneLabFlow();
   await platformVisualFlow();
+  await completePlatformFlow();
   console.log('BROWSER_SMOKE_OK');
 } finally {
   if (socket) socket.close();
