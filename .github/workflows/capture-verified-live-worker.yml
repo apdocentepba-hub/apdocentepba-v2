@@ -6,15 +6,17 @@ on:
       - 'scripts/capture-verified-live-worker.mjs'
       - 'scripts/test-capture-verified-live-worker.mjs'
       - '.github/workflows/capture-verified-live-worker.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/capture-verified-live-worker.mjs'
-      - 'scripts/test-capture-verified-live-worker.mjs'
-      - '.github/workflows/capture-verified-live-worker.yml'
+  workflow_dispatch:
+    inputs:
+      confirm_capture:
+        description: "Authorize verified capture and commit manually"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "CAPTURAR"]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: apd-canonical-worker-baseline
@@ -32,8 +34,10 @@ jobs:
       - run: node --test scripts/test-capture-verified-live-worker.mjs
       - run: node scripts/test-live-source-equivalence.mjs
   capture:
+    permissions:
+      contents: write
     needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_capture == 'CAPTURAR'
     runs-on: ubuntu-latest
     environment: production
     steps:
