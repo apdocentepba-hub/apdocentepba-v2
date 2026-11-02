@@ -1,0 +1,115 @@
+/* APDocentePBA · Visual refresh 2026-11
+   Alcance intencional: navegación, tarjetas informativas, formularios,
+   recursos y estados. NO se modifica .alerta-* ni el carrusel de APD.
+*/
+:root{
+  --apd-r-ink:#122d41;--apd-r-muted:#4d6777;--apd-r-border:#c9dfe5;
+  --apd-r-surface:#ffffff;--apd-r-canvas:#f0f7f8;--apd-r-navy:#092d42;
+  --apd-r-teal:#087989;--apd-r-mint:#ccf7e5;
+  --apd-r-shadow:0 12px 35px rgba(7,49,68,.07);
+}
+html{scroll-padding-top:108px}
+body{color:var(--apd-r-ink);-webkit-font-smoothing:antialiased}
+body .header{
+  background:linear-gradient(110deg,#08283f,#0c4054)!important;
+  box-shadow:0 5px 22px rgba(6,32,47,.13)!important;
+  border-bottom:1px solid rgba(255,255,255,.12)!important
+}
+body .header-inner{max-width:1320px!important;gap:15px!important;padding:12px 18px!important}
+body .brand{min-width:182px;display:flex;align-items:center;gap:11px}
+body .brand-icon{background:rgba(206,255,233,.16)!important;box-shadow:none!important}
+body .brand-title{font-size:20px!important;letter-spacing:-.04em}
+body .brand-sub{font-size:10px!important;line-height:1.25!important;max-width:290px}
+body .top-nav{gap:6px!important;justify-content:flex-end;min-width:0;flex:1}
+body .top-nav>a[href="./proximamente.html"]{display:none!important}
+body .top-nav>a.btn{font-size:12px!important;min-height:37px;border-radius:9px!important;padding:8px 10px!important;white-space:nowrap}
+body .apd-top-tabs{
+  display:flex!important;gap:4px!important;overflow-x:auto;scrollbar-width:thin;
+  flex-wrap:nowrap!important;max-width:100%;padding:4px!important;
+  background:rgba(4,32,50,.30);border:1px solid rgba(213,240,245,.17);
+  border-radius:12px;min-width:0
+}
+body .apd-top-tab{
+  flex:0 0 auto;white-space:nowrap;letter-spacing:0!important;
+  border-radius:9px!important;padding:9px 11px!important;
+  font-size:12px!important;font-weight:750!important;min-height:39px!important;
+  color:#e2f0f4!important;transition:background .15s ease,color .15s ease
+}
+body .apd-top-tab:hover{background:rgba(255,255,255,.13)!important;color:#fff!important}
+body .apd-top-tab.is-active{color:#062c3f!important;background:var(--apd-r-mint)!important;box-shadow:none!important}
+body .apd-top-tab.is-active:after{display:none!important}
+body #btnCerrarSesion{border-radius:9px!important;padding:8px 12px!important;font-size:12px!important;min-height:38px}
+body .panel-tab-grid{gap:15px!important}
+body .apd-tab-intro{
+  background:linear-gradient(125deg,#fff,#f2f9fa)!important;
+  border:1px solid var(--apd-r-border)!important;
+  border-radius:16px!important;box-shadow:var(--apd-r-shadow)!important;
+  padding:25px 30px!important;gap:18px!important
+}
+body .apd-tab-intro h2{color:var(--apd-r-ink)!important;font-size:clamp(24px,2.8vw,37px)!important}
+body .apd-tab-intro p{color:var(--apd-r-muted)!important;line-height:1.52!important}
+body .apd-tab-chip{border-radius:8px!important;background:#e6f4f4!important;color:#236275!important}
+body .apd-tab-side a{border-radius:9px!important;background:var(--apd-r-teal)!important;color:#fff!important;box-shadow:none!important}
+body .apd-panel-showcase .apd-hero-main{
+  background:linear-gradient(115deg,#ffffff 5%,#f3faf9 66%,#e8f5f2)!important
+}
+body .apd-panel-showcase h2{font-size:clamp(30px,4vw,53px)!important;max-width:590px}
+body .apd-panel-showcase h2 span{color:#0a7d85!important}
+body .apd-panel-showcase-actions a.primary,body .apd-tab-side a:first-child{
+  background:var(--apd-r-teal)!important;border-color:var(--apd-r-teal)!important;
+  box-shadow:0 8px 18px rgba(2,113,129,.13)!important
+}
+body .apd-panel-quick{gap:11px!important;padding:21px 26px!important}
+body .apd-panel-quick a{
+  border-radius:13px!important;box-shadow:none!important;
+  border-color:var(--apd-r-border)!important
+}
+body .apd-panel-quick a:hover{border-color:var(--apd-r-teal)!important}
+body .apd-panel-quick a em{color:var(--apd-r-teal)!important}
+body .apd-panel-benefits{padding:22px 30px!important}
+body #panel-plan .plan-note,body #panel-canales .plan-note{line-height:1.55}
+body .prefs-card{max-width:none}
+body .prefs-card input[type="text"],body .prefs-card select{
+  border:1px solid #a8cbd3!important;min-height:44px;border-radius:10px!important;
+  background:#fff!important;color:#14384b!important
+}
+body .prefs-card input:focus-visible,body .prefs-card select:focus-visible{
+  outline:3px solid rgba(19,161,169,.28)!important;outline-offset:2px
+}
+body .prefs-card .checks-grid{gap:9px!important}
+body .prefs-card .form-actions{padding-top:12px}
+body #panel-loading{
+  display:flex;align-items:center;gap:11px;min-height:43px;
+  max-width:1180px;margin:8px auto 12px;padding:8px 14px;
+  background:#e8f6f5;border:1px solid #b9dfe0;border-radius:10px;
+  font-size:13px;font-weight:650;color:#235666;box-shadow:none
+}
+body #panel-loading.hidden{display:none!important}
+body #panel-loading .spinner{width:18px;height:18px;border-width:2px}
+body #panel-estadisticas .stat-n{color:#0d6978}
+body #panel-estadisticas .stat-l{line-height:1.45}
+body .panel-tab-pane .card-lbl{letter-spacing:0!important;text-transform:none!important}
+body .footer{background:linear-gradient(110deg,#08283f,#0b3348)!important}
+body .footer a:hover{text-decoration:underline!important}
+body :is(a,button,input,select,textarea,summary):focus-visible{
+  outline:3px solid #f0bd57;outline-offset:2px
+}
+/* No tocar reglas .alerta-*, #panel-alertas ni su navegación. */
+@media(max-width:1150px){
+  body .header-inner{flex-wrap:wrap!important}
+  body .top-nav{justify-content:flex-start}
+  body .apd-top-tabs{order:5;flex:1 1 100%;justify-content:flex-start}
+}
+@media(max-width:640px){
+  body .brand-sub{display:none!important}
+  body .header-inner{padding:9px 13px!important;gap:9px!important}
+  body .top-nav>a.btn{display:none!important}
+  body #navPrivado{margin-left:auto!important}
+  body .apd-top-tabs{gap:3px!important;padding:3px!important}
+  body .apd-top-tab{font-size:12px!important;padding:9px 10px!important}
+  body .apd-tab-intro{padding:18px!important}
+  body .apd-tab-side a{width:100%}
+  body .apd-panel-quick{padding:16px!important}
+  body .apd-panel-benefits{padding:20px!important}
+}
+@media(prefers-reduced-motion:reduce){body .apd-top-tab{transition:none!important}}
