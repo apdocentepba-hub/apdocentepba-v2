@@ -4,6 +4,8 @@ on:
     paths:
       - 'candidates/radar_provincia_live_20261102.js'
       - 'scripts/test-apd-radar-live-candidate.mjs'
+      - 'scripts/test-apd-radar-live-release.mjs'
+      - 'index.html'
       - '.github/workflows/apd-radar-live-preview.yml'
   workflow_dispatch:
 permissions:
@@ -20,6 +22,11 @@ jobs:
         run: node --check candidates/radar_provincia_live_20261102.js
       - name: Validate real scan state, stale data and failed requests with no network
         run: node --test scripts/test-apd-radar-live-candidate.mjs
-      - name: Verify installed production radar/index unchanged
+      - name: Preserve legacy radar and production Worker
+        run: git diff --exit-code origin/main -- radar_provincia_patch_semaforo.js worker-live/worker_hotfix.js
+      - name: If index changed, verify exact version-only release and rollback
         run: |
-          git diff --exit-code origin/main -- index.html radar_provincia_patch_semaforo.js worker-live/worker_hotfix.js
+          if git diff --name-only origin/main -- index.html | grep -q '^index.html
+; then
+            node --test scripts/test-apd-radar-live-release.mjs
+          fi
