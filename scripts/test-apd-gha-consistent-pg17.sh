@@ -22,6 +22,9 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
   postgres:17-alpine \
   sh -ec 'pg_dump --dbname=postgresql://postgres@127.0.0.1:5432/apd_backup_test --format=plain --schema=public --no-owner --file=/backup/app.sql'
 test -s "$tmp/app.sql"
+# A restored Supabase/local PG database already owns the public schema.
+[[ "$(grep -Fxc 'CREATE SCHEMA public;' "$tmp/app.sql")" == 1 ]]
+sed -i 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' "$tmp/app.sql"
 grep -q 'COPY public.apd_mock_preferences' "$tmp/app.sql"
 grep -q 'CREATE TABLE public.apd_mock_ofertas' "$tmp/app.sql"
 psql "$restored_uri" -X -q -v ON_ERROR_STOP=1 --single-transaction -f "$tmp/app.sql" >/dev/null
