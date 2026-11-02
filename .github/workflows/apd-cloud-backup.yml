@@ -14,6 +14,7 @@ on:
       - 'scripts/test-apd-gha-backup-offline.sh'
       - 'scripts/test-apd-gha-backup-restore-sql.sh'
       - 'scripts/test-apd-gha-consistent-pg17.sh'
+      - 'scripts/apd_gha_public_inventory.sh'
 
 permissions:
   contents: read
@@ -46,6 +47,7 @@ jobs:
         run: |
           bash -n scripts/apd_gha_backup_crypto.sh
           bash -n scripts/apd_gha_production_backup.sh
+          bash -n scripts/apd_gha_public_inventory.sh
       - name: Validate encryption, decryption, SHA-256 and tamper resistance offline
         run: bash scripts/test-apd-gha-backup-offline.sh
       - name: Verify real PostgreSQL17 restoration with mock encrypted SQL
