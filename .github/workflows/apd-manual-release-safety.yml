@@ -14,6 +14,7 @@ on:
       - '.github/workflows/build-email-format-candidate.yml'
       - '.github/workflows/apd-manual-release-safety.yml'
       - 'scripts/test-apd-manual-release-guards.mjs'
+      - 'scripts/test-live-messaging-status-auth-current.mjs'
       - 'scripts/audit-apd-workflow-triggers.mjs'
   workflow_dispatch:
 permissions:
