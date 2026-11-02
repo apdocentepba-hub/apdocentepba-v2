@@ -1,0 +1,38 @@
+name: Centro ABC y buscador - auditoria sin deploy
+on:
+  push:
+    branches:
+      - 'feature/abc-hub-20261101'
+  pull_request:
+    paths:
+      - 'centro-abc-servado.html'
+      - 'assets/js/herramientas-catalogo.js'
+      - 'assets/js/herramientas-buscador-v2.js'
+      - 'herramientas.html'
+      - 'buscar-herramientas.html'
+      - 'fuentes-oficiales.html'
+      - 'proximamente.html'
+      - 'index.html'
+      - 'scripts/test-abc-servado-hub.mjs'
+      - 'scripts/test-abc-servado-browser.mjs'
+      - '.github/workflows/abc-hub-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abc-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxis del buscador y catálogo
+        run: |
+          node --check assets/js/herramientas-catalogo.js
+          node --check assets/js/herramientas-buscador-v2.js
+      - name: Contratos y verificación de enlaces locales
+        run: node --test scripts/test-abc-servado-hub.mjs
+      - name: Comportamiento en Chrome sin backend
+        run: node scripts/test-abc-servado-browser.mjs
