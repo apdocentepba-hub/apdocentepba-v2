@@ -1,0 +1,21 @@
+name: APD ABC official public Published count (read-only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-abc-publicadas-count.mjs'
+      - '.github/workflows/apd-abc-publicadas-count.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  count-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate script syntax and absence of secrets
+        run: |
+          node --check scripts/audit-apd-abc-publicadas-count.mjs
+          ! grep -Eq 'SUPABASE_SERVICE_ROLE_KEY|process\.env|Bearer |POST|INSERT|DELETE|UPDATE' scripts/audit-apd-abc-publicadas-count.mjs
+      - name: Query only aggregate Publicada count from ABC (rows=0)
+        run: node scripts/audit-apd-abc-publicadas-count.mjs
