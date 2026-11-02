@@ -1,0 +1,19 @@
+name: APD public website radar deployment audit (read-only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-public-radar-deployment.mjs'
+      - '.github/workflows/apd-audit-public-radar-deployment.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check audit script syntax
+        run: node --check scripts/audit-apd-public-radar-deployment.mjs
+      - name: Verify what radar script is actually delivered to public browsers
+        run: node scripts/audit-apd-public-radar-deployment.mjs
