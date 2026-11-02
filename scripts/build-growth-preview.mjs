@@ -19,6 +19,7 @@ assert.match(landing, /<\/body>/i);
 const banner = `<div class="apd-preview-ribbon" role="status" style="position:sticky;top:0;z-index:9999;background:#ffedb7;color:#402a02;padding:13px 20px;font:700 14px system-ui;text-align:center;border-bottom:2px solid #d29d30">
   VISTA PREVIA · Diseño de prueba sin conexión a cuentas ni envíos.
   <a href="./panel-demo.html" style="color:#402a02;margin-left:12px">Probar panel simulado</a>
+  <a href="./insigne-laboratorio.html" style="color:#402a02;margin-left:12px">Probar Insigne LAB</a>
   <a href="https://alertasapd.com.ar/" style="color:#402a02;margin-left:12px">Sitio real</a>
 </div>`;
 let html = landing
@@ -133,6 +134,8 @@ document.getElementById('reset-demo').addEventListener('click', function() {
 <script src="./growth_activation_guide.js?v=1"></script></body></html>`;
 writeFileSync(path.join(out, 'panel-demo.html'), panel, 'utf8');
 copyFileSync(path.join(root, 'growth_activation_guide.js'), path.join(out, 'growth_activation_guide.js'));
+copyFileSync(path.join(root, 'insigne_rules_lab.js'), path.join(out, 'insigne_rules_lab.js'));
+copyFileSync(path.join(root, 'scripts/previews/insigne-laboratorio.html'), path.join(out, 'insigne-laboratorio.html'));
 writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n', 'utf8');
 writeFileSync(path.join(out, '_headers'), '/*\n  X-Robots-Tag: noindex, nofollow\n', 'utf8');
 console.log('APD_PREVIEW_BUILD_OK', out);
