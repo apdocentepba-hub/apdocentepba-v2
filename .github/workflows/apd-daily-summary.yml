@@ -54,7 +54,7 @@ jobs:
         run: |
           output=$(psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --no-align --tuples-only --file=scripts/apd-daily-history-preflight.sql)
           echo "$output"
-          readiness=$(printf '%s\\n' "$output" | tail -n 1 | awk -F '|' '{print $NF}')
+          readiness=$(printf '%s' "$output" | tail -n 1 | awk -F '|' '{print $NF}')
           if [ "$readiness" != "t" ]; then
             echo "Preflight isolated expected ready_to_review_migration=true, got: $readiness" >&2
             exit 1
