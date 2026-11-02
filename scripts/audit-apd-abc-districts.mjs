@@ -18,7 +18,7 @@ let body;
 try{
  const res=await fetch(url,{method:"GET",credentials:"omit",redirect:"error",signal:ctrl.signal,cache:"no-store",headers:{Accept:"application/json"}});
  assert.equal(res.status,200,"ABC HTTP "+res.status);
- const raw=await res.text();
+ const raw=new TextDecoder("iso-8859-1").decode(await res.arrayBuffer());
  assert.ok(raw.length<200000,"Unexpected size of aggregated ABC response");
  body=JSON.parse(raw);
 } finally {clearTimeout(timeout);}
