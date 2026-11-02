@@ -78,6 +78,11 @@ if ! docker run --rm --network host \
 fi
 [[ -s "$root/plain/app.sql" ]] ||
   { echo 'Empty combined application SQL snapshot; refused.' >&2; exit 4; }
+# Existing Supabase local/Postgres databases already contain schema public.
+# Only adjust the pg_dump schema creation statement, never drop source objects.
+[[ "$(grep -Fxc 'CREATE SCHEMA public;' "$root/plain/app.sql")" == 1 ]] ||
+  { echo 'Unexpected public schema DDL in dump; restoration not safe.' >&2; exit 4; }
+sed -i 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' "$root/plain/app.sql"
 after_dump="$(read_counts "$SUPABASE_DB_URL")" ||
   { echo 'Post-export count read failed.' >&2; exit 4; }
 [[ "$baseline" == "$after_dump" ]] ||
