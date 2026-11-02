@@ -12,7 +12,8 @@ CREATE TABLE public.users (id text PRIMARY KEY);
 CREATE TABLE public.user_subscriptions (id text PRIMARY KEY);
 CREATE TABLE public.apd_ofertas_global_current (source_offer_key text PRIMARY KEY);
 SQL
-# combined with schema in the same snapshot\ncat >> "$temp/plain/app.sql" <<'SQL'
+# combined with schema in the same snapshot
+cat >> "$temp/plain/app.sql" <<'SQL'
 COPY public.users (id) FROM stdin;
 fake-user
 \.
