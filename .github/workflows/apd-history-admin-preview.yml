@@ -1,0 +1,26 @@
+name: APD history private admin preview — isolated tests
+on:
+  pull_request:
+    paths:
+      - 'worker-live/apd_history_admin_read.mjs'
+      - 'scripts/build-apd-history-admin-read-preview.mjs'
+      - 'scripts/test-apd-history-admin-read.mjs'
+      - '.github/workflows/apd-history-admin-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check standalone read-only handler syntax and runtime tests
+        run: |
+          node --check worker-live/apd_history_admin_read.mjs
+          node --check scripts/build-apd-history-admin-read-preview.mjs
+          node --test scripts/test-apd-history-admin-read.mjs
+      - name: Confirm production bundle unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js
