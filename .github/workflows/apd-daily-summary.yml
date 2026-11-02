@@ -1,0 +1,43 @@
+name: APD daily history — PostgreSQL isolation tests
+on:
+  push:
+    branches:
+      - 'feature/apd-lightweight-daily-history-20261102'
+  pull_request:
+    paths:
+      - 'sql/apd_daily_province_summary_20261102.sql'
+      - 'scripts/test-apd-daily-summary.sql'
+      - '.github/workflows/apd-daily-summary.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sql-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: tests_only
+          POSTGRES_USER: postgres
+          POSTGRES_DB: apd_history_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d apd_history_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar cliente PostgreSQL
+        run: psql --version
+      - name: Ejecutar migración y pruebas en base efímera de CI
+        env:
+          PGPASSWORD: tests_only
+        run: |
+          psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --file=scripts/test-apd-daily-summary.sql
+      - name: Verificar que el Worker productivo no fue modificado
+        run: |
+          git diff --exit-code origin/main -- worker-live/worker_hotfix.js
