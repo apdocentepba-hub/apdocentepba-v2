@@ -16,7 +16,7 @@ const UNSUPERVISED=new Set([
 
 export function events(source) {
   if(typeof source!=='string') throw Error('Missing workflow body');
-  const match=source.match(/^on:\s*([^\n]*)/m);
+  const match=source.match(/^on:[ \t]*([^\r\n]*)/m);
   if(!match) throw Error('Unrecognized GitHub event trigger: missing top-level on:');
   if(match[1].trim()) {
     const raw=match[1].split('#')[0].trim();
