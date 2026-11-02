@@ -1,0 +1,50 @@
+name: APD atomic staged district - real PostgreSQL 17 tests
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_atomic_district_pilot_pg17.sql'
+      - 'tests/sql/apd_atomic_stage_pages_pg17.sql'
+      - 'tests/sql/test_apd_atomic_stage_pages_pg17.sh'
+      - 'scripts/apd-atomic-stage-rest-adapter.mjs'
+      - 'scripts/test-apd-atomic-stage-rest-adapter.mjs'
+      - '.github/workflows/apd-pg17-atomic-stage-pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: test_only_no_real_secrets
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGPASSWORD: test_only_no_real_secrets
+      PGDATABASE: apd_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate REST adapter syntax and mocked HTTP contracts
+        run: |
+          node --check scripts/apd-atomic-stage-rest-adapter.mjs
+          node --test scripts/test-apd-atomic-stage-rest-adapter.mjs
+      - name: Run real PG17 five-page staged capture, retries and failure injection
+        run: bash tests/sql/test_apd_atomic_stage_pages_pg17.sh
+      - name: Verify no deployed Worker or public schema changed
+        run: |
+          git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
