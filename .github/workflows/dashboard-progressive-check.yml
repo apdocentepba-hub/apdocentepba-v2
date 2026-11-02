@@ -1,0 +1,28 @@
+name: APD panel progressive loading and feed integrity
+on:
+  push:
+    branches:
+      - 'fix/dashboard-progressive-alerts-20261101'
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-dashboard-progressive.mjs'
+      - '.github/workflows/dashboard-progressive-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  progressive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxis del frontend
+        run: |
+          node --check app_v2.js
+          node --check scripts/test-dashboard-progressive.mjs
+      - name: Ejecutar regresiones de panel y sesión
+        run: node --test scripts/test-dashboard-progressive.mjs
