@@ -65,3 +65,58 @@
 ## Restricción irrevocable de esta fase
 
 No se modificó `main`, `alertasapd.com.ar`, Cloudflare, Supabase, credenciales, DNS, roles, precios, suscripciones ni se envió ningún email. Mantener el PR como **borrador** hasta aprobación explícita.
+
+## Revisión final de utilidad — versión 2.1, 1/11/2026
+
+La revisión de pantalla completa encontró tres funciones de alto valor que
+estaban insuficientemente resueltas antes de pedir aprobación.
+
+### Checklist de activación sin suplantar datos
+- Tarjeta visible desde **Resumen**: verificar filtros, verificar canales y
+  comprobar ABC oficial.
+- Tres casillas manuales, contador `0/3` a `3/3`, accesos a Preferencias,
+  Ayuda y APD; estado **solo de demo**, se pierde al recargar.
+- **No afirmar** que un docente tiene alertas activas únicamente porque marcó
+  la casilla; el Worker debe confirmar filtros, plan, canal y vigencia real.
+
+### Centro de ayuda y estado de datos
+- Botón **Ayuda** siempre disponible en la barra superior. Pantalla
+  contextual adicional (no es una novena opción que recargue el menú móvil).
+- Cinco diagnósticos guiados y con siguiente acción:
+  1. No llegan correos: alertas activas, canal email, plan, filtros y logs.
+  2. No aparecen ofertas: requisitos de filtros y verificación ABC.
+  3. El panel tarda o falla: diferenciar consulta pendiente de error.
+  4. Plan vencido: verificación de servidor y conservación de filtros.
+  5. Datos antiguos: separación entre barrido actual y capturas históricas.
+- Indicadores de origen y fechas **auditados** de noviembre/septiembre de
+  2026; no es un monitor vivo ni afirma disponibilidad en tiempo real.
+
+### Catálogo honesto y acciones ajustadas a madurez
+- Las 34 páginas del catálogo existen, pero sus etiquetas no garantizan su
+  funcionamiento integral. Inventario del propio catálogo:
+  - 29 declaradas «Activo»
+  - 1 «Recomendado»
+  - 1 «Experimental»
+  - 1 «Orientativo»
+  - 1 «Preparado»
+  - 1 «Próximamente»
+- Las fichas muestran una acción precisa: «Ver prototipo experimental»,
+  «Ver página informativa (no operativo)» y «Ver información pendiente de
+  revisión», en lugar de equipararlas a las herramientas activas.
+- No inventar métricas de adopción, compatibilidad o uso de recursos.
+
+### Verificaciones v2.1
+- CI GitHub Actions:
+  https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41373308520
+- **91/91 tests**: 71 producto, 10 preview inicial, 10 propuesta integral.
+- Chrome real sin backend: lista de activación, Ayuda, guía email, navegación
+  a Preferencias, estados, filtros, búsqueda y responsive 390/1280 px.
+- **10/10 checks de repositorio exitosos**.
+- Todo en rama `growth/landing-apd-20261101` y vista previa estática Render.
+- Sin cambios a `main`, GitHub Pages productivo, Cloudflare Worker, Supabase
+  ni carrusel. Sin correos, telemetría, contraseñas ni pagos en la demo.
+
+**Para aprobación:** revisar nueva tarjeta «Comprobá tu configuración» en
+Resumen, el botón «Ayuda» arriba y el comportamiento de Herramientas con
+recursos no operativos. El rediseño está **cerrado como propuesta visual**;
+la integración real y QA autenticado siguen pendientes de autorización.
