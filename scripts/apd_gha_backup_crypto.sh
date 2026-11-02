@@ -18,7 +18,14 @@ command -v sha256sum >/dev/null
 case "$mode" in
   seal)
     [[ -d "$source" && ! -e "$destination" ]] || { echo 'Invalid source directory or output exists.' >&2; exit 2; }
-    for f in roles.sql schema.sql data.sql counts.tsv SHA256SUMS; do
+    # v2: one consistent application schema+data snapshot.
+    # v1 is accepted for decrypting pre-existing encrypted artifacts only.
+    if [[ -f "$source/app.sql" ]]; then
+      payload=(roles.sql app.sql counts.tsv SHA256SUMS)
+    else
+      payload=(roles.sql schema.sql data.sql counts.tsv SHA256SUMS)
+    fi
+    for f in "${payload[@]}"; do
       [[ -s "$source/$f" ]] || { echo 'Missing or empty backup component.' >&2; exit 3; }
     done
     (cd "$source" && sha256sum --status --check SHA256SUMS)
@@ -27,7 +34,7 @@ case "$mode" in
     output="$encrypted_parent/$(basename "$destination")"
     tarfile="$(mktemp "$encrypted_parent/apd-archive.XXXXXXXX.tar")"
     trap 'rm -f "$tarfile"' EXIT
-    tar --create --file="$tarfile" --directory="$source" roles.sql schema.sql data.sql counts.tsv SHA256SUMS
+    tar --create --file="$tarfile" --directory="$source" "${payload[@]}"
     # Passphrase travels only through file descriptor 3 (never CLI arguments or logs).
     gpg --batch --yes --no-tty --pinentry-mode loopback --cipher-algo AES256 \
       --s2k-digest-algo SHA512 --s2k-count 65011712 --compress-algo none \
@@ -48,9 +55,11 @@ case "$mode" in
       echo 'Authentication/decryption failed; refusing backup.' >&2
       exit 5
     fi
-    expected="$(printf '%s\n' roles.sql schema.sql data.sql counts.tsv SHA256SUMS | LC_ALL=C sort)"
+    expected_v1="$(printf '%s\n' roles.sql schema.sql data.sql counts.tsv SHA256SUMS | LC_ALL=C sort)"
+    expected_v2="$(printf '%s\n' roles.sql app.sql counts.tsv SHA256SUMS | LC_ALL=C sort)"
     names="$(tar -tf "$temp_tar" | LC_ALL=C sort)"
-    [[ "$names" == "$expected" ]] || { echo 'Backup archive has unexpected/missing paths.' >&2; exit 6; }
+    [[ "$names" == "$expected_v1" || "$names" == "$expected_v2" ]] ||
+      { echo 'Backup archive has unexpected/missing paths.' >&2; exit 6; }
     mkdir -m 700 "$destination"
     tar -xf "$temp_tar" -C "$destination" --no-same-owner --no-same-permissions
     if ! (cd "$destination" && sha256sum --status --check SHA256SUMS); then
