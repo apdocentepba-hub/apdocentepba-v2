@@ -1,0 +1,26 @@
+name: APD unified history preview — no-deploy integration
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-apd-history-unified-preview.mjs'
+      - 'scripts/test-apd-history-unified-preview.mjs'
+      - '.github/workflows/apd-history-unified-preview.yml'
+      - 'worker-live/apd_daily_summary_hook.mjs'
+      - 'worker-live/apd_history_admin_read.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compose both guarded features and test exported Worker
+        run: |
+          node --check scripts/build-apd-history-unified-preview.mjs
+          node --test scripts/test-apd-history-unified-preview.mjs
+      - name: Assert canonical production Worker has not changed
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js
