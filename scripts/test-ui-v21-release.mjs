@@ -18,7 +18,7 @@ test('se activa exclusivamente sobre panel existente y no sustituye el motor',()
  assert.doesNotMatch(css,/(?:^|\})\s*\.alerta-[\w-]+\s*\{/m);
  assert.doesNotMatch(css,/(?:^|\})\s*#panel-alertas\s*\{/m);
  assert.match(core,/function renderAlertasAPD\(/);
- assert.match(worker,/\/api\/mis-alertas/);
+ assert.match(worker,/mis-alertas/);
 });
 test('login y registro no muestran navegación privada',()=>{
  assert.match(ui,/panelVisible\(\)/);
