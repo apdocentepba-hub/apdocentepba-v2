@@ -10,7 +10,7 @@ const out = path.join(root, 'dist-growth-preview');
 
 test('la construcción de la demo funciona sin bibliotecas externas', () => {
   execFileSync(process.execPath, [path.join(root, 'scripts/build-growth-preview.mjs')], { cwd: root, timeout: 10000 });
-  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'index.html', 'insigne-laboratorio.html', 'insigne_rules_lab.js', 'panel-demo.html', 'platform-visual.html', 'platform_refresh_v1.css', 'robots.txt'].sort());
+  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'herramientas-catalogo.js', 'index.html', 'insigne-laboratorio.html', 'insigne_rules_lab.js', 'panel-demo.html', 'platform-completa.css', 'platform-completa.html', 'platform-completa.js', 'platform-visual.html', 'platform_refresh_v1.css', 'robots.txt'].sort());
 });
 
 test('la landing no muestra botones de registro/login que usen backend real', () => {
