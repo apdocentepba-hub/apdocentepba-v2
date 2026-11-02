@@ -52,3 +52,16 @@ test('sin falsa estadística, cambios de plan ni instrucciones que afecten al ca
  assert.ok(!ui.includes('cargarPrefsEnFormulario('));
  assert.match(ui,/Las mejoras de carga progresiva están en validación/);
 });
+
+test('los módulos auxiliares usan diseño unificado sin introducir scripts nuevos',()=>{
+ const pages=['herramientas.html','buscar-herramientas.html','herramientas-docentes.html','proximamente.html','pid.html'];
+ const theme=readFileSync('tools_refresh_v1.css','utf8');
+ for(const page of pages){
+   const html=readFileSync(page,'utf8');
+   assert.match(html,/tools_refresh_v1\.css\?v=20261101/,page);
+   assert.match(html,/<meta name="viewport"/,page);
+ }
+ assert.match(theme,/focus-visible/);
+ assert.match(theme,/@media\(max-width:580px\)/);
+ assert.doesNotMatch(theme,/#panel-alertas|\.alerta-/);
+});
