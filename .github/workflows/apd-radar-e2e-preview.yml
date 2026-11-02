@@ -1,0 +1,28 @@
+name: APD radar integrated Worker-browser test (offline)
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-apd-radar-e2e-preview.mjs'
+      - 'scripts/build-apd-provincia-paginated-preview.mjs'
+      - 'worker-live/apd_provincia_summary_pagination_hook.mjs'
+      - 'candidates/radar_provincia_live_20261102.js'
+      - '.github/workflows/apd-radar-e2e-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  end-to-end:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate integration harness without network
+        run: |
+          node --check scripts/test-apd-radar-e2e-preview.mjs
+          node --check scripts/build-apd-provincia-paginated-preview.mjs
+      - name: Run compiled Worker and browser against 2609 simulated APD offers
+        run: node --test scripts/test-apd-radar-e2e-preview.mjs
+      - name: Confirm published Worker, index and original radar unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html radar_provincia_patch_semaforo.js
