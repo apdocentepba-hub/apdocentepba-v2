@@ -10,6 +10,7 @@ on:
       - '.github/workflows/auto-apply-worker-export-default-replacement.yml'
       - '.github/workflows/apd-manual-release-safety.yml'
       - 'scripts/test-apd-manual-release-guards.mjs'
+      - 'scripts/audit-apd-workflow-triggers.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,3 +29,7 @@ jobs:
         run: |
           node --check scripts/test-apd-manual-release-guards.mjs
           node --test scripts/test-apd-manual-release-guards.mjs
+      - name: Report other auto-triggered workflows with write-capable steps (read only)
+        run: |
+          node --check scripts/audit-apd-workflow-triggers.mjs
+          node scripts/audit-apd-workflow-triggers.mjs
