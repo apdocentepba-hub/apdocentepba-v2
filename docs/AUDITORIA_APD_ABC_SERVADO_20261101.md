@@ -16,7 +16,10 @@
 4. Los servicios ABC públicos permiten ingresar a APD, Mis Haberes y Mis Licencias:
    - https://srv4.abc.gob.ar/?i=AGENTES
    - https://misservicios.abc.gob.ar/actos.publicos.digitales/
-5. El APD redirige a autenticación; **no se inspeccionó su interior** ni se identificó una API pública documentada. No afirmar compatibilidad ni porcentaje de cobertura del feed oficial sin cotejo autorizado.
+5. **Mapa Escolar renovado:** el visor público directo es https://mapaescolar.abc.gob.ar/mapaescolar/ (no la portada general de relevamientos). Según la DGCyE, incorpora búsqueda de escuelas, capas, descargas y funciones de compartir. IDEBA registra un servicio WMS público en https://mapaescolar.abc.gob.ar/me/wms, comprobado como operativo en su monitor. Cualquier integración requiere revisar cobertura, licencia, formato y frecuencia.
+   - https://ideba.gba.gob.ar/es/visualizador/mapa-escolar-dgc-y-e
+   - https://geohealthcheck.ideba.gba.gob.ar/resource/78?lang=es_AR
+6. El APD redirige a autenticación; **no se inspeccionó su interior** ni se identificó una API pública documentada. No afirmar compatibilidad ni porcentaje de cobertura del feed oficial sin cotejo autorizado.
 
 El listado de fechas visto en SerVaDo fue revisado en esta fecha de auditoría; ABC puede cambiar períodos y condiciones. No copiarlo a la base como si fuera una API oficial estable y en tiempo real.
 
