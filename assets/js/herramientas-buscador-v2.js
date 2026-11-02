@@ -10,6 +10,8 @@
  const count=document.getElementById('count');
  const chips=document.getElementById('chips');
  const clear=document.getElementById('clear')||document.getElementById('limpiar');
+ const initialQuery=new URLSearchParams(window.location.search).get('q');
+ if(document.getElementById('grid')&&initialQuery)q.value=initialQuery.slice(0,100);
  if(!q||!results)return;
  const quick=['haberes','licencia','acta','APD','PID','secretaría','analítico','familias','planificación','fuentes','calendario','mapa','docente nuevo'];
  const norm=s=>String(s??'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
