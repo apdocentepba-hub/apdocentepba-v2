@@ -34,6 +34,7 @@ jobs:
         run: |
           node --check scripts/test-apd-manual-release-guards.mjs
           node --test scripts/test-apd-manual-release-guards.mjs
+          node --test scripts/test-live-messaging-status-auth-current.mjs
       - name: Report other auto-triggered workflows with write-capable steps (read only)
         run: |
           node --check scripts/audit-apd-workflow-triggers.mjs
