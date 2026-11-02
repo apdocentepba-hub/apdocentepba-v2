@@ -52,6 +52,21 @@ baseline="$(read_counts "$SUPABASE_DB_URL")" ||
 [[ "$baseline" =~ ^[0-9]+$'\t'[0-9]+$'\t'[0-9]+$ ]] ||
   { echo 'Invalid production counts.' >&2; exit 3; }
 
+# Do not silently omit managed Auth/Storage records when they become active.
+managed_sql="SELECT (SELECT count(*) FROM auth.users), (SELECT count(*) FROM storage.buckets), (SELECT count(*) FROM storage.objects);"
+read_managed_counts() {
+  psql "$1" -X -q -A -t -F ':' -v ON_ERROR_STOP=1 -c "$managed_sql" 2>/dev/null
+}
+managed_baseline="$(read_managed_counts "$SUPABASE_DB_URL")" ||
+  { echo 'Cannot inspect Auth/Storage backup scope.' >&2; exit 3; }
+[[ "$managed_baseline" == '0:0:0' ]] ||
+  { echo 'Nonempty Auth/Storage is outside current backup scope; refusing.' >&2; exit 3; }
+APD_INVENTORY_DB_URL="$SUPABASE_DB_URL" \
+  bash "$GITHUB_WORKSPACE/scripts/apd_gha_public_inventory.sh" > "$root/plain/inventory.tsv" ||
+  { echo 'Cannot inventory all public tables.' >&2; exit 3; }
+[[ -s "$root/plain/inventory.tsv" ]] || exit 3
+cp "$root/plain/inventory.tsv" "$root/baseline_inventory.tsv"
+
 echo 'Exporting user-managed Supabase schema/roles/data (not Supabase-managed Auth/Storage objects).'
 cd "$root/restore_project"
 dump() {
@@ -87,8 +102,15 @@ after_dump="$(read_counts "$SUPABASE_DB_URL")" ||
   { echo 'Post-export count read failed.' >&2; exit 4; }
 [[ "$baseline" == "$after_dump" ]] ||
   { echo 'Source table counts changed during export. Refusing inconsistent backup.' >&2; exit 4; }
+[[ "$(read_managed_counts "$SUPABASE_DB_URL")" == "$managed_baseline" ]] ||
+  { echo 'Auth/Storage changed during export; refusing.' >&2; exit 4; }
+APD_INVENTORY_DB_URL="$SUPABASE_DB_URL" \
+  bash "$GITHUB_WORKSPACE/scripts/apd_gha_public_inventory.sh" > "$root/after_inventory.tsv" ||
+  { echo 'Could not audit public inventory after export.' >&2; exit 4; }
+cmp -s "$root/baseline_inventory.tsv" "$root/after_inventory.tsv" ||
+  { echo 'Public inventory/counts changed during export; refusing.' >&2; exit 4; }
 printf '%s\n' "$baseline" > "$root/plain/counts.tsv"
-(cd "$root/plain" && sha256sum roles.sql app.sql counts.tsv > SHA256SUMS)
+(cd "$root/plain" && sha256sum roles.sql app.sql counts.tsv inventory.tsv > SHA256SUMS)
 
 encrypted="$ready/APDocentePBA_pre_migracion_$(date -u +%Y%m%dT%H%M%SZ).tar.gpg"
 bash "$GITHUB_WORKSPACE/scripts/apd_gha_backup_crypto.sh" seal "$root/plain" "$encrypted"
@@ -118,11 +140,16 @@ actual="$(read_counts "$local_url")" ||
   { echo 'Restore completed but application count validation failed.' >&2; exit 6; }
 [[ "$baseline" == "$actual" ]] ||
   { echo 'Restored application row counts do not match production baseline.' >&2; exit 6; }
+APD_INVENTORY_DB_URL="$local_url" \
+  bash "$GITHUB_WORKSPACE/scripts/apd_gha_public_inventory.sh" > "$root/restore_inventory.tsv" ||
+  { echo 'Restored public inventory unavailable.' >&2; exit 6; }
+cmp -s "$root/restored/inventory.tsv" "$root/restore_inventory.tsv" ||
+  { echo 'Restored public inventory/counts mismatched; no artifact uploaded.' >&2; exit 6; }
 
 # Independent encrypted package can be unsealed and used to restore those tables.
-echo 'Verified: roles/schema/data encrypted, SHA-256 valid, PostgreSQL 17 isolated restore successful, core table counts equal.'
+echo 'Verified: public dump encrypted, SHA-256 valid, PG17 local restoration and ALL public-table counts matched.'
 # The combined app.sql is a consistent snapshot; the auxiliary role export is not
 # transactionally synchronized. This is NOT an entire Supabase platform backup.
 # This marker never contains credentials or private records.
 printf 'APD_BACKUP_APP_RESTORE_VERIFIED=true\n' >> "$GITHUB_STEP_SUMMARY"
-printf 'Scope: public app schema and data from one PG17 snapshot; auxiliary roles export. Managed auth/storage/other schemas and Storage API objects NOT included.\n' >> "$GITHUB_STEP_SUMMARY"
+printf 'Scope: public application schema/data with complete public-table inventory. Auth/Storage checked EMPTY; managed schemas and external objects NOT backed up.\n' >> "$GITHUB_STEP_SUMMARY"

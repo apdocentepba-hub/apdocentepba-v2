@@ -13,6 +13,10 @@ INSERT INTO public.apd_mock_preferences VALUES ('fake-a','Avellaneda'), ('fake-b
 CREATE TABLE public.apd_mock_ofertas (id integer PRIMARY KEY, descripcion text NOT NULL);
 INSERT INTO public.apd_mock_ofertas VALUES (1,'Ficticia A'), (2,'Ficticia B');
 SQL
+APD_INVENTORY_DB_URL="$source_uri" bash scripts/apd_gha_public_inventory.sh > "$tmp/source-inventory.tsv"
+[[ "$(wc -l < "$tmp/source-inventory.tsv")" -ge 2 ]]
+grep -q $'public.apd_mock_preferences\t2' "$tmp/source-inventory.tsv"
+grep -q $'public.apd_mock_ofertas\t2' "$tmp/source-inventory.tsv"
 createdb -h 127.0.0.1 -U postgres apd_backup_restore
 # Exactly ONE pg_dump command for DDL and rows, using PostgreSQL 17 client.
 # On the GitHub hosted runner, docker is available. Postgres17 service stays isolated.
@@ -31,4 +35,12 @@ psql "$restored_uri" -X -q -v ON_ERROR_STOP=1 --single-transaction -f "$tmp/app.
 result="$(psql "$restored_uri" -X -q -t -A -v ON_ERROR_STOP=1 -c \
   "SELECT (SELECT count(*) FROM public.apd_mock_preferences)::text || ':' || (SELECT count(*) FROM public.apd_mock_ofertas)::text")"
 [[ "$result" == '2:2' ]] || { echo 'Inconsistent restored application snapshot' >&2; exit 1; }
-echo 'APD_PG17_ONE_DUMP_ONE_SNAPSHOT_RESTORE_OK'
+APD_INVENTORY_DB_URL="$restored_uri" bash scripts/apd_gha_public_inventory.sh > "$tmp/restore-inventory.tsv"
+cmp "$tmp/source-inventory.tsv" "$tmp/restore-inventory.tsv"
+psql "$restored_uri" -X -q -v ON_ERROR_STOP=1 -c "INSERT INTO public.apd_mock_ofertas VALUES (3,'Extra ficticia')" >/dev/null
+APD_INVENTORY_DB_URL="$restored_uri" bash scripts/apd_gha_public_inventory.sh > "$tmp/tampered-inventory.tsv"
+if cmp -s "$tmp/source-inventory.tsv" "$tmp/tampered-inventory.tsv"; then
+  echo 'Changed restored count went unnoticed' >&2
+  exit 1
+fi
+echo 'APD_PG17_ONE_DUMP_ONE_SNAPSHOT_RESTORE_AND_ALL_TABLES_OK'

@@ -18,9 +18,10 @@ command -v sha256sum >/dev/null
 case "$mode" in
   seal)
     [[ -d "$source" && ! -e "$destination" ]] || { echo 'Invalid source directory or output exists.' >&2; exit 2; }
-    # v2: one consistent application schema+data snapshot.
-    # v1 is accepted for decrypting pre-existing encrypted artifacts only.
-    if [[ -f "$source/app.sql" ]]; then
+    # v3 includes full public-table inventory. Older archives remain decryptable.
+    if [[ -f "$source/app.sql" && -f "$source/inventory.tsv" ]]; then
+      payload=(roles.sql app.sql counts.tsv inventory.tsv SHA256SUMS)
+    elif [[ -f "$source/app.sql" ]]; then
       payload=(roles.sql app.sql counts.tsv SHA256SUMS)
     else
       payload=(roles.sql schema.sql data.sql counts.tsv SHA256SUMS)
@@ -57,8 +58,9 @@ case "$mode" in
     fi
     expected_v1="$(printf '%s\n' roles.sql schema.sql data.sql counts.tsv SHA256SUMS | LC_ALL=C sort)"
     expected_v2="$(printf '%s\n' roles.sql app.sql counts.tsv SHA256SUMS | LC_ALL=C sort)"
+    expected_v3="$(printf '%s\n' roles.sql app.sql counts.tsv inventory.tsv SHA256SUMS | LC_ALL=C sort)"
     names="$(tar -tf "$temp_tar" | LC_ALL=C sort)"
-    [[ "$names" == "$expected_v1" || "$names" == "$expected_v2" ]] ||
+    [[ "$names" == "$expected_v1" || "$names" == "$expected_v2" || "$names" == "$expected_v3" ]] ||
       { echo 'Backup archive has unexpected/missing paths.' >&2; exit 6; }
     mkdir -m 700 "$destination"
     tar -xf "$temp_tar" -C "$destination" --no-same-owner --no-same-permissions

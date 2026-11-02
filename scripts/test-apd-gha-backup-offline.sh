@@ -50,4 +50,10 @@ if bash "$script" seal "$dir/plain" "$dir/should-not-exist.tar.gpg" >/dev/null 2
   echo 'Changed plaintext with outdated SHA-256 unexpectedly sealed.' >&2
   exit 1
 fi
-echo 'APD_GHA_OFFLINE_BACKUP_CRYPTO_TESTS_PASSED'
+# V3 includes a full inventory in the encrypted archive; v2 remains decryptable.
+printf 'public.mock\\t2\\n' > "$dir/plain/inventory.tsv"
+(cd "$dir/plain" && sha256sum roles.sql app.sql counts.tsv inventory.tsv > SHA256SUMS)
+bash "$script" seal "$dir/plain" "$dir/archive-v3.tar.gpg"
+bash "$script" verify "$dir/archive-v3.tar.gpg" "$dir/recovered-v3"
+cmp "$dir/plain/inventory.tsv" "$dir/recovered-v3/inventory.tsv"
+echo 'APD_GHA_OFFLINE_BACKUP_CRYPTO_TESTS_V2_V3_PASSED'
