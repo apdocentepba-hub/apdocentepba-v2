@@ -1,0 +1,59 @@
+name: APD isolated PostgreSQL 17 atomic district rollback
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_atomic_district_pilot_pg17.sql'
+      - 'tests/sql/test_apd_atomic_district_pg17.sh'
+      - '.github/workflows/apd-pg17-atomic-district-pilot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-atomicity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: test_only_no_real_secrets
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGPASSWORD: test_only_no_real_secrets
+      PGDATABASE: apd_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure PostgreSQL command-line utilities exist
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          psql --version
+      - name: Run actual PG17 transaction, induced failures and reversible data changes
+        run: bash tests/sql/test_apd_atomic_district_pg17.sh
+      - name: Dump and restore ONLY the disposable prototype schema to a second test database
+        run: |
+          pg_dump -Fc --no-owner --no-acl --schema=apd_scanner_pilot -f /tmp/apd_pilot_test.dump
+          createdb apd_ci_restore
+          PGDATABASE=apd_ci_restore pg_restore --no-owner --no-acl -d apd_ci_restore /tmp/apd_pilot_test.dump
+          TEST_ROWS="$(PGDATABASE=apd_ci_restore psql -Atc 'SELECT count(*) FROM apd_scanner_pilot.current_offers')"
+          test "$TEST_ROWS" = "3"
+          TEST_RUNS="$(PGDATABASE=apd_ci_restore psql -Atc "SELECT count(*) FROM apd_scanner_pilot.runs WHERE status='finalized'")"
+          test "$TEST_RUNS" = "2"
+          echo "Disposable PostgreSQL schema restored with 3 rows and 2 finalized runs."
+      - name: Verify no production source or database migration touched
+        run: |
+          git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js supabase
