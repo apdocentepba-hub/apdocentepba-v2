@@ -29,7 +29,9 @@ const newScripts=scripts.filter(x=>x===CANDIDATE);
 assert.equal(oldScripts.length+newScripts.length,1,"Public site must load precisely one provincial radar");
 const current= newScripts.length===1 ? "candidate" : "legacy";
 const sourceName=current==="candidate" ? CANDIDATE : LEGACY;
-const source=await get(new URL(sourceName.split("?")[0],SITE).href);
+const assetUrl=new URL(sourceName.split("?")[0],SITE);
+assetUrl.searchParams.set("apd_radar_asset_audit",String(Date.now()));
+const source=await get(assetUrl.href);
 const expected=current==="candidate" ? candidateSource
  : readFileSync("radar_provincia_patch_semaforo.js","utf8");
 const output={
