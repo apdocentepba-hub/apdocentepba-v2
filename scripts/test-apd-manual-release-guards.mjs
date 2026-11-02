@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const candidates = Object.freeze([
-  { path: '.github/workflows/release-live-messaging-auth.yml', job: 'production', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/release-live-messaging-auth.yml', job: 'production', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true, legacyDisabled: true },
   { path: '.github/workflows/deploy-apd-email-fix-681.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/release-expiry-worker.yml', job: 'release', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/deploy-email-format-candidate.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
@@ -47,6 +47,7 @@ function validateManualOnly(contents, item) {
     assert.ok(gate.includes(part), 'Missing job release gate: ' + part);
   }
   if (item.production) assert.match(job, /^    environment: production\s*$/m, 'Production environment required');
+  if (item.legacyDisabled) assert.ok(gate.includes('&& false'), 'Obsolete legacy release must remain permanently disabled');
   if (item.repositoryWrite) {
     assert.match(contents, /^permissions:\s*\n  contents: read/m, 'Workflow-level permissions must be read only');
     assert.match(job, /^    permissions:\s*\n      contents: write/m, 'Write permission must be scoped to explicitly approved job');
