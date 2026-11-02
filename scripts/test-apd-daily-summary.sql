@@ -15,7 +15,10 @@ CREATE TABLE public.apd_ofertas_global_current (
 );
 -- El servicio obtiene lectura del estado y de las ofertas, igual que el Worker real.
 GRANT USAGE ON SCHEMA public TO service_role;
-GRANT SELECT ON public.apd_global_scan_state, public.apd_ofertas_global_current TO service_role;
+-- SELECT FOR UPDATE requires UPDATE privilege on the locked table.
+-- Real Supabase service_role has this; the CI simulation must mirror it.
+GRANT SELECT, UPDATE ON public.apd_global_scan_state TO service_role;
+GRANT SELECT ON public.apd_ofertas_global_current TO service_role;
 \ir ../sql/apd_daily_province_summary_20261102.sql
 INSERT INTO public.apd_global_scan_state
 (scope,status,mode,started_at,finished_at,total_districts,districts_completed,offers_processed,notes)
