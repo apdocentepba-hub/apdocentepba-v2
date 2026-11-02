@@ -17,7 +17,7 @@ function env(){
  const el=id=>{
   if(!nodes.has(id))nodes.set(id,{
     textContent:'',className:'',classList:{toggle(){},add(){},remove(){}},
-    setAttribute(){},appendChild(){},addEventListener(){},
+    setAttribute(){},appendChild(child){this.textContent += child.textContent||'';},addEventListener(){},
   });
   return nodes.get(id);
  };
