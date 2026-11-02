@@ -19,16 +19,17 @@ function exactlyOnce(source, anchor, description) {
 }
 
 export function buildPilotWorker(liveSource, hookSource) {
+  if (liveSource.includes('maybeCaptureDailyProvinceSummary') ||
+      liveSource.includes('APD_DAILY_SUMMARY_ENABLED')) {
+    throw new Error('El Worker base ya contiene integración: revisar manualmente');
+  }
   exactlyOnce(liveSource, ENTRY, 'Entrada del escáner compiled');
   exactlyOnce(liveSource, FINISH, 'Guardado final del barrido current_published');
   exactlyOnce(hookSource, HOOK_EXPORT, 'Exportación del adaptador');
   if (!liveSource.includes('snapshot_writes: false')) {
     throw new Error('No se detectó la desactivación de snapshots masivos');
   }
-  if (liveSource.includes('maybeCaptureDailyProvinceSummary') ||
-      liveSource.includes('APD_DAILY_SUMMARY_ENABLED')) {
-    throw new Error('El Worker base ya contiene integración: revisar manualmente');
-  }
+
   if (/^\s*import\s/m.test(hookSource)) {
     throw new Error('El adaptador debe ser autónomo, sin imports externos');
   }
