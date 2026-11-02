@@ -27,5 +27,18 @@ La consulta de producción debe ejecutarse únicamente como lectura, preferentem
 
 El resultado `structural_checks_ok=true` solo acredita coherencia **estructural de ese corte**. Cualquier captura con staging, poda, nueva RPC, alteración de tablas o publicación de Worker continúa bloqueada hasta contar con QA y recuperación verificada.
 
+
+## Auditoría de paridad entre `source_offer_key` y Worker real
+
+El Worker productivo extrae la clave principal mediante `sanitizeSolrNumber(oferta.iddetalle || oferta.id)` y el prefijo `D_`. Cuando el `iddetalle` está informado y contiene dígitos, **prevalece** sobre `id` y `idoferta`. Esta precedencia es esencial para conservar el historial al cambiar el método de paginación ABC.
+
+La consulta nueva `scripts/apd-scanner-source-key-parity-readonly.sql` comprueba exclusivamente ese camino principal, más la presencia y relación numérica del `id` Solr almacenado en `raw`. Si en una futura captura falta `iddetalle` numérico o se requiere la ruta de respaldo `O_` / clave compuesta, el resultado `primary_identity_parity_ok` será **false**, obligando a revisar esa excepción antes de migrar. No infiere equivalencias entre formas distintas.
+
+**Comprobación real contra Supabase (SELECT, 02/11/2026):** entre 2.609 ofertas actuales, 2.609 poseen dígitos en `iddetalle`, 2.609 cumplen la regla `D_` + dígitos de `iddetalle`, 2.609 tienen `raw.id`, 0 presentan divergencia numérica entre `raw.id` e `iddetalle`, 0 claves divergentes y 0 fallback sin cobertura. Son resultados agregados, sin datos identificatorios individuales.
+
+**Pruebas con PostgreSQL 17 descartable:** dos filas válidas, alteración deliberada de `source_offer_key`, alteración del identificador en `raw` y ausencia de un detalle numérico. Cada caso alterado debe invalidar el preflight. También se ejecuta el SQL mediante una sesión que prohíbe escrituras.
+
+**Límite:** una coincidencia en filas almacenadas **no** prueba que el índice ABC actual contenga exactamente esas mismas ofertas, que todos los distritos estén sincronizados ni que la fuente mantenga identificadores estables mañana. La captura nueva sigue sin autorizarse hasta comparar dos barridos completos y ensayar transacciones, roles y recuperación.
+
 ## Siguiente validación
 Cruzar las identidades del índice ABC (`id`, `iddetalle`, `idoferta`) con las reglas exactas de `source_offer_key` y someter los casos de colisión a la transacción aislada del piloto PG17. No inferir pérdida de ofertas ni ausencia de alertas solo a partir de esta consulta.
