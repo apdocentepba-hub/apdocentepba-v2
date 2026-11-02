@@ -1589,7 +1589,7 @@ function renderHistoricoAPD(data) {
       <div class="empty-state">
         <p>${esc(data?.message || "Todavía no hay histórico APD para mostrar.")}</p>
         <p class="empty-hint">
-          Tocá "Actualizar histórico" para guardar una primera foto de los APD actuales y empezar a ver tendencias.
+          El histórico necesita capturas recientes de tus filtros. El listado actual se actualiza por separado: que no haya histórico no significa que no existan ofertas.
         </p>
       </div>
     `;
