@@ -72,3 +72,30 @@ test('la nueva página es el acceso principal a la preview sin quitar las demos 
   const landing=readFileSync(resolve(output,'index.html'),'utf8');
   for(const link of ['platform-completa.html','panel-demo.html','insigne-laboratorio.html'])assert.ok(landing.includes(link));
 });
+
+test('la activación se presenta como autocontrol y nunca como verificación de cuenta',()=>{
+  for(const step of ['prefs','email','abc'])assert.match(html,new RegExp('data-check-step="'+step+'"'));
+  assert.match(html,/id="activation-progress"/);
+  assert.match(app,/function updateActivationProgress/);
+  assert.match(app,/pasos marcados \(demo\)/);
+  assert.match(html,/no se guarda y se reinicia al recargar/);
+});
+test('el centro de ayuda cubre problemas reales y estados con límites explícitos',()=>{
+  assert.match(html,/id="section-ayuda"/);
+  assert.match(html,/id="help-button"/);
+  for(const id of ['emails','offers','slow','plan','historic']){
+    assert.match(html,new RegExp('data-help-topic="'+id+'"'));
+    assert.match(app,new RegExp('^  '+id+':', 'm'));
+  }
+  assert.match(html,/no es un monitor en vivo/);
+  assert.match(html,/No confundimos «Existe un enlace» con «Funciona correctamente»/);
+  assert.match(app,/function showHelpTopic/);
+  assert.doesNotMatch(html,/section-admin/);
+});
+test('las herramientas en desarrollo no se publicitan como operativas',()=>{
+  assert.match(app,/Próximamente'\?'Ver página informativa \(no operativo\)/);
+  assert.match(app,/Experimental'\?'Ver prototipo experimental/);
+  assert.match(app,/Preparado'\?'Ver información \(pendiente de revisión\)/);
+  assert.match(app,/statesMap/);
+  assert.match(html,/Clasificación declarada en el catálogo del repositorio/);
+});
