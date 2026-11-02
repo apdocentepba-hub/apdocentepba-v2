@@ -1,0 +1,36 @@
+name: "APD ABC full cursor ID scan twice - read-only published index"
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-abc-cursor-full-readonly.mjs'
+      - 'scripts/test-apd-abc-cursor-full-readonly.mjs'
+      - 'scripts/audit-apd-abc-cursor-full-twopass.mjs'
+      - '.github/workflows/apd-abc-cursor-full-twopass.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-cursor-public-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify complete page traversal, duplicate detection and changed IDs with constant count
+        run: |
+          node --check scripts/apd-abc-cursor-full-readonly.mjs
+          node --check scripts/audit-apd-abc-cursor-full-twopass.mjs
+          node --test scripts/test-apd-abc-cursor-full-readonly.mjs
+      - name: Run TWO complete anonymous ID-only cursor passes against ABC
+        run: node scripts/audit-apd-abc-cursor-full-twopass.mjs
+      - name: Save aggregated statistics only (never offer identities)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-full-cursor-two-pass
+          path: tmp/apd-abc-solr-cursor-full/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Protect Worker, website and database from changes
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
