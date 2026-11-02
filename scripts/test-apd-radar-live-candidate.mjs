@@ -67,9 +67,9 @@ test("complete scan reflects server counts, source date and explicit ABC disclai
  assert.equal(calls[0].opts.method,"GET");
  assert.equal(calls[0].opts.credentials,"omit");
  assert.equal(calls[0].opts.cache,"no-store");
- assert.match(ui.node("apd-radar-vivo-title").textContent,/completado/);
+ assert.match(ui.node("apd-radar-vivo-title").textContent,/no es en tiempo real/);
  assert.ok(stats(ui).includes("Distritos: 137/137"));
- assert.ok(stats(ui).includes("Ofertas detectadas: 2.609"));
+ assert.ok(stats(ui).includes("Publicadas capturadas: 2.609"));
  assert.match(ui.node("apd-radar-vivo-detail").textContent,/no una confirmación de disponibilidad en ABC/);
  assert.equal(ui.node("btn-refresh-radar-combinado").disabled,false);
 });
@@ -77,16 +77,16 @@ test("stale scan is labeled outdated without pretending offers are current",asyn
  const ts=new Date(Date.now()-48*60*60*1000).toISOString();
  const ui=setup(async()=>ok(payload({finished_at:ts})));
  await ui.window.cargarExtrasProvincia();
- assert.match(ui.node("apd-radar-vivo-title").textContent,/antiguos/);
- assert.match(ui.node("apd-radar-vivo-detail").textContent,/más de 36 horas/);
- assert.ok(stats(ui).includes("Ofertas detectadas: 2.609"));
+ assert.match(ui.node("apd-radar-vivo-title").textContent,/Captura anterior/);
+ assert.match(ui.node("apd-radar-vivo-detail").textContent,/más de 6 horas/);
+ assert.ok(stats(ui).includes("Publicadas capturadas: 2.609"));
 });
 test("running/error/partial scans never print a final offer count",async()=>{
  for(const status of ["running","error","finished"]){
    const ui=setup(async()=>ok(payload({status,districts_completed:63})));
    await ui.window.cargarExtrasProvincia();
-   assert.ok(stats(ui).every(x=>!x.includes("Ofertas detectadas")),status);
-   assert.ok(!ui.node("apd-radar-vivo-title").textContent.includes("completado"),status);
+   assert.ok(stats(ui).every(x=>!x.includes("Publicadas capturadas")),status);
+   assert.ok(!ui.node("apd-radar-vivo-title").textContent.includes("no es en tiempo real"),status);
  }
 });
 test("invalid or failed requests clear stale counts and don't invent zeros", async()=>{
@@ -104,7 +104,7 @@ test("wrong server shape and missing canonical API fail closed",async()=>{
     payload({finished_at:"not-a-date"}),payload({status:"finished",districts_completed:5})]) {
    const ui=setup(async()=>ok(item));
    await ui.window.cargarExtrasProvincia();
-   assert.equal(stats(ui).filter(x=>x.includes("Ofertas detectadas")).length,0);
+   assert.equal(stats(ui).filter(x=>x.includes("Publicadas capturadas")).length,0);
  }
  const noApi=setup(failFetch,false);
  await noApi.window.cargarExtrasProvincia();
@@ -121,7 +121,7 @@ test("late response cannot overwrite the newest scan result",async()=>{
  await second;
  requests[0].resolve(ok(payload({offers_processed:99})));
  await first;
- assert.ok(stats(ui).includes("Ofertas detectadas: 2.609"));
+ assert.ok(stats(ui).includes("Publicadas capturadas: 2.609"));
  assert.equal(stats(ui).some(x=>x.includes("99")),false);
  assert.equal(ui.node("btn-refresh-radar-combinado").disabled,false);
 });
@@ -143,8 +143,8 @@ test("existing public radar card is reused; does not create a duplicate card",as
  await ui.window.cargarExtrasProvincia();
  assert.equal(calls,1);
  assert.equal(ui.nodes.has("panel-radar-combinado-card"),false);
- assert.equal(ui.node("btn-refresh-provincia").textContent,"Consultar ahora");
- assert.ok(stats(ui).includes("Ofertas detectadas: 2.609"));
+ assert.equal(ui.node("btn-refresh-provincia").textContent,"Revisar última captura");
+ assert.ok(stats(ui).includes("Publicadas capturadas: 2.609"));
  assert.equal(typeof ui.node("btn-refresh-provincia").listeners.click,"function");
  ui.node("btn-refresh-provincia").listeners.click();
  await new Promise(resolve=>setImmediate(resolve));
