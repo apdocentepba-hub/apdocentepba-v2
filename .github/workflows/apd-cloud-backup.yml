@@ -13,6 +13,7 @@ on:
       - 'scripts/apd_gha_production_backup.sh'
       - 'scripts/test-apd-gha-backup-offline.sh'
       - 'scripts/test-apd-gha-backup-restore-sql.sh'
+      - 'scripts/test-apd-gha-consistent-pg17.sh'
 
 permissions:
   contents: read
@@ -49,6 +50,8 @@ jobs:
         run: bash scripts/test-apd-gha-backup-offline.sh
       - name: Verify real PostgreSQL17 restoration with mock encrypted SQL
         run: bash scripts/test-apd-gha-backup-restore-sql.sh
+      - name: Verify real PostgreSQL 17 single-snapshot dump & restore
+        run: bash scripts/test-apd-gha-consistent-pg17.sh
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'

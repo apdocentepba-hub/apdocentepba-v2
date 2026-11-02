@@ -6,22 +6,22 @@ dir="$(mktemp -d)"
 trap 'rm -rf -- "$dir"' EXIT
 mkdir "$dir/plain"
 printf '%s\n' '-- ONLY MOCK ROLE FIXTURE' > "$dir/plain/roles.sql"
-printf '%s\n' '-- ONLY MOCK SCHEMA FIXTURE' > "$dir/plain/schema.sql"
-printf '%s\n' '-- ONLY MOCK DATA FIXTURE' > "$dir/plain/data.sql"
+printf '%s\n' '-- ONLY MOCK SCHEMA + DATA SNAPSHOT' > "$dir/plain/app.sql"
+
 printf '50\t55\t2609\n' > "$dir/plain/counts.tsv"
-(cd "$dir/plain" && sha256sum roles.sql schema.sql data.sql counts.tsv > SHA256SUMS)
+(cd "$dir/plain" && sha256sum roles.sql app.sql counts.tsv > SHA256SUMS)
 
 export APD_BACKUP_ENCRYPTION_PASSPHRASE='MOCK_ONLY_OFFLINE_ENCRYPTION_KEY_20261102_NOT_REAL'
 script='scripts/apd_gha_backup_crypto.sh'
 bash "$script" seal "$dir/plain" "$dir/archive.tar.gpg"
 [[ -s "$dir/archive.tar.gpg" ]]
 # Explicitly verify the artifact does not reveal dump contents.
-if grep -qa 'ONLY MOCK DATA FIXTURE' "$dir/archive.tar.gpg"; then
+if grep -qa 'ONLY MOCK SCHEMA + DATA SNAPSHOT' "$dir/archive.tar.gpg"; then
   echo 'Plaintext leaked into encrypted artifact.' >&2
   exit 1
 fi
 bash "$script" verify "$dir/archive.tar.gpg" "$dir/recovered"
-cmp "$dir/plain/data.sql" "$dir/recovered/data.sql"
+cmp "$dir/plain/app.sql" "$dir/recovered/app.sql"
 cmp "$dir/plain/SHA256SUMS" "$dir/recovered/SHA256SUMS"
 
 # Wrong key and altered ciphertext MUST fail without creating an accepted backup.
@@ -45,7 +45,7 @@ if bash "$script" verify "$dir/altered.tar.gpg" "$dir/altered" >/dev/null 2>&1; 
   echo 'Altered ciphertext unexpectedly accepted.' >&2
   exit 1
 fi
-printf 'tampered\n' >> "$dir/plain/data.sql"
+printf 'tampered\n' >> "$dir/plain/app.sql"
 if bash "$script" seal "$dir/plain" "$dir/should-not-exist.tar.gpg" >/dev/null 2>&1; then
   echo 'Changed plaintext with outdated SHA-256 unexpectedly sealed.' >&2
   exit 1

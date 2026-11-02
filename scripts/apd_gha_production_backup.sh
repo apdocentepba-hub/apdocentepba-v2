@@ -63,15 +63,32 @@ dump() {
   fi
   [[ -s "$root/plain/$name" ]] || { echo "Empty export $name; refused." >&2; exit 4; }
 }
+# Export globals separately; the application public schema AND its rows are
+# exported in ONE pg_dump operation / ONE PostgreSQL consistent snapshot.
 dump roles.sql --role-only
-dump schema.sql
-dump data.sql --data-only --use-copy
+if ! docker run --rm --network host \
+      --user "$(id -u):$(id -g)" \
+      --volume "$root/plain:/backup" \
+      --env SUPABASE_DB_URL \
+      postgres:17-alpine \
+      sh -ec 'pg_dump --dbname="$SUPABASE_DB_URL" --format=plain --schema=public --no-owner --file=/backup/app.sql' \
+      >/dev/null 2>"$root/dump-snapshot.log"; then
+  echo 'Postgres 17 consistent public schema/data export failed. No artifact will be uploaded.' >&2
+  exit 4
+fi
+[[ -s "$root/plain/app.sql" ]] ||
+  { echo 'Empty combined application SQL snapshot; refused.' >&2; exit 4; }
+# Existing Supabase local/Postgres databases already contain schema public.
+# Only adjust the pg_dump schema creation statement, never drop source objects.
+[[ "$(grep -Fxc 'CREATE SCHEMA public;' "$root/plain/app.sql")" == 1 ]] ||
+  { echo 'Unexpected public schema DDL in dump; restoration not safe.' >&2; exit 4; }
+sed -i 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' "$root/plain/app.sql"
 after_dump="$(read_counts "$SUPABASE_DB_URL")" ||
   { echo 'Post-export count read failed.' >&2; exit 4; }
 [[ "$baseline" == "$after_dump" ]] ||
   { echo 'Source table counts changed during export. Refusing inconsistent backup.' >&2; exit 4; }
 printf '%s\n' "$baseline" > "$root/plain/counts.tsv"
-(cd "$root/plain" && sha256sum roles.sql schema.sql data.sql counts.tsv > SHA256SUMS)
+(cd "$root/plain" && sha256sum roles.sql app.sql counts.tsv > SHA256SUMS)
 
 encrypted="$ready/APDocentePBA_pre_migracion_$(date -u +%Y%m%dT%H%M%SZ).tar.gpg"
 bash "$GITHUB_WORKSPACE/scripts/apd_gha_backup_crypto.sh" seal "$root/plain" "$encrypted"
@@ -92,8 +109,7 @@ major="$(psql "$local_url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SHOW server_versio
 
 if ! psql "$local_url" -X -q -v ON_ERROR_STOP=1 --single-transaction \
       -f "$root/restored/roles.sql" \
-      -f "$root/restored/schema.sql" \
-      -f "$root/restored/data.sql" \
+      -f "$root/restored/app.sql" \
       >/dev/null 2>"$root/restore-error.log"; then
   echo 'Isolated PostgreSQL restore failed. No artifact will be uploaded.' >&2
   exit 6
@@ -105,6 +121,8 @@ actual="$(read_counts "$local_url")" ||
 
 # Independent encrypted package can be unsealed and used to restore those tables.
 echo 'Verified: roles/schema/data encrypted, SHA-256 valid, PostgreSQL 17 isolated restore successful, core table counts equal.'
+# The combined app.sql is a consistent snapshot; the auxiliary role export is not
+# transactionally synchronized. This is NOT an entire Supabase platform backup.
 # This marker never contains credentials or private records.
 printf 'APD_BACKUP_APP_RESTORE_VERIFIED=true\n' >> "$GITHUB_STEP_SUMMARY"
-printf 'Scope: user-managed schemas via Supabase CLI. Managed auth/storage data and Storage API objects NOT included.\n' >> "$GITHUB_STEP_SUMMARY"
+printf 'Scope: public app schema and data from one PG17 snapshot; auxiliary roles export. Managed auth/storage/other schemas and Storage API objects NOT included.\n' >> "$GITHUB_STEP_SUMMARY"
