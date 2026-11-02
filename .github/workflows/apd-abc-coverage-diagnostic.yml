@@ -5,6 +5,10 @@ on:
       - 'scripts/apd-abc-coverage-assessment.mjs'
       - 'scripts/audit-apd-abc-coverage-daily.mjs'
       - 'scripts/test-apd-abc-coverage-audit.mjs'
+      - 'scripts/apd-abc-district-assessment.mjs'
+      - 'scripts/audit-apd-abc-districts.mjs'
+      - 'scripts/test-apd-abc-districts.mjs'
+      - 'audits/apd_scan_district_reference_20261102.json'
       - '.github/workflows/apd-abc-coverage-diagnostic.yml'
   workflow_dispatch:
   schedule:
@@ -25,13 +29,20 @@ jobs:
           node --check scripts/apd-abc-coverage-assessment.mjs
           node --check scripts/audit-apd-abc-coverage-daily.mjs
           node --test scripts/test-apd-abc-coverage-audit.mjs
+          node --check scripts/apd-abc-district-assessment.mjs
+          node --check scripts/audit-apd-abc-districts.mjs
+          node --test scripts/test-apd-abc-districts.mjs
       - name: Collect 3 public, read-only count responses (ABC/Worker/ABC)
         run: node scripts/audit-apd-abc-coverage-daily.mjs
+      - name: Compare all ABC district facet counts to the dated APD reference
+        run: node scripts/audit-apd-abc-districts.mjs
       - name: Retain aggregated diagnostic only (no private offers or users)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: apd-abc-coverage-diagnostic
-          path: tmp/apd-abc-coverage-audit/report.json
+          path: |
+            tmp/apd-abc-coverage-audit/report.json
+            tmp/apd-abc-coverage-audit/district-report.json
           if-no-files-found: ignore
           retention-days: 21
