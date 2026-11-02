@@ -25,10 +25,10 @@
 
 ## Última intervención verificable — PR #233 (DRAFT)
 
-1. Se revisaron 101 workflows mediante auditoría estática. Los indicios de riesgo son candidatos para inspección humana: un token o un endpoint `/deployments` usado con GET puede ser de solo lectura.
-2. Se preparó una restricción manual para diez workflows con posibles escrituras o creación de versiones. El valor por defecto de confirmación es `NO` y las pruebas rechazan triggers automáticos de los flujos modificados.
+1. Se revisaron 101 workflows mediante auditoría estática de la rama candidata. Los indicios de riesgo son candidatos para inspección humana: un token o un endpoint `/deployments` usado con GET puede ser de solo lectura.
+2. Se prepararon restricciones manuales para diez workflows con posibles escrituras o creación de versiones; además, tres workflows heredados de Cloudflare con carga/rollback quedaron deshabilitados completamente en la rama (13 en total). El valor por defecto de confirmación es `NO` y las pruebas rechazan triggers automáticos de los flujos modificados.
 3. El test heredado de mensajería fallaba porque el Worker ya NO contiene el patrón inseguro al que intentaba aplicar el parche. Se agregó regresión sobre los handlers canónicos reales con sesiones ficticias y se deshabilitó el job antiguo de promoción con `&& false`.
-4. CI independiente `APD manual-release safety gate (offline only)` aprobó en el commit `949716964d0e8945a016f0883bad689d2099f000` (run `41529941816`). La ejecución simultánea del workflow heredado fue cancelada por concurrencia, por lo que NO se declara aprobada esa ejecución independiente.
+4. CI independiente `APD manual-release safety gate (offline only)` aprobó en el commit `949716964d0e8945a016f0883bad689d2099f000` (run `41529941816`). Se corrigió la colisión de grupos de concurrencia de las verificaciones PR, preservando el grupo compartido para operaciones productivas manuales. La regresión de mensajería aprobó en el commit 451a07d; se sustituyeron los ensayos obsoletos de los generadores históricos por comprobaciones de fallo seguro.
 5. **El PR sigue sin fusionar**. Su CI no garantiza la seguridad de todos los workflows del repositorio, ni reemplaza un ruleset. No ejecutar promoción de Worker, migraciones ni respaldo real desde estas pruebas.
 
 ## Acciones que se pueden hacer sin tocar producción
@@ -47,3 +47,11 @@
 5. Autorización explícita, independiente del permiso para desarrollar o ejecutar CI.
 
 **Próxima decisión técnica:** mejorar controles de los flujos de CI que quedan fuera de #233; no fusionar todavía.
+
+## Avance adicional — controles heredados y prevención de rollback
+
+- Se encontraron `stage-live-messaging-auth.yml` y `mp-signed-webhook-staging.yml` con disparador automático `push` capaz de crear versiones de Cloudflare, aunque no asignaran tráfico. En la rama del PR #233 ambos trabajos de staging se dejaron `if: false`, sin `push`.
+- Se detectó `verify-apd-681-live.yml`: una verificación antigua cuyo manejador de errores podía promover una versión histórica como rollback. Su job quedó `if: false` y sin disparador `push`.
+- La creación de candidatos de Mercado Pago falla cerrada frente a cambios del código canónico; ese generador obsoleto fue retirado de la prueba de staging deshabilitada. No se inventó una actualización de pagos.
+- Los CI de seguridad verifican por código que estos tres jobs son inaccesibles; el resultado de cada commit debe consultarse en GitHub Actions antes de una decisión de fusión.
+- **Pendiente crítico:** los 13 cambios están en PR #233, todavía no en `main`. Otras automatizaciones de solo lectura se mantienen; cualquier protección global de `main` mediante reglas obligatorias requiere configuración específica del repositorio.
