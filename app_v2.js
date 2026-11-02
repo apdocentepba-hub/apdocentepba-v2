@@ -15,6 +15,7 @@ const HISTORICO_DAYS_DEFAULT = 30;
 let tokenMem = null;
 let googleInitDone = false;
 let planActual = buildPlanFallback();
+let dashboardLoadSequence = 0;
 
 const alertasState = {
   items: [],
@@ -82,6 +83,8 @@ async function adminCheckAccess() {
     const isAdmin = !!data?.user?.es_admin;
 
     ADMIN.enabled = isAdmin;
+    window.APD_adminAccessConfirmed = isAdmin;
+    window.APD_refreshPanelTabs?.();
 
     const card = document.getElementById("admin-panel-card");
     if (card) {
@@ -91,6 +94,8 @@ async function adminCheckAccess() {
     return isAdmin;
   } catch (e) {
     ADMIN.enabled = false;
+    window.APD_adminAccessConfirmed = false;
+    window.APD_refreshPanelTabs?.();
     const card = document.getElementById("admin-panel-card");
     if (card) card.classList.add("hidden");
     return false;
@@ -669,8 +674,14 @@ function adaptarPreferencias(prefRaw) {
 }
 
 function setPanelLoading(activo) {
-  document.getElementById("panel-loading")?.classList.toggle("hidden", !activo);
-  document.getElementById("panel-content")?.classList.toggle("hidden", activo);
+  // El panel permanece visible durante una actualización: no ocultar tarjetas ni carrusel.
+  const loader = document.getElementById("panel-loading");
+  if (loader) {
+    loader.classList.toggle("hidden", !activo);
+    loader.setAttribute("role", "status");
+    loader.setAttribute("aria-live", "polite");
+  }
+  document.getElementById("panel-docente")?.setAttribute("aria-busy", String(!!activo));
 }
 function parseFechaAPD(value) {
   const raw = String(value || "").trim();
@@ -1713,18 +1724,24 @@ async function cargarDashboard() {
   }
 
   mostrarSeccion("panel-docente");
+  const sequence = ++dashboardLoadSequence;
   setPanelLoading(true);
+  // La cuenta y los filtros se muestran sin esperar alertas ni autorización admin.
+  window.APD_adminAccessConfirmed = false;
+  document.getElementById("admin-panel-card")?.classList.add("hidden");
+  window.APD_refreshPanelTabs?.();
 
   try {
-    const [docente, prefRaw, planInfo, alertasResult] = await Promise.all([
+    const alertasPromise = obtenerMisAlertas(token).catch(err => {
+      console.error("ERROR ALERTAS:", err);
+      return [];
+    });
+    const [docente, prefRaw, planInfo] = await Promise.all([
       obtenerDocentePorId(token),
       obtenerPreferenciasPorUserId(token),
-      obtenerMiPlan(token),
-      obtenerMisAlertas(token).catch(err => {
-        console.error("ERROR ALERTAS:", err);
-        return [];
-      })
+      obtenerMiPlan(token)
     ]);
+    if (sequence !== dashboardLoadSequence || obtenerToken() !== token) return;
 
     if (!docente) {
       alert("Usuario no encontrado en Supabase");
@@ -1734,68 +1751,68 @@ async function cargarDashboard() {
 
     const preferencias = adaptarPreferencias(prefRaw);
     planActual = planInfo || buildPlanFallback();
-const alertasPanel = Array.isArray(alertasResult)
-  ? alertasResult
-  : [];
-
-console.log("ALERTAS PANEL:", alertasPanel.length, alertasPanel);
 renderDashboard({
   docente,
   preferencias,
-  alertas: alertasPanel,
+  // No reemplazar el carrusel con un estado vacío durante cada recarga.
+  alertas: null,
   historial: [],
   planInfo: planActual,
   estadisticas: {
-    total_alertas: Array.isArray(alertasResult) ? alertasResult.length : 0,
-    alertas_leidas: 0,
-    alertas_no_leidas: Array.isArray(alertasResult) ? alertasResult.length : 0,
-    ultimo_acceso: docente.ultimo_login || new Date().toISOString()
+    total_alertas: null,
+    ultimo_acceso: docente.ultimo_login || ""
   }
 });
-
-workerFetchJson('/api/sync-offers', {
-  method: 'POST',
-  body: JSON.stringify({
-    offers: alertasPanel.map(o => ({
-      ...o,
-      id: String(o.idoferta || o.iddetalle || o.id || ""),
-      offer_id: String(o.idoferta || o.iddetalle || o.id || ""),
-
-      cargo: o.cargo || o.descripcioncargo || "",
-      materia: o.materia || o.area || o.descripcionarea || "",
-      nivel: o.nivel || o.nivel_modalidad || o.descnivelmodalidad || "",
-      distrito: o.distrito || o.descdistrito || "",
-      escuela: o.escuela || o.nombreestablecimiento || "",
-      turno: o.turno || "",
-
-      modulos: o.modulos || o.hsmodulos || "",
-      dias_horarios: o.dias_horarios || [
-        o.lunes, o.martes, o.miercoles, o.jueves, o.viernes, o.sabado
-      ].filter(Boolean).join(" "),
-
-      desde: o.desde || o.supl_desde_label || o.supl_desde || "",
-      hasta: o.hasta || o.supl_hasta_label || o.supl_hasta || "",
-
-      tipo_cargo: o.tipo_cargo || o.tipooferta || "",
-      revista: o.revista || o.supl_revista || "",
-
-      curso_division: o.curso_division || o.cursodivision || "",
-      jornada: o.jornada || "",
-
-      observaciones: o.observaciones || "",
-      fecha_cierre: o.fecha_cierre || o.fecha_cierre_fmt || o.finoferta_label || o.finoferta || "",
-
-      link_postular: o.link_postular || o.abc_postulantes_url || "",
-      source_offer_key: o.source_offer_key || "",
-
-      total_postulantes: o.total_postulantes ?? null,
-      puntaje_primero: o.puntaje_primero ?? null,
-      listado_origen_primero: o.listado_origen_primero || ""
-    }))
-  })
-}).catch(err => {
-  console.warn('ERROR SYNC OFFERS:', err);
-});
+// Lo costoso se completa después, sin mantener bloqueado el panel.
+void alertasPromise.then(alertasResult => {
+  if (sequence !== dashboardLoadSequence || obtenerToken() !== token) return;
+  const alertasPanel = Array.isArray(alertasResult) ? alertasResult : [];
+  renderAlertasAPD(alertasPanel);
+  renderResumenEstadistico(alertasPanel.length);
+  workerFetchJson('/api/sync-offers', {
+    method: 'POST',
+    body: JSON.stringify({
+      offers: alertasPanel.map(o => ({
+        ...o,
+        id: String(o.idoferta || o.iddetalle || o.id || ""),
+        offer_id: String(o.idoferta || o.iddetalle || o.id || ""),
+  
+        cargo: o.cargo || o.descripcioncargo || "",
+        materia: o.materia || o.area || o.descripcionarea || "",
+        nivel: o.nivel || o.nivel_modalidad || o.descnivelmodalidad || "",
+        distrito: o.distrito || o.descdistrito || "",
+        escuela: o.escuela || o.nombreestablecimiento || "",
+        turno: o.turno || "",
+  
+        modulos: o.modulos || o.hsmodulos || "",
+        dias_horarios: o.dias_horarios || [
+          o.lunes, o.martes, o.miercoles, o.jueves, o.viernes, o.sabado
+        ].filter(Boolean).join(" "),
+  
+        desde: o.desde || o.supl_desde_label || o.supl_desde || "",
+        hasta: o.hasta || o.supl_hasta_label || o.supl_hasta || "",
+  
+        tipo_cargo: o.tipo_cargo || o.tipooferta || "",
+        revista: o.revista || o.supl_revista || "",
+  
+        curso_division: o.curso_division || o.cursodivision || "",
+        jornada: o.jornada || "",
+  
+        observaciones: o.observaciones || "",
+        fecha_cierre: o.fecha_cierre || o.fecha_cierre_fmt || o.finoferta_label || o.finoferta || "",
+  
+        link_postular: o.link_postular || o.abc_postulantes_url || "",
+        source_offer_key: o.source_offer_key || "",
+  
+        total_postulantes: o.total_postulantes ?? null,
+        puntaje_primero: o.puntaje_primero ?? null,
+        listado_origen_primero: o.listado_origen_primero || ""
+      }))
+    })
+  }).catch(err => {
+    console.warn('ERROR SYNC OFFERS:', err);
+  });
+}).catch(err => console.error("ERROR ACTUALIZANDO ALERTAS:", err));
  cargarPrefsEnFormulario({ preferencias });
 renderPlanUI(planActual);
 actualizarNav();
@@ -1812,8 +1829,11 @@ if (typeof window.cargarExtrasProvincia === "function") {
   });
 }
 
-await adminCheckAccess();
-bindAdminEvents();
+// Autorización admin fuera de la ruta crítica. Las pestañas admin siguen
+// ocultas hasta recibir una confirmación explícita del Worker.
+void adminCheckAccess().then(() => {
+  if (sequence === dashboardLoadSequence && obtenerToken() === token) bindAdminEvents();
+}).catch(err => console.warn("VERIFICACIÓN ADMIN:", err));
   } catch (err) {
     console.error("ERROR CARGANDO PANEL:", err);
     // Un error transitorio del Worker no debe cerrar una sesión válida.
@@ -1826,8 +1846,23 @@ bindAdminEvents();
       alert("No se pudo cargar el panel. Tus datos siguen guardados; reintentá en unos momentos.");
     }
   } finally {
-    setPanelLoading(false);
+    if (sequence === dashboardLoadSequence) setPanelLoading(false);
   }
+}
+
+function renderResumenEstadistico(count) {
+  const verified = Number.isInteger(count) && count >= 0;
+  setHTML("panel-estadisticas", `
+    <div class="stats-row">
+      <div class="stat-box">
+        <span class="stat-n">${verified ? count : "—"}</span>
+        <span class="stat-l">Ofertas vigentes encontradas</span>
+      </div>
+    </div>
+    <p class="stat-acceso">${verified
+      ? "Cantidad de ofertas recibidas para tu búsqueda. No representa postulaciones ni designaciones."
+      : "Consultando ofertas vigentes. No mostramos cifras estimadas como si fueran reales."}</p>
+  `);
 }
 
 function renderDashboard(data) {
@@ -1873,16 +1908,10 @@ function renderDashboard(data) {
     <p><strong>Email:</strong> ${pref.alertas_email ? "Sí" : "No"}</p>
   `);
 
-  setHTML("panel-estadisticas", `
-    <div class="stats-row">
-      <div class="stat-box"><span class="stat-n">${data.estadisticas?.total_alertas ?? 0}</span><span class="stat-l">Alertas</span></div>
-      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_leidas ?? 0}</span><span class="stat-l">Vistas</span></div>
-      <div class="stat-box"><span class="stat-n">${data.estadisticas?.alertas_no_leidas ?? 0}</span><span class="stat-l">Sin ver</span></div>
-    </div>
-    <p class="stat-acceso">Último acceso: ${esc(fmtFecha(data.estadisticas?.ultimo_acceso || "-"))}</p>
-  `);
+  renderResumenEstadistico(data.estadisticas?.total_alertas);
 
-  renderAlertasAPD(data.alertas || []);
+  // La recarga de perfil o plan nunca reinicia el carrusel de alertas.
+  if (Array.isArray(data.alertas)) renderAlertasAPD(data.alertas);
   setHTML("panel-historial", `<p class="ph">Sin historial todavía.</p>`);
   setHTML("panel-historico-apd", `<p class="ph">Cargando histórico APD...</p>`);
 }
