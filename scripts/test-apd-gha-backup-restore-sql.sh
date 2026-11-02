@@ -7,12 +7,12 @@ temp="$(mktemp -d)"
 trap 'rm -rf -- "$temp"' EXIT
 mkdir "$temp/plain"
 printf '%s\n' '-- mocked roles, no live credentials' > "$temp/plain/roles.sql"
-cat > "$temp/plain/schema.sql" <<'SQL'
+cat > "$temp/plain/app.sql" <<'SQL'
 CREATE TABLE public.users (id text PRIMARY KEY);
 CREATE TABLE public.user_subscriptions (id text PRIMARY KEY);
 CREATE TABLE public.apd_ofertas_global_current (source_offer_key text PRIMARY KEY);
 SQL
-cat > "$temp/plain/data.sql" <<'SQL'
+# combined with schema in the same snapshot\ncat >> "$temp/plain/app.sql" <<'SQL'
 COPY public.users (id) FROM stdin;
 fake-user
 \.
@@ -25,7 +25,7 @@ fake-offer-2
 \.
 SQL
 printf '1\t1\t2\n' > "$temp/plain/counts.tsv"
-(cd "$temp/plain" && sha256sum roles.sql schema.sql data.sql counts.tsv > SHA256SUMS)
+(cd "$temp/plain" && sha256sum roles.sql app.sql counts.tsv > SHA256SUMS)
 export APD_BACKUP_ENCRYPTION_PASSPHRASE='MOCK_ONLY_OFFLINE_GH_ACTIONS_RESTORE_32_CHARS'
 bash scripts/apd_gha_backup_crypto.sh seal "$temp/plain" "$temp/safe.tar.gpg"
 bash scripts/apd_gha_backup_crypto.sh verify "$temp/safe.tar.gpg" "$temp/unpacked"
