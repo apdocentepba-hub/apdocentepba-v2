@@ -24,7 +24,7 @@ Archivo: `scripts/apd-daily-history-preflight.sql`.
 
 1. Revisar espacio disponible, seguridad y plan de recuperación. Mantener una copia verificable de la migración y esquema actual.
 2. **Solo con autorización específica**, aplicar `sql/apd_daily_province_summary_20261102.sql` al proyecto productivo. Esta migración agrega tabla/RPC: no borra ni modifica ofertas actuales, usuarios, planes ni snapshots.
-3. Confirmar inmediatamente RLS activo, EXECUTE solo service role, SELECT/INSERT/UPDATE no disponibles para `anon` ni `authenticated`. Verificar que tabla esté vacía tras migración.
+3. Ejecutar `scripts/apd-history-postflight.sql` **solo después de aplicar la migración**. Exigir `security_ok=true` y `empty_for_first_capture=true` (tabla vacía). Verifica RLS activo, función SECURITY INVOKER, EXECUTE solo `service_role`, acceso denegado a clientes, y prohibición de DELETE del backend sobre la tabla nueva. Si algo falla, NO activar capturas; revisar y corregir antes de continuar.
 4. Ensayar la RPC mediante `service_role` exclusivamente en backend de prueba autorizado, para el último barrido completo; comprobar una fila única e idempotencia. Evitar repetir una captura si ya está guardada.
 5. Revisar bytes consumidos y conservar `snapshot_writes=false`; no habilitar capturas masivas.
 6. Preparar despliegue del Worker verificado compilando el piloto del PR #186, con `APD_DAILY_SUMMARY_ENABLED` ausente/desactivado y sin alterar rutas de producción.
