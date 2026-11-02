@@ -1,0 +1,138 @@
+name: "APD PG17 concurrent capture fencing - genuine two-session HTTP race"
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_atomic_concurrency_fence_pg17.sql'
+      - 'scripts/test-apd-district-commit-concurrency.mjs'
+      - '.github/workflows/apd-pg17-concurrent-commit-fencing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  concurrency-in-isolated-pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: disposable_ci_concurrency_only
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGDATABASE: apd_ci
+      PGPASSWORD: disposable_ci_concurrency_only
+      APD_CI_FAKE_JWT_SECRET: "CI-only-disposable-concurrency-key-0123456789"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install isolated schema and fencing (never connect Supabase)
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_district_pilot_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_stage_pages_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_full_24col_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_private_rpc_gateway_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_concurrency_fence_pg17.sql
+      - name: Seed existing fictitious district offers to detect unintended deletion
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO apd_scanner_pilot.current_offers
+            (source_offer_key,distrito,estado,first_seen_at,last_seen_at,times_seen)
+          VALUES ('D_OLD','MATANZA','Anulada','2026-01-01','2026-10-01',2),
+                 ('D_UNTOUCHED','MATANZA','Publicada','2026-01-01','2026-10-01',1),
+                 ('D_OTHER','AVELLANEDA','Publicada','2026-01-01','2026-10-01',1);
+          INSERT INTO apd_scanner_pilot.current_offers_full
+            (source_offer_key,distrito,estado,first_seen_at,last_seen_at,last_state_change_at,
+              times_seen,state_changes,raw)
+          VALUES ('D_OLD','MATANZA','Anulada','2026-01-01','2026-10-01','2026-10-01',
+                  2,1,'{"test":"old"}'::jsonb),
+                 ('D_UNTOUCHED','MATANZA','Publicada','2026-01-01','2026-10-01','2026-10-01',
+                  1,0,'{"test":"untouched"}'::jsonb),
+                 ('D_OTHER','AVELLANEDA','Publicada','2026-01-01','2026-10-01','2026-10-01',
+                  1,0,'{"test":"other"}'::jsonb);
+          SQL
+      - name: Serve ONLY scanner API schema through local PostgREST
+        run: |
+          docker run -d --rm --name apd-concurrency-postgrest --network host \
+            -e PGRST_DB_URI="postgres://apd_ci:disposable_ci_concurrency_only@127.0.0.1:5432/apd_ci" \
+            -e PGRST_DB_SCHEMAS="apd_scanner_api" \
+            -e PGRST_DB_ANON_ROLE="apd_api_anon" \
+            -e PGRST_JWT_SECRET="$APD_CI_FAKE_JWT_SECRET" \
+            -e PGRST_SERVER_PORT="3300" \
+            postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
+      - name: Real advisory lock + 2 overlapping HTTP commits + independent district + later and stale replays
+        run: |
+          node --check scripts/test-apd-district-commit-concurrency.mjs
+          node scripts/test-apd-district-commit-concurrency.mjs
+      - name: Assert only winning captured rows exist, no drift, no prunes or double counts
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE a text; b text; chosen text; loser text; accepted_rows integer;
+          BEGIN
+            SELECT status INTO a FROM apd_scanner_pilot.runs
+             WHERE run_id='00000000-0000-0000-0000-000000000931';
+            SELECT status INTO b FROM apd_scanner_pilot.runs
+             WHERE run_id='00000000-0000-0000-0000-000000000932';
+            IF (a='finalized')=(b='finalized') THEN
+              RAISE EXCEPTION 'Exactly one of two overlapping runs must win';
+            END IF;
+            chosen:=CASE WHEN a='finalized' THEN 'A' ELSE 'B' END;
+            loser:=CASE WHEN chosen='A' THEN 'B' ELSE 'A' END;
+            accepted_rows:=CASE WHEN chosen='A' THEN 180 ELSE 190 END;
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                 WHERE source_offer_key LIKE 'SIM_'||chosen||'_%')<>accepted_rows OR
+               (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                 WHERE source_offer_key LIKE 'SIM_'||loser||'_%')<>0 OR
+               (SELECT count(*) FROM apd_scanner_pilot.current_offers_full)<>accepted_rows+5 THEN
+              RAISE EXCEPTION 'Stale/overlapping offer changes leaked into committed dataset';
+            END IF;
+            IF (SELECT count(*) FROM apd_scanner_pilot.district_commit_fence)<>2 OR
+               NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.district_commit_fence
+                 WHERE distrito='MATANZA' AND
+                 run_id='00000000-0000-0000-0000-000000000933') OR
+               NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.district_commit_fence
+                 WHERE distrito='AVELLANEDA' AND
+                 run_id='00000000-0000-0000-0000-000000000935') THEN
+              RAISE EXCEPTION 'Per-district commit fence watermarks incorrect';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                WHERE source_offer_key='D_OLD' AND first_seen_at='2026-01-01'::timestamptz
+                  AND times_seen=3 AND state_changes=2 AND estado='Publicada') OR
+               NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                 WHERE source_offer_key='D_UNTOUCHED') OR
+               NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                 WHERE source_offer_key='D_OTHER' AND distrito='AVELLANEDA') THEN
+              RAISE EXCEPTION 'Historical fields or existing rows lost';
+            END IF;
+            IF EXISTS(SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                WHERE source_offer_key='SIM_STALE') THEN
+              RAISE EXCEPTION 'Old scanner overwrote newly committed district';
+            END IF;
+          END$$;
+          SELECT 'PASS: exactly one overlapping commit, protected history, newer capture wins afterward, 0 deletion' AS result;
+          SQL
+      - name: Assert no production scripts, migrations or web files touched
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
+      - name: Remove disposable PostgREST container
+        if: always()
+        run: docker rm -f apd-concurrency-postgrest || true
