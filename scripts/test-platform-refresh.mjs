@@ -129,3 +129,10 @@ test('las pestañas privadas desaparecen cuando no está abierto el panel docent
   assert.match(tabs,/tabs\?\.classList\.toggle\('hidden',!panelVisible\)/);
   assert.match(css,/body \.apd-top-tabs\.hidden\{display:none!important\}/);
 });
+
+test('estadísticas históricas sin capturas no se confunden con ausencia de ofertas',()=>{
+  const historical=block('function renderHistoricoAPD(data) {','async function cargarHistoricoPanel(');
+  assert.match(historical,/El histórico necesita capturas recientes de tus filtros/);
+  assert.match(historical,/que no haya histórico no significa que no existan ofertas/);
+  assert.match(historical,/data\.ultima_captura/);
+});
