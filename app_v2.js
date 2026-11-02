@@ -1890,9 +1890,9 @@ async function cargarDashboard() {
     if (!current()) return;
     console.error("ERROR CARGANDO PANEL:", err);
     // Error transitorio de API: no cerrar una sesión válida ni inventar plan.
-    const vigente = typeof window.obtenerSessionToken === "function"
+    const sesionVigente = typeof window.obtenerSessionToken === "function"
       ? !!window.obtenerSessionToken() : !!localStorage.getItem("apd_session_token_v1");
-    if (vigente) {
+    if (sesionVigente) {
       setText("panel-subtitulo", "No pudimos cargar el perfil o el plan. Reintentá desde el panel.");
     }
   } finally {
