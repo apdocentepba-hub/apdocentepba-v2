@@ -35,8 +35,7 @@ local_uri='postgresql://postgres@127.0.0.1:5432/apd_backup_test'
 major="$(psql "$local_uri" -X -A -t -q -v ON_ERROR_STOP=1 -c 'SHOW server_version_num')"
 [[ "$major" =~ ^17[0-9]{4}$ ]]
 psql "$local_uri" -X -q -v ON_ERROR_STOP=1 --single-transaction \
-  -f "$temp/unpacked/roles.sql" -f "$temp/unpacked/schema.sql" \
-  -f "$temp/unpacked/data.sql" >/dev/null
+  -f "$temp/unpacked/roles.sql" -f "$temp/unpacked/app.sql" >/dev/null
 counts="$(psql "$local_uri" -X -A -t -q -v ON_ERROR_STOP=1 -c \
 "SELECT (SELECT count(*) FROM public.users)::text || E'\t' || (SELECT count(*) FROM public.user_subscriptions)::text || E'\t' || (SELECT count(*) FROM public.apd_ofertas_global_current)::text;")"
 [[ "$counts" == "$(cat "$temp/unpacked/counts.tsv")" ]]
