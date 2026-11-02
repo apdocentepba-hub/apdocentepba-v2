@@ -1,0 +1,85 @@
+name: APD atomic staging - real PostgREST plus PostgreSQL17 localhost
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-apd-postgrest-pg17-real.mjs'
+      - '.github/workflows/apd-postgrest-pg17-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-local-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: apd_ci
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: disposable_pilot_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: apd_ci
+      PGUSER: apd_ci
+      PGPASSWORD: disposable_pilot_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install disposable schema and stage functions into PostgreSQL17 only
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_district_pilot_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_stage_pages_pg17.sql
+      - name: Allow only temporary test API role to reach isolated schema
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE apd_pilot_http NOLOGIN;
+          GRANT apd_pilot_http TO apd_ci;
+          GRANT USAGE ON SCHEMA apd_scanner_pilot TO apd_pilot_http;
+          GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA apd_scanner_pilot TO apd_pilot_http;
+          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA apd_scanner_pilot TO apd_pilot_http;
+          SQL
+      - name: Run real PostgREST v16.3 on loopback (disposable database only)
+        run: |
+          docker run -d --rm --name apd-postgrest --network host \
+            -e PGRST_DB_URI="postgres://apd_ci:disposable_pilot_only@127.0.0.1:5432/apd_ci" \
+            -e PGRST_DB_SCHEMAS="apd_scanner_pilot" \
+            -e PGRST_DB_ANON_ROLE="apd_pilot_http" \
+            -e PGRST_DB_CHANNEL_ENABLED="false" \
+            -e PGRST_SERVER_PORT="3300" \
+            postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
+      - name: Call genuine HTTP RPCs to stage, seal and atomically apply 650 synthetic offers
+        run: node scripts/test-apd-postgrest-pg17-real.mjs
+      - name: Verify SQL state after HTTP test (no pruning, no duplicate run)
+        run: |
+          ROWS="$(psql -Atc "SELECT count(*) FROM apd_scanner_pilot.current_offers")"
+          RUN_STATE="$(psql -Atc "SELECT status FROM apd_scanner_pilot.runs WHERE run_id='00000000-0000-0000-0000-000000000901'")"
+          PAGE_COUNT="$(psql -Atc "SELECT count(*) FROM apd_scanner_pilot.staged_pages WHERE run_id='00000000-0000-0000-0000-000000000901'")"
+          MAX_SEEN="$(psql -Atc "SELECT max(times_seen) FROM apd_scanner_pilot.current_offers")"
+          test "$ROWS" = "650"
+          test "$RUN_STATE" = "finalized"
+          test "$PAGE_COUNT" = "5"
+          test "$MAX_SEEN" = "1"
+          echo "PASS: 650 staged and finalized exactly once, five pages, no pruning."
+      - name: Confirm real Worker/website unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
+      - name: Shut down PostgREST disposable container
+        if: always()
+        run: docker rm -f apd-postgrest || true
