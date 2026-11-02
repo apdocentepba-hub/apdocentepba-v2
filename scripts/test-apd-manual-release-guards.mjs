@@ -11,8 +11,8 @@ const candidates = Object.freeze([
   { path: '.github/workflows/deploy-email-format-candidate.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/importar-escuelas-pba.yml', job: 'importar', confirmation: 'confirm_import', choice: 'IMPORTAR', ref: 'refs/heads/main', production: false },
   { path: '.github/workflows/auto-apply-worker-export-default-replacement.yml', job: 'auto-apply-worker-export-default-replacement', confirmation: 'confirm_apply', choice: 'APLICAR', ref: 'refs/heads/refactor/worker-base-20260401', production: false },
-  { path: '.github/workflows/reconcile-mp-secret-baseline.yml', job: 'reconcile', confirmation: 'confirm_reconcile', choice: 'RECONCILIAR', ref: 'refs/heads/main', production: true },
-  { path: '.github/workflows/capture-verified-live-worker.yml', job: 'capture', confirmation: 'confirm_capture', choice: 'CAPTURAR', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/reconcile-mp-secret-baseline.yml', job: 'reconcile', confirmation: 'confirm_reconcile', choice: 'RECONCILIAR', ref: 'refs/heads/main', production: true, repositoryWrite: true },
+  { path: '.github/workflows/capture-verified-live-worker.yml', job: 'capture', confirmation: 'confirm_capture', choice: 'CAPTURAR', ref: 'refs/heads/main', production: true, repositoryWrite: true },
   { path: '.github/workflows/run-apd-email-fix-candidate.yml', job: 'candidate', confirmation: 'confirm_candidate', choice: 'CREAR', ref: 'refs/heads/main', production: true },
   { path: '.github/workflows/build-email-format-candidate.yml', job: 'candidate', confirmation: 'confirm_candidate', choice: 'CREAR', ref: 'refs/heads/main', production: true }
 ]);
@@ -47,7 +47,12 @@ function validateManualOnly(contents, item) {
     assert.ok(gate.includes(part), 'Missing job release gate: ' + part);
   }
   if (item.production) assert.match(job, /^    environment: production\s*$/m, 'Production environment required');
-  assert.doesNotMatch(job, /^    permissions:\s*\n\s+contents: write/m, 'Production job must not write repository');
+  if (item.repositoryWrite) {
+    assert.match(contents, /^permissions:\s*\n  contents: read/m, 'Workflow-level permissions must be read only');
+    assert.match(job, /^    permissions:\s*\n      contents: write/m, 'Write permission must be scoped to explicitly approved job');
+  } else {
+    assert.doesNotMatch(job, /^    permissions:\s*\n\s+contents: write/m, 'Unnecessary repository write permission');
+  }
 }
 
 for (const item of candidates) {
