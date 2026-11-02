@@ -4,8 +4,8 @@
 */
 (function(){
 'use strict';
-const ids=['resumen','alertas','listados','estadisticas','preferencias','plan','recursos','buscar'];
-const names={resumen:'Resumen',alertas:'Alertas',listados:'Listados APD',estadisticas:'Estadísticas',preferencias:'Preferencias',plan:'Mi plan',recursos:'Herramientas',buscar:'Buscar'};
+const ids=['resumen','alertas','listados','estadisticas','preferencias','plan','recursos','buscar','ayuda'];
+const names={resumen:'Resumen',alertas:'Alertas',listados:'Listados APD',estadisticas:'Estadísticas',preferencias:'Preferencias',plan:'Mi plan',recursos:'Herramientas',buscar:'Buscar',ayuda:'Ayuda y estado'};
 const nav=Array.from(document.querySelectorAll('#mock-tabs [data-tab]'));
 const catalog=Array.isArray(window.AP_DOCENTE_HERRAMIENTAS)?window.AP_DOCENTE_HERRAMIENTAS:[];
 const $=id=>document.getElementById(id);
@@ -37,6 +37,10 @@ function show(id,{updateHash=true}={}){
     else button.removeAttribute('aria-current');
   });
   const heading=$('header-location');if(heading)heading.textContent=names[target];
+  const helpButton=$('help-button');if(helpButton){
+    if(target==='ayuda')helpButton.setAttribute('aria-current','page');
+    else helpButton.removeAttribute('aria-current');
+  }
   if(updateHash && window.location.hash!=='#'+target)history.replaceState(null,'','#'+target);
   window.scrollTo({top:0,behavior:'instant'});
 }
@@ -148,7 +152,11 @@ function resourceCard(record){
   const category=element('span','small',record.categoria||'Recurso');
   const desc=element('p','',record.descripcion||'Recurso del catálogo.');
   const actions=element('div','actions');
-  const link=element('a','btn secondary','Abrir recurso existente ↗');
+  const maturity=String(record.estado||'');
+  const link=element('a','btn secondary',maturity==='Próximamente'?'Ver página informativa (no operativo) ↗':
+    maturity==='Preparado'?'Ver información (pendiente de revisión) ↗':
+    maturity==='Experimental'?'Ver prototipo experimental ↗':'Abrir página del recurso ↗');
+  link.setAttribute('aria-label',(record.titulo||'Herramienta')+' · '+(maturity||'Estado no determinado')+' · '+link.textContent);
   const path=String(record.url||'').replace(/^\.\//,'');
   // Lista de rutas relativas suministrada por el catálogo estático del propio repositorio.
   if(!/^[a-z0-9_./-]+\.html(?:\?[a-z0-9_=&-]+)?$/i.test(path)||path.includes('..')){
@@ -225,4 +233,94 @@ $('theme-toggle')?.addEventListener('click',()=>{
   $('theme-label').textContent=dark?'Claro':'Oscuro';
   note(dark?'Modo oscuro de ejemplo activado. No se guarda.':'Modo claro restaurado.');
 });
+
+
+// Checklist de autocontrol: nunca afirma haber verificado la cuenta o el ABC.
+function updateActivationProgress(){
+  const boxes=Array.from(document.querySelectorAll('[data-check-step]'));
+  const done=boxes.filter(box=>box.checked).length;
+  const counter=$('activation-progress');
+  if(counter)counter.textContent=done+' de '+boxes.length+' pasos marcados (demo)';
+}
+document.querySelectorAll('[data-check-step]').forEach(box=>box.addEventListener('change',updateActivationProgress));
+updateActivationProgress();
+
+// Ayuda contextual con pasos concretos, sin inferir causas ni hacer llamadas.
+const helpTopics={
+  emails:{
+    title:'No recibo correos de alertas',
+    steps:[
+      'Verificá que “Alertas activas” y “Email” estén habilitados por separado.',
+      'Comprobá que tu plan esté vigente y que tengas distrito, cargos y nivel configurados.',
+      'Revisá spam o correo no deseado; que no llegue un email no demuestra que se haya enviado.',
+      'Si todo está correcto, el siguiente diagnóstico debe consultar logs reales del proveedor, con autorización.'
+    ],action:'preferencias',button:'Revisar preferencias'
+  },
+  offers:{
+    title:'No aparecen ofertas compatibles',
+    steps:[
+      'Revisá distrito, cargo, modalidad y turno: un filtro restrictivo puede dejar cero coincidencias.',
+      'Compará la información con el APD oficial de ABC. La publicación, vigencia y postulación se verifican allí.',
+      'Un error de conexión no equivale a “cero ofertas”; distinguimos ambos estados en Alertas.',
+      'La plataforma no garantiza que todas las ofertas de ABC sigan abiertas entre barridos.'
+    ],action:'alertas',button:'Ver estados de alertas'
+  },
+  slow:{
+    title:'El panel tarda en cargar o queda esperando',
+    steps:[
+      'La propuesta permite mostrar perfil, plan y filtros antes de terminar de consultar las alertas.',
+      'Si falla el servidor, debe aparecer un mensaje con opción de reintentar, nunca una pantalla vacía permanente.',
+      'No interpretes un número viejo como actualizado: consultá la fecha de último barrido.',
+      'Para corregir tiempos reales falta medir la sesión autenticada y la latencia de cada endpoint.'
+    ],action:'alertas',button:'Probar estado de error'
+  },
+  plan:{
+    title:'Plan vencido o beneficios incorrectos',
+    steps:[
+      'Consultá tu vigencia y límites confirmados por el Worker. No se debe inventar un plan gratuito ante un error.',
+      'Los filtros existentes deben preservarse aunque el plan haya vencido.',
+      'Los límites del catálogo de Supabase y los del Worker todavía requieren conciliación.',
+      'La maqueta no renueva ni cobra planes; cualquier cambio comercial requiere validación.'
+    ],action:'plan',button:'Revisar propuesta de planes'
+  },
+  historic:{
+    title:'Listado o estadísticas desactualizados',
+    steps:[
+      'Las ofertas actuales y las capturas históricas provienen de tablas distintas.',
+      'El corte auditado es del 1/11/2026; la última captura histórica observada fue el 18/9/2026.',
+      'La fecha de observación no equivale necesariamente a la fecha de publicación o cierre en ABC.',
+      'Antes de anunciar tendencias o sincronización deben verificarse los datos del APD oficial.'
+    ],action:'estadisticas',button:'Ver fuentes y fechas'
+  }
+};
+function showHelpTopic(topic){
+  const cfg=helpTopics[topic];
+  if(!cfg)return;
+  document.querySelectorAll('[data-help-topic]').forEach(btn=>btn.setAttribute('aria-pressed',String(btn.dataset.helpTopic===topic)));
+  const area=$('help-result');
+  area.replaceChildren();
+  area.appendChild(element('strong','',cfg.title));
+  const list=element('ol','');
+  for(const item of cfg.steps){const li=element('li','',item);li.style.margin='8px 0';list.appendChild(li);}
+  area.appendChild(list);
+  const action=$('help-action');
+  action.dataset.go=cfg.action;action.textContent=cfg.button;action.hidden=false;
+}
+document.querySelectorAll('[data-help-topic]').forEach(btn=>{
+  btn.setAttribute('aria-pressed','false');
+  btn.addEventListener('click',()=>showHelpTopic(btn.dataset.helpTopic));
+});
+const statesMap=new Map();
+for(const item of catalog){
+  const key=String(item.estado||'Sin clasificar');
+  statesMap.set(key,(statesMap.get(key)||0)+1);
+}
+const stateContainer=$('tool-state-summary');
+if(stateContainer){
+  stateContainer.replaceChildren();
+  for(const [name,count] of [...statesMap].sort((a,b)=>b[1]-a[1])){
+    const badge=element('span','pill '+(name==='Experimental'?'warn':'neutral'),name+': '+count);
+    stateContainer.appendChild(badge);
+  }
+}
 })();
