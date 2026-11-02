@@ -20,7 +20,16 @@ GRANT USAGE ON SCHEMA apd_scanner_pilot TO apd_api_scanner;
 GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA apd_scanner_pilot TO apd_api_scanner;
 -- SECURITY INVOKER only. Direct SQL permissions are required by the inner RPCs,
 -- but no table is reachable over the HTTP Data API (schema not exposed).
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA apd_scanner_pilot TO apd_api_scanner;
+GRANT EXECUTE ON FUNCTION apd_scanner_pilot.stage_page(uuid,integer,integer,jsonb)
+ TO apd_api_scanner;
+GRANT EXECUTE ON FUNCTION apd_scanner_pilot.stage_full_page(uuid,integer,integer,jsonb)
+ TO apd_api_scanner;
+GRANT EXECUTE ON FUNCTION apd_scanner_pilot.seal_capture(uuid)
+ TO apd_api_scanner;
+GRANT EXECUTE ON FUNCTION apd_scanner_pilot.finalize_district(uuid,boolean,boolean)
+ TO apd_api_scanner;
+GRANT EXECUTE ON FUNCTION apd_scanner_pilot.finalize_full_district(uuid,boolean)
+ TO apd_api_scanner;
 -- Never authorize direct table deletion, including the scanner role.
 REVOKE DELETE ON ALL TABLES IN SCHEMA apd_scanner_pilot FROM apd_api_scanner;
 
