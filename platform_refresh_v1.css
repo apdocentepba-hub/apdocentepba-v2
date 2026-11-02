@@ -21,6 +21,9 @@ body .brand-icon{background:rgba(206,255,233,.16)!important;box-shadow:none!impo
 body .brand-title{font-size:20px!important;letter-spacing:-.04em}
 body .brand-sub{font-size:10px!important;line-height:1.25!important;max-width:290px}
 body .top-nav{gap:6px!important;justify-content:flex-end;min-width:0;flex:1}
+/* Respeta estrictamente login/logout pese a estilos heredados con !important. */
+body #navPrivado.hidden,body #navPublico.hidden{display:none!important}
+body #navPrivado:not(.hidden),body #navPublico:not(.hidden){display:flex!important}
 body .top-nav>a[href="./proximamente.html"]{display:none!important}
 body .top-nav>a.btn{font-size:12px!important;min-height:37px;border-radius:9px!important;padding:8px 10px!important;white-space:nowrap}
 body .apd-top-tabs{
