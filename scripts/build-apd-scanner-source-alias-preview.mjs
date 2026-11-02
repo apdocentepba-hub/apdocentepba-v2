@@ -50,6 +50,42 @@ export function buildDistrictSourceAliasPreview(live,source){
    'distrito: canonicalDistrict ? norm(canonicalDistrict) : norm(oferta.descdistrito || ""),',
    "district database storage inside snapshot function");
  out=out.slice(0,snapshotStart)+patchedSnapshot+out.slice(snapshotEnd);
+ // Reject changing Solr totals while reading a batch of pages (flag ON only).
+ out=changeOnce(out,
+   "    totalFound = Number(data?.response?.numFound ?? totalFound ?? 0);",
+   "    const pageTotal = Number(data?.response?.numFound);\n" +
+   "    if (aliasesEnabled && (!Number.isSafeInteger(pageTotal) || pageTotal < 0 ||\n" +
+   "      (pagesRead > 0 && pageTotal !== totalFound))) {\n" +
+   "      throw new Error(\"ABC source result count changed during district paging\");\n" +
+   "    }\n" +
+   "    totalFound = Number(data?.response?.numFound ?? totalFound ?? 0);",
+   "consistent Solr total per page");
+ out=changeOnce(out,
+   "    docs.push(...filtered);",
+   "    if (aliasesEnabled) {\n" +
+   "      const keysSeen = new Set(docs.map(buildSourceOfferKeyFromOferta));\n" +
+   "      for (const item of filtered) {\n" +
+   "        const key = buildSourceOfferKeyFromOferta(item);\n" +
+   "        if (!key || keysSeen.has(key)) throw new Error(\"ABC duplicate offer between pages\");\n" +
+   "        keysSeen.add(key);\n" +
+   "      }\n" +
+   "    }\n" +
+   "    docs.push(...filtered);",
+   "reject duplicate offers within a batch");
+ out=changeOnce(out,
+   "    const capturedAt = (/* @__PURE__ */ new Date()).toISOString();",
+   "    if (env?.APD_DISTRICT_SOURCE_ALIASES_ENABLED === \"true\" && nextPage > 0 &&\n" +
+   "      (!Number.isSafeInteger(state?.notes?.district_source_total) ||\n" +
+   "       state.notes.district_source_total !== batchInfo.totalFound)) {\n" +
+   "      throw new Error(\"ABC result count changed between district scan steps\");\n" +
+   "    }\n" +
+   "    const capturedAt = (/* @__PURE__ */ new Date()).toISOString();",
+   "consistent Solr total between scan steps");
+ out=changeOnce(out,
+   "      last_source_num_found: Number(batchInfo.totalFound || 0),",
+   "      last_source_num_found: Number(batchInfo.totalFound || 0),\n" +
+   "      district_source_total: batchInfo.hasMore ? Number(batchInfo.totalFound) : null,",
+   "store expected total while district scan continues");
  return out;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){

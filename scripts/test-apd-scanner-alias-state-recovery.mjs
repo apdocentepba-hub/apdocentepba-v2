@@ -37,7 +37,8 @@ const INDEX=new Map([
  ["LA MATANZA",Array.from({length:650},(_,i)=>fakeOffer(20000+i,"LA MATANZA"))],
  ["AVELLANEDA",[fakeOffer(9001,"AVELLANEDA")]]
 ]);
-function harness({enabled=true, failOnUpsertNumber=null, failOnSourcePage=null}={}){
+function harness({enabled=true, failOnUpsertNumber=null, failOnSourcePage=null,
+  sourceCountDriftAfter600=false,duplicateSecondPage=false}={}){
   const calls=[],current=new Map(),preferences=[
     {user_id:"synthetic-user",distrito_principal:"MATANZA",otros_distritos:["AVELLANEDA"],alertas_activas:true}
   ];
@@ -124,7 +125,12 @@ function harness({enabled=true, failOnUpsertNumber=null, failOnSourcePage=null}=
       if(failOnSourcePage===page&&district==="LA MATANZA")throw Error("SIMULATED_ABC_FAILURE");
       const offers=INDEX.get(district)||[];
       const docs=offers.slice(start,start+rows);
-      const data={response:{docs,numFound:offers.length}};
+      if(duplicateSecondPage && district==="LA MATANZA" && start===150 && docs.length){
+        docs[0]=offers[0];
+      }
+      const numFound=sourceCountDriftAfter600 && district==="LA MATANZA" && start>=600
+        ? offers.length+1 : offers.length;
+      const data={response:{docs,numFound}};
       return {ok:true,arrayBuffer:async()=>new TextEncoder().encode(JSON.stringify(data)).buffer};
     }
   };
@@ -210,4 +216,33 @@ test("published Worker is untouched and no test refers to production DB credenti
  const live=readFileSync("worker-live/worker_hotfix.js","utf8");
  assert.ok(!live.includes("APD_DISTRICT_SOURCE_ALIASES_ENABLED"));
  assert.doesNotMatch(compiled,/process\.env\.SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("changing ABC numFound between scan steps blocks pruning, retains state error",async()=>{
+ const h=harness({sourceCountDriftAfter600:true});
+ const first=await h.ctx.runProvinciaBackfillStep(h.env,{source:"test"});
+ assert.equal(first.next_page,4);
+ assert.equal(h.state().notes.district_source_total,650);
+ await assert.rejects(
+   ()=>h.ctx.runProvinciaBackfillStep(h.env,{source:"test"}),
+   /ABC result count changed between district scan steps/
+ );
+ assert.equal(h.state().status,"error");
+ assert.equal(h.calls.filter(x=>x.type==="prune").length,0);
+ assert.equal(h.current.has("D_1111"),true,"Existing synthetic record preserved");
+ h.checkPreferences();
+ h.rollback();
+ assert.deepEqual([...h.current.entries()],h.initial.records);
+});
+test("duplicate offer across two ABC pages fails before any upsert or pruning",async()=>{
+ const h=harness({duplicateSecondPage:true});
+ await assert.rejects(
+   ()=>h.ctx.runProvinciaBackfillStep(h.env,{source:"test"}),
+   /ABC duplicate offer between pages/
+ );
+ assert.equal(h.state().status,"error");
+ assert.equal(h.calls.filter(x=>x.type==="upsert").length,0);
+ assert.equal(h.calls.filter(x=>x.type==="prune").length,0);
+ h.rollback();
+ assert.deepEqual([...h.current.entries()],h.initial.records);
 });
