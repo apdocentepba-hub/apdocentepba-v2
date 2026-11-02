@@ -32,9 +32,7 @@ try{
   const state=await js("({visible:document.body.classList.contains('apd-ui-v21-live'),sidebar:!!document.querySelector('#apd-ui-v21-sidebar'),buttons:document.querySelectorAll('#apd-ui-v21-sidebar .apd-top-tab').length,admin:!!document.querySelector('.apd-top-tab[data-top-tab-key=\"admin\"]:not(.hidden)'),cards:!!document.querySelector('#apd-v21-activation'),overflow:document.documentElement.scrollWidth,viewport:innerWidth})");
   assert.equal(state.visible,true,JSON.stringify(state));assert.equal(state.sidebar,true);
   assert.equal(state.buttons,8);assert.equal(state.admin,false,'Admin debe estar oculto sin autenticación');
-  assert.equal(state.cards,true);assert.ok(state.overflow<=state.viewport+3,'Overflow horizontal '+width+' '+JSON.stringify(state));
-  await js('document.querySelector("#apd-v21-activation input").click();true');
-  assert.match(await js('document.getElementById("apd-v21-activation-count").textContent'),/1 de 3/);
+  assert.equal(state.cards,false,'Checklist manual eliminado del panel');assert.ok(state.overflow<=state.viewport+3,'Overflow horizontal '+width+' '+JSON.stringify(state));
   await js('document.getElementById("apd-v21-open-help").click();true');
   assert.equal(await js('document.getElementById("apd-v21-help").open'),true);
   await js('document.querySelector("#apd-v21-help [data-topic=email]").click();true');
