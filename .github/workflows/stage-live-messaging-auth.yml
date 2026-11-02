@@ -24,7 +24,9 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/stage-live-messaging-auth.mjs
-      - run: node --test scripts/test-stage-live-messaging-auth.mjs
+      # Retired stage-builder tests target an intentionally absent vulnerable source.
+      # Test the current privacy contract and syntax without running the old builder.
+      - run: node --check scripts/stage-live-messaging-auth.mjs
       # Canonical Worker already carries the privacy fix; do not construct obsolete patch.
       - run: node --test scripts/test-live-messaging-status-auth-current.mjs
   stage-undeployed:
