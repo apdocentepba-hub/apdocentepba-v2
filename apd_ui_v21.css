@@ -8,7 +8,7 @@ body.apd-ui-v21-live .header-inner{max-width:none!important;margin-left:230px!im
 body.apd-ui-v21-live .brand-title{font-size:18px!important}
 body.apd-ui-v21-live .brand-sub{font-size:10px!important}
 body.apd-ui-v21-live .top-nav{gap:6px!important;justify-content:flex-end}
-body.apd-ui-v21-live #apd-top-tabs{display:none!important}
+body.apd-ui-v21-live .header #apd-top-tabs{display:none!important}
 body.apd-ui-v21-live .apd-v21-sidebar{position:fixed;inset:0 auto 0 0;width:230px;z-index:102;background:var(--apd21-deep);color:#eaf2f4;display:flex;flex-direction:column;padding:18px 10px;overflow-y:auto;scrollbar-width:thin}
 body.apd-ui-v21-live .apd-v21-sidebar-brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;padding:8px 9px 19px;font-size:15px;line-height:1.2;font-weight:850}
 body.apd-ui-v21-live .apd-v21-sidebar-brand span{display:grid;place-items:center;width:39px;height:39px;border-radius:12px;background:#174a59;font-size:22px;flex-shrink:0}
