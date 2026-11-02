@@ -11,8 +11,8 @@
 
 1. Requiere `APD_PROVINCIA_PAGINATION_ENABLED=true` para usar el nuevo handler. Por defecto no cambia ninguna ruta.
 2. Lee estado del escáner antes y después, exige `finished` y cobertura total.
-3. Pagina con `limit=500&offset=...`, máximo 20.000 registros, rechazando duplicados y resultados incompletos.
-4. Compara el número final de filas con `offers_processed` del barrido y verifica la ventana de observación.
+3. Pagina con `limit=500&offset=...`, máximo 20.000 registros, **delimitando el inicio y el fin del barrido terminado** (`started_at`/`finished_at`), en lugar de mezclar filas de los últimos 30 días. Rechaza duplicados y resultados incompletos. Si el barrido finalizó fuera del horizonte `days` solicitado, responde 503 en lugar de inventar que el total sigue vigente.
+4. Compara el número final de filas con `offers_processed` del barrido, verifica la ventana de observación y exige que la cobertura y el modo sigan iguales al terminar.
 5. Solo entonces llama al constructor de resumen existente y devuelve `verified_complete_scan=true`.
 6. Si la consulta falla, cambia el estado o los datos no concuerdan, devuelve **503**, nunca un total falso o cero silencioso.
 
