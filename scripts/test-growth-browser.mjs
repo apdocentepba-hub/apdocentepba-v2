@@ -168,6 +168,30 @@ async function demoFlow() {
   console.log('PASÓ demo: sugerencias, guardado ficticio, advertencia sin email y canal activado');
 }
 
+
+async function insigneLabFlow() {
+  const url=pathToFileURL(path.join(ROOT,'dist-growth-preview','insigne-laboratorio.html')).href;
+  await cdp('Page.navigate',{url});
+  await loaded();
+  await sleep(160);
+  const initial=await js("({ hits:document.querySelectorAll('#lab-offers .hit').length, misses:document.querySelectorAll('#lab-offers .miss').length, rules:document.querySelectorAll('#lab-rules .rule').length })");
+  assert.equal(initial.hits,3,'Tres ejemplos coinciden por reglas específicas');
+  assert.equal(initial.misses,3,'Tres ejemplos no coinciden');
+  assert.equal(initial.rules,3);
+  await js("document.getElementById('lab-district').value='AVELLANEDA';"+
+    "document.getElementById('lab-cargo').value='MATEMÁTICA';"+
+    "document.getElementById('lab-mode').value='normal';"+
+    "document.getElementById('lab-form').requestSubmit();true");
+  const expanded=await js("({hits:document.querySelectorAll('#lab-offers .hit').length,count:document.getElementById('lab-count').textContent})");
+  assert.equal(expanded.hits,4,'Agregar combinación exacta añade una coincidencia');
+  assert.match(expanded.count,/4\/20/);
+  await js("document.getElementById('lab-reset').click();true");
+  assert.equal(await js("document.querySelectorAll('#lab-offers .hit').length"),3);
+  const screenshot=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
+  writeFileSync(path.join(OUTPUT,'apd-insigne-lab-preview.png'),Buffer.from(screenshot.data,'base64'));
+  console.log('PASÓ Insigne LAB: coincidencias específicas, emergencia y restablecer sin conexión');
+}
+
 try {
   const port = await awaitPort();
   const targets = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
@@ -194,6 +218,7 @@ try {
   await viewport(1280, 900, 'apd-landing-desktop.png');
   await guide();
   await demoFlow();
+  await insigneLabFlow();
   console.log('BROWSER_SMOKE_OK');
 } finally {
   if (socket) socket.close();
