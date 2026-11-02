@@ -124,7 +124,6 @@
       <div class="plan-stack">
         <div class="plan-pill-row">
           <span class="plan-pill">Mi cuenta</span>
-          <span class="plan-pill plan-pill-neutral">${esc(PATCH_VERSION)}</span>
         </div>
         <p class="plan-note">Tus datos quedan guardados y solo se habilitan para modificar cuando tocás <b>Editar</b>.</p>
 

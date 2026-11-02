@@ -107,33 +107,6 @@ function attachTabs(){
  }
  return true;
 }
-function ensureChecklist(){
- const g=document.querySelector('#panel-tab-pane-inicio .panel-tab-grid');if(!g||$('apd-v21-activation'))return;
- const card=element('section','panel-card span-12 apd-v21-check');card.id='apd-v21-activation';
- const title=element('h3','', 'Comprobá tu configuración antes de esperar avisos');
- const description=element('p','','Lista manual orientativa; marcar una casilla no verifica el Worker ni envía notificaciones.');
- const counter=element('p','', '0 de 3 pasos marcados (en esta pantalla)');
- counter.id='apd-v21-activation-count';counter.setAttribute('role','status');counter.setAttribute('aria-live','polite');
- const row=element('div','apd-v21-checkrow');
- const parts=[
-  ['Configuré distrito, cargo y nivel','Los filtros pueden limitar las coincidencias.'],
-  ['Verifiqué el email y las alertas','Se habilitan por separado y dependen del plan.'],
-  ['Consulté el APD oficial','La postulación se realiza en ABC.']
- ];
- for(const [title,detail]of parts){
-  const l=element('label');const input=document.createElement('input');input.type='checkbox';input.name='apd-v21-check-manual';
-  const t=element('span');t.append(element('strong','',title),element('small','',detail));l.append(input,t);row.appendChild(l);
-  input.addEventListener('change',()=>{const n=row.querySelectorAll('input:checked').length;counter.textContent=n+' de 3 pasos marcados (en esta pantalla)';});
- }
- const actions=element('div','apd-v21-check-actions');
- const prefs=element('button','primary','Revisar preferencias');prefs.type='button';prefs.addEventListener('click',()=>goto('preferencias'));
- const help=element('button','','¿No llegan avisos?');help.type='button';help.addEventListener('click',openHelp);
- const abc=element('a','','Abrir APD oficial ↗');abc.href='https://misservicios.abc.gob.ar/actos.publicos.digitales/';abc.rel='noopener noreferrer';abc.target='_blank';
- actions.append(prefs,help,abc);
- card.append(title,description,counter,row,actions);
- const hero=$('apd-panel-benefits')||$('apd-panel-showcase');
- if(hero?.parentElement===g)hero.insertAdjacentElement('afterend',card);else g.appendChild(card);
-}
 function panelVisible(){return !p.classList.contains('hidden');}
 function requestAdmin(){
  const token=String(window.obtenerAuthBearer?.()||'');
@@ -164,7 +137,7 @@ function refresh(){
   if(dialog?.open)dialog.close();
   return;
  }
- ensureSidebar();sidebar.hidden=false;attachTabs();ensureChecklist();requestAdmin();
+ ensureSidebar();sidebar.hidden=false;attachTabs();requestAdmin();
 }
 function schedule(){if(rafPending)return;rafPending=true;requestAnimationFrame(refresh);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
