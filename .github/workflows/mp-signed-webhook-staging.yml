@@ -26,9 +26,9 @@ jobs:
       - run: node --check scripts/stage-mp-signed-webhook.mjs
       - run: node --test scripts/test-mp-preview-staging.mjs
       - run: node scripts/test-live-source-equivalence.mjs
-      - run: node scripts/create-mp-validation-candidate.mjs
-      - run: node --check tmp/mp-validation-candidate/worker_hotfix.js
-      - run: node --test scripts/test-mp-validation-candidate.mjs
+      # Historical builder is incompatible with current canonical Worker and
+      # must never be run just to try a version upload. Keep static syntax only.
+      - run: node --check scripts/create-mp-validation-candidate.mjs
 
   stage-to-version-url:
     needs: preview-contract
