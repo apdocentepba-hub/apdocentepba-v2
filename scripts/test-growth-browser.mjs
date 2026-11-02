@@ -257,6 +257,19 @@ async function completePlatformFlow(){
   assert.match(summary,/QUILMES/);assert.match(summary,/MATEMÁTICA/);assert.match(summary,/Email no/);
   await js("document.querySelector('[data-tab=\"resumen\"]').click();true");
   assert.match(await js("document.getElementById('dashboard-config-summary').textContent"),/QUILMES/);
+  assert.match(await js("document.getElementById('activation-progress').textContent"),/0 de 3/);
+  await js("document.querySelector('[data-check-step=\"prefs\"]').click();true");
+  assert.match(await js("document.getElementById('activation-progress').textContent"),/1 de 3/);
+  await js("document.getElementById('help-button').click();true");
+  assert.equal(await js("document.querySelector('.section.active')?.id"),'section-ayuda');
+  await js("document.querySelector('[data-help-topic=\"emails\"]').click();true");
+  assert.match(await js("document.getElementById('help-result').textContent"),/No recibo correos/);
+  assert.equal(await js("document.getElementById('help-action').hidden"),false);
+  await js("document.getElementById('help-action').click();true");
+  assert.equal(await js("document.querySelector('.section.active')?.id"),'section-preferencias');
+  await js("document.getElementById('help-button').click();true");
+  assert.match(await js("document.getElementById('tool-state-summary').textContent"),/Activo: 29/);
+
   await js("document.querySelector('[data-tab=\"estadisticas\"]').click();true");
   const stats=await js("document.querySelector('#section-estadisticas').textContent");
   assert.match(stats,/2\.617/);assert.match(stats,/137 \/ 137/);assert.match(stats,/18 sep 2026/);assert.match(stats,/no consulta Supabase/);
