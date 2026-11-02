@@ -116,6 +116,8 @@ actual="$(read_counts "$local_url")" ||
 
 # Independent encrypted package can be unsealed and used to restore those tables.
 echo 'Verified: roles/schema/data encrypted, SHA-256 valid, PostgreSQL 17 isolated restore successful, core table counts equal.'
-# The combined app.sql is a consistent snapshot; the auxiliary role export is not\n# transactionally synchronized. This is NOT an entire Supabase platform backup.\n# This marker never contains credentials or private records.
+# The combined app.sql is a consistent snapshot; the auxiliary role export is not
+# transactionally synchronized. This is NOT an entire Supabase platform backup.
+# This marker never contains credentials or private records.
 printf 'APD_BACKUP_APP_RESTORE_VERIFIED=true\n' >> "$GITHUB_STEP_SUMMARY"
 printf 'Scope: public app schema and data from one PG17 snapshot; auxiliary roles export. Managed auth/storage/other schemas and Storage API objects NOT included.\n' >> "$GITHUB_STEP_SUMMARY"
