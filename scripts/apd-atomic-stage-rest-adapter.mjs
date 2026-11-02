@@ -17,7 +17,8 @@ export function createAtomicStagePilotClient({baseUrl,fetchImpl,enabled=false}){
     throw Error("Pilot adapter refuses non-isolated host");
   if(typeof fetchImpl!=="function")throw Error("Missing injected fetch");
   const headers={"Content-Type":"application/json",
-    "Accept":"application/json","Content-Profile":"apd_scanner_pilot",
+    "Accept":"application/json","Prefer":"return=representation",
+    "Content-Profile":"apd_scanner_pilot",
     "Accept-Profile":"apd_scanner_pilot"};
   async function request(path,body){
     const res=await fetchImpl(new URL(path,base).href,{
