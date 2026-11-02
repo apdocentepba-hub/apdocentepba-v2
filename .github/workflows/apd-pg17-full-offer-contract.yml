@@ -1,0 +1,51 @@
+name: APD exact 24-column offer preservation in isolated PostgreSQL 17
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_atomic_full_24col_pg17.sql'
+      - 'tests/sql/test_apd_atomic_full_24col_pg17.sh'
+      - 'scripts/test-apd-full-24-column-contract.mjs'
+      - '.github/workflows/apd-pg17-full-offer-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pg17-full-offers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: apd_ci
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: local_disposable_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGDATABASE: apd_ci
+      PGUSER: apd_ci
+      PGPASSWORD: local_disposable_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare all 24 source schema fields with Worker mapping
+        run: |
+          node --check scripts/test-apd-full-24-column-contract.mjs
+          node --test scripts/test-apd-full-24-column-contract.mjs
+      - name: Run full offer metadata, history and atomic rollback against real PG17
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          bash tests/sql/test_apd_atomic_full_24col_pg17.sh
+      - name: Ensure no changes to production Worker, public schema, users or site
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
