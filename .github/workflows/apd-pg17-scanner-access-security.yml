@@ -1,0 +1,71 @@
+name: APD PG17/PostgREST scanner role isolation and denied public RPC
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_atomic_pilot_roles_pg17.sql'
+      - 'scripts/test-apd-postgrest-roles-real.mjs'
+      - '.github/workflows/apd-pg17-scanner-access-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  role-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: apd_ci
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: disposable_pilot_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: apd_ci
+      PGUSER: apd_ci
+      PGPASSWORD: disposable_pilot_only
+      APD_CI_FAKE_JWT_SECRET: "ci-only-not-for-production-0123456789-very-long-secret"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create isolated schema and explicitly revoke public permissions
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_district_pilot_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_stage_pages_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_full_24col_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_pilot_roles_pg17.sql
+      - name: Start temporary PostgREST with local JWT signing only
+        run: |
+          docker run -d --rm --name apd-test-postgrest-roles --network host \
+            -e PGRST_DB_URI="postgres://apd_ci:disposable_pilot_only@127.0.0.1:5432/apd_ci" \
+            -e PGRST_DB_SCHEMAS="apd_scanner_pilot" \
+            -e PGRST_DB_ANON_ROLE="apd_pilot_anon" \
+            -e PGRST_JWT_SECRET="$APD_CI_FAKE_JWT_SECRET" \
+            -e PGRST_SERVER_PORT="3300" \
+            postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
+      - name: Check real public denial, scanner-only authorization, and no DELETE
+        run: |
+          node --check scripts/test-apd-postgrest-roles-real.mjs
+          node scripts/test-apd-postgrest-roles-real.mjs
+      - name: Verify source remains isolated from production
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
+      - name: Remove disposable PostgREST service
+        if: always()
+        run: docker rm -f apd-test-postgrest-roles || true
