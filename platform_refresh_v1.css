@@ -26,6 +26,7 @@ body #navPrivado.hidden,body #navPublico.hidden{display:none!important}
 body #navPrivado:not(.hidden),body #navPublico:not(.hidden){display:flex!important}
 body .top-nav>a[href="./proximamente.html"]{display:none!important}
 body .top-nav>a.btn{font-size:12px!important;min-height:37px;border-radius:9px!important;padding:8px 10px!important;white-space:nowrap}
+body .apd-top-tabs.hidden{display:none!important}
 body .apd-top-tabs{
   display:flex!important;gap:4px!important;overflow-x:auto;scrollbar-width:thin;
   flex-wrap:nowrap!important;max-width:100%;padding:4px!important;
