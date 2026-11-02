@@ -1,7 +1,7 @@
 // Pure unit tests: do not access any network, GitHub API, Cloudflare or database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {events,inspectChange,signals} from './check-apd-workflow-risk-diff.mjs';
+import {events,inspectChange,signals,executableScriptReferences,linkedPrivilegedScriptRisks} from './check-apd-workflow-risk-diff.mjs';
 
 const file='.github/workflows/example.yml';
 const flow=(trigger,body,perms='permissions:\n  contents: read') =>
@@ -80,4 +80,26 @@ test('file path scope is limited to GitHub Actions workflows',()=>{
 test('static risk signal detection keeps token names, not values',()=>{
   const s=flow('  push:',"echo hi\n        env:\n          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}");
   assert.deepEqual(signals(s).tokens,['CLOUDFLARE_API_TOKEN']);
+});
+
+test('script-only patch referenced by an automatic privileged job is blocked',()=>{
+  const workflow=flow('  push:\n    branches: [main]',
+    'node scripts/deploy-cloudflare.mjs\n        env:\n          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}');
+  const findings=linkedPrivilegedScriptRisks(['scripts/deploy-cloudflare.mjs'],[['auto.yml',workflow]]);
+  assert.match(findings.join(' '),/changed entrypoint invoked by privileged automatic workflow/);
+});
+
+test('unrelated script changes are unaffected by a privileged auto workflow',()=>{
+  const workflow=flow('  push:', 'node scripts/production-audit.mjs\n        env:\n          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}');
+  assert.deepEqual(linkedPrivilegedScriptRisks(['scripts/test-other.mjs'],[['auto.yml',workflow]]),[]);
+});
+
+test('manualizing the workflow permits modifying its scripted implementation',()=>{
+  const workflow=flow('  workflow_dispatch:', 'node scripts/promote.mjs\n        env:\n          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}');
+  assert.deepEqual(linkedPrivilegedScriptRisks(['scripts/promote.mjs'],[['manual.yml',workflow]]),[]);
+});
+
+test('script command extraction recognizes quoting and node test flags',()=>{
+  const workflow=flow('  push:', 'node --test "scripts/test-example.mjs"');
+  assert.deepEqual(executableScriptReferences(workflow),['scripts/test-example.mjs']);
 });
