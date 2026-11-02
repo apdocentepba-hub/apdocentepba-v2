@@ -1,0 +1,25 @@
+name: APD radar provincial live candidate - offline contracts
+on:
+  pull_request:
+    paths:
+      - 'candidates/radar_provincia_live_20261102.js'
+      - 'scripts/test-apd-radar-live-candidate.mjs'
+      - '.github/workflows/apd-radar-live-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate browser script syntax
+        run: node --check candidates/radar_provincia_live_20261102.js
+      - name: Validate real scan state, stale data and failed requests with no network
+        run: node --test scripts/test-apd-radar-live-candidate.mjs
+      - name: Verify installed production radar/index unchanged
+        run: |
+          git diff --exit-code origin/main -- index.html radar_provincia_patch_semaforo.js worker-live/worker_hotfix.js
