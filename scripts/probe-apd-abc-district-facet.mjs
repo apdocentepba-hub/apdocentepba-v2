@@ -7,7 +7,7 @@ const timer=setTimeout(()=>ctrl.abort(),16000);
 try{
  const res=await fetch(url,{method:"GET",redirect:"error",credentials:"omit",cache:"no-store",signal:ctrl.signal,headers:{Accept:"application/json"}});
  assert.equal(res.status,200,"ABC returned HTTP "+res.status);
- const raw=await res.text();assert.ok(raw.length<200000,"Unexpectedly large facet response");
+ const raw=new TextDecoder("iso-8859-1").decode(await res.arrayBuffer());assert.ok(raw.length<200000,"Unexpectedly large facet response");
  const json=JSON.parse(raw);
  assert.ok(Number.isSafeInteger(json?.response?.numFound));
  assert.deepEqual(json.response.docs,[]);
