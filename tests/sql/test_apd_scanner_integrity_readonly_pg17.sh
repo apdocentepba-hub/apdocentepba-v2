@@ -6,7 +6,9 @@ set -euo pipefail
 : "${PGPASSWORD:?missing disposable PGPASSWORD}"
 : "${PGDATABASE:?missing disposable PGDATABASE}"
 sql=scripts/apd-scanner-integrity-readonly.sql
+sql_key=scripts/apd-scanner-source-key-parity-readonly.sql
 test -s "$sql"
+test -s "$sql_key"
 
 # Fail on any accidentally inserted SQL writing operation (exclude comments).
 if grep -Ev '^\s*--' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|COPY|CALL|DO)\b'; then
@@ -32,6 +34,15 @@ VALUES
 ('D_101','101','101','LA MATANZA','2026-11-01T10:00:00Z','2026-11-02T10:00:00Z',
  '2026-11-02T09:00:00Z',2,1);
 SQL
+
+# Same two fake offers keep their original Solr ID only in disposable JSON.
+psql -X -q -v ON_ERROR_STOP=1 -c "
+UPDATE public.apd_ofertas_global_current
+SET raw = jsonb_build_object('id', iddetalle)" >/dev/null
+
+check_key() {
+  PGOPTIONS="-c default_transaction_read_only=on" psql -X -q -v ON_ERROR_STOP=1 -At -F '|' -f "$sql_key"
+}
 
 check() {
   PGOPTIONS="-c default_transaction_read_only=on" psql -X -q -v ON_ERROR_STOP=1 -At -F '|' -f "$sql"
@@ -62,5 +73,31 @@ psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET f
 inverted="$(check)"
 [[ "$inverted" == 2\|2\|*\|f ]] ||
   { echo 'Inverted first/last seen timestamp went unnoticed' >&2; exit 6; }
+
+# Test canonical primary identity from real Worker: D_<digits(iddetalle)>.
+parity="$(check_key)"
+[[ "$parity" == '2|2|0|2|0|2|0|t' ]] ||
+  { echo 'Valid canonical keys rejected by primary parity preflight' >&2; exit 7; }
+
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET source_offer_key='D_999' WHERE idoferta='100'" >/dev/null
+[[ "$(check_key)" == '2|2|0|1|1|2|0|f' ]] ||
+  { echo 'Wrong persisted source key went unnoticed' >&2; exit 8; }
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET source_offer_key='D_100' WHERE idoferta='100'" >/dev/null
+
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET raw=jsonb_build_object('id','777') WHERE idoferta='100'" >/dev/null
+[[ "$(check_key)" == '2|2|0|2|0|2|1|f' ]] ||
+  { echo 'Divergent raw Solr ID went unnoticed' >&2; exit 9; }
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET raw=jsonb_build_object('id','100') WHERE idoferta='100'" >/dev/null
+
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET iddetalle='no-numeric-key' WHERE idoferta='100'" >/dev/null
+fallback="$(check_key)"
+[[ "$fallback" == 2\|1\|1\|1\|0\|2\|1\|f ]] ||
+  { echo 'Fallback requiring explicit review went unnoticed' >&2; exit 10; }
+psql -X -q -v ON_ERROR_STOP=1 -c "UPDATE public.apd_ofertas_global_current SET iddetalle='100' WHERE idoferta='100'" >/dev/null
+
+[[ "$(check_key)" == "$parity" ]] ||
+  { echo 'Restoring fake canonical keys did not restore parity' >&2; exit 11; }
+
+echo 'APD_WORKER_PRIMARY_KEY_PARITY_PG17_PASSED: matching, wrong-key, raw mismatch, fallback review, readonly'
 
 echo 'APD_SCANNER_READONLY_PG17_INTEGRITY_PRECHECK_PASSED: valid/duplicate/inverted/read-only'
