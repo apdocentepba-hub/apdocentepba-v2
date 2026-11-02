@@ -88,7 +88,7 @@ test('la propuesta de navegación es estática, accesible y sin sesiones reales'
   const html=readFileSync(path.join(out,'platform-visual.html'),'utf8');
   assert.match(html,/VISTA PREVIA VISUAL/);
   assert.match(html,/Cuenta, cifras y ofertas ficticias/i);
-  assert.match(html,/Carrusel real NO fue modificado/);
+  assert.match(html,/carrusel real NO fue modificado/i);
   for(const section of ['resumen','alertas','listados','recursos','plan','estadisticas','preferencias']){
     assert.match(html,new RegExp('id="section-'+section+'"'));
   }
