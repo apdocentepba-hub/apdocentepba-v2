@@ -12,7 +12,7 @@
     perfil:['🪪','Listados y perfil docente','Datos personales, PID, cargos, materias y accesos rápidos para ordenar tu información docente.',['PID docente','Perfil','Listados']],
     repo:['📚','Repositorio docente PBA','Biblioteca de recursos, normativa, guías y materiales útiles para docentes y secretarías escolares.',['Normativa','Modelos','Guías']],
     plan:['💳','Mi plan y suscripción','Estado del plan, beneficios activos, vencimiento y opciones para actualizar o gestionar la suscripción.',['Plan activo','Beneficios','Pagos']],
-    mercado:['📊','Radar docente PBA','Lectura rápida de movimiento provincial, distritos, cargos y tendencias para decidir mejor.',['Radar','Tendencias','Mercado']],
+    mercado:['📊','Datos y actividad APD','Consultá ofertas encontradas y resúmenes históricos cuando existan datos verificables. Las estadísticas no predicen designaciones.',['Actividad','Histórico','Fuentes']],
     preferencias:['⚙️','Preferencias de alertas','Configurá distritos, cargos, niveles, turnos y canales para que las alertas lleguen con más precisión.',['Distritos','Cargos','Canales']],
     admin:['🛠️','Administración','Acciones técnicas, pagos, usuarios, backfill, vista previa de alertas y controles internos.',['Usuarios','Pagos','Backfill']]
   };
@@ -82,7 +82,7 @@
 
   function ensureIntro(k){
     if(k==='inicio') return; const cfg=INTRO[k], g=grid(k); if(!cfg||!g) return; let card=document.getElementById('apd-tab-intro-'+k);
-    if(!card){card=document.createElement('div');card.id='apd-tab-intro-'+k;card.className='panel-card span-12 apd-tab-intro';card.innerHTML='<div class="apd-tab-copy"><div class="apd-tab-kicker">'+cfg[0]+' '+cfg[1]+'</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p><div class="apd-tab-chips">'+cfg[3].map(c=>'<span class="apd-tab-chip">'+c+'</span>').join('')+'</div></div><div class="apd-tab-side"><a href="#">Ver sección</a></div>';}
+    if(!card){card=document.createElement('div');card.id='apd-tab-intro-'+k;card.className='panel-card span-12 apd-tab-intro';card.innerHTML='<div class="apd-tab-copy"><div class="apd-tab-kicker">'+cfg[0]+' '+cfg[1]+'</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p><div class="apd-tab-chips">'+cfg[3].map(c=>'<span class="apd-tab-chip">'+c+'</span>').join('')+'</div></div>';}
     if(card.parentElement!==g) g.prepend(card); else if(g.firstElementChild!==card) g.prepend(card);
   }
 
@@ -114,10 +114,3 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>{schedule();observers();},{once:true}); else {schedule();observers();}
 })();
 
-(function(){
-  'use strict';
-  if(window.__apdAuthSessionPatchLoaderLoaded) return;
-  window.__apdAuthSessionPatchLoaderLoaded=true;
-  function load(){if(document.querySelector('script[data-apd-auth-session-patch="1"]')) return; const s=document.createElement('script');s.src='auth_session_patch.js?v=1';s.async=false;s.dataset.apdAuthSessionPatch='1';document.head.appendChild(s);}
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',load,{once:true}); else load();
-})();
