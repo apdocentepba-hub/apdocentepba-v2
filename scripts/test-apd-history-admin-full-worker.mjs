@@ -75,7 +75,7 @@ test("the actual exported compiled Worker delegates safe admin history route",as
 
     role="regular";
     const regular=await send("true",{token:true});
-    assert.equal(regular.res.status,403);
+    assert.equal(regular.res.status,403,JSON.stringify({calls,body:regular.json}));
     assert.deepEqual(calls,["/rest/v1/sessions","/rest/v1/users"]);
     calls=[];
 
