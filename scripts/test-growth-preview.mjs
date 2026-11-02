@@ -87,11 +87,20 @@ test('Insigne LAB aparece sólo como experimento aislado en la preview',()=>{
 test('la propuesta de navegación es estática, accesible y sin sesiones reales',()=>{
   const html=readFileSync(path.join(out,'platform-visual.html'),'utf8');
   assert.match(html,/VISTA PREVIA VISUAL/);
-  assert.match(html,/Cuenta, cifras y ofertas ficticias/i);
+  assert.match(html,/Cuenta y ofertas ficticias; cifras provinciales de un corte auditado/i);
   assert.match(html,/carrusel real NO fue modificado/i);
   for(const section of ['resumen','alertas','listados','recursos','plan','estadisticas','preferencias']){
     assert.match(html,new RegExp('id="section-'+section+'"'));
   }
   assert.doesNotMatch(html,/type="password"|\/api\/login|\/api\/register|localStorage|sessionStorage|fetch\s*\(|sendBeacon|XMLHttpRequest/);
   assert.match(html,/platform_refresh_v1\.css/);
+});
+
+test('la propuesta identifica fuente y fecha del corte, sin aparentar estadística en vivo',()=>{
+  const html=readFileSync(path.join(out,'platform-visual.html'),'utf8');
+  assert.match(html,/2\.617/);
+  assert.match(html,/137 \/ 137/);
+  assert.match(html,/18 sep 2026/);
+  assert.match(html,/no consulta Supabase ni actualiza estos números en vivo/);
+  assert.doesNotMatch(html,/\/api\/estadisticas/);
 });
