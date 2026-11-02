@@ -48,7 +48,7 @@ test('Both canonical handlers already require Bearer session; no legacy bypass r
     assert.doesNotMatch(body,/obtenerUsuario\(env, requestedUserId\)/);
   }
   assert.throws(()=>hardenMessagingStatus(canonical),/Expected exactly Telegram and WhatsApp status patterns/);
-  assert.throws(()=>assertAuthorizedPromotion(canonical,canonical,[],[]),/Release refused/);
+  assert.throws(()=>assertAuthorizedPromotion(canonical,canonical,[],[]),/Expected exactly Telegram and WhatsApp status patterns|Release refused/);
 });
 
 for(const name of handlers) {
