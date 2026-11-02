@@ -1,0 +1,43 @@
+name: APD scanner current-offer integrity preflight (PG17 isolated)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-scanner-integrity-readonly.sql'
+      - 'tests/sql/test_apd_scanner_integrity_readonly_pg17.sh'
+      - '.github/workflows/apd-scanner-readonly-integrity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pg17-readonly-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: apd_ci_fake_only
+          POSTGRES_DB: apd_scanner_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d apd_scanner_ci"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: apd_ci_fake_only
+      PGDATABASE: apd_scanner_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify local PostgreSQL 17 only
+        run: |
+          psql -X -At -c "select current_setting('server_version_num')::integer >= 170000" | grep -qx t
+      - name: Execute only fake-data tests and fail-closed read-only SQL
+        run: bash tests/sql/test_apd_scanner_integrity_readonly_pg17.sh
