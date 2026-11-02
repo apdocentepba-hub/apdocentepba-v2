@@ -1,0 +1,17 @@
+name: APD ABC district faceting one-read probe
+on:
+  pull_request:
+    paths:
+      - 'scripts/probe-apd-abc-district-facet.mjs'
+      - '.github/workflows/apd-abc-district-facet-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  facet-read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check scripts/probe-apd-abc-district-facet.mjs
+      - run: node scripts/probe-apd-abc-district-facet.mjs
