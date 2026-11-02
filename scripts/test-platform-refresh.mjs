@@ -51,6 +51,7 @@ function fixture(){
     async adminCheckAccess(){events.push(['admin']);return false;},
     bindAdminEvents(){events.push(['admin_events']);},
     planActual:{},
+    alertasState:{items:[],index:0},
     dashboardLoadSequence:0,
     dashboardLoadedOwner:null
   };
@@ -112,4 +113,19 @@ test('no inventa vistas y no inventa cantidades durante la carga',()=>{
   assert.match(code,/Ofertas vigentes encontradas/);
   assert.doesNotMatch(code,/Sin ver|Vistas|Math\.random/);
   assert.match(code,/No mostramos cifras estimadas/);
+});
+
+test('fallo de red no se disfraza de cero ofertas ni sincroniza una lista vacía',async()=>{
+  const f=fixture();
+  await f.context.cargarDashboard();
+  f.alerts.reject(new Error('servicio temporalmente inaccesible'));
+  await new Promise(r=>setImmediate(r));
+  assert.match(f.nodes.get('panel-alertas').textContent,/No pudimos verificar tus alertas vigentes/);
+  assert.ok(f.events.some(e=>e[0]==='stats'&&e[1]===null));
+  assert.ok(!f.events.some(e=>e[0]==='background'&&e[1]==='/api/sync-offers'));
+  assert.ok(!f.events.some(e=>e[0]==='carousel_updated'));
+});
+test('las pestañas privadas desaparecen cuando no está abierto el panel docente',()=>{
+  assert.match(tabs,/tabs\?\.classList\.toggle\('hidden',!panelVisible\)/);
+  assert.match(css,/body \.apd-top-tabs\.hidden\{display:none!important\}/);
 });
