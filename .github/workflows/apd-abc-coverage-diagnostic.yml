@@ -1,0 +1,37 @@
+name: APD ABC vs APDocente - aggregate coverage diagnostic
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-abc-coverage-assessment.mjs'
+      - 'scripts/audit-apd-abc-coverage-daily.mjs'
+      - 'scripts/test-apd-abc-coverage-audit.mjs'
+      - '.github/workflows/apd-abc-coverage-diagnostic.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '10 16 * * 1-5'
+permissions:
+  contents: read
+concurrency:
+  group: apd-abc-readonly-audit
+  cancel-in-progress: false
+jobs:
+  count-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify script syntax and classification without credentials
+        run: |
+          node --check scripts/apd-abc-coverage-assessment.mjs
+          node --check scripts/audit-apd-abc-coverage-daily.mjs
+          node --test scripts/test-apd-abc-coverage-audit.mjs
+      - name: Collect 3 public, read-only count responses (ABC/Worker/ABC)
+        run: node scripts/audit-apd-abc-coverage-daily.mjs
+      - name: Retain aggregated diagnostic only (no private offers or users)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-coverage-diagnostic
+          path: tmp/apd-abc-coverage-audit/report.json
+          if-no-files-found: ignore
+          retention-days: 21
