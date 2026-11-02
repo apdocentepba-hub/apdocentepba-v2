@@ -29,7 +29,25 @@ export async function maybeCaptureDailyProvinceSummary(env, scanDate, finished, 
       }
     );
     if (!response.ok) throw new Error(`Summary RPC HTTP ${response.status}`);
-    return { ok: true, captured: true, scan_date: day };
+    // PostgREST returns an array of rows for RETURNS TABLE. HTTP 200 alone
+    // does not prove that a row was written (idempotent replay: saved=false).
+    const payload = await response.json();
+    if (!Array.isArray(payload) || payload.length !== 1) {
+      throw new Error("Summary RPC unexpected payload");
+    }
+    const row = payload[0];
+    if (!row || typeof row.saved !== "boolean" ||
+        row.captured_date !== day ||
+        !Number.isSafeInteger(Number(row.offers)) || Number(row.offers) < 0 ||
+        !Number.isSafeInteger(Number(row.districts_with_offers)) ||
+        Number(row.districts_with_offers) < 0) {
+      throw new Error("Summary RPC invalid result");
+    }
+    return {
+      ok: true, captured: row.saved, already_present: !row.saved,
+      scan_date: day, offers: Number(row.offers),
+      districts_with_offers: Number(row.districts_with_offers)
+    };
   } catch (err) {
     // Un fallo de historico jamás debe detener el scanner de ofertas.
     console.warn("APD_DAILY_SUMMARY_FAILED", String(err?.message || err));
