@@ -8,7 +8,7 @@ import { buildAdminHistoryPreview } from "./build-apd-history-admin-read-preview
 
 const LIVE = readFileSync("worker-live/worker_hotfix.js", "utf8");
 const READER = readFileSync("worker-live/apd_history_admin_read.mjs", "utf8");
-const URL = "https://worker.example.invalid/api/admin/provincia/historico-diario";
+const ENDPOINT_URL = "https://worker.example.invalid/api/admin/provincia/historico-diario";
 const KEY = "MOCK_ONLY_NOT_A_CREDENTIAL";
 const SCHEMA = [{
   scan_date:"2026-11-02",
@@ -60,7 +60,7 @@ test("the actual exported compiled Worker delegates safe admin history route",as
     });
     const send=async(enabled,opts={})=>{
       const headers=opts.token?{Authorization:"Bearer mock_token"}:{};
-      const req=new Request(URL+(opts.query||""),{method:opts.method||"GET",headers});
+      const req=new Request(ENDPOINT_URL+(opts.query||""),{method:opts.method||"GET",headers});
       const res=await worker.fetch(req,env(enabled),{});
       return {res,json:await res.json()};
     };
