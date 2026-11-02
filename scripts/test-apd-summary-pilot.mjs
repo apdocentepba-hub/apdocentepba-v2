@@ -42,11 +42,11 @@ test('archivo productivo permanece como fuente inalterada', () => {
 test('el error inesperado de histórico no puede convertir un barrido finalizado en fallo', async () => {
  const output=buildPilotWorker(live,hook);
  const anchor=output.indexOf('    // Piloto opt-in: solo después de persistir estado finished.');
- const end=output.indexOf('    return {\\n      ok: true,\\n      mode: "current_published"',anchor);
+ const end=output.indexOf('    return {',anchor);
  assert.ok(anchor>0 && end>anchor);
  const block=output.slice(anchor,end);
  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
- const run=new AsyncFunction('finished','env','nextNotes','maybeCaptureDailyProvinceSummary','supabaseFetchWithRetry','console',block+'\\nreturn "scanner_ok";');
+ const run=new AsyncFunction('finished','env','nextNotes','maybeCaptureDailyProvinceSummary','supabaseFetchWithRetry','console',block+String.fromCharCode(10)+'return "scanner_ok";');
  const logs=[],warnings=[];
  const logger={log:(...a)=>logs.push(a),warn:(...a)=>warnings.push(a)};
  let invoked=0;
