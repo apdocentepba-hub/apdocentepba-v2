@@ -86,13 +86,29 @@
     if(card.parentElement!==g) g.prepend(card); else if(g.firstElementChild!==card) g.prepend(card);
   }
 
+  function ensureOfficialSources(){
+    const g=grid('perfil'); if(!g)return;
+    let card=document.getElementById('apd-official-listings-card');
+    if(!card){
+      card=document.createElement('section');
+      card.id='apd-official-listings-card';card.className='panel-card span-12';
+      card.innerHTML='<div class="card-lbl-row"><span class="card-lbl">🪪 Fuentes oficiales para listados y APD</span></div>'+
+        '<p class="prefs-hint">El listado y los puntajes oficiales se verifican en SerVaDo. El APD requiere el acceso correspondiente de ABC. APDocentePBA no reemplaza esos sistemas ni sincroniza tu legajo sin autorización.</p>'+
+        '<div class="apd-official-links" style="display:flex;gap:10px;flex-wrap:wrap">'+
+        '<a class="btn btn-primary" href="https://servado.abc.gob.ar/" target="_blank" rel="noopener noreferrer">Abrir SerVaDo oficial</a>'+
+        '<a class="btn btn-secondary" href="https://misservicios.abc.gob.ar/actos.publicos.digitales/" target="_blank" rel="noopener noreferrer">Abrir APD oficial</a>'+
+        '<a class="btn btn-secondary" href="./pid.html">Consultar orientación PID</a></div>';
+    }
+    if(card.parentElement!==g)g.appendChild(card);
+  }
+
   function repartition(){
     ensureShell(); ensureShowcase(); ensureBenefits(); TABS.forEach(t=>ensureIntro(t[0]));
     moveByContent('panel-datos-docente','inicio');moveByContent('panel-preferencias-resumen','inicio');moveByContent('panel-plan','inicio');moveByContent('panel-canales','inicio');
     moveByContent('panel-alertas','alertas');moveByContent('panel-estadisticas','alertas');
     moveByContent('panel-perfil-docente','perfil');moveByContent('panel-listados-docente','perfil');moveById('panel-listados-pid-card','perfil');
     moveById('panel-repositorio-card','repo');moveById('panel-plan-selector-card','plan');moveByContent('panel-historico-apd','mercado');moveById('panel-radar-combinado-card','mercado');moveById('panel-radar-provincia','mercado');
-    movePrefs();moveById('admin-panel-card','admin');moveByContent('panel-backfill-provincia','admin');refreshVisibility();
+    movePrefs();ensureOfficialSources();moveById('admin-panel-card','admin');moveByContent('panel-backfill-provincia','admin');refreshVisibility();
   }
 
   function hasCards(k){const g=grid(k); return !!(g&&[...g.children].some(el=>el instanceof HTMLElement&&!el.classList.contains('hidden')&&!(el.id==='admin-panel-card'&&el.classList.contains('hidden'))));}
