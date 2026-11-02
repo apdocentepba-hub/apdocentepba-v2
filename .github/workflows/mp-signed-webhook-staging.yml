@@ -6,12 +6,6 @@ on:
       - 'scripts/stage-mp-signed-webhook.mjs'
       - 'scripts/test-mp-preview-staging.mjs'
       - '.github/workflows/mp-signed-webhook-staging.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/stage-mp-signed-webhook.mjs'
-      - 'scripts/test-mp-preview-staging.mjs'
-      - '.github/workflows/mp-signed-webhook-staging.yml'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +32,9 @@ jobs:
 
   stage-to-version-url:
     needs: preview-contract
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Disabled: old uploader expects push events and can create Cloudflare versions.
+    # A new reviewed, explicitly approved staging workflow is required.
+    if: false
     runs-on: ubuntu-latest
     environment: production
     steps:
