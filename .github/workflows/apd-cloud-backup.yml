@@ -1,0 +1,63 @@
+name: "APDocentePBA — respaldo cifrado de Supabase (solo manual)"
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Escribir RESPALDAR_APDOCENTEPBA (no modifica producción)"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/apd-cloud-backup.yml'
+      - 'scripts/apd_gha_backup_crypto.sh'
+      - 'scripts/apd_gha_production_backup.sh'
+      - 'scripts/test-apd-gha-backup-offline.sh'
+
+permissions:
+  contents: read
+concurrency:
+  group: apd-encrypted-backup
+  cancel-in-progress: false
+
+jobs:
+  offline-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate encryption, decryption, SHA-256 and tamper resistance offline
+        run: bash scripts/test-apd-gha-backup-offline.sh
+
+  production-backup:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: apd-backup
+    env:
+      SUPABASE_DB_URL: ${{ secrets.APD_SUPABASE_DB_URL }}
+      APD_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.APD_BACKUP_ENCRYPTION_PASSPHRASE }}
+      APD_CONFIRM_BACKUP: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets without printing their contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SUPABASE_DB_URL" ]] || { echo 'Missing secret APD_SUPABASE_DB_URL' >&2; exit 2; }
+          [[ -n "$APD_BACKUP_ENCRYPTION_PASSPHRASE" ]] || { echo 'Missing secret APD_BACKUP_ENCRYPTION_PASSPHRASE' >&2; exit 2; }
+          [[ "$APD_CONFIRM_BACKUP" == 'RESPALDAR_APDOCENTEPBA' ]] || { echo 'Backup confirmation mismatch' >&2; exit 2; }
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
+      - name: Export, encrypt, decrypt and prove a local PostgreSQL restore
+        shell: bash
+        run: bash scripts/apd_gha_production_backup.sh
+      - name: Upload ONLY the verified AES256-encrypted backup (30-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: APDocentePBA-encrypted-restorable-backup
+          path: _apd-encrypted-backup/*.tar.gpg
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
