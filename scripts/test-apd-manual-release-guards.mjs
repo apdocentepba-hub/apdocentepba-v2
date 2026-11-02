@@ -1,0 +1,70 @@
+// APDocentePBA: offline-only safety contract for risky GitHub Actions workflows.
+// This test NEVER calls network, Supabase, Cloudflare, or a deployment API.
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+const candidates = Object.freeze([
+  { path: '.github/workflows/release-live-messaging-auth.yml', job: 'production', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/deploy-apd-email-fix-681.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/release-expiry-worker.yml', job: 'release', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/deploy-email-format-candidate.yml', job: 'deploy', confirmation: 'confirm_release', choice: 'RELEASE', ref: 'refs/heads/main', production: true },
+  { path: '.github/workflows/importar-escuelas-pba.yml', job: 'importar', confirmation: 'confirm_import', choice: 'IMPORTAR', ref: 'refs/heads/main', production: false },
+  { path: '.github/workflows/auto-apply-worker-export-default-replacement.yml', job: 'auto-apply-worker-export-default-replacement', confirmation: 'confirm_apply', choice: 'APLICAR', ref: 'refs/heads/refactor/worker-base-20260401', production: false }
+]);
+
+function extractTrigger(contents) {
+  const m = contents.match(/^on:\s*\n([\s\S]*?)(?=^[A-Za-z_][^\n]*:|$(?![\s\S]))/m);
+  assert.ok(m, 'Missing YAML on: section');
+  return m[1];
+}
+
+function extractJob(contents, jobName) {
+  const lines = contents.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === '  ' + jobName + ':');
+  assert.ok(start >= 0, 'Expected job missing: ' + jobName);
+  let end = start + 1;
+  while (end < lines.length && !/^  [a-zA-Z][\w-]*:$/.test(lines[end])) end++;
+  return lines.slice(start, end).join('\n');
+}
+
+function validateManualOnly(contents, item) {
+  const triggers = extractTrigger(contents);
+  assert.match(triggers, /^  workflow_dispatch:\s*$/m, 'Manual trigger required');
+  assert.doesNotMatch(triggers, /^  (?:push|schedule|repository_dispatch|workflow_run|pull_request_target):/m, 'Autonomous or privileged trigger forbidden');
+  assert.match(triggers, new RegExp('^      ' + item.confirmation + ':\\s*$', 'm'), 'Confirmation input required');
+  assert.match(triggers, /^        default: ["']?NO["']?\s*$/m, 'Default must be NO');
+  assert.match(triggers, new RegExp('options: \\[["\x27]NO["\x27], ["\x27]' + item.choice + '["\x27]\\]'), 'Explicit approval choice required');
+
+  const job = extractJob(contents, item.job);
+  const gate = job.split('\n').find((line) => /^    if:/.test(line));
+  assert.ok(gate, 'Production/write job requires job-level if');
+  for (const part of ["github.event_name == 'workflow_dispatch'", "github.ref == '" + item.ref + "'", 'inputs.' + item.confirmation + " == '" + item.choice + "'"]) {
+    assert.ok(gate.includes(part), 'Missing job release gate: ' + part);
+  }
+  if (item.production) assert.match(job, /^    environment: production\s*$/m, 'Production environment required');
+  assert.doesNotMatch(job, /^    permissions:\s*\n\s+contents: write/m, 'Production job must not write repository');
+}
+
+for (const item of candidates) {
+  test(item.path + ' cannot auto-release or auto-write', () => {
+    const contents = readFileSync(item.path, 'utf8');
+    validateManualOnly(contents, item);
+  });
+}
+
+test('unsafe push event is rejected (negative control)', () => {
+  const item = candidates[0];
+  const safe = readFileSync(item.path, 'utf8');
+  const unsafe = safe.replace('on:\n', 'on:\n  push:\n    branches: [main]\n');
+  assert.throws(() => validateManualOnly(unsafe, item), /Autonomous or privileged trigger forbidden/);
+});
+
+test('missing production confirmation is rejected (negative control)', () => {
+  const item = candidates[0];
+  const safe = readFileSync(item.path, 'utf8');
+  const unsafe = safe.replace("inputs.confirm_release == 'RELEASE'", "inputs.confirm_release == 'NO'");
+  assert.throws(() => validateManualOnly(unsafe, item), /Missing job release gate/);
+});
+
+console.log('APD_MANUAL_RELEASE_GUARD: no production deployment performed');
