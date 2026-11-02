@@ -6818,7 +6818,7 @@ async function maybeCaptureDailyProvinceSummary(env, scanDate, finished) {
     return { ok: true, skipped: true, reason: "feature_disabled_or_scan_incomplete" };
   }
   const day = String(scanDate || "").trim();
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)) {
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)) {
     return { ok: false, skipped: true, reason: "invalid_scan_date" };
   }
   try {
