@@ -100,9 +100,9 @@ jobs:
             loser:=CASE WHEN chosen='A' THEN 'B' ELSE 'A' END;
             accepted_rows:=CASE WHEN chosen='A' THEN 180 ELSE 190 END;
             IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
-                 WHERE source_offer_key LIKE 'SIM_'||chosen||'_%')<>accepted_rows OR
+                 WHERE left(source_offer_key,length('SIM_'||chosen||'_'))='SIM_'||chosen||'_')<>accepted_rows OR
                (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
-                 WHERE source_offer_key LIKE 'SIM_'||loser||'_%')<>0 OR
+                 WHERE left(source_offer_key,length('SIM_'||loser||'_'))='SIM_'||loser||'_')<>0 OR
                (SELECT count(*) FROM apd_scanner_pilot.current_offers_full)<>accepted_rows+5 THEN
               RAISE EXCEPTION 'Stale/overlapping offer changes leaked into committed dataset';
             END IF;
