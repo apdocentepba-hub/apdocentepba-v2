@@ -159,6 +159,6 @@ test("existing index exposes just one primary radar card",()=>{
  const html=readFileSync("index.html","utf8");
  assert.equal((html.match(/id="panel-radar-provincia"/g)||[]).length,1);
  assert.equal((html.match(/id="btn-refresh-provincia"/g)||[]).length,1);
- assert.ok(html.includes('candidates/radar_provincia_live_20261102.js?v=1'));
+ assert.ok(html.includes('candidates/radar_provincia_live_20261102.js?v=2'));
  assert.ok(!html.includes('radar_provincia_patch_semaforo.js?v=2'));
 });
