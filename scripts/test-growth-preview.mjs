@@ -10,7 +10,7 @@ const out = path.join(root, 'dist-growth-preview');
 
 test('la construcción de la demo funciona sin bibliotecas externas', () => {
   execFileSync(process.execPath, [path.join(root, 'scripts/build-growth-preview.mjs')], { cwd: root, timeout: 10000 });
-  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'index.html', 'panel-demo.html', 'robots.txt'].sort());
+  assert.deepEqual(readdirSync(out).sort(), ['_headers', 'growth_activation_guide.js', 'index.html', 'insigne-laboratorio.html', 'insigne_rules_lab.js', 'panel-demo.html', 'robots.txt'].sort());
 });
 
 test('la landing no muestra botones de registro/login que usen backend real', () => {
@@ -65,4 +65,21 @@ test('niveles y turnos opcionales respetan opciones del panel real sin escribir 
   assert.match(html, /option value="T">Tarde/);
   assert.match(html, /values\.levels\.join\(', '\)/);
   assert.match(html, /values\.turn \|\| '\(cualquiera\)'/);
+});
+
+test('Insigne LAB aparece sólo como experimento aislado en la preview',()=>{
+  const landing=readFileSync(path.join(out,'index.html'),'utf8');
+  const lab=readFileSync(path.join(out,'insigne-laboratorio.html'),'utf8');
+  const engine=readFileSync(path.join(out,'insigne_rules_lab.js'),'utf8');
+  assert.match(landing,/insigne-laboratorio\.html/);
+  assert.match(lab,/Propuesta NO habilitada/);
+  assert.match(lab,/No almacena información ni envía alertas/);
+  assert.match(lab,/id="lab-district"/);
+  assert.match(lab,/id="lab-cargo"/);
+  assert.match(lab,/id="lab-mode"/);
+  assert.match(lab,/insigne_rules_lab\.js/);
+  assert.doesNotMatch(lab,/api\/guardar-preferencias|api\/login|type="password"|supabase\.co/);
+  for (const text of [lab,engine]) {
+    assert.doesNotMatch(text,/fetch\s*\(|XMLHttpRequest|navigator\.sendBeacon|localStorage|sessionStorage/);
+  }
 });
