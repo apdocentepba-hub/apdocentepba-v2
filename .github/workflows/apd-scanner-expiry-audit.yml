@@ -1,0 +1,34 @@
+name: APD scanner expiry public filter audit (no production changes)
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-scanner-expiration-real.mjs'
+      - 'scripts/test-apd-scanner-expiration-real.mjs'
+      - '.github/workflows/apd-scanner-expiry-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  count-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact Worker expiry filter and safe field projection
+        run: |
+          node --check scripts/audit-apd-scanner-expiration-real.mjs
+          node --test scripts/test-apd-scanner-expiration-real.mjs
+      - name: Apply current Worker expiry logic to public minimal ABC fields
+        run: node scripts/audit-apd-scanner-expiration-real.mjs
+      - name: Retain aggregate-only report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-scanner-expiry-aggregate
+          path: tmp/apd-scanner-expiration-audit/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Preserve published Worker, frontend and user data integrations
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js
