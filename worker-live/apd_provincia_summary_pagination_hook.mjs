@@ -15,7 +15,8 @@ export async function handleProvinciaResumenPaginadoPreview(url, env, deps) {
   const days = rawDays !== null && /^[0-9]{1,3}$/.test(rawDays)
     ? Math.min(120,Math.max(7,Number(rawDays))) : 30;
   const now = Date.now();
-  const sinceIso = new Date(now-days*86400000).toISOString();
+  const requestedWindowStartMs = now - days * 86400000;
+  // Query exactly the completed scan, not a rolling 30-day collection of older scans.
   const PAGE_SIZE = 500, MAX_ROWS = 20000;
   const projection = "source_offer_key,idoferta,iddetalle,estado,distrito,escuela," +
     "cargo,area,nivel_modalidad,turno,jornada,hsmodulos,cursodivision," +
@@ -25,6 +26,7 @@ export async function handleProvinciaResumenPaginadoPreview(url, env, deps) {
   try {
     const before = await deps.getScanState(env);
     const validScan = (s) =>
+      s?.scope === "PROVINCIA_FULL" &&
       s?.status === "finished" && s?.mode === "current_published" &&
       Number.isSafeInteger(Number(s.total_districts)) && Number(s.total_districts) > 0 &&
       Number(s.districts_completed) === Number(s.total_districts) &&
@@ -36,12 +38,14 @@ export async function handleProvinciaResumenPaginadoPreview(url, env, deps) {
       Number.isFinite(Date.parse(s.finished_at)) &&
       Date.parse(s.finished_at) >= Date.parse(s.started_at) &&
       Date.parse(s.finished_at) <= now + 5*60000;
-    if (!validScan(before)) return reply({ok:false,error:"Barrido provincial no verificado"},503);
+    if (!validScan(before) || Date.parse(before.finished_at) < requestedWindowStartMs) {
+      return reply({ok:false,error:"Barrido provincial no verificado"},503);
+    }
 
     const rows = [], seen = new Set();
     for(let offset=0; offset<=MAX_ROWS; offset+=PAGE_SIZE) {
       const query = "apd_ofertas_global_current?last_seen_at=gte." +
-        encodeURIComponent(sinceIso) +
+        encodeURIComponent(before.started_at) +
         "&last_seen_at=lte." + encodeURIComponent(before.finished_at) +
         "&select=" + projection +
         "&order=last_seen_at.desc,source_offer_key.asc&limit=" + PAGE_SIZE +
@@ -63,7 +67,10 @@ export async function handleProvinciaResumenPaginadoPreview(url, env, deps) {
     if(!validScan(after) ||
        after.started_at !== before.started_at ||
        after.finished_at !== before.finished_at ||
-       Number(after.offers_processed) !== Number(before.offers_processed)) {
+       Number(after.offers_processed) !== Number(before.offers_processed) ||
+       Number(after.total_districts) !== Number(before.total_districts) ||
+       Number(after.districts_completed) !== Number(before.districts_completed) ||
+       after.mode !== before.mode || after.scope !== before.scope) {
       throw Error("scan changed during pagination");
     }
     // Each row in a finished full current scan must belong to that scan.
