@@ -6,13 +6,20 @@ on:
       - 'scripts/release-live-messaging-auth.mjs'
       - 'scripts/test-release-live-messaging-auth.mjs'
       - '.github/workflows/release-live-messaging-auth.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/release-live-messaging-auth.mjs'
-      - 'scripts/test-release-live-messaging-auth.mjs'
-      - '.github/workflows/release-live-messaging-auth.yml'
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Confirm manual production release"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "RELEASE"]
+      real_session_qa:
+        description: "Confirm approved real-session QA"
+        required: true
+        type: choice
+        default: "NOT_VERIFIED"
+        options: ["NOT_VERIFIED", "VERIFIED"]
 
 permissions:
   contents: read
@@ -33,7 +40,7 @@ jobs:
       - run: node --test scripts/test-release-live-messaging-auth.mjs
   production:
     needs: release-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE' && inputs.real_session_qa == 'VERIFIED'
     runs-on: ubuntu-latest
     environment: production
     steps:
