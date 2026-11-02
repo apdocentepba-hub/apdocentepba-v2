@@ -57,6 +57,8 @@ test("candidate is not wired to production pages and contains no frozen statisti
  assert.doesNotMatch(SOURCE,/\.innerHTML\s*=|POST|PUT|PATCH|DELETE/);
  assert.match(SOURCE,/\/api\/provincia\/backfill-status/);
  assert.match(SOURCE,/no-store/);
+ assert.match(SOURCE,/NO es el total de ofertas publicadas actualmente en ABC/);
+ assert.doesNotMatch(SOURCE,/Último barrido provincial completado/);
 });
 test("complete scan reflects server counts, source date and explicit ABC disclaimer", async()=>{
  const calls=[];
@@ -70,7 +72,7 @@ test("complete scan reflects server counts, source date and explicit ABC disclai
  assert.match(ui.node("apd-radar-vivo-title").textContent,/no es en tiempo real/);
  assert.ok(stats(ui).includes("Distritos: 137/137"));
  assert.ok(stats(ui).includes("Publicadas capturadas: 2.609"));
- assert.match(ui.node("apd-radar-vivo-detail").textContent,/no una confirmación de disponibilidad en ABC/);
+ assert.match(ui.node("apd-radar-vivo-detail").textContent,/no es un conteo oficial en tiempo real/);
  assert.equal(ui.node("btn-refresh-radar-combinado").disabled,false);
 });
 test("stale scan is labeled outdated without pretending offers are current",async()=>{
