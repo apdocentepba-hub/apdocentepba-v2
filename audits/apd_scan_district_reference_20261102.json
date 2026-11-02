@@ -1,0 +1,701 @@
+{
+  "schema_version": 1,
+  "description": "Referencia agregada y fechada del último barrido APDocentePBA. No son las ofertas vigentes en ABC.",
+  "source": "Supabase public.apd_ofertas_global_current + catalogo_distritos + apd_global_scan_state (solo lectura)",
+  "scope": "PROVINCIA_FULL",
+  "scan_mode": "current_published",
+  "scan_started_at": "2026-11-02T03:01:16.615+00:00",
+  "scan_finished_at": "2026-11-02T07:33:18.692+00:00",
+  "scan_offers_processed": 2609,
+  "scan_districts_completed": 137,
+  "scan_total_districts": 137,
+  "counts_sum": 2609,
+  "zero_districts": 15,
+  "districts": [
+    {
+      "name": "25 DE MAYO",
+      "abc_name": "25 DE MAYO",
+      "count": 13
+    },
+    {
+      "name": "ADOLFO ALSINA",
+      "abc_name": "ADOLFO ALSINA",
+      "count": 42
+    },
+    {
+      "name": "ALBERTI",
+      "abc_name": "ALBERTI",
+      "count": 11
+    },
+    {
+      "name": "ALMIRANTE BROWN",
+      "abc_name": "ALMIRANTE BROWN",
+      "count": 42
+    },
+    {
+      "name": "ARRECIFES",
+      "abc_name": "ARRECIFES",
+      "count": 2
+    },
+    {
+      "name": "AVELLANEDA",
+      "abc_name": "AVELLANEDA",
+      "count": 38
+    },
+    {
+      "name": "AYACUCHO",
+      "abc_name": "AYACUCHO",
+      "count": 19
+    },
+    {
+      "name": "AZUL",
+      "abc_name": "AZUL",
+      "count": 27
+    },
+    {
+      "name": "BAHIA BLANCA",
+      "abc_name": "BAHIA BLANCA",
+      "count": 29
+    },
+    {
+      "name": "BALCARCE",
+      "abc_name": "BALCARCE",
+      "count": 13
+    },
+    {
+      "name": "BARADERO",
+      "abc_name": "BARADERO",
+      "count": 38
+    },
+    {
+      "name": "BERAZATEGUI",
+      "abc_name": "BERAZATEGUI",
+      "count": 4
+    },
+    {
+      "name": "BERISSO",
+      "abc_name": "BERISSO",
+      "count": 12
+    },
+    {
+      "name": "BOLIVAR",
+      "abc_name": "BOLIVAR",
+      "count": 27
+    },
+    {
+      "name": "BRAGADO",
+      "abc_name": "BRAGADO",
+      "count": 4
+    },
+    {
+      "name": "BRANDSEN",
+      "abc_name": "BRANDSEN",
+      "count": 13
+    },
+    {
+      "name": "CAMPANA",
+      "abc_name": "CAMPANA",
+      "count": 45
+    },
+    {
+      "name": "CAÑUELAS",
+      "abc_name": "CAÑUELAS",
+      "count": 0
+    },
+    {
+      "name": "CARLOS CASARES",
+      "abc_name": "CARLOS CASARES",
+      "count": 22
+    },
+    {
+      "name": "CARLOS TEJEDOR",
+      "abc_name": "CARLOS TEJEDOR",
+      "count": 2
+    },
+    {
+      "name": "CARMEN DE ARECO",
+      "abc_name": "CARMEN DE ARECO",
+      "count": 11
+    },
+    {
+      "name": "CASTELLI",
+      "abc_name": "CASTELLI",
+      "count": 2
+    },
+    {
+      "name": "CHACABUCO",
+      "abc_name": "CHACABUCO",
+      "count": 5
+    },
+    {
+      "name": "CHASCOMUS",
+      "abc_name": "CHASCOMUS",
+      "count": 28
+    },
+    {
+      "name": "CHIVILCOY",
+      "abc_name": "CHIVILCOY",
+      "count": 16
+    },
+    {
+      "name": "COLON",
+      "abc_name": "COLON",
+      "count": 5
+    },
+    {
+      "name": "CORONEL DORREGO",
+      "abc_name": "CORONEL DORREGO",
+      "count": 21
+    },
+    {
+      "name": "CORONEL PRINGLES",
+      "abc_name": "CORONEL PRINGLES",
+      "count": 13
+    },
+    {
+      "name": "CORONEL ROSALES",
+      "abc_name": "CORONEL ROSALES",
+      "count": 5
+    },
+    {
+      "name": "CORONEL SARMIENTO",
+      "abc_name": "CORONEL SARMIENTO",
+      "count": 0
+    },
+    {
+      "name": "CORONEL SUAREZ",
+      "abc_name": "CORONEL SUAREZ",
+      "count": 13
+    },
+    {
+      "name": "DAIREAUX",
+      "abc_name": "DAIREAUX",
+      "count": 21
+    },
+    {
+      "name": "DOLORES",
+      "abc_name": "DOLORES",
+      "count": 13
+    },
+    {
+      "name": "ENSENADA",
+      "abc_name": "ENSENADA",
+      "count": 6
+    },
+    {
+      "name": "ESCOBAR",
+      "abc_name": "ESCOBAR",
+      "count": 33
+    },
+    {
+      "name": "ESTEBAN ECHEVERRIA",
+      "abc_name": "ESTEBAN ECHEVERRIA",
+      "count": 14
+    },
+    {
+      "name": "EXALTACION DE LA CRUZ",
+      "abc_name": "EXALTACION DE LA CRUZ",
+      "count": 9
+    },
+    {
+      "name": "EZEIZA",
+      "abc_name": "EZEIZA",
+      "count": 27
+    },
+    {
+      "name": "FLORENCIO VARELA",
+      "abc_name": "FLORENCIO VARELA",
+      "count": 41
+    },
+    {
+      "name": "FLORENTINO AMEGHINO",
+      "abc_name": "FLORENTINO AMEGHINO",
+      "count": 13
+    },
+    {
+      "name": "GENERAL ALVARADO",
+      "abc_name": "GENERAL ALVARADO",
+      "count": 12
+    },
+    {
+      "name": "GENERAL ALVEAR",
+      "abc_name": "GENERAL ALVEAR",
+      "count": 5
+    },
+    {
+      "name": "GENERAL ARENALES",
+      "abc_name": "GENERAL ARENALES",
+      "count": 0
+    },
+    {
+      "name": "GENERAL BELGRANO",
+      "abc_name": "GENERAL BELGRANO",
+      "count": 14
+    },
+    {
+      "name": "GENERAL GUIDO",
+      "abc_name": "GENERAL GUIDO",
+      "count": 1
+    },
+    {
+      "name": "GENERAL LAMADRID",
+      "abc_name": "GENERAL LAMADRID",
+      "count": 0
+    },
+    {
+      "name": "GENERAL LAVALLE",
+      "abc_name": "GENERAL LAVALLE",
+      "count": 4
+    },
+    {
+      "name": "GENERAL MADARIAGA",
+      "abc_name": "GENERAL MADARIAGA",
+      "count": 18
+    },
+    {
+      "name": "GENERAL PAZ",
+      "abc_name": "GENERAL PAZ",
+      "count": 18
+    },
+    {
+      "name": "GENERAL PINTO",
+      "abc_name": "GENERAL PINTO",
+      "count": 19
+    },
+    {
+      "name": "GENERAL PUEYRREDON",
+      "abc_name": "GENERAL PUEYRREDON",
+      "count": 77
+    },
+    {
+      "name": "GENERAL RODRIGUEZ",
+      "abc_name": "GENERAL RODRIGUEZ",
+      "count": 43
+    },
+    {
+      "name": "GENERAL SAN MARTIN",
+      "abc_name": "GENERAL SAN MARTIN",
+      "count": 42
+    },
+    {
+      "name": "GENERAL SARMIENTO",
+      "abc_name": "GENERAL SARMIENTO",
+      "count": 0
+    },
+    {
+      "name": "GENERAL VIAMONTE",
+      "abc_name": "GENERAL VIAMONTE",
+      "count": 4
+    },
+    {
+      "name": "GENERAL VILLEGAS",
+      "abc_name": "GENERAL VILLEGAS",
+      "count": 22
+    },
+    {
+      "name": "GONZALES CHAVES",
+      "abc_name": "GONZALES CHAVES",
+      "count": 12
+    },
+    {
+      "name": "GUAMINI",
+      "abc_name": "GUAMINI",
+      "count": 18
+    },
+    {
+      "name": "HIPOLITO YRIGOYEN",
+      "abc_name": "HIPOLITO YRIGOYEN",
+      "count": 0
+    },
+    {
+      "name": "HURLINGHAM",
+      "abc_name": "HURLINGHAM",
+      "count": 18
+    },
+    {
+      "name": "ISLAS",
+      "abc_name": "ISLAS",
+      "count": 0
+    },
+    {
+      "name": "ITUZAINGO",
+      "abc_name": "ITUZAINGO",
+      "count": 2
+    },
+    {
+      "name": "JOSE C. PAZ",
+      "abc_name": "JOSE C. PAZ",
+      "count": 18
+    },
+    {
+      "name": "JUAREZ",
+      "abc_name": "JUAREZ",
+      "count": 0
+    },
+    {
+      "name": "JUNIN",
+      "abc_name": "JUNIN",
+      "count": 19
+    },
+    {
+      "name": "LA PLATA",
+      "abc_name": "LA PLATA",
+      "count": 72
+    },
+    {
+      "name": "LANUS",
+      "abc_name": "LANUS",
+      "count": 34
+    },
+    {
+      "name": "LAPRIDA",
+      "abc_name": "LAPRIDA",
+      "count": 6
+    },
+    {
+      "name": "LAS FLORES",
+      "abc_name": "LAS FLORES",
+      "count": 28
+    },
+    {
+      "name": "LAS HERAS",
+      "abc_name": "LAS HERAS",
+      "count": 0
+    },
+    {
+      "name": "LEANDRO N. ALEM",
+      "abc_name": "LEANDRO N. ALEM",
+      "count": 0
+    },
+    {
+      "name": "LEZAMA",
+      "abc_name": "LEZAMA",
+      "count": 5
+    },
+    {
+      "name": "LINCOLN",
+      "abc_name": "LINCOLN",
+      "count": 20
+    },
+    {
+      "name": "LOBERIA",
+      "abc_name": "LOBERIA",
+      "count": 9
+    },
+    {
+      "name": "LOBOS",
+      "abc_name": "LOBOS",
+      "count": 13
+    },
+    {
+      "name": "LOMAS DE ZAMORA",
+      "abc_name": "LOMAS DE ZAMORA",
+      "count": 45
+    },
+    {
+      "name": "LUJAN",
+      "abc_name": "LUJAN",
+      "count": 35
+    },
+    {
+      "name": "MAGDALENA",
+      "abc_name": "MAGDALENA",
+      "count": 15
+    },
+    {
+      "name": "MAIPU",
+      "abc_name": "MAIPU",
+      "count": 1
+    },
+    {
+      "name": "MALVINAS ARGENTINAS",
+      "abc_name": "MALVINAS ARGENTINAS",
+      "count": 12
+    },
+    {
+      "name": "MAR CHIQUITA",
+      "abc_name": "MAR CHIQUITA",
+      "count": 24
+    },
+    {
+      "name": "MARCOS PAZ",
+      "abc_name": "MARCOS PAZ",
+      "count": 21
+    },
+    {
+      "name": "MATANZA",
+      "abc_name": "MATANZA",
+      "count": 0
+    },
+    {
+      "name": "MERCEDES",
+      "abc_name": "MERCEDES",
+      "count": 55
+    },
+    {
+      "name": "MERLO",
+      "abc_name": "MERLO",
+      "count": 61
+    },
+    {
+      "name": "MONTE",
+      "abc_name": "MONTE",
+      "count": 8
+    },
+    {
+      "name": "MONTE HERMOSO",
+      "abc_name": "MONTE HERMOSO",
+      "count": 10
+    },
+    {
+      "name": "MORENO",
+      "abc_name": "MORENO",
+      "count": 76
+    },
+    {
+      "name": "MORON",
+      "abc_name": "MORON",
+      "count": 19
+    },
+    {
+      "name": "NAVARRO",
+      "abc_name": "NAVARRO",
+      "count": 16
+    },
+    {
+      "name": "NECOCHEA",
+      "abc_name": "NECOCHEA",
+      "count": 39
+    },
+    {
+      "name": "NUEVE DE JULIO",
+      "abc_name": "NUEVE DE JULIO",
+      "count": 0
+    },
+    {
+      "name": "OLAVARRIA",
+      "abc_name": "OLAVARRIA",
+      "count": 26
+    },
+    {
+      "name": "PARTIDO DE LA COSTA",
+      "abc_name": "PARTIDO DE LA COSTA",
+      "count": 21
+    },
+    {
+      "name": "PATAGONES",
+      "abc_name": "PATAGONES",
+      "count": 6
+    },
+    {
+      "name": "PEHUAJO",
+      "abc_name": "PEHUAJO",
+      "count": 14
+    },
+    {
+      "name": "PELLEGRINI",
+      "abc_name": "PELLEGRINI",
+      "count": 7
+    },
+    {
+      "name": "PERGAMINO",
+      "abc_name": "PERGAMINO",
+      "count": 21
+    },
+    {
+      "name": "PILA",
+      "abc_name": "PILA",
+      "count": 13
+    },
+    {
+      "name": "PILAR",
+      "abc_name": "PILAR",
+      "count": 46
+    },
+    {
+      "name": "PINAMAR",
+      "abc_name": "PINAMAR",
+      "count": 14
+    },
+    {
+      "name": "PRESIDENTE PERON",
+      "abc_name": "PRESIDENTE PERON",
+      "count": 7
+    },
+    {
+      "name": "PUAN",
+      "abc_name": "PUAN",
+      "count": 16
+    },
+    {
+      "name": "PUNTA INDIO",
+      "abc_name": "PUNTA INDIO",
+      "count": 13
+    },
+    {
+      "name": "QUILMES",
+      "abc_name": "QUILMES",
+      "count": 65
+    },
+    {
+      "name": "RAMALLO",
+      "abc_name": "RAMALLO",
+      "count": 21
+    },
+    {
+      "name": "RAUCH",
+      "abc_name": "RAUCH",
+      "count": 6
+    },
+    {
+      "name": "RIVADAVIA",
+      "abc_name": "RIVADAVIA",
+      "count": 3
+    },
+    {
+      "name": "ROJAS",
+      "abc_name": "ROJAS",
+      "count": 17
+    },
+    {
+      "name": "ROQUE PEREZ",
+      "abc_name": "ROQUE PEREZ",
+      "count": 11
+    },
+    {
+      "name": "SAAVEDRA",
+      "abc_name": "SAAVEDRA",
+      "count": 23
+    },
+    {
+      "name": "SALADILLO",
+      "abc_name": "SALADILLO",
+      "count": 13
+    },
+    {
+      "name": "SALLIQUELO",
+      "abc_name": "SALLIQUELO",
+      "count": 14
+    },
+    {
+      "name": "SALTO",
+      "abc_name": "SALTO",
+      "count": 30
+    },
+    {
+      "name": "SAN ANDRES DE GILES",
+      "abc_name": "SAN ANDRES DE GILES",
+      "count": 0
+    },
+    {
+      "name": "SAN ANTONIO DE ARECO",
+      "abc_name": "SAN ANTONIO DE ARECO",
+      "count": 0
+    },
+    {
+      "name": "SAN CAYETANO",
+      "abc_name": "SAN CAYETANO",
+      "count": 9
+    },
+    {
+      "name": "SAN FERNANDO",
+      "abc_name": "SAN FERNANDO",
+      "count": 34
+    },
+    {
+      "name": "SAN ISIDRO",
+      "abc_name": "SAN ISIDRO",
+      "count": 39
+    },
+    {
+      "name": "SAN MIGUEL",
+      "abc_name": "SAN MIGUEL",
+      "count": 5
+    },
+    {
+      "name": "SAN NICOLAS",
+      "abc_name": "SAN NICOLAS",
+      "count": 16
+    },
+    {
+      "name": "SAN PEDRO",
+      "abc_name": "SAN PEDRO",
+      "count": 29
+    },
+    {
+      "name": "SAN VICENTE",
+      "abc_name": "SAN VICENTE",
+      "count": 13
+    },
+    {
+      "name": "SUIPACHA",
+      "abc_name": "SUIPACHA",
+      "count": 1
+    },
+    {
+      "name": "TANDIL",
+      "abc_name": "TANDIL",
+      "count": 31
+    },
+    {
+      "name": "TAPALQUE",
+      "abc_name": "TAPALQUE",
+      "count": 12
+    },
+    {
+      "name": "TIGRE",
+      "abc_name": "TIGRE",
+      "count": 88
+    },
+    {
+      "name": "TORDILLO",
+      "abc_name": "TORDILLO",
+      "count": 2
+    },
+    {
+      "name": "TORNQUIST",
+      "abc_name": "TORNQUIST",
+      "count": 22
+    },
+    {
+      "name": "TRENQUE LAUQUEN",
+      "abc_name": "TRENQUE LAUQUEN",
+      "count": 44
+    },
+    {
+      "name": "TRES ARROYOS",
+      "abc_name": "TRES ARROYOS",
+      "count": 36
+    },
+    {
+      "name": "TRES DE FEBRERO",
+      "abc_name": "TRES DE FEBRERO",
+      "count": 41
+    },
+    {
+      "name": "TRES LOMAS",
+      "abc_name": "TRES LOMAS",
+      "count": 4
+    },
+    {
+      "name": "VICENTE LOPEZ",
+      "abc_name": "VICENTE LOPEZ",
+      "count": 25
+    },
+    {
+      "name": "VILLA GESELL",
+      "abc_name": "VILLA GESELL",
+      "count": 14
+    },
+    {
+      "name": "VILLARINO",
+      "abc_name": "VILLARINO",
+      "count": 48
+    },
+    {
+      "name": "ZARATE",
+      "abc_name": "ZARATE",
+      "count": 0
+    }
+  ]
+}
