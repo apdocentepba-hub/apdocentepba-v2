@@ -15,11 +15,16 @@ permissions:
   contents: read
 jobs:
   sql-acceptance:
+    name: PostgreSQL ${{ matrix.postgres }} — schema and role acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: [16, 17]
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: tests_only
           POSTGRES_USER: postgres
