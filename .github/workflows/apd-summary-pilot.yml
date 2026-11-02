@@ -1,0 +1,27 @@
+name: APD daily history — compiled Worker pilot (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-apd-daily-history-pilot.mjs'
+      - 'scripts/test-apd-summary-pilot.mjs'
+      - 'worker-live/apd_daily_summary_hook.mjs'
+      - 'worker-live/worker_hotfix.js'
+      - '.github/workflows/apd-summary-pilot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate builder and generated Worker syntax
+        run: |
+          node --test scripts/test-apd-summary-pilot.mjs scripts/test-apd-daily-worker-gate.mjs
+          node scripts/build-apd-daily-history-pilot.mjs
+          node --input-type=module --check < tmp/apd-summary-pilot/worker_preview.mjs
+      - name: Verify production Worker is unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js
