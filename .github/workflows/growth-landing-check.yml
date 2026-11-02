@@ -17,6 +17,15 @@ on:
       - 'scripts/previews/insigne-laboratorio.html'
       - 'scripts/test-insigne-rules-lab.mjs'
       - 'scripts/test-platform-refresh.mjs'
+      - 'scripts/test-platform-tools.mjs'
+      - 'tools_refresh_v1.css'
+      - 'herramientas.html'
+      - 'buscar-herramientas.html'
+      - 'proximamente.html'
+      - 'herramientas-docentes.html'
+      - 'pid.html'
+      - 'safe_dashboard_ui_patch.js'
+      - 'scripts/previews/platform-visual.html'
       - 'platform_refresh_v1.css'
       - 'panel_tabs_patch.js'
       - 'scripts/test-growth-browser.mjs'
@@ -43,7 +52,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate landing and campaign entry routing
-        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs scripts/test-growth-plan-parity.mjs scripts/test-growth-plan-fallback.mjs scripts/test-insigne-rules-lab.mjs scripts/test-platform-refresh.mjs
+        run: node --test scripts/test-growth-landing.mjs scripts/test-growth-activation.mjs scripts/test-growth-registration.mjs scripts/test-growth-preferences-roundtrip.mjs scripts/test-growth-worker-preferences.mjs scripts/test-growth-plan-parity.mjs scripts/test-growth-plan-fallback.mjs scripts/test-insigne-rules-lab.mjs scripts/test-platform-refresh.mjs scripts/test-platform-tools.mjs
       - name: Verificar construcción aislada sin backend ni contraseñas
         run: node --test scripts/test-growth-preview.mjs
       - name: Smoke en navegador Chrome real (sin backend)
@@ -54,6 +63,14 @@ jobs:
         with:
           name: apd-growth-plan-parity
           path: tmp/growth-audit/plan-parity.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Adjuntar auditoría de rutas de herramientas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-platform-tools-audit
+          path: tmp/growth-audit/tools-routes.json
           if-no-files-found: ignore
           retention-days: 14
       - name: Adjuntar capturas de revisión visual
