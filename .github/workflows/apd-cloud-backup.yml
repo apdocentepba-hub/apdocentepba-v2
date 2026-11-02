@@ -12,6 +12,7 @@ on:
       - 'scripts/apd_gha_backup_crypto.sh'
       - 'scripts/apd_gha_production_backup.sh'
       - 'scripts/test-apd-gha-backup-offline.sh'
+      - 'scripts/test-apd-gha-backup-restore-sql.sh'
 
 permissions:
   contents: read
@@ -23,7 +24,21 @@ jobs:
   offline-tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: apd_mock_test_only
+          POSTGRES_DB: apd_backup_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d apd_backup_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Verify production scripts parse (no database access)
@@ -32,6 +47,8 @@ jobs:
           bash -n scripts/apd_gha_production_backup.sh
       - name: Validate encryption, decryption, SHA-256 and tamper resistance offline
         run: bash scripts/test-apd-gha-backup-offline.sh
+      - name: Verify real PostgreSQL17 restoration with mock encrypted SQL
+        run: bash scripts/test-apd-gha-backup-restore-sql.sh
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
