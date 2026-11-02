@@ -1,0 +1,29 @@
+name: APD scanner district aliases - OFF by default preview
+on:
+  pull_request:
+    paths:
+      - 'worker-live/apd_scanner_source_district_alias_candidate.mjs'
+      - 'scripts/build-apd-scanner-source-alias-preview.mjs'
+      - 'scripts/test-apd-scanner-source-alias-preview.mjs'
+      - '.github/workflows/apd-scanner-district-alias-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-production-writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate aliases and compile a temporary Worker
+        run: |
+          node --check worker-live/apd_scanner_source_district_alias_candidate.mjs
+          node --check scripts/build-apd-scanner-source-alias-preview.mjs
+          node --test scripts/test-apd-scanner-source-alias-preview.mjs
+          node scripts/build-apd-scanner-source-alias-preview.mjs
+          node --check tmp/apd-scanner-alias-preview/worker-preview.mjs
+      - name: Enforce production source, users and frontend unchanged
+        run: |
+          git diff --exit-code origin/main -- index.html app_v2.js worker-live/worker_hotfix.js worker.js
