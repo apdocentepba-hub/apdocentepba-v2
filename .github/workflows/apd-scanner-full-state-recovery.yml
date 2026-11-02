@@ -1,0 +1,23 @@
+name: APD scanner full-state rehearsal and in-memory rollback (OFFLINE)
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-apd-scanner-alias-state-recovery.mjs'
+      - '.github/workflows/apd-scanner-full-state-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scanner-simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Parse real scanner state-machine rehearsal
+        run: node --check scripts/test-apd-scanner-alias-state-recovery.mjs
+      - name: Run stateful fake Supabase and ABC failure-injection scenarios
+        run: node --test scripts/test-apd-scanner-alias-state-recovery.mjs
+      - name: Enforce published Worker, frontend and Supabase integration unchanged
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js
