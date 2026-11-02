@@ -192,6 +192,40 @@ async function insigneLabFlow() {
   console.log('PASÓ Insigne LAB: coincidencias específicas, emergencia y restablecer sin conexión');
 }
 
+
+async function platformVisualFlow() {
+  await cdp('Emulation.setDeviceMetricsOverride',{
+    width:390,height:844,deviceScaleFactor:1,mobile:true
+  });
+  const url=pathToFileURL(path.join(ROOT,'dist-growth-preview','platform-visual.html')).href;
+  await cdp('Page.navigate',{url});
+  await loaded();
+  await sleep(190);
+  const initial=await js("({tabs:document.querySelectorAll('#mock-tabs [data-tab]').length,active:document.querySelector('.section.active')?.id,scroll:document.documentElement.scrollWidth,view:innerWidth})");
+  assert.equal(initial.tabs,7);
+  assert.equal(initial.active,'section-resumen');
+  assert.ok(initial.scroll<=initial.view+1,'La demo no debe tener overflow horizontal móvil');
+  await js("document.querySelector('[data-tab=\"estadisticas\"]').click();true");
+  assert.equal(await js("document.querySelector('.section.active')?.id"),'section-estadisticas');
+  const labels=await js("document.querySelector('#section-estadisticas').textContent");
+  assert.match(labels,/Sin indicadores inventados/);
+  await js("document.querySelector('[data-tab=\"alertas\"]').click();true");
+  assert.equal(await js("document.querySelector('.section.active')?.id"),'section-alertas');
+  assert.match(await js("document.querySelector('#section-alertas').textContent"),/carrusel actual queda intacto/i);
+  await js("document.querySelector('[data-tab=\"resumen\"]').click();true");
+  const screenshot=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
+  writeFileSync(path.join(OUTPUT,'apd-platform-redesign-mobile.png'),Buffer.from(screenshot.data,'base64'));
+  await cdp('Emulation.setDeviceMetricsOverride',{
+    width:1280,height:900,deviceScaleFactor:1,mobile:false
+  });
+  await sleep(90);
+  const desktop=await js("({width:document.documentElement.scrollWidth,view:innerWidth})");
+  assert.ok(desktop.width<=desktop.view+1,'Sin overflow horizontal escritorio');
+  const shot2=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
+  writeFileSync(path.join(OUTPUT,'apd-platform-redesign-desktop.png'),Buffer.from(shot2.data,'base64'));
+  console.log('PASÓ plataforma visual: pestañas, estadísticas honestas, carrusel intacto y responsive');
+}
+
 try {
   const port = await awaitPort();
   const targets = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
@@ -219,6 +253,7 @@ try {
   await guide();
   await demoFlow();
   await insigneLabFlow();
+  await platformVisualFlow();
   console.log('BROWSER_SMOKE_OK');
 } finally {
   if (socket) socket.close();
