@@ -158,35 +158,24 @@ const catalogoAutocomplete = {
 };
 
 function buildPlanFallback() {
+  // Error o demora al verificar la suscripción. NO constituye un plan
+  // gratuito ni confirma cuotas, vigencia o acceso a notificaciones.
+  // Se muestran todos los campos guardados, pero se impide guardar
+  // hasta que el Worker confirme el plan real.
   return {
-    ok: true,
-    subscription: {
-      id: null,
-      user_id: null,
-      plan_code: "PLUS",
-      status: "available",
-      source: "fallback_frontend",
-      started_at: new Date().toISOString(),
-      trial_ends_at: null,
-      current_period_ends_at: null,
-      mercadopago_preapproval_id: null
-    },
+    ok: false,
+    access_active: null,
+    subscription: { status: "unverified", source: "fallback_frontend" },
     plan: {
-      code: "PLUS",
-      nombre: "Plan Plus",
-      descripcion: "Más alcance para combinar distritos y materias sin perder oportunidades. Alertas por email y Telegram próximamente.",
-      price_ars: 0,
-      trial_days: 0,
-      max_distritos: 2,
-      max_distritos_normales: 2,
+      code: "UNVERIFIED",
+      nombre: "Plan sin verificar",
+      descripcion: "No pudimos consultar tu suscripción. Reintentá desde el panel.",
+      price_ars: null,
+      max_distritos: 5,
+      max_distritos_normales: 5,
       max_distritos_emergencia: 0,
-      max_cargos: 4,
-      feature_flags: {
-        email: true,
-        telegram_coming_soon: true,
-        whatsapp_coming_soon: false
-      },
-      public_visible: true
+      max_cargos: 10,
+      feature_flags: {}
     }
   };
 }
@@ -1956,6 +1945,21 @@ function renderDashboard(data) {
 
 function renderPlanUI(planInfo) {
   const info = planInfo || buildPlanFallback();
+  if (info.subscription?.source === "fallback_frontend") {
+    setHTML("panel-plan", `
+      <div class="empty-state" role="status">
+        <h3>No pudimos verificar tu plan</h3>
+        <p>La conexión con el servidor falló. No significa que tu plan haya vencido
+        ni que sea gratuito. Tus preferencias se conservan.</p>
+        <button type="button" class="btn btn-primary" id="apd-retry-plan">Reintentar consulta</button>
+      </div>
+    `);
+    document.getElementById("apd-retry-plan")?.addEventListener("click", () => { void cargarDashboard(); });
+    setText("prefs-plan-hint", "Plan sin verificar. Guardar preferencias está pausado hasta confirmar tus límites.");
+    setText("panel-canales", "No pudimos verificar los canales habilitados para tu suscripción.");
+    applyPlanFieldVisibility(info);
+    return;
+  }
   const plan = info.plan || {};
   const subscription = info.subscription || {};
   const nombre = planNombreHumano(plan, subscription);
@@ -1995,6 +1999,7 @@ function renderPlanUI(planInfo) {
   applyPlanFieldVisibility(info);
 }
 function planNombreHumano(plan, subscription) {
+  if (subscription?.source === "fallback_frontend") return "Plan sin verificar";
   if (plan?.display_name) {
     return String(plan.display_name).trim();
   }
@@ -2013,6 +2018,7 @@ function planNombreHumano(plan, subscription) {
 
 
 function planEstadoHumano(subscription, accessActive) {
+  if (subscription?.source === "fallback_frontend") return "Sin verificar";
   const status = String(subscription?.status || "").trim().toLowerCase();
   // Only the session-authenticated Worker can confirm expiry. Unknown is not expired.
   if (accessActive === false) return status === "available" ? "Sin plan vigente" : "Vencido";
@@ -2027,6 +2033,7 @@ function planEstadoHumano(subscription, accessActive) {
 }
 
 function planPrecioHumano(plan, subscription) {
+  if (subscription?.source === "fallback_frontend") return "Sin verificar";
   if (subscription?.status === "beta" || plan?.beta) return "Gratis por ahora";
   if (String(plan?.code || "").toUpperCase() === "TRIAL_7D") return "Gratis";
   const n = Number(plan?.price_ars);
@@ -2082,6 +2089,12 @@ async function guardarPreferencias(e) {
   const token = obtenerToken();
   if (!token) {
     showMsg("preferencias-msg", "Sesión no válida", "error");
+    return;
+  }
+  // Un plan no confirmado no puede determinar qué campos se pueden guardar.
+  // Evita truncar preferencias existentes o presumir cuotas de pago.
+  if (planActual?.subscription?.source === "fallback_frontend") {
+    showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
     return;
   }
 

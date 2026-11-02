@@ -1,0 +1,28 @@
+name: APD plan unknown-state regression
+on:
+  push:
+    branches:
+      - 'fix/plan-unverified-fallback-20261102'
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-unverified-plan-fallback.mjs'
+      - '.github/workflows/unverified-plan-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxis
+        run: |
+          node --check app_v2.js
+          node --check scripts/test-unverified-plan-fallback.mjs
+      - name: Pruebas de fallo controlado
+        run: node --test scripts/test-unverified-plan-fallback.mjs
