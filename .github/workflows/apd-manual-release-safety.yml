@@ -1,0 +1,30 @@
+name: APD manual-release safety gate (offline only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release-live-messaging-auth.yml'
+      - '.github/workflows/deploy-apd-email-fix-681.yml'
+      - '.github/workflows/release-expiry-worker.yml'
+      - '.github/workflows/deploy-email-format-candidate.yml'
+      - '.github/workflows/importar-escuelas-pba.yml'
+      - '.github/workflows/auto-apply-worker-export-default-replacement.yml'
+      - '.github/workflows/apd-manual-release-safety.yml'
+      - 'scripts/test-apd-manual-release-guards.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-no-automatic-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check and negative-control tests (never deploy)
+        run: |
+          node --check scripts/test-apd-manual-release-guards.mjs
+          node --test scripts/test-apd-manual-release-guards.mjs
