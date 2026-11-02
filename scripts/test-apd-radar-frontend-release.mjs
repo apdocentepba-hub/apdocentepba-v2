@@ -48,7 +48,7 @@ test("CLI emits only untracked preview/rollback files, canonical site untouched"
    assert.equal(checksum(readFileSync("index.html")),before);
    assert.equal(manifest.candidate_html_sha256,checksum(preview));
    assert.equal(manifest.rollback_html_sha256,checksum(rollback));
-   assert.ok(statSync(join(tmp,"index-preview.html")).size>50000);
+   assert.equal(statSync(join(tmp,"index-preview.html")).size,Buffer.byteLength(preview));
  } finally{
    rmSync(tmp,{force:true,recursive:true});
  }
