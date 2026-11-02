@@ -8,6 +8,7 @@ on:
       - 'sql/apd_daily_province_summary_20261102.sql'
       - 'scripts/test-apd-daily-summary.sql'
       - 'scripts/apd-daily-history-preflight.sql'
+      - 'scripts/test-apd-history-ddl-recovery.sql'
       - 'scripts/test-apd-daily-worker-gate.mjs'
       - 'worker-live/apd_daily_summary_hook.mjs'
       - '.github/workflows/apd-daily-summary.yml'
@@ -59,6 +60,11 @@ jobs:
             echo "Preflight isolated expected ready_to_review_migration=true, got: $readiness" >&2
             exit 1
           fi
+      - name: Ensayar reversión transaccional solo en DB temporal
+        env:
+          PGPASSWORD: tests_only
+        run: |
+          psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=apd_history_test --no-psqlrc --set=ON_ERROR_STOP=1 --file=scripts/test-apd-history-ddl-recovery.sql
       - name: Validar adaptador opt-in en aislamiento
         run: |
           node --check worker-live/apd_daily_summary_hook.mjs
