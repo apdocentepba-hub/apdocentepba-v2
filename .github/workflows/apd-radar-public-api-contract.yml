@@ -1,0 +1,19 @@
+name: APD public radar API contract (read only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit-apd-radar-public-api.mjs'
+      - '.github/workflows/apd-radar-public-api-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check read-only public API script syntax
+        run: node --check scripts/audit-apd-radar-public-api.mjs
+      - name: Inspect live public scan and summary counts without secrets
+        run: node scripts/audit-apd-radar-public-api.mjs
