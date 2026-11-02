@@ -14,7 +14,7 @@ class FakeNode {
   appendChild(node) { this.children.push(node); }
   replaceChildren(...children) { this.children = children; }
 }
-function setup(fetcher, withApi=true) {
+function setup(fetcher, withApi=true, existingRadar=false) {
   const nodes = new Map();
   function node(id) {
     if (!nodes.has(id)) nodes.set(id, new FakeNode(id));
@@ -24,6 +24,13 @@ function setup(fetcher, withApi=true) {
   root.insertAdjacentHTML = (_position, html) => {
     for (const found of html.matchAll(/id="([^"]+)"/g)) node(found[1]);
   };
+  if (existingRadar) {
+    const nativeRadar = node("panel-radar-provincia");
+    node("btn-refresh-provincia");
+    nativeRadar.insertAdjacentHTML = (_position, html) => {
+      for (const found of html.matchAll(/id="([^"]+)"/g)) node(found[1]);
+    };
+  }
   const document = {
     readyState:"complete",
     head: {appendChild() {}},
@@ -128,4 +135,27 @@ test("refresh button genuinely fetches again without duplicate handlers",async()
  await ui.node("btn-refresh-radar-combinado").listeners.click();
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(requests,3);
+});
+
+test("existing public radar card is reused; does not create a duplicate card",async()=>{
+ let calls=0;
+ const ui=setup(async()=>{calls++;return ok(payload());},true,true);
+ await ui.window.cargarExtrasProvincia();
+ assert.equal(calls,1);
+ assert.equal(ui.nodes.has("panel-radar-combinado-card"),false);
+ assert.equal(ui.node("btn-refresh-provincia").textContent,"Consultar ahora");
+ assert.ok(stats(ui).includes("Ofertas detectadas: 2.609"));
+ assert.equal(typeof ui.node("btn-refresh-provincia").listeners.click,"function");
+ ui.node("btn-refresh-provincia").listeners.click();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,2);
+ await ui.window.cargarExtrasProvincia();
+ assert.equal(calls,3);
+ assert.equal(ui.nodes.has("panel-radar-combinado-card"),false);
+});
+test("existing index exposes just one primary radar card",()=>{
+ const html=readFileSync("index.html","utf8");
+ assert.equal((html.match(/id="panel-radar-provincia"/g)||[]).length,1);
+ assert.equal((html.match(/id="btn-refresh-provincia"/g)||[]).length,1);
+ assert.ok(html.includes('radar_provincia_patch_semaforo.js?v=2'));
 });
