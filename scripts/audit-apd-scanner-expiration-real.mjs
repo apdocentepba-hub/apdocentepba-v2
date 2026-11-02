@@ -50,7 +50,7 @@ for(const catalogName of names){
   assert.equal(normal(doc.estado),"PUBLICADA","Wrong ABC state");
   const rawDate=doc.finoferta||doc.fecha_cierre||"";
   if(!rawDate)missingDate++;
-  else if(ctx.parseFechaFlexible2(rawDate)===null)nonparsedDate++;
+  else {const parsed=ctx.parseFechaFlexible2(rawDate);if(!parsed || !Number.isFinite(parsed.getTime()))nonparsedDate++;}
   if(ctx.ofertaVigente(doc))candidate++;else rejected++;
  }
  results.push({district:catalogName,source_name:officialName,
