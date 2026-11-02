@@ -37,10 +37,15 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/release-live-messaging-auth.mjs
-      - run: node --test scripts/test-release-live-messaging-auth.mjs
+      # The old patch-builder test expects two *vulnerable* handlers; the
+      # canonical Worker already has the fix. Test the actual source instead.
+      - run: node --test scripts/test-live-messaging-status-auth-current.mjs
   production:
     needs: release-tests
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE' && inputs.real_session_qa == 'VERIFIED'
+    # Permanently fail closed: legacy release script still requires a push event
+    # and is obsolete on already-hardened canonical source.
+    # A future release must use a new reviewed workflow, not this job.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE' && inputs.real_session_qa == 'VERIFIED' && false
     runs-on: ubuntu-latest
     environment: production
     steps:
