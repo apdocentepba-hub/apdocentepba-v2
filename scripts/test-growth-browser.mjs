@@ -208,7 +208,11 @@ async function platformVisualFlow() {
   await js("document.querySelector('[data-tab=\"estadisticas\"]').click();true");
   assert.equal(await js("document.querySelector('.section.active')?.id"),'section-estadisticas');
   const labels=await js("document.querySelector('#section-estadisticas').textContent");
-  assert.match(labels,/Sin indicadores inventados/);
+  assert.match(labels,/Estadísticas con fuente y fecha/);
+  assert.match(labels,/2\.617/);
+  assert.match(labels,/137 \/ 137/);
+  assert.match(labels,/18 sep 2026/);
+  assert.match(labels,/no consulta Supabase/i);
   await js("document.querySelector('[data-tab=\"alertas\"]').click();true");
   assert.equal(await js("document.querySelector('.section.active')?.id"),'section-alertas');
   assert.match(await js("document.querySelector('#section-alertas').textContent"),/carrusel actual queda intacto/i);
