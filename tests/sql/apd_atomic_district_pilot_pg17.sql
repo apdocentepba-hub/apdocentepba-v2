@@ -96,8 +96,12 @@ BEGIN
   DO UPDATE SET
     estado = EXCLUDED.estado,
     last_seen_at = EXCLUDED.last_seen_at,
-    times_seen = dst.times_seen + 1;
+    times_seen = dst.times_seen + 1
+  WHERE dst.distrito = EXCLUDED.distrito;
   GET DIAGNOSTICS v_upserted = ROW_COUNT;
+  IF v_upserted <> v_count THEN
+    RAISE EXCEPTION 'Concurrent cross-district source key collision';
+  END IF;
 
   -- Test-only forced error proves upserts are rolled back atomically.
   IF p_inject_error_for_test THEN
