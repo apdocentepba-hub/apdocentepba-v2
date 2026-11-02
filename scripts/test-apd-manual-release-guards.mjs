@@ -77,4 +77,19 @@ test('missing production confirmation is rejected (negative control)', () => {
   assert.throws(() => validateManualOnly(unsafe, item), /Missing job release gate/);
 });
 
+
+test('Pull-request checks cannot cancel a different workflow or main deployment', () => {
+  for (const name of [
+    '.github/workflows/release-live-messaging-auth.yml',
+    '.github/workflows/capture-verified-live-worker.yml',
+    '.github/workflows/reconcile-mp-secret-baseline.yml'
+  ]) {
+    const wf = readFileSync(name, 'utf8');
+    const expected = "group: ${{ github.event_name == 'pull_request' && format('apd-pr-{0}-{1}', github.workflow, github.event.pull_request.number) || 'apd-canonical-worker-baseline' }}";
+    assert.ok(wf.includes(expected), 'PR concurrency needs distinct workflow + PR number: '+name);
+    assert.match(wf,/cancel-in-progress: false/, 'Do not cancel in-progress jobs');
+    assert.doesNotMatch(wf,/^  group: apd-canonical-worker-baseline$/m, 'Unscoped group stalls or cancels other PR runs');
+  }
+});
+
 console.log('APD_MANUAL_RELEASE_GUARD: no production deployment performed');
