@@ -1692,9 +1692,11 @@ async function cargarHistoricoPanel(userId, days = HISTORICO_DAYS_DEFAULT) {
 
   try {
     const data = await obtenerHistoricoResumen(userId, days);
+    if (obtenerToken() !== userId) return null;
     renderHistoricoAPD(data);
     return data;
   } catch (err) {
+    if (obtenerToken() !== userId) return null;
     console.error("ERROR HISTORICO APD:", err);
 
     if (box) {
@@ -1836,6 +1838,11 @@ async function cargarDashboard() {
     // ni mostrar una falla de API como si hubiera cero coincidencias.
     void alertasPromise.then(result => {
       if (!current()) return;
+      if (planActual?.access_active === false) {
+        renderAlertasAPD([]);
+        renderEstadisticasPanel(null, ultimoAcceso);
+        return;
+      }
       if (!result.ok) {
         console.error("ERROR ALERTAS:", result.error);
         alertasState.items = [];
