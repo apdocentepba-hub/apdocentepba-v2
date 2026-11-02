@@ -15,10 +15,16 @@ Una sola petición a la API pública del índice ABC, con `q=estado:"Publicada"`
 
 Prueba real del 02/11/2026 ~14:21 ART: **2.827 ofertas con estado Publicada en 130 distritos del índice; suma de categorías 2.827; cero documentos descargados**. Esta es una observación puntual, no una consulta en tiempo real permanente. La forma de agrupar fue comprobada contra la respuesta, pero cada ejecución puede producir números distintos.
 
+La respuesta requiere **decodificación ISO-8859-1 (Latin-1)**, igual que el Worker existente; si se lee como UTF-8, «cañuelas» aparece corrupto y genera una falsa falta de correspondencia.
+
+El primer cruce mostró ocho denominaciones de ABC no conciliadas. Se añadieron seis equivalencias documentadas y explícitas: «la matanza» → MATANZA, «general las heras» → LAS HERAS, «9 de julio» → NUEVE DE JULIO, «general la madrid» → GENERAL LAMADRID, «hipolito irigoyen» → HIPOLITO YRIGOYEN y «benito juarez» → JUAREZ. «cañuelas» concilia normalmente al usar Latin-1. **«capitan sarmiento» continúa sin asignar al catálogo «CORONEL SARMIENTO»**: el nombre oficial es Capitán Sarmiento, y «Coronel Sarmiento» no debe tratarse como equivalente automático. Esta discrepancia del catálogo requiere corrección controlada aparte.
+
 Solr soporta facetas de términos, aunque el índice concreto puede cambiar su respuesta. El código valida que los pares `[distrito, conteo]` sean íntegros y que sumen exactamente el `numFound` informado por ABC; si no, **falla con error, no inventa ceros**. No emite peticiones por distrito, evitando 137 solicitudes y sobrecarga.
 
 ## Comparación que nunca atribuye ofertas perdidas
 `scripts/apd-abc-district-assessment.mjs` normaliza estrictamente mayúsculas, acentos y espacios, sin inventar equivalencias de nombres diferentes. Rechaza duplicados; si aparecen etiquetas de ABC sin correspondencia explícita con `apd_nombre`, las separa como `NOMBRES_ABC_NO_CONCILIADOS`, sin distribuirlas arbitrariamente.
+
+El informe indica qué equivalencias de nombres fueron utilizadas y conserva las etiquetas aún no conciliadas (sin inferir a qué distrito pertenecen). 
 
 El informe incluye por distrito **conteo ABC observado**, **conteo APD capturado en la referencia**, **diferencia meramente informativa**, fechas y la clasificación:
 - `CAPTURA_APD_ANTERIOR` (referencia con más de 15 minutos);
