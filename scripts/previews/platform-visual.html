@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive"><title>Propuesta visual · APDocentePBA</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#14394b;background:#f0f7f8}
+a{color:inherit}.notice{background:#fff0bf;color:#4d3600;padding:11px 18px;text-align:center;font-weight:700;font-size:12px}
+.header{position:sticky;top:0;z-index:10;background:#082f44;color:#fff}.header-inner{max-width:1260px;margin:auto;display:flex;align-items:center;gap:18px;justify-content:space-between;padding:15px 20px}
+.brand{display:flex;align-items:center;gap:10px}.brand-icon{font-size:28px}.brand-title{font-size:18px;margin:0}.brand-sub{font-size:11px;margin:0;color:#cee4ea}
+.top-nav{display:flex;align-items:center;gap:8px;min-width:0;flex:1;justify-content:flex-end}.apd-top-tabs{display:flex;align-items:center;gap:5px}
+.apd-top-tab{font:750 13px system-ui;cursor:pointer;border:0;background:transparent;color:#e8f3f6;padding:12px 14px;white-space:nowrap}
+.apd-top-tab.is-active{background:#cefae8;color:#0a3746}.apd-top-tab:focus-visible{outline:3px solid orange}
+.ghost{color:#fff;text-decoration:none;border:1px solid #75a5b8;border-radius:10px;padding:9px 13px;font-size:13px;white-space:nowrap}
+.shell{max-width:1200px;margin:25px auto;padding:0 20px 35px}
+.title{font-size:clamp(25px,4.2vw,42px);line-height:1.12;margin:0}.subtitle{color:#4e6e7f;margin:7px 0 18px}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.span3{grid-column:span 3}.span4{grid-column:span 4}.span6{grid-column:span 6}.span8{grid-column:span 8}.span12{grid-column:span 12}
+.card{background:#fff;border:1px solid #cee1e7;border-radius:16px;padding:20px;box-shadow:0 10px 25px rgba(3,42,62,.045)}
+.card h3{font-size:16px;margin:0 0 9px}.card p{margin:7px 0;color:#4e6775}
+.kpi{font-size:29px;font-weight:850;color:#087989}.small{font-size:12px;color:#5f7782}.tiny{font-size:11px;color:#667d86}
+.pill{font-size:11px;font-weight:800;display:inline-flex;background:#eaf5f4;color:#0c6f7c;padding:5px 9px;border-radius:8px}
+.btn{display:inline-flex;text-decoration:none;padding:10px 13px;border-radius:10px;background:#0b7786;color:#fff;border:1px solid #0b7786;font-weight:750;font-size:13px}
+.btn.secondary{background:white;color:#0b6573;border-color:#add3d9}.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.section{display:none}.section.active{display:block}
+.placeholder{border:1px dashed #a1c1c9;background:#f5fafa;padding:18px;border-radius:12px;color:#4e6c7b}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.field{margin:10px 0}.field label{display:block;margin:0 0 5px;font-weight:750;font-size:13px}
+.field input,.field select{padding:10px 12px;border:1px solid #abc8d3;border-radius:9px;width:100%;font:inherit;background:#fff}
+.bar{height:10px;background:#e7f1f4;border-radius:99px;overflow:hidden}.bar>span{display:block;background:#0b7b88;height:100%}
+.foot{background:#0b3147;color:#c9e1e9;text-align:center;padding:22px}
+@media(max-width:1050px){.header-inner{flex-wrap:wrap}.top-nav{flex-basis:100%;justify-content:flex-start}.apd-top-tabs{max-width:100%;overflow:auto}}
+@media(max-width:720px){.span3,.span4,.span6,.span8{grid-column:span 12}.shell{padding:0 14px}.header-inner{padding:10px 13px}.ghost{display:none}.card{padding:16px}}
+</style><link rel="stylesheet" href="./platform_refresh_v1.css"></head>
+<body><div class="notice" role="status">VISTA PREVIA VISUAL · Cuenta, cifras y ofertas ficticias · Sin autenticación · El carrusel real NO fue modificado</div>
+<header class="header"><div class="header-inner"><div class="brand"><div class="brand-icon">🔔</div><div><h1 class="brand-title">APDocentePBA</h1><p class="brand-sub">Alertas docentes · Provincia de Buenos Aires</p></div></div>
+<nav class="top-nav" aria-label="Secciones de la plataforma"><div class="apd-top-tabs" id="mock-tabs">
+<button class="apd-top-tab is-active" data-tab="resumen" type="button" aria-current="page">Resumen</button>
+<button class="apd-top-tab" data-tab="alertas" type="button">Alertas</button>
+<button class="apd-top-tab" data-tab="listados" type="button">Listados</button>
+<button class="apd-top-tab" data-tab="recursos" type="button">Recursos</button>
+<button class="apd-top-tab" data-tab="plan" type="button">Mi plan</button>
+<button class="apd-top-tab" data-tab="estadisticas" type="button">Estadísticas</button>
+<button class="apd-top-tab" data-tab="preferencias" type="button">Preferencias</button></div>
+<a href="./panel-demo.html" class="ghost">Panel simulado</a></nav></div></header>
+<main class="shell">
+<div class="section active" id="section-resumen"><h2 class="title">Tu actividad docente, en un solo lugar</h2><p class="subtitle">Consultá lo esencial sin recorrer tarjetas repetidas.</p>
+<div class="grid">
+<div class="card span4"><span class="pill">Ejemplo de estado</span><h3>Preferencias</h3><p>Avellaneda · Preceptor · Secundario</p><div class="links"><a class="btn secondary" href="./panel-demo.html">Probar preferencias</a></div></div>
+<div class="card span4"><span class="pill">Ejemplo ilustrativo</span><h3>Plan y acceso</h3><p>La vigencia y las cuotas se consultarían del servidor, no de un precio de respaldo.</p><div class="links"><button type="button" class="btn secondary" data-goto="plan">Ver estructura</button></div></div>
+<div class="card span4"><span class="pill">Transparencia</span><h3>Alertas</h3><p>Sin datos reales: no inventamos ofertas, vistas ni postulaciones.</p><div class="links"><button type="button" class="btn secondary" data-goto="alertas">Ver organización</button></div></div>
+<div class="card span12"><h3>Accesos frecuentes</h3><div class="links"><button type="button" class="btn" data-goto="alertas">Revisar alertas</button><button type="button" class="btn secondary" data-goto="listados">Listados</button><a class="btn secondary" href="https://servado.abc.gob.ar/" rel="noopener noreferrer" target="_blank">SerVaDo oficial</a><a class="btn secondary" href="./insigne-laboratorio.html">Explorar Insigne LAB</a></div></div>
+</div></div>
+<div class="section" id="section-alertas"><h2 class="title">Alertas APD</h2><p class="subtitle">Mantendremos la navegación y el carrusel que ya conocés.</p><div class="grid"><div class="card span12"><h3>El carrusel actual queda intacto</h3><div class="placeholder">No se cargan ofertas ni datos de otros usuarios en esta vista previa. En el producto real, este lugar muestra el carrusel existente y sus controles.</div></div></div></div>
+<div class="section" id="section-listados"><h2 class="title">Listados y puntaje</h2><p class="subtitle">Diferenciamos accesos oficiales de herramientas orientativas.</p><div class="grid"><div class="card span6"><h3>Consultar fuente oficial</h3><p>SerVaDo ofrece servicios de PID, PAD y listados. Algunas funciones requieren cuenta ABC.</p><div class="links"><a class="btn" href="https://servado.abc.gob.ar/" target="_blank" rel="noopener noreferrer">Ir a SerVaDo</a></div></div><div class="card span6"><h3>Orientación en APDocentePBA</h3><p>Guías y verificaciones previas; no modifican el legajo oficial.</p><div class="links"><a class="btn secondary" href="https://alertasapd.com.ar/pid.html" target="_blank" rel="noopener noreferrer">Ver orientación PID</a></div></div></div></div>
+<div class="section" id="section-recursos"><h2 class="title">Recursos docentes</h2><p class="subtitle">Una puerta de entrada simple a herramientas existentes.</p><div class="grid"><div class="card span4"><h3>Licencias</h3><p>Organizá documentación antes de iniciar trámites.</p><a class="btn secondary" href="https://alertasapd.com.ar/licencias-docentes.html">Ver guía</a></div><div class="card span4"><h3>Actas y documentación</h3><p>Modelos de uso escolar, sujetos a revisión institucional.</p><a class="btn secondary" href="https://alertasapd.com.ar/herramientas.html">Abrir herramientas</a></div><div class="card span4"><h3>Buscar</h3><p>Filtrá recursos por tarea y estado de desarrollo.</p><a class="btn secondary" href="https://alertasapd.com.ar/buscar-herramientas.html">Abrir buscador</a></div></div></div>
+<div class="section" id="section-plan"><h2 class="title">Mi plan</h2><p class="subtitle">Las cuotas reales provendrán de la sesión autenticada.</p><div class="grid"><div class="card span8"><h3>Capacidad y vigencia</h3><p>Nombre, vencimiento, límites y canales se muestran solamente después de verificar el Worker.</p><div class="placeholder">Esta demo no conoce tu suscripción. No muestra un plan inventado ni ofrece contratación.</div></div><div class="card span4"><h3>Explorar opciones</h3><p>Los límites se están conciliando con el catálogo de producción.</p><a href="./" class="btn secondary">Ver página de planes</a></div></div></div>
+<div class="section" id="section-estadisticas"><h2 class="title">Estadísticas verificables</h2><p class="subtitle">Sin indicadores inventados de visualizaciones, postulaciones o probabilidades.</p><div class="grid"><div class="card span4"><span class="pill">Ejemplo sin datos</span><h3>Ofertas vigentes</h3><div class="kpi">—</div><p class="small">Se cargaría desde el Worker cuando responda.</p></div><div class="card span4"><span class="pill">Histórico</span><h3>Actividad reciente</h3><div class="kpi">—</div><p class="small">Solo si hay historial disponible y fecha de actualización.</p></div><div class="card span4"><span class="pill">Transparencia</span><h3>Datos no medidos</h3><p>El sistema no mostrará cifras de “vistas” o chances sin medición comprobable.</p></div></div></div>
+<div class="section" id="section-preferencias"><h2 class="title">Preferencias de alertas</h2><p class="subtitle">La configuración debe ser rápida, comprensible y segura.</p><div class="grid"><div class="card span8"><h3>Tu búsqueda</h3><div class="field"><label for="mock-district">Distrito</label><input id="mock-district" value="AVELLANEDA" readonly></div><div class="field"><label for="mock-cargo">Cargo o materia</label><input id="mock-cargo" value="PRECEPTOR" readonly></div><p class="small">Datos de ejemplo. Para probar filtros interactivos usá el simulador.</p><div class="links"><a href="./panel-demo.html" class="btn">Abrir simulador seguro</a><a href="./insigne-laboratorio.html" class="btn secondary">Combinaciones precisas</a></div></div></div></div>
+</main>
+<footer class="foot">APDocentePBA · Propuesta visual en revisión · No reemplaza ABC</footer>
+<script>
+(function(){
+  const buttons=Array.from(document.querySelectorAll('[data-tab]'));
+  function show(key){
+    const current=buttons.some(b=>b.dataset.tab===key)?key:'resumen';
+    document.querySelectorAll('.section').forEach(section=>section.classList.toggle('active',section.id==='section-'+current));
+    buttons.forEach(b=>{const selected=b.dataset.tab===current;b.classList.toggle('is-active',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  }
+  buttons.forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.goto)));
+})();
+</script></body></html>
