@@ -1,18 +1,23 @@
 name: Run safe APD email fix candidate
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/run-apd-email-fix-candidate.yml
   workflow_dispatch:
+    inputs:
+      confirm_candidate:
+        description: "Manually approve candidate version creation"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "CREAR"]
 
 permissions:
   contents: read
 
 jobs:
   candidate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_candidate == 'CREAR'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout fix branch
         uses: actions/checkout@v4

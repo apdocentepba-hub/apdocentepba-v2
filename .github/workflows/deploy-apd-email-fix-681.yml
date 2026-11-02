@@ -1,18 +1,23 @@
 name: Deploy APD email PID parity 685
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/deploy-apd-email-fix-681.yml
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Manual release requires explicit confirmation"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "RELEASE"]
 
 permissions:
   contents: read
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Promote candidate 685 with automatic rollback
         env:
