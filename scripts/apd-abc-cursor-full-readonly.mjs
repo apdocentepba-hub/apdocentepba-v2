@@ -5,12 +5,16 @@
 export const SOLR_SELECT="https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
 
 export async function readPublishedIdsByCursor({
- fetchImpl,sourceDistrict="LA MATANZA",rows=60,maxPages=12
+ fetchImpl,sourceDistrict="LA MATANZA",rows=60,maxPages=12,
+ includeWorkerKeyFields=false,onDocument=null
 }={}){
  if(typeof fetchImpl!=="function")throw Error("Fetch dependency missing");
  if(!/^[A-ZÁÉÍÓÚÜÑ0-9 /().,-]{2,80}$/u.test(sourceDistrict))throw Error("Invalid public district");
  if(!Number.isSafeInteger(rows)||rows<1||rows>100||
     !Number.isSafeInteger(maxPages)||maxPages<2||maxPages>30)throw Error("Invalid cursor limits");
+ if(typeof includeWorkerKeyFields!=="boolean" ||
+    (onDocument!==null&&typeof onDocument!=="function"))
+   throw Error("Invalid optional private-free ID projection observer");
  const ids=new Set();
  let cursor="*",total=null,pages=0;
  const cursorsSeen=new Set();
@@ -22,6 +26,7 @@ export async function readPublishedIdsByCursor({
    q:'descdistrito:"'+sourceDistrict.replace(/(["\\])/g,"\\$1")+'" AND estado:"Publicada"',
    wt:"json",rows:String(rows),sort:"id asc",cursorMark:cursor,fl:"id"
   }))url.searchParams.set(key,val);
+  if(includeWorkerKeyFields)url.searchParams.set("fl","id,iddetalle,idoferta");
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),15000);
   let response;
@@ -50,6 +55,7 @@ export async function readPublishedIdsByCursor({
     const key=String(id);
     if(ids.has(key))throw Error("ABC cursor duplicated an offer ID");
     ids.add(key);
+    if(onDocument)onDocument(doc);
   }
   pages++;
   if(next===cursor){

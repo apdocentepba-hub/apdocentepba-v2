@@ -1,0 +1,38 @@
+name: "APD ABC Solr cursor vs Worker source key - read-only"
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-worker-source-key-readonly.mjs'
+      - 'scripts/audit-apd-abc-worker-key-compat.mjs'
+      - 'scripts/apd-abc-cursor-full-readonly.mjs'
+      - 'scripts/test-apd-worker-source-key-readonly.mjs'
+      - '.github/workflows/apd-abc-worker-key-compat.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-cursor-mapping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Worker key function and cursor projection safeguards
+        run: |
+          node --check scripts/apd-worker-source-key-readonly.mjs
+          node --check scripts/audit-apd-abc-worker-key-compat.mjs
+          node --test scripts/test-apd-worker-source-key-readonly.mjs
+          node --test scripts/test-apd-abc-cursor-full-readonly.mjs
+      - name: Audit real ABC source key mapping using cursor, no personal records
+        run: node scripts/audit-apd-abc-worker-key-compat.mjs
+      - name: Keep only anonymized aggregate numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-cursor-key-compat
+          path: tmp/apd-abc-key-compat/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Guard productive Worker, database and frontend
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
