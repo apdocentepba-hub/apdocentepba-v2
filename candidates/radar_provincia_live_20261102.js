@@ -8,7 +8,7 @@
   window.__apdRadarProvinciaPatchLoaded = true;
 
   const state = { requestId: 0, controller: null };
-  const MAX_AGE_MS = 36 * 60 * 60 * 1000;
+  const MAX_AGE_MS = 6 * 60 * 60 * 1000;
   const MAX_FUTURE_MS = 5 * 60 * 1000;
 
   function byId(id) { return document.getElementById(id); }
@@ -66,11 +66,11 @@
           '<strong id="apd-radar-vivo-title">Sin consultar</strong>' +
           '<div id="apd-radar-vivo-stats" class="stats"></div>' +
           '<small id="apd-radar-vivo-detail">Consulta de datos agregados del escáner provincial.</small>' +
-          '<small>Las ofertas detectadas no equivalen a vacantes abiertas. Antes de postularte, verificá siempre en ABC.</small>' +
+          '<small>El total de esta captura NO es el total de ofertas publicadas actualmente en ABC. Antes de postularte, verificá siempre en el portal oficial.</small>' +
           '</div>');
       }
       const nativeButton = byId("btn-refresh-provincia");
-      if (nativeButton) nativeButton.textContent = "Consultar ahora";
+      if (nativeButton) nativeButton.textContent = "Revisar última captura";
       return nativeRadar;
     }
     // Compatibilidad con páginas de pruebas donde aún no existe el radar fijo.
@@ -78,12 +78,12 @@
     if (!card) {
       const html = '<div id="panel-radar-combinado-card" class="panel-card span-12">' +
         '<div class="card-lbl-row"><span class="card-lbl">📍 Radar provincial — estado de captura</span>' +
-        '<button id="btn-refresh-radar-combinado" class="mini-btn" type="button">Consultar ahora</button></div>' +
+        '<button id="btn-refresh-radar-combinado" class="mini-btn" type="button">Revisar última captura</button></div>' +
         '<div class="apd-radar-vivo" aria-live="polite">' +
         '<strong id="apd-radar-vivo-title">Sin consultar</strong>' +
         '<div id="apd-radar-vivo-stats" class="stats"></div>' +
         '<small id="apd-radar-vivo-detail">Consulta de datos agregados del escáner provincial.</small>' +
-        '<small>Las ofertas detectadas no equivalen a vacantes abiertas. Antes de postularte, verificá siempre en ABC.</small>' +
+        '<small>El total de esta captura NO es el total de ofertas publicadas actualmente en ABC. Antes de postularte, verificá siempre en el portal oficial.</small>' +
         '</div></div>';
       const historic = byId("panel-historico-apd-card");
       if (historic) historic.insertAdjacentHTML("beforebegin", html);
@@ -108,14 +108,14 @@
     stats.replaceChildren();
     if (model.kind === "complete" || model.kind === "stale") {
       title.textContent = model.kind === "complete"
-        ? "Último barrido provincial completado"
-        : "Último barrido registrado — datos antiguos";
+        ? "Último barrido registrado — no es en tiempo real"
+         : "Captura anterior — consultar ABC";
       stats.appendChild(stat("Distritos: " + model.done + "/" + model.total));
-      stats.appendChild(stat("Ofertas detectadas: " + model.offers.toLocaleString("es-AR")));
+      stats.appendChild(stat("Publicadas capturadas: " + model.offers.toLocaleString("es-AR")));
       detail.textContent = "Finalizado: " + formatDate(model.finishedAt) +
         " (hora argentina). " +
-        (model.kind === "stale" ? "La captura tiene más de 36 horas; no representa la situación actual."
-          : "Es un recuento del barrido, no una confirmación de disponibilidad en ABC.");
+        (model.kind === "stale" ? "La captura tiene más de 6 horas; podría diferir considerablemente de ABC."
+          : "El portal ABC puede haber cambiado desde ese momento; no es un conteo oficial en tiempo real.");
     } else if (model.kind === "running") {
       title.textContent = "Escaneo provincial en curso";
       stats.appendChild(stat("Distritos procesados: " + model.done + "/" + model.total));
@@ -126,7 +126,7 @@
       detail.textContent = "La última captura no está completa. No se publican totales de ofertas.";
     } else if (model.kind === "loading") {
       title.textContent = "Verificando datos del escáner…";
-      detail.textContent = "Consultando estado público agregado, sin acceder a tus datos personales.";
+      detail.textContent = "Consultando el estado del último barrido guardado por APDocentePBA, no el portal ABC en tiempo real.";
     } else {
       title.textContent = "No se pudo verificar el estado provincial";
       detail.textContent = "No se muestran estadísticas anteriores ni números estimados. Podés reintentar.";
