@@ -37,7 +37,7 @@ async function rpc(name,body){
 }
 const fixture=(id,key,district)=>({
  source_offer_key:key,idoferta:"CI_"+id,iddetalle:key.slice(2),
- estado:"Publicada",distrito,escuela:"PRUEBA SOLO CI",cargo:"INFORMATICA",
+ estado:"Publicada",distrito:district,escuela:"PRUEBA SOLO CI",cargo:"INFORMATICA",
  area:"PRUEBA",nivel_modalidad:"TECNICA",turno:"TM",jornada:"SIMPLE",
  hsmodulos:"2",cursodivision:"1 A",supl_desde:"",supl_hasta:"",
  finoferta:"2099-12-31",ult_movimiento:"2026-11-02T19:00:00Z",
