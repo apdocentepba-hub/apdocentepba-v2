@@ -12,6 +12,14 @@ permissions:
 jobs:
   public-index-key-stability:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: la-matanza
+            district: "LA MATANZA"
+          - id: avellaneda
+            district: "AVELLANEDA"
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -27,14 +35,16 @@ jobs:
           node --check scripts/audit-apd-abc-worker-key-twopass.mjs
           node --test scripts/test-apd-abc-worker-key-twopass.mjs
           node --test scripts/test-apd-worker-source-key-readonly.mjs
-      - name: Compare two complete public ABC cursor passes (GET, 3 projected ID fields)
+      - name: Compare two full public ABC cursor passes (GET, 3 projected ID fields)
+        env:
+          APD_AUDIT_DISTRICT: ${{ matrix.district }}
         run: node scripts/audit-apd-abc-worker-key-twopass.mjs
       - name: Store only aggregate report without any identifiers
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apd-abc-worker-key-twopass-aggregates
-          path: tmp/apd-abc-key-twopass/summary.json
+          name: apd-abc-worker-key-twopass-${{ matrix.id }}
+          path: tmp/apd-abc-key-twopass/summary-${{ matrix.id }}.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Verify Worker source, frontend and database are not changed
