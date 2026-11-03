@@ -93,6 +93,86 @@ d(
  "  const previousBadge=document.getElementById('alertas-badge');",
  "  if(previousBadge){previousBadge.textContent='';previousBadge.classList.add('hidden');}"
  ].join("\n"),"clear stale offers during plan check");
+// This guard exists in the disposable generated dashboard function only.
+// It observes actual editor changes and blocks unsafe submit attempts before
+// legacy submit listeners can serialize blank/unverified preferences.
+d('  mostrarSeccion("panel-docente");',
+ [
+ "  const oldPrefGuard = window.__APD_LAB_PREF_GUARD;",
+ "  const keepDraft = oldPrefGuard?.owner === token && oldPrefGuard.dirty === true;",
+ "  oldPrefGuard?.dispose?.();",
+ "  const prefForm = document.getElementById('form-preferencias');",
+ "  const prefGuard = {owner:token,dirty:keepDraft,state:'loading',dispose:()=>{}};",
+ "  const onPrefEdit = e => {",
+ "    if (!current()) return;",
+ "    if (e.target?.matches?.('input, select, textarea')) prefGuard.dirty = true;",
+ "  };",
+ "  const onPrefClear = e => {",
+ "    if (current() && e.target?.closest?.('#btn-clear-distritos, #btn-clear-cargos'))",
+ "      prefGuard.dirty = true;",
+ "  };",
+ "  const onUnsafeSubmit = e => {",
+ "    if (!current() || prefGuard.state === 'ready') return;",
+ "    e.preventDefault();",
+ "    e.stopImmediatePropagation?.();",
+ "    showMsg('preferencias-msg', prefGuard.state === 'conflict'",
+ "      ? 'Conservamos tus cambios sin guardar. Recargá la página para recuperar las preferencias almacenadas antes de guardar.'",
+ "      : 'Esperá a que se verifiquen las preferencias antes de guardar. No se enviaron cambios.', 'error');",
+ "  };",
+ "  prefForm?.addEventListener('input',onPrefEdit,true);",
+ "  prefForm?.addEventListener('change',onPrefEdit,true);",
+ "  prefForm?.addEventListener('submit',onUnsafeSubmit,true);",
+ "  document.addEventListener?.('click',onPrefClear,true);",
+ "  prefGuard.dispose=()=>{",
+ "    prefForm?.removeEventListener?.('input',onPrefEdit,true);",
+ "    prefForm?.removeEventListener?.('change',onPrefEdit,true);",
+ "    prefForm?.removeEventListener?.('submit',onUnsafeSubmit,true);",
+ "    document.removeEventListener?.('click',onPrefClear,true);",
+ "  };",
+ "  window.__APD_LAB_PREF_GUARD=prefGuard;",
+ '  mostrarSeccion("panel-docente");'
+ ].join("\n"),
+ "protect draft edits and unsafely early form submits");
+// The late result must never overwrite user-edited controls, even on success.
+d(
+ [
+ "      if(!result.ok){",
+ "        if(summary)summary.textContent = 'No pudimos verificar tus preferencias. Reintentá desde el panel.';",
+ "        return;",
+ "      }",
+ "      try{",
+ "        const actual=adaptarPreferencias(result.raw);",
+ "        renderDashboard({docente,preferencias:actual,planInfo:planActual,apdPrefsOnly:true});",
+ "        cargarPrefsEnFormulario({preferencias:actual});",
+ "      }catch(error){",
+ "        if(summary)summary.textContent = 'No pudimos mostrar tus preferencias. Reintentá desde el panel.';",
+ "      }"
+ ].join("\n"),
+ [
+ "      if(!result.ok){",
+ "        prefGuard.state='error';",
+ "        if(summary)summary.textContent = 'No pudimos verificar tus preferencias. Reintentá desde el panel.';",
+ "        return;",
+ "      }",
+ "      if(prefGuard.dirty){",
+ "        prefGuard.state='conflict';",
+ "        if(summary)summary.textContent = 'Conservamos tus cambios locales. No se aplicaron las preferencias recibidas del servidor.';",
+ "        showMsg('preferencias-msg','Hay cambios sin guardar anteriores a la carga. Recargá la página para recuperar las preferencias almacenadas antes de guardar.','error');",
+ "        return;",
+ "      }",
+ "      prefGuard.state='hydrating';",
+ "      try{",
+ "        const actual=adaptarPreferencias(result.raw);",
+ "        renderDashboard({docente,preferencias:actual,planInfo:planActual,apdPrefsOnly:true});",
+ "        cargarPrefsEnFormulario({preferencias:actual});",
+ "        prefGuard.state='ready';",
+ "      }catch(error){",
+ "        prefGuard.state='error';",
+ "        if(summary)summary.textContent = 'No pudimos mostrar tus preferencias. Reintentá desde el panel.';",
+ "      }"
+ ].join("\n"),
+ "never clobber an in-progress draft with late server preferences");
+
 renderer=edit(renderer,
  '  setText("panel-bienvenida", nombre ? ',
  '  if (!data.apdPrefsOnly) {\n  setText("panel-bienvenida", nombre ? ',
