@@ -156,6 +156,19 @@ test("unreasonable deadline and non-monotonic clocks are rejected",async()=>{
   /monotonic clock invalid/
  );
 });
+test("stalled ABC fetch aborts within district budget and never reports zero",async()=>{
+ const fetchImpl=(_url,{signal})=>new Promise((_resolve,reject)=>{
+  signal.addEventListener("abort",()=>{
+   const error=new Error("simulated GET abort");
+   error.name="AbortError";
+   reject(error);
+  },{once:true});
+ });
+ await assert.rejects(
+  ()=>run({fetchImpl},"LA MATANZA",{maxWallMs:1000}),
+  /district request timed out/
+ );
+});
 test("valid complete multi-page result still passes within total budget",async()=>{
  const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
  let clock=0;
