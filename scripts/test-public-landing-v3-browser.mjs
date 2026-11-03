@@ -142,7 +142,9 @@ try{
     google:!!document.getElementById("google-btn-login"),
     overflow:document.documentElement.scrollWidth,viewport:window.innerWidth,
     asideWidth:document.querySelector("#login .apd-v3-auth-aside").getBoundingClientRect().width,
-    privateNavHidden:getComputedStyle(document.getElementById("navPrivado")).display==="none"
+    privateNavHidden:getComputedStyle(document.getElementById("navPrivado")).display==="none",
+    themeBottom:document.querySelector(".apd-theme-toggle")?.getBoundingClientRect().bottom??0,
+    passwordTop:document.getElementById("login-password").getBoundingClientRect().top
    }
   })()`);
   assert.ok(login.visible&&login.homeHidden&&login.inputs&&login.google,
@@ -150,6 +152,7 @@ try{
   assert.ok(login.overflow<=login.viewport+4,"Login overflow "+width);
   assert.ok(login.asideWidth>150,"Login aside collapsed");
   assert.ok(login.privateNavHidden,"Private nav visible in login");
+  if(width===390)assert.ok(login.themeBottom<login.passwordTop,"Mobile theme toggle overlays login password field");
   await screenshot("login-"+width);
   const signup=await evaluate(`(()=>{
    document.querySelector("#login .form-foot .link-btn").click();
