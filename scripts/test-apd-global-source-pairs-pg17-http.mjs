@@ -92,6 +92,10 @@ const drifting=cloned();drifting[1].pairs[0].source_offer_key="D_9499";
 assert.throws(()=>prepareGlobalSourcePairsForLab({
  first:cloned(),second:drifting
 }),/mapping drifted/);
+const tampered=structuredClone(good.stagedRowsForIsolatedPg17("MORENO",["D_9401"]));
+tampered[0].cargo="CHANGED_AFTER_SOURCE_AUDIT";
+assert.throws(()=>good.validateStagedRowsForIsolatedPg17(
+ "MORENO",["D_9401"],tampered),/outgoing staging content drifted/);
 assert.equal(requestCount,0,"Unsafe source snapshots initiated an API request");
 const rows=[
  {district:"MORENO",key:"D_9401",run:"00000000-0000-0000-0000-000000009401"},
@@ -107,7 +111,8 @@ for(const {district,key,run} of rows){
  }),run);
  assert.equal(await rpc("stage_capture_page",{
   p_run_id:run,p_page_index:0,p_source_total:pairs.length,
-  p_rows:good.stagedRowsForIsolatedPg17(district,[key])
+  p_rows:good.validateStagedRowsForIsolatedPg17(
+   district,[key],good.stagedRowsForIsolatedPg17(district,[key]))
  }),1);
  assert.equal(await rpc("seal_capture",{p_run_id:run}),1);
  assert.equal(await rpc("register_source_pairs",{
@@ -134,6 +139,7 @@ console.log(JSON.stringify({
  source_ids_or_worker_keys_logged:false,
  projected_content_hashes_checked:true,
  staged_rows_derived_from_verified_source:true,
+ outgoing_staging_payload_validated:true,
  raw_source_content_excluded_from_staging:true,
  production_modified:false
 }));
