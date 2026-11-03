@@ -60,6 +60,13 @@ test("buttons/links have semantic accessible controls and non-misleading wording
  assert.match(landing,/href="\.\/herramientas\.html"/);
  assert.match(login,/type="email" id="login-email"/);
  assert.match(login,/type="password" id="login-password"/);
+ for(const [section,target] of [[login,"login-password"],[registration,"reg-password"]]){
+  const tag=section.match(new RegExp('<button[^>]*class="pw-toggle"[^>]*data-target="'+target+'"[^>]*>'));
+  assert.ok(tag,"Password toggle unavailable: "+target);
+  assert.match(tag[0],new RegExp('aria-controls="'+target+'"'));
+  assert.match(tag[0],/aria-label="Mostrar u ocultar contraseña"/);
+  assert.doesNotMatch(tag[0],/tabindex="-1"/);
+ }
  assert.match(registration,/type="email" id="reg-email"/);
  assert.match(css,/:focus-visible/);
  assert.match(css,/@media\(max-width:760px\)/);
