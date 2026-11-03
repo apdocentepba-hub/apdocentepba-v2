@@ -21,6 +21,9 @@ on:
       - 'scripts/test-apd-panel-timing-meter.mjs'
       - 'scripts/test-apd-panel-timing-dashboard-contract.mjs'
       - 'scripts/test-apd-panel-first-paint-chromium.mjs'
+      - 'scripts/build-apd-panel-deferred-preferences-candidate.mjs'
+      - 'scripts/test-apd-panel-deferred-preferences.mjs'
+      - 'scripts/test-apd-panel-deferred-preferences-chromium.mjs'
       - 'scripts/apd-fetch-published-district-lab.mjs'
       - 'scripts/build-apd-published-minimized-candidate.mjs'
       - 'scripts/test-apd-published-worker-candidate.mjs'
@@ -155,6 +158,19 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-first-paint-chromium.mjs
           node scripts/test-apd-panel-first-paint-chromium.mjs
+      - name: Build deferred-preferences browser candidate only, never publish
+        run: |
+          node --check scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js
+      - name: Assert preference hydration, security, stale sessions and error isolation
+        run: |
+          node --check scripts/test-apd-panel-deferred-preferences.mjs
+          node --test scripts/test-apd-panel-deferred-preferences.mjs
+      - name: Measure preference-deferred first alert paint in Chromium with synthetic data
+        run: |
+          node --check scripts/test-apd-panel-deferred-preferences-chromium.mjs
+          node scripts/test-apd-panel-deferred-preferences-chromium.mjs
       - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
         run: |
           node --check scripts/test-apd-live-source-probes-fail-closed.mjs
