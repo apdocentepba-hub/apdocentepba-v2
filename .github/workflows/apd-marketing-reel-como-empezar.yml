@@ -1,0 +1,73 @@
+name: APD Reel original IG — pruebas aisladas
+on:
+  push:
+    branches:
+      - 'marketing/apd-reel-como-empezar-20261103'
+    paths:
+      - 'marketing/reels/apdocentepba-como-empezar-20261103/build.py'
+      - '.github/workflows/apd-marketing-reel-como-empezar.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: apd-marketing-reel-como-empezar-20261103
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar herramientas públicas sin credenciales
+        run: |
+          python -m pip install 'Pillow>=10,<13' 'numpy>=1.26,<3' 'playwright>=1.50,<2'
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m compileall -q marketing/reels/apdocentepba-como-empezar-20261103/build.py
+      - name: Generar capturas públicas y MP4 vertical
+        run: |
+          python marketing/reels/apdocentepba-como-empezar-20261103/build.py
+      - name: Verificación independiente de artefactos
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from PIL import Image
+          root=Path('marketing/reels/apdocentepba-como-empezar-20261103')
+          manifest=json.loads((root/'manifest.json').read_text())
+          assert manifest['instagram']=='@apdocentepba'
+          assert manifest['width']==1080 and manifest['height']==1920
+          assert 17<=manifest['duration_seconds']<=19
+          for key in ['portada','empezar','herramientas']:
+              p=root/'capturas'/(key+'.png')
+              with Image.open(p) as im: im.verify()
+              print('PUBLIC_CAPTURE_OK',key)
+          frames=sorted((root/'escenas').glob('step_*.jpg'))
+          assert len(frames)==6
+          for p in frames:
+              with Image.open(p) as im:
+                  assert im.size==(1080,1920)
+                  im.verify()
+              print('VALID_FRAME',p.name)
+          print('VALID_VIDEO_SHA',manifest['sha256'])
+          PY
+      - name: Conservar evidencias de capturas durante 7 días
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-ig-reel-public-captures
+          path: marketing/reels/apdocentepba-como-empezar-20261103/capturas/*.png
+          retention-days: 7
+      - name: Guardar solo en rama marketing — prohibido despliegue a producción
+        run: |
+          git config user.name 'APD Creative Builder'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add marketing/reels/apdocentepba-como-empezar-20261103/apdocentepba_reel_como_empezar.mp4
+          git add marketing/reels/apdocentepba-como-empezar-20261103/contact_sheet.jpg
+          git add marketing/reels/apdocentepba-como-empezar-20261103/manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Video APD original: capturas públicas verificadas, sin datos de usuarios'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
