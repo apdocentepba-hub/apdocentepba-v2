@@ -87,9 +87,14 @@ try{
   const initial=await evaluate(`({
    homeVisible:!document.getElementById("inicio").classList.contains("hidden"),
    loginVisible:!document.getElementById("login").classList.contains("hidden"),
-   panelHidden:document.getElementById("panel-docente").classList.contains("hidden")
+   panelHidden:document.getElementById("panel-docente").classList.contains("hidden"),
+   privateNavHidden:getComputedStyle(document.getElementById("navPrivado")).display==="none",
+   oldTabsHidden:[...document.querySelectorAll(".apd-top-tabs")]
+      .every(n=>getComputedStyle(n).display==="none")
   })`);
   assert.ok(initial.panelHidden,"Private panel exposed without session");
+  assert.ok(initial.privateNavHidden && initial.oldTabsHidden,
+    "Private header actions should be hidden on public screens: "+JSON.stringify(initial));
   assert.ok(initial.homeVisible||initial.loginVisible,
    "No public view visible on first load");
   await evaluate("mostrarSeccion('inicio');true");
@@ -103,13 +108,29 @@ try{
    background:getComputedStyle(document.querySelector(".apd-v3-hero")).backgroundImage,
    overflow:document.documentElement.scrollWidth,
    viewport:window.innerWidth,
-   heroWidth:document.querySelector(".apd-v3-hero").getBoundingClientRect().width
+   heroWidth:document.querySelector(".apd-v3-hero").getBoundingClientRect().width,
+   titleBreakVisible:getComputedStyle(document.querySelector(".apd-v3-title br")).display!=="none",
+   previewX:document.querySelector(".apd-v3-visual").getBoundingClientRect().x,
+   copyRight:document.querySelector(".apd-v3-copy").getBoundingClientRect().right,
+   previewY:document.querySelector(".apd-v3-visual").getBoundingClientRect().y,
+   copyBottom:document.querySelector(".apd-v3-copy").getBoundingClientRect().bottom,
+   mobileMenuVisible:getComputedStyle(document.querySelector(".apd-v3-mobile-menu")).display!=="none"
   })`);
   assert.ok(first.homeVisible&&first.loginHidden&&first.signupHidden&&first.panelHidden,
    "Homepage/session visibility regression: "+JSON.stringify(first));
   assert.ok(first.previewVisible);
   assert.match(first.background,/gradient/);
   assert.match(first.headline,/Menos tiempo buscando/);
+  assert.ok(first.titleBreakVisible,"Headline line break overridden by legacy CSS");
+  if(width===1440){
+   assert.ok(first.previewX>first.copyRight-8,
+    "Desktop preview must appear in right column: "+JSON.stringify(first));
+   assert.equal(first.mobileMenuVisible,false);
+  }else{
+   assert.ok(first.previewY>=first.copyBottom-8,
+    "Mobile preview must stack below the headline: "+JSON.stringify(first));
+   assert.equal(first.mobileMenuVisible,true);
+  }
   assert.ok(first.overflow<=first.viewport+4,"Horizontal overflow on home "+width+": "+JSON.stringify(first));
   await screenshot("home-"+width);
   const login=await evaluate(`(()=>{
@@ -120,13 +141,15 @@ try{
     inputs:!!document.getElementById("login-email")&&!!document.getElementById("login-password"),
     google:!!document.getElementById("google-btn-login"),
     overflow:document.documentElement.scrollWidth,viewport:window.innerWidth,
-    asideWidth:document.querySelector("#login .apd-v3-auth-aside").getBoundingClientRect().width
+    asideWidth:document.querySelector("#login .apd-v3-auth-aside").getBoundingClientRect().width,
+    privateNavHidden:getComputedStyle(document.getElementById("navPrivado")).display==="none"
    }
   })()`);
   assert.ok(login.visible&&login.homeHidden&&login.inputs&&login.google,
    "Login navigation/controls broken "+JSON.stringify(login));
   assert.ok(login.overflow<=login.viewport+4,"Login overflow "+width);
   assert.ok(login.asideWidth>150,"Login aside collapsed");
+  assert.ok(login.privateNavHidden,"Private nav visible in login");
   await screenshot("login-"+width);
   const signup=await evaluate(`(()=>{
    document.querySelector("#login .form-foot .link-btn").click();
