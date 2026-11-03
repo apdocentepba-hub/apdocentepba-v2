@@ -50,4 +50,6 @@ try{
   no_missed_offers_inferred:true,no_user_auth_used:true,
   did_not_modify_production:true
  }));
+ // Mark live evidence unverified; never convert source errors to zero offers.
+ process.exitCode=1;
 }
