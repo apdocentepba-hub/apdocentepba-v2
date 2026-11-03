@@ -21,3 +21,16 @@ El PR #228 demostró que dos recorridos `cursorMark` podían devolver el mismo c
 Sin SQL de escritura, sin tokens de Supabase o Cloudflare, sin modificar Worker, sin envíos a docentes y sin publicar ofertas. No sirve para validar el historial de los 137 distritos ni reemplaza la copia de recuperación productiva.
 
 **Pendiente siguiente:** integrar estas comprobaciones con la preparación de páginas y el sello transaccional del piloto PostgreSQL 17, manteniendo aislada la ejecución. Migraciones y publicación siguen requiriendo autorización específica y respaldo restaurable.
+
+
+## Verificación nueva: unicidad global entre los dos distritos
+
+`scripts/apd-abc-cross-district-worker-keys-readonly.mjs` extiende las dos lecturas completas del cursor para cruzar **Avellaneda y La Matanza simultáneamente** en memoria. En cada pasada controla que ninguna `source_offer_key` de un distrito aparezca en el otro, que el `id` Solr tampoco se reutilice entre ellos y que ninguna oferta salte, desaparezca o cambie de clave entre pasadas. Se exige la regla principal `D_<iddetalle>` sin fallbacks automáticos.
+
+`scripts/audit-apd-abc-cross-district-worker-keys.mjs` hace únicamente GET públicos y escribe un reporte agregado, sin almacenar documentos ni identificadores. `scripts/test-apd-abc-cross-district-worker-keys.mjs` cubre los casos sintéticos de colisión de claves entre distritos, reutilización de Solr ID, remapeo de clave con mismo ID, reemplazo de documento con mismo conteo, duplicado interno y fallback.
+
+**Evidencia de ejecución real (02/11/2026, 21:20 ART):** GitHub Actions `41552150734`, job `cross-district-global-uniqueness` **success**. Las dos pasadas sumaron **248** ofertas públicas (`LA MATANZA=183`, `AVELLANEDA=65`), con **0** colisiones globales de claves, **0** IDs Solr repetidos entre distritos, **0** altas/bajas o cambios de identidad entre pasadas, y **0** identificadores alternativos. Los dos jobs individuales por distrito también aprobaron.
+
+**Límite del resultado:** solo acredita unicidad y estabilidad de **dos lecturas consecutivas** en estos dos distritos, no una instantánea permanente, el total provincial, las notificaciones, la vigencia, ni correspondencia exacta con toda la base productiva. `production_activation_authorized=false`, sin SQL de escritura, sin despliegue y sin credenciales de acceso a producción.
+
+**Pendiente real:** acoplar el control de identidad a la etapa de sellado transaccional del piloto PostgreSQL 17, asegurar que el mismo conjunto de IDs/keys sea el que se confirme y validar reversión en laboratorio. No aplicar aún cambios a las preferencias o a las ofertas de docentes.
