@@ -6,13 +6,15 @@
 import {PUBLIC_ALERT_FIELDS} from "./apd-abc-published-projected-cursor-readonly.mjs";
 export async function apdFetchPublishedOnlyDistrict({
  district,fetchImpl,normalizeDistrict,districtVariants,escapeSolr,keyFromOffer,
- rows=100,maxPages=12
+ rows=100,maxPages=12,maxWallMs=20000,now=()=>performance.now()
 }={}){
  if(typeof fetchImpl!=="function"||typeof normalizeDistrict!=="function"||
     typeof districtVariants!=="function"||typeof escapeSolr!=="function"||
     typeof keyFromOffer!=="function")throw Error("Published cursor dependencies missing");
  if(!Number.isSafeInteger(rows)||rows<1||rows>200||
-    !Number.isSafeInteger(maxPages)||maxPages<2||maxPages>15)
+    !Number.isSafeInteger(maxPages)||maxPages<2||maxPages>15||
+    !Number.isSafeInteger(maxWallMs)||maxWallMs<1000||maxWallMs>60000||
+    typeof now!=="function")
    throw Error("Published cursor bounded limits invalid");
  const canonical=normalizeDistrict(district||"");
  const variants=districtVariants(canonical);
@@ -23,11 +25,25 @@ export async function apdFetchPublishedOnlyDistrict({
   throw Error("Invalid ABC district identity or alias variants");
  const q=`(${variants.map(v=>`descdistrito:"${escapeSolr(v)}"`).join(" OR ")}) AND estado:"Publicada"`;
  const endpoint="https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
+ // A single district budget bounds ALL sequential pages, not just each GET.
+ // A timeout is a source failure, never permission to return truncated offers.
+ const started=now();
+ if(!Number.isFinite(started))throw Error("ABC Published monotonic clock invalid");
+ const remaining=()=>{
+  const elapsed=now()-started;
+  if(!Number.isFinite(elapsed)||elapsed<0)
+   throw Error("ABC Published monotonic clock invalid");
+  const left=maxWallMs-elapsed;
+  if(left<=0)throw Error("ABC Published district time budget exceeded");
+  return left;
+ };
  const docs=[];
  const ids=new Set(),keys=new Set(),cursors=new Set();
  const allowlist=new Set(PUBLIC_ALERT_FIELDS);
  let cursor="*",total=null;
  for(let pageIndex=0;pageIndex<maxPages;pageIndex++){
+  // Check before allocating the next page request.
+  const requestBudget=Math.min(15000,Math.ceil(remaining()));
   if(cursors.has(cursor))throw Error("Repeated ABC cursor");
   cursors.add(cursor);
   const url=new URL(endpoint);
@@ -36,7 +52,7 @@ export async function apdFetchPublishedOnlyDistrict({
    rows:String(rows),fl:PUBLIC_ALERT_FIELDS.join(",")
   }))url.searchParams.set(field,value);
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),15000);
+  const timeout=setTimeout(()=>controller.abort(),requestBudget);
   let data;
   try{
    const response=await fetchImpl(url,{
@@ -48,7 +64,13 @@ export async function apdFetchPublishedOnlyDistrict({
    const buffer=await response.arrayBuffer();
    if(buffer.byteLength>1600000)throw Error("ABC Published page exceeds safe byte cap");
    data=JSON.parse(new TextDecoder("iso-8859-1").decode(buffer));
+  }catch(error){
+   if(controller.signal.aborted)
+    throw Error("ABC Published district request timed out");
+   throw error;
   }finally{clearTimeout(timeout)}
+  // Also enforce the deadline if a test double or transport ignores abort.
+  remaining();
   if(data?.responseHeader?.partialResults===true)
    throw Error("ABC source reported partial results");
   const reported=data?.response?.numFound;
@@ -78,8 +100,10 @@ export async function apdFetchPublishedOnlyDistrict({
   // We have all expected UNIQUE rows: requesting one extra empty Solr page
   // would add latency without improving completeness of this one-pass read.
   // A later independent second pass still provides drift protection.
-  if(ids.size===total)
+  if(ids.size===total){
+   remaining();
    return {docs,query:q,totalBruto:total,totalFiltrado:docs.length};
+  }
   if(next===cursor)throw Error("ABC Published incomplete cursor coverage");
   if(rowsFound.length===0)throw Error("ABC cursor advanced on empty page");
   cursor=next;
