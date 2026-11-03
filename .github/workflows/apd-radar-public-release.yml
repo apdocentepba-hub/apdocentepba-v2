@@ -4,6 +4,8 @@ on:
     paths:
       - 'index.html'
       - 'scripts/test-apd-radar-live-release.mjs'
+      - 'scripts/apd-radar-release-guard.mjs'
+      - 'scripts/test-apd-radar-release-guard-unit.mjs'
       - '.github/workflows/apd-radar-public-release.yml'
   workflow_dispatch:
 permissions:
@@ -16,8 +18,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Validate one-line release, existing panel and public candidate asset
+      - name: Test both current v2 preservation and guarded version bump
+        run: |
+          node --check scripts/apd-radar-release-guard.mjs
+          node --check scripts/test-apd-radar-live-release.mjs
+          node --test scripts/test-apd-radar-release-guard-unit.mjs
+      - name: Validate existing radar contract and require public asset proof only for a real release
         run: node --test scripts/test-apd-radar-live-release.mjs
       - name: Preserve Worker, users, payments and Supabase integration
         run: |
-          git diff --exit-code origin/main -- worker-live/worker_hotfix.js worker.js app_v2.js radar_provincia_patch_semaforo.js
+          git diff --exit-code origin/main -- worker-live/worker_hotfix.js worker.js app_v2.js radar_provincia_patch_semaforo.js candidates/radar_provincia_live_20261102.js
