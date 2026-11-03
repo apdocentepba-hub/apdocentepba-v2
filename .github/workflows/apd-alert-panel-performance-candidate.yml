@@ -6,6 +6,7 @@ on:
       - 'scripts/test-apd-alert-panel-performance-candidate.mjs'
       - 'scripts/benchmark-apd-alert-panel-performance-synthetic.mjs'
       - 'scripts/probe-apd-public-abc-latency-readonly.mjs'
+      - 'scripts/probe-apd-published-full-cursor-shape-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
@@ -40,6 +41,10 @@ jobs:
         run: |
           node --check scripts/probe-apd-public-abc-latency-readonly.mjs
           node scripts/probe-apd-public-abc-latency-readonly.mjs
+      - name: Inspect full published-only cursor source fields without logging offers
+        run: |
+          node --check scripts/probe-apd-published-full-cursor-shape-readonly.mjs
+          node scripts/probe-apd-published-full-cursor-shape-readonly.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
