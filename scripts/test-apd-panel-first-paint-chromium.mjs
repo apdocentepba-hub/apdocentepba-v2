@@ -24,18 +24,37 @@ const browserArgs=directory=>[
  "--remote-debugging-port=0","--user-data-dir="+directory,"about:blank"
 ];
 let directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-paint-"));
-let browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
+let browser=spawn(executable,browserArgs(directory),{stdio:"ignore",detached:true});
 const sleep=ms=>new Promise(done=>setTimeout(done,ms));
 let socket,serial=0;
 const pending=new Map();
 async function stopForRetry(){
- browser.kill("SIGTERM");
+ // Chromium can leave child helpers writing to the temporary profile AFTER
+ // the main PID exits. This test runs only on Ubuntu CI: spawn its own process
+ // group, then terminate that group before removing the disposable directory.
+ if(browser.pid&&process.platform!=="win32"){
+  try{process.kill(-browser.pid,"SIGKILL");}
+  catch(error){if(error.code!=="ESRCH")throw error;}
+ }else if(browser.exitCode===null){
+  browser.kill("SIGKILL");
+ }
  await new Promise(resolve=>{
   if(browser.exitCode!==null||browser.signalCode!==null)return resolve();
   const t=setTimeout(resolve,3000);
   browser.once("exit",()=>{clearTimeout(t);resolve();});
  });
- rmSync(directory,{recursive:true,force:true,maxRetries:12,retryDelay:200});
+ let last;
+ for(let attempt=0;attempt<12;attempt++){
+  try{
+   rmSync(directory,{recursive:true,force:true,maxRetries:2,retryDelay:100});
+   return;
+  }catch(error){
+   if(error.code!=="ENOTEMPTY"&&error.code!=="EBUSY")throw error;
+   last=error;
+   await sleep(300);
+  }
+ }
+ throw last;
 }
 async function debugPort(){
  // Startup can fail intermittently on shared GitHub runners; retry ONLY
@@ -53,7 +72,7 @@ async function debugPort(){
   if(attempt===0){
    await stopForRetry();
    directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-retry-"));
-   browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
+   browser=spawn(executable,browserArgs(directory),{stdio:"ignore",detached:true});
   }
  }
  throw Error("Chromium debug port unavailable after 2 fresh-profile attempts");
@@ -193,14 +212,6 @@ try{
  }));
 }finally{
  for(const p of pending.values())clearTimeout(p.timer);
- pending.clear();socket?.close();browser.kill("SIGTERM");
- // Chromium writes its profile asynchronously on exit. Wait for the process
- // before removing its temporary folder; retry only filesystem ENOTEMPTY/EBUSY.
- // This is test cleanup, not a dashboard behavioral change.
- await new Promise(resolve=>{
-  if(browser.exitCode!==null||browser.signalCode!==null)return resolve();
-  const timeout=setTimeout(resolve,3000);
-  browser.once("exit",()=>{clearTimeout(timeout);resolve()});
- });
- rmSync(directory,{recursive:true,force:true,maxRetries:12,retryDelay:200});
+ pending.clear();socket?.close();
+ await stopForRetry();
 }
