@@ -1,0 +1,72 @@
+name: APD standalone offline Android lab APK (debug-key signed)
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/apd-mobile-android-standalone-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  standalone-offline-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK 37.0 from preinstalled command-line tools
+        run: |
+          SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK_BIN" ]; then SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"; fi
+          test -x "$SDK_BIN"
+          yes | "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null || true
+          "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --install 'platforms;android-37.0' 'build-tools;37.0.0'
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37.0/android.jar"
+          if [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_SDK_ROOT/platforms/android-37"
+          fi
+      - name: Install demo dependencies and verify no production or push
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          node --test src/demo-security.test.cjs
+      - name: Generate disposable native app without Expo services
+        working-directory: mobile
+        run: |
+          npx expo prebuild --platform android --no-install --non-interactive
+          test -f android/gradlew
+      - name: Compile release-mode, **LAB ONLY**, signed with generated debug key
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          echo 'Checking offline bundled JavaScript inside APK...'
+          unzip -Z1 app/build/outputs/apk/release/app-release.apk | grep -Eq '^assets/index.android.bundle$'
+          echo 'Verifying APK is signed (debug keystore, NOT store signing)...'
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          sha256sum app/build/outputs/apk/release/app-release.apk
+      - name: Upload expiring standalone LAB APK — no stores, no user installations
+        uses: actions/upload-artifact@v4
+        with:
+          name: APDocentePBA-Android-Standalone-DEMO-debugkey
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
+          if-no-files-found: error
+      - name: Ensure main website and Worker unchanged
+        run: |
+          git diff --exit-code -- index.html app_v2.js worker.js auth_session_patch.js

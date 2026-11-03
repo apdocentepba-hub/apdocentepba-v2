@@ -1,0 +1,70 @@
+name: APD mobile push candidate contract (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'scripts/mobile-push-candidate-contract.mjs'
+      - 'scripts/test-mobile-push-candidate-contract.mjs'
+      - 'scripts/mobile-device-registry-contract.mjs'
+      - 'scripts/test-mobile-device-registry-contract.mjs'
+      - 'scripts/mobile-push-outbox-contract.mjs'
+      - 'scripts/test-mobile-push-outbox-contract.mjs'
+      - 'scripts/test-mobile-push-synthetic-e2e.mjs'
+      - 'scripts/mobile-push-strict-session-lab.mjs'
+      - 'scripts/test-mobile-push-strict-session-lab.mjs'
+      - 'scripts/mobile-push-endpoint-lab.mjs'
+      - 'scripts/test-mobile-push-endpoint-lab.mjs'
+      - 'scripts/mobile-push-token-crypto-lab.mjs'
+      - 'scripts/test-mobile-push-token-crypto-lab.mjs'
+      - 'docs/mobile-push-mvp-20261103.md'
+      - 'mobile/**'
+      - '.github/workflows/apd-mobile-push-contract-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lab-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate push candidate without network, devices, secrets, or writes
+        run: |
+          node --check scripts/mobile-push-candidate-contract.mjs
+          node --check scripts/test-mobile-push-candidate-contract.mjs
+          node --test scripts/test-mobile-push-candidate-contract.mjs
+          node --check scripts/mobile-device-registry-contract.mjs
+          node --check scripts/test-mobile-device-registry-contract.mjs
+          node --test scripts/test-mobile-device-registry-contract.mjs
+          node --check scripts/mobile-push-outbox-contract.mjs
+          node --check scripts/test-mobile-push-outbox-contract.mjs
+          node --test scripts/test-mobile-push-outbox-contract.mjs
+          node --test scripts/test-mobile-push-synthetic-e2e.mjs
+          node --check scripts/mobile-push-strict-session-lab.mjs
+          node --test scripts/test-mobile-push-strict-session-lab.mjs
+          node --check scripts/mobile-push-endpoint-lab.mjs
+          node --test scripts/test-mobile-push-endpoint-lab.mjs
+          node --check scripts/mobile-push-token-crypto-lab.mjs
+          node --test scripts/test-mobile-push-token-crypto-lab.mjs
+      - name: Validate native demo state without external services
+        run: |
+          node --test mobile/src/*.test.cjs
+      - name: Install Expo SDK dependencies in isolated mobile workspace
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Bundle Android JavaScript with Expo (NOT an APK)
+        working-directory: mobile
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          CI: '1'
+        run: |
+          npx expo export --platform android --output-dir dist/android-lab
+          test -d dist/android-lab
+      - name: Verify installed web service files are unchanged
+        run: |
+          git diff --exit-code origin/main -- index.html app_v2.js worker.js auth_session_patch.js safe_dashboard_ui_patch.js

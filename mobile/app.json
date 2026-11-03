@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "APDocentePBA (Laboratorio)",
+    "slug": "apdocentepba-mobile-lab",
+    "scheme": "apdocentepbalab",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F5F9FC",
+    "android": {
+      "package": "ar.com.alertasapd.laboratorio",
+      "permissions": [],
+      "adaptiveIcon": {
+        "backgroundColor": "#0A2840"
+      }
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "extra": {
+      "demoOnly": true,
+      "pushEnabled": false,
+      "backendEnabled": false
+    }
+  }
+}

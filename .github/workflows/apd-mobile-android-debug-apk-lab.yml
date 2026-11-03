@@ -1,0 +1,77 @@
+name: APD Android debug APK lab (no production deploy)
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/apd-mobile-android-debug-apk-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK 37 for Expo SDK 58
+        run: |
+          SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK_BIN" ]; then SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"; fi
+          test -x "$SDK_BIN"
+          yes | "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null || true
+          # Google publishes API 37 with package name android-37.0 on this runner.
+          "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --install 'platforms;android-37.0' 'build-tools;37.0.0'
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37.0/android.jar"
+          # Expo/AGP may resolve compileSdk=37 to android-37; alias only in disposable runner.
+          if [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_SDK_ROOT/platforms/android-37"
+          fi
+      - name: Install isolated demo dependencies
+        working-directory: mobile
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: npm install --no-audit --no-fund
+      - name: Prohibit production endpoints, credentials and push in this binary
+        run: |
+          node --test mobile/src/*.test.cjs
+          node --test scripts/test-mobile-push-candidate-contract.mjs
+      - name: Generate disposable native Android project from Expo
+        working-directory: mobile
+        env:
+          CI: '1'
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          npx expo prebuild --platform android --no-install --non-interactive
+          test -f android/gradlew
+      - name: Build native debug APK locally on GitHub runner
+        working-directory: mobile/android
+        env:
+          CI: '1'
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish LAB debug APK as workflow artifact (not Google Play)
+        uses: actions/upload-artifact@v4
+        with:
+          name: APDocentePBA-Android-LAB-debug
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error
+      - name: Ensure production files remain untouched
+        run: |
+          git diff --exit-code -- index.html app_v2.js worker.js auth_session_patch.js

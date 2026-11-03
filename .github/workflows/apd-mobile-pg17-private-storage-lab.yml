@@ -1,0 +1,55 @@
+name: APD mobile push PostgreSQL 17 storage lab (never deploy)
+on:
+  pull_request:
+    paths:
+      - 'sql/apd_mobile_push_private_candidate_20261103.sql'
+      - 'scripts/test-apd-mobile-push-private-pg17.sql'
+      - 'scripts/mobile-push-strict-session-lab.mjs'
+      - 'scripts/test-mobile-push-strict-session-lab.mjs'
+      - '.github/workflows/apd-mobile-pg17-private-storage-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-database-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: apd_lab_only
+          POSTGRES_USER: postgres
+          POSTGRES_DB: apd_mobile_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d apd_mobile_lab"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: apd_lab_only
+      PGDATABASE: apd_mobile_lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enforce strict push bearer from actual session, never raw user UUID
+        run: |
+          node --check scripts/mobile-push-strict-session-lab.mjs
+          node --test scripts/test-mobile-push-strict-session-lab.mjs
+      - name: Execute candidate SQL only on disposable PostgreSQL 17 container
+        run: |
+          command -v psql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-push-private-pg17.sql
+      - name: Prove no production file changes
+        run: |
+          git diff --exit-code origin/main -- worker.js app_v2.js index.html auth_session_patch.js
