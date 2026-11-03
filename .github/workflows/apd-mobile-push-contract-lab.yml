@@ -4,6 +4,8 @@ on:
     paths:
       - 'scripts/mobile-push-candidate-contract.mjs'
       - 'scripts/test-mobile-push-candidate-contract.mjs'
+      - 'scripts/mobile-device-registry-contract.mjs'
+      - 'scripts/test-mobile-device-registry-contract.mjs'
       - 'docs/mobile-push-mvp-20261103.md'
       - 'mobile/**'
       - '.github/workflows/apd-mobile-push-contract-lab.yml'
@@ -27,6 +29,9 @@ jobs:
           node --check scripts/mobile-push-candidate-contract.mjs
           node --check scripts/test-mobile-push-candidate-contract.mjs
           node --test scripts/test-mobile-push-candidate-contract.mjs
+          node --check scripts/mobile-device-registry-contract.mjs
+          node --check scripts/test-mobile-device-registry-contract.mjs
+          node --test scripts/test-mobile-device-registry-contract.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
