@@ -25,6 +25,9 @@ on:
       - 'scripts/test-apd-published-worker-candidate.mjs'
       - 'scripts/test-apd-published-alias-and-limits.mjs'
       - 'scripts/probe-apd-published-four-districts-readonly.mjs'
+      - 'scripts/audit-apd-published-two-pass-readonly.mjs'
+      - 'scripts/test-apd-published-two-pass-readonly.mjs'
+      - 'scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs'
       - 'scripts/probe-apd-combined-worker-candidate-public-readonly.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
@@ -110,6 +113,15 @@ jobs:
         run: |
           node --check scripts/test-apd-published-alias-and-limits.mjs
           node --test scripts/test-apd-published-alias-and-limits.mjs
+      - name: Enforce identical Solr ID, Worker key and projected content across independent captures
+        run: |
+          node --check scripts/audit-apd-published-two-pass-readonly.mjs
+          node --check scripts/test-apd-published-two-pass-readonly.mjs
+          node --test scripts/test-apd-published-two-pass-readonly.mjs
+      - name: Observe four public PBA districts twice; aggregate stable/drift status only
+        run: |
+          node --check scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs
+          node scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs
       - name: Read four additional PBA districts with bounded public GETs (aggregate only)
         run: |
           node --check scripts/probe-apd-published-four-districts-readonly.mjs
