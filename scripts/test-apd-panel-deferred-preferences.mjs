@@ -19,7 +19,8 @@ async function flush(){
 function fixture({plan=true,apiError=false,profilePending=false,planPending=false,formInitiallyMissing=false}={}){
  let token="FAKE_TOKEN_1",time=0,formExists=!formInitiallyMissing;
  const prefPending=new Map(),profiles=new Map(),plans=new Map(),paints=[];
- const events=[], els=new Map(),docHandlers=new Map();
+ const events=[], els=new Map(),docHandlers=new Map(),observers=new Set();
+ let observerDisconnects=0;
  const node=id=>{
   if(!els.has(id))els.set(id,{
    textContent:"",className:"",style:{},classList:{add(){},remove(){}},
@@ -40,9 +41,15 @@ function fixture({plan=true,apiError=false,profilePending=false,planPending=fals
   createElement:()=>({className:"",type:"",textContent:"",
    setAttribute(){},appendChild(){},addEventListener(){}})
  };
+ class FakeMutationObserver {
+  constructor(callback){this.callback=callback;}
+  observe(){observers.add(this);}
+  disconnect(){if(observers.delete(this))observerDisconnects++;}
+ }
  const meter=createApdPanelTimingMeter({now:()=>time,nextPaint:fn=>paints.push(fn)});
  const deps={
   window:{__APD_LAB_PERF:meter},
+  MutationObserver:FakeMutationObserver,
   document:doc,console:{error(){},warn(){}},alert(){},logout(){},
   localStorage:{getItem:()=>token},
   showMsg:(id,message,type)=>events.push("message:"+id+":"+type+":"+message),
@@ -80,7 +87,9 @@ function fixture({plan=true,apiError=false,profilePending=false,planPending=fals
    matches:x=>x==="input",closest:x=>x==="#form-preferencias"?{}:null,
    parentElement:{querySelector:x=>x===".ac-list"?{style:{display:"block"},querySelector:x=>x===".ac-item"?{}:null}:null}
   }}),
-  mountForm:()=>{formExists=true;},
+  mountForm:()=>{formExists=true;for(const o of [...observers])o.callback();},
+  get observerCount(){return observers.size;},
+  get observerDisconnects(){return observerDisconnects;},
   hasForm:()=>formExists,
   clear:selector=>doc.fireClick(selector),
   submit:()=>{const e={type:"submit",defaultPrevented:false,
@@ -390,4 +399,43 @@ test("delegated document listeners are disposed on each same-user reload",async(
  h.resolvePrefs({marker:"NEW"});await flush();
  assert.equal(h.events.includes("formHydrated"),false);
  assert.equal(h.submit().defaultPrevented,true);
+});
+
+
+test("preferences fetched before delayed safe_dashboard form mount are hydrated only after DOM appears",async()=>{
+ const h=fixture({formInitiallyMissing:true});
+ await h.load();await flush();
+ h.resolvePrefs({marker:"SERVER_READY_EARLY"});await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.equal(h.observerCount,1,"a form-mount observer must exist while source arrived first");
+ assert.equal(h.submit().defaultPrevented,true,"must refuse premature save");
+ h.mountForm();await flush();
+ assert.equal(h.observerCount,0,"observer must disconnect after hydration");
+ assert.equal(h.events.includes("formHydrated"),true);
+ assert.equal(h.events.includes("preferencesOnly"),true);
+ assert.equal(h.submit().defaultPrevented,false,"only fully hydrated form can submit");
+});
+test("editing a late-mounted form before observer callback cannot be overwritten by early source",async()=>{
+ const h=fixture({formInitiallyMissing:true});
+ await h.load();await flush();
+ h.resolvePrefs({marker:"EARLY"});await flush();
+ assert.equal(h.observerCount,1);
+ h.edit();
+ h.mountForm();await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.equal(h.submit().defaultPrevented,true);
+ assert.match(h.doc.getElementById("panel-preferencias-resumen").textContent,/Conservamos tus cambios locales/);
+});
+test("session swap disconnects old outstanding form-mount observer and ignores obsolete data",async()=>{
+ const h=fixture({formInitiallyMissing:true});
+ await h.load();await flush();
+ h.resolvePrefs({marker:"OLD"});await flush();
+ assert.equal(h.observerCount,1);
+ h.setToken("FAKE_TOKEN_2");
+ await h.load();await flush();
+ assert.equal(h.observerCount,0);
+ h.mountForm();
+ h.resolvePrefs({marker:"NEW"},"FAKE_TOKEN_2");await flush();
+ assert.equal(h.events.filter(x=>x==="formHydrated").length,1);
+ assert.ok(h.observerDisconnects>=1);
 });
