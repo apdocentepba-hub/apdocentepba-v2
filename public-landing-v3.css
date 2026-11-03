@@ -458,7 +458,14 @@ body.apd-dark #inicio.apd-public-v3 .apd-v3-bottom-card a{color:#b6f4e3!importan
   body:has(#panel-docente.hidden) .header #navPublico button{
     min-height:38px!important;padding:9px 11px!important;font-size:12px!important;
   }
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu summary{
+    display:flex!important;align-items:center!important;gap:7px!important;
+    white-space:nowrap!important;
+  }
+  /* Keep the public theme control inside the sticky header's unused corner.
+     It must never cover the login password field or submit button. */
   body:has(#panel-docente.hidden) .apd-theme-toggle{
-    position:fixed!important;top:auto!important;bottom:14px!important;right:12px!important;
+    position:fixed!important;top:10px!important;bottom:auto!important;
+    right:14px!important;z-index:101!important;
   }
 }
