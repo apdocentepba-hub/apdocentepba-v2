@@ -41,7 +41,7 @@ function sourceSnapshot(district, result, keyFromOffer){
     result.totalFiltrado!==result.totalBruto||
     result.docs.length!==result.totalBruto)
   throw Error('Projected preflight incomplete district capture');
- const pairs=[], hashes=new Map();
+ const pairs=[], hashes=new Map(),projectedByKey=new Map();
  for(const doc of result.docs){
   if(!doc||typeof doc!=='object'||Array.isArray(doc)||
      Object.keys(doc).some(field=>!ALLOWED.has(field)))
@@ -58,16 +58,19 @@ function sourceSnapshot(district, result, keyFromOffer){
    throw Error('Projected preflight Worker key mismatches source detail');
   if(hashes.has(id))throw Error('Projected preflight duplicate source ID');
   // Canonicalized allowlisted content only. Hashes are private and never emitted.
-  let digest;
+  let digest,projected;
   try{
-   const projected=Object.fromEntries(LAB_PROJECTED_FIELDS.map(field=>
+   projected=Object.fromEntries(LAB_PROJECTED_FIELDS.map(field=>
     [field,stable(doc[field])]));
    digest=createHash('sha256').update(JSON.stringify(projected)).digest('hex');
   }catch{throw Error('Projected preflight could not canonicalize source content')}
   hashes.set(id,digest);
+  // Keep a detached, canonical snapshot. Mutating caller-owned ABC records
+  // after verification must not change any staged payload.
+  projectedByKey.set(key,Object.freeze(projected));
   pairs.push({id,source_offer_key:key});
  }
- return {entry:{district,sourceTotal:result.totalBruto,pairs},hashes};
+ return {entry:{district,sourceTotal:result.totalBruto,pairs},hashes,projectedByKey};
 }
 
 export async function prepareProjectedGlobalPairsForIsolatedPg17({
@@ -80,15 +83,16 @@ export async function prepareProjectedGlobalPairsForIsolatedPg17({
   throw Error('Projected preflight invalid laboratory dependencies');
  const passes=[];
  for(let pass=0;pass<2;pass++){
-  const entries=[],hashes=new Map();
+  const entries=[],hashes=new Map(),projected=new Map();
   for(const district of districts){
    let capture;
    try{capture=await readDistrict(district)}
    catch{throw Error('Projected preflight source read failed')}
    const result=sourceSnapshot(district,capture,keyFromOffer);
    entries.push(result.entry);hashes.set(district,result.hashes);
+   projected.set(district,result.projectedByKey);
   }
-  passes.push({entries,hashes});
+  passes.push({entries,hashes,projected});
  }
  // Validate the global ID/key namespace and snapshot identity first.
  const gate=prepareGlobalSourcePairsForLab({
@@ -111,5 +115,55 @@ export async function prepareProjectedGlobalPairsForIsolatedPg17({
   production_modified:false,
   deploy_authorized:false
  });
- return Object.freeze({summary,pairsForIsolatedStaging:gate.pairsForIsolatedStaging});
+ // This is a deliberately narrow pilot mapping. Values are sourced ONLY from
+ // the verified projection, not from caller-provided staging payloads.
+ // Worker production additionally normalizes turno/curso; this lab bridge
+ // requires these fields to be already normalized, until parity is proven.
+ const textField=(doc,name)=>{
+  const v=doc[name];
+  if(v===null||v===undefined)return '';
+  if(typeof v==='string')return v;
+  if(typeof v==='number'&&Number.isFinite(v))return String(v);
+  throw Error('Projected preflight rejected non-scalar staged field');
+ };
+ function stagedRowsForIsolatedPg17(district,stagedKeys){
+  const pairs=gate.pairsForIsolatedStaging(district,stagedKeys);
+  const source=passes[1].projected.get(district);
+  const requested=new Set(stagedKeys);
+  const result=[];
+  for(const {source_offer_key:key} of pairs){
+   if(!requested.has(key))continue;
+   const doc=source?.get(key);
+   if(!doc)throw Error('Projected preflight missing verified source document');
+   const row={
+    source_offer_key:key,
+    idoferta:textField(doc,'idoferta'),
+    iddetalle:textField(doc,'iddetalle'),
+    estado:'Publicada',
+    distrito:district,
+    escuela:textField(doc,'escuela'),
+    cargo:textField(doc,'descripcioncargo')||textField(doc,'cargo'),
+    area:textField(doc,'descripcionarea'),
+    nivel_modalidad:textField(doc,'descnivelmodalidad'),
+    turno:textField(doc,'turno'),
+    jornada:textField(doc,'jornada'),
+    hsmodulos:textField(doc,'hsmodulos'),
+    cursodivision:textField(doc,'cursodivision'),
+    supl_desde:textField(doc,'supl_desde'),
+    supl_hasta:textField(doc,'supl_hasta'),
+    finoferta:textField(doc,'finoferta'),
+    ult_movimiento:textField(doc,'ult_movimiento'),
+    raw:null
+   };
+   // Never propagate free-text observations, source ID, contact details
+   // or the full public source object into the pilot's raw JSON column.
+   result.push(Object.freeze(row));
+  }
+  if(result.length!==requested.size)
+   throw Error('Projected preflight selected staging payload incomplete');
+  return Object.freeze(result);
+ }
+ return Object.freeze({summary,
+  pairsForIsolatedStaging:gate.pairsForIsolatedStaging,
+  stagedRowsForIsolatedPg17});
 }
