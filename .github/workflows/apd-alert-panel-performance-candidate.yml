@@ -7,6 +7,9 @@ on:
       - 'scripts/benchmark-apd-alert-panel-performance-synthetic.mjs'
       - 'scripts/probe-apd-public-abc-latency-readonly.mjs'
       - 'scripts/probe-apd-published-full-cursor-shape-readonly.mjs'
+      - 'scripts/apd-abc-published-projected-cursor-readonly.mjs'
+      - 'scripts/test-apd-abc-published-projected-cursor-readonly.mjs'
+      - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
@@ -45,6 +48,15 @@ jobs:
         run: |
           node --check scripts/probe-apd-published-full-cursor-shape-readonly.mjs
           node scripts/probe-apd-published-full-cursor-shape-readonly.mjs
+      - name: Validate fail-closed Published-only projected cursor with fake ABC pages
+        run: |
+          node --check scripts/apd-abc-published-projected-cursor-readonly.mjs
+          node --check scripts/test-apd-abc-published-projected-cursor-readonly.mjs
+          node --test scripts/test-apd-abc-published-projected-cursor-readonly.mjs
+      - name: Check complete published-only public ABC coverage without personal fields
+        run: |
+          node --check scripts/probe-apd-projected-published-complete-readonly.mjs
+          node scripts/probe-apd-projected-published-complete-readonly.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
