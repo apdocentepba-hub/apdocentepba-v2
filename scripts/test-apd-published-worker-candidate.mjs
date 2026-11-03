@@ -114,6 +114,57 @@ test("changed ABC numFound, partialResults, 429 or page cap are hard errors",asy
  await assert.rejects(()=>run(fakeApi({"LA MATANZA":overCap}),"LA MATANZA",
   {rows:100,maxPages:2}),/bounded page cap/);
 });
+test("district-wide deadline rejects a multi-page response after cumulative latency",async()=>{
+ const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
+ let clock=0;
+ const api=fakeApi({"LA MATANZA":docs},{change:()=>{clock+=1200;}});
+ await assert.rejects(
+  ()=>run(api,"LA MATANZA",{maxWallMs:2000,now:()=>clock}),
+  /district time budget exceeded/
+ );
+ assert.equal(api.requests.length,2);
+});
+test("deadline rejects a slow last page even if all expected offers arrived",async()=>{
+ const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
+ let clock=0;
+ const api=fakeApi({"LA MATANZA":docs},{
+  change:(_rows,offset)=>{clock+=offset===0?1800:250;}
+ });
+ await assert.rejects(
+  ()=>run(api,"LA MATANZA",{maxWallMs:2000,now:()=>clock}),
+  /district time budget exceeded/
+ );
+ assert.equal(api.requests.length,2);
+});
+test("empty Published result cannot be declared complete after district budget expired",async()=>{
+ let clock=0;
+ const api=fakeApi({"LA MATANZA":[]},{change:()=>{clock=1001;}});
+ await assert.rejects(
+  ()=>run(api,"LA MATANZA",{maxWallMs:1000,now:()=>clock}),
+  /district time budget exceeded/
+ );
+});
+test("unreasonable deadline and non-monotonic clocks are rejected",async()=>{
+ const api=fakeApi({"LA MATANZA":[]});
+ for(const maxWallMs of [0,999,60001,1.5,NaN]){
+  await assert.rejects(()=>run(api,"LA MATANZA",{maxWallMs}),/bounded limits invalid/);
+ }
+ let tick=100;
+ const back=fakeApi({"LA MATANZA":[]},{change:()=>{tick=99;}});
+ await assert.rejects(
+  ()=>run(back,"LA MATANZA",{now:()=>tick}),
+  /monotonic clock invalid/
+ );
+});
+test("valid complete multi-page result still passes within total budget",async()=>{
+ const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
+ let clock=0;
+ const api=fakeApi({"LA MATANZA":docs},{change:()=>{clock+=700;}});
+ const result=await run(api,"LA MATANZA",{maxWallMs:2000,now:()=>clock});
+ assert.equal(result.docs.length,183);
+ assert.equal(result.totalBruto,183);
+ assert.equal(api.requests.length,2);
+});
 test("privacy-and-performance combined generated Worker is syntax-complete",()=>{
  const worker=readFileSync("tmp/apd-alerts-performance/worker_published_minimized_candidate.js","utf8");
  const original=readFileSync("worker-live/worker_hotfix.js","utf8");
@@ -121,6 +172,8 @@ test("privacy-and-performance combined generated Worker is syntax-complete",()=>
  assert.match(worker,/async function apdFetchPublishedOnlyDistrict\(/);
  assert.match(worker,/AND estado:"Publicada"/);
  assert.match(worker,/cursorMark/);
+ assert.match(worker,/maxWallMs=20000/);
+ assert.match(worker,/ABC Published district time budget exceeded/);
  assert.match(worker,/Math\.min\(2, distritos\.length\)/);
  assert.match(worker,/apdSafeObservationNotice\(oferta\.observaciones\)/);
  assert.ok(!original.includes("function apdMinimizedRawAlertOffer("));
