@@ -87,10 +87,12 @@ function setupBrowser(config){
   if(!u.startsWith("https://ancient-wildflower-cd37.apdocentepba.workers.dev/"))
    throw Error("External fetch forbidden by mock");
   const auth=String(options.headers?.Authorization||"");
-  const isProtected=!path.endsWith("/api/login")&&!path.endsWith("/api/google-auth");
+  // Real worker.js routes /api/postulantes-resumen as public GET.
+  const isProtected=!path.endsWith("/api/login")&&!path.endsWith("/api/google-auth")&&
+    !path.endsWith("/api/postulantes-resumen");
   const correctBearer=auth==="Bearer "+session;
   lab.requestLog.push({route:path.split("/").slice(-2).join("/"),authorized:correctBearer,
-    method:options.method||"GET"});
+    protected:isProtected,method:options.method||"GET"});
   if(isProtected&&!correctBearer)return json({ok:false,message:"Invalid synthetic bearer"},401);
   if(config.unauthorized && path.endsWith("/api/account/profile")){
     lab.unauthorizedCount++;
@@ -195,7 +197,8 @@ try{
  assert.equal(active.writes,1,"Should only sync synthetic authorized offer once");
  assert.equal(active.status.rendered,1);
  assert.ok(active.mockRoutes.some(x=>x.route==="account/profile"));
- assert.ok(active.mockRoutes.every(x=>x.authorized),"Protected requests must use bearer: "+JSON.stringify(active.mockRoutes));
+ assert.ok(active.mockRoutes.filter(x=>x.protected).every(x=>x.authorized),
+  "Protected requests must use bearer: "+JSON.stringify(active.mockRoutes));
 
  const inactive=await isolatedScenario({active:false,preferencesDelay:20});
  assert.equal(inactive.alertCount,0);assert.equal(inactive.writes,0);
