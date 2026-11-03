@@ -27,10 +27,13 @@ export function auditRadarReleaseHtml(mainHtml,candidateHtml){
      value.split('id="btn-refresh-provincia"').length-1!==1)
    throw Error("Radar release guard: "+label+" missing native radar panel controls");
  }
- const appIndex=candidateHtml.indexOf('src="app_v2.js?v=20&rev=20261102-unverified-plan"');
+ // The canonical app must load first; its cache-buster may evolve without
+ // that ordinary asset update becoming an illicit radar release.
+ const appTags=[...candidateHtml.matchAll(/<script\\b[^>]*\\bsrc\\s*=\\s*["']app_v2\\.js(?:\\?[^"']*)?["'][^>]*><\\/script>/gi)];
+ const appIndex=appTags.length===1?appTags[0].index:-1;
  const radarIndex=candidateHtml.indexOf(newRef.tag);
  if(appIndex<0||radarIndex<appIndex)
-  throw Error("Radar release guard: native alert/app script must load before radar");
+  throw Error("Radar release guard: exactly one canonical app script must load before radar");
  if(oldRef.tag===newRef.tag)
   return Object.freeze({mode:"existing-radar-preserved",version:newRef.version,needsLiveAssetProof:false});
  if(newRef.version!==oldRef.version+1)
