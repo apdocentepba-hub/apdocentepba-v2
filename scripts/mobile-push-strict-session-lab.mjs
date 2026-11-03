@@ -21,7 +21,8 @@ export async function verifyStrictMobileSession({
     !Number.isFinite(Number(now)))return null;
  const token=authorization.slice(7);
  // Even if a real user's UUID is submitted, never treat it as a session.
- if(uuid(token))return null;
+ // A UUID-shaped bearer is valid only when the sessions table contains
+ // that exact active token; user IDs alone are never authenticated.
  let session,user;
  try{
   session=await loadSessionByToken(token);
