@@ -6,6 +6,7 @@ on:
       - 'scripts/test-apd-radar-live-release.mjs'
       - 'scripts/apd-radar-release-guard.mjs'
       - 'scripts/test-apd-radar-release-guard-unit.mjs'
+      - 'candidates/radar_provincia_live_20261102.js'
       - '.github/workflows/apd-radar-public-release.yml'
   workflow_dispatch:
 permissions:
