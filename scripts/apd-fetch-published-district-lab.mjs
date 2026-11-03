@@ -23,7 +23,8 @@ export async function apdFetchPublishedOnlyDistrict({
  if(!canonical||!Array.isArray(variants)||!variants.length||
     variants.some(v=>typeof v!=="string"||!v.trim()))
   throw Error("Invalid ABC district identity or alias variants");
- const q=`(${variants.map(v=>`descdistrito:"${escapeSolr(v)}"`).join(" OR ")}) AND estado:"Publicada"`;
+ const districtQuery=`(${variants.map(v=>`descdistrito:"${escapeSolr(v)}"`).join(" OR ")})`;
+ const q=districtQuery+' AND estado:"Publicada"';
  const endpoint="https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
  // A single district budget bounds ALL sequential pages, not just each GET.
  // A timeout is a source failure, never permission to return truncated offers.
@@ -36,6 +37,58 @@ export async function apdFetchPublishedOnlyDistrict({
   const left=maxWallMs-elapsed;
   if(left<=0)throw Error("ABC Published district time budget exceeded");
   return left;
+ };
+ // Only for a TRUE zero published result: independently ask Solr for the
+ // same district WITHOUT the estado filter, using rows=0 and state facets.
+ // No documents, IDs, CUIL or observation text are fetched by this proof.
+ // Source contradictions, missing facets, timeouts and 429 reject the zero.
+ const confirmZeroPublished=async()=>{
+  const url=new URL(endpoint);
+  for(const [field,value] of Object.entries({
+   q:districtQuery,wt:"json",rows:"0",facet:"true",
+   "facet.field":"estado","facet.mincount":"1","facet.limit":"-1",
+   "facet.missing":"true"
+  }))url.searchParams.set(field,value);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),Math.min(15000,Math.ceil(remaining())));
+  let body;
+  try{
+   const response=await fetchImpl(url,{
+    method:"GET",credentials:"omit",redirect:"error",
+    cache:"no-store",signal:controller.signal,
+    headers:{"accept":"application/json"}
+   });
+   if(!response?.ok)throw Error("ABC Published zero-proof HTTP "+(response?.status??"unknown"));
+   const buffer=await response.arrayBuffer();
+   if(buffer.byteLength>100000)throw Error("ABC Published zero-proof response too large");
+   body=JSON.parse(new TextDecoder("iso-8859-1").decode(buffer));
+  }catch(error){
+   if(controller.signal.aborted)throw Error("ABC Published zero-proof timed out");
+   throw error;
+  }finally{clearTimeout(timeout)}
+  remaining();
+  const totalAllStates=body?.response?.numFound;
+  const facet=body?.facet_counts?.facet_fields?.estado;
+  if(body?.responseHeader?.partialResults===true||
+     !Number.isSafeInteger(totalAllStates)||totalAllStates<0||
+     !Array.isArray(body?.response?.docs)||body.response.docs.length!==0||
+     !Array.isArray(facet)||facet.length%2!==0)
+   throw Error("ABC Published zero-proof facet response invalid");
+  let counted=0,published=0;
+  for(let i=0;i<facet.length;i+=2){
+   const label=facet[i];
+   const count=facet[i+1];
+   if(!(typeof label==="string"||label===null)||
+      !Number.isSafeInteger(count)||count<0)
+    throw Error("ABC Published zero-proof facet count invalid");
+   counted+=count;
+   if(String(label||"").trim().toUpperCase()==="PUBLICADA")published+=count;
+  }
+  if(!Number.isSafeInteger(counted)||counted!==totalAllStates)
+   throw Error("ABC Published zero-proof facet totals incomplete");
+  if(published!==0)
+   throw Error("ABC Published zero contradicts independent state facets");
+  return true;
  };
  const docs=[];
  const ids=new Set(),keys=new Set(),cursors=new Set();
@@ -102,6 +155,7 @@ export async function apdFetchPublishedOnlyDistrict({
   // A later independent second pass still provides drift protection.
   if(ids.size===total){
    remaining();
+   if(total===0)await confirmZeroPublished();
    return {docs,query:q,totalBruto:total,totalFiltrado:docs.length};
   }
   if(next===cursor)throw Error("ABC Published incomplete cursor coverage");
