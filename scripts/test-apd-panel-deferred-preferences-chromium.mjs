@@ -59,7 +59,7 @@ async function evalBrowser(expression){
 }
 
 // Serializable browser function: no import, no request and no external state.
-async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false,lateForm=false,selection=null,prefsHtml=''}){
+async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false,lateForm=false,selection=null,mountDelayMs=0,prefsHtml=''}){
  const createMeter=new Function(meterSource+"\nreturn createApdPanelTimingMeter;")();
  const meter=createMeter();
  window.__APD_LAB_PERF=meter;
@@ -99,6 +99,7 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  if(lateForm)document.getElementById("form-preferencias")?.remove();
  await dashboard();
  if(lateForm){
+  if(mountDelayMs>0)await new Promise(done=>setTimeout(done,mountDelayMs));
   document.getElementById("panel-content").insertAdjacentHTML("beforeend",prefsHtml);
   assertRealFormAfterLoad();
  }
@@ -128,7 +129,7 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  }
  for(let i=0;i<45&&meter.summary().sample_count<1;i++)
   await new Promise(done=>setTimeout(done,20));
- if(editBeforePrefs||selection)await new Promise(done=>setTimeout(done,(delays.prefs??15)+55));
+ if(editBeforePrefs||selection||mountDelayMs)await new Promise(done=>setTimeout(done,(delays.prefs??15)+55));
  const submitEvent=new Event("submit",{bubbles:true,cancelable:true});
  const saveAllowed=document.getElementById("form-preferencias").dispatchEvent(submitEvent);
  const result=meter.summary();
@@ -180,7 +181,8 @@ try{
  const dirty=await run({delays:{api:12,profile:15,prefs:170,plan:15},editBeforePrefs:true});
  const lateMouse=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"mouse"});
  const lateKeyboard=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"keyboard"});
- for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard})){
+ const prefBeforeForm=await run({delays:{api:12,profile:15,prefs:0,plan:15},lateForm:true,mountDelayMs:90});
+ for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard,prefBeforeForm})){
   assert.equal(s.result.sample_count,1,name+" missing browser paint sample");
   assert.equal(s.samples.length,1);
   assert.equal(s.noExternalNetwork,true);
@@ -216,14 +218,20 @@ try{
  assert.equal(dirty.saveAllowed,false,"Saving incomplete/conflicting preferences must be blocked");
  assert.match(dirty.summaryText,/Conservamos tus cambios locales/);
  assert.match(dirty.preferencesMessage,/Recargá la página/);
+ assert.equal(prefBeforeForm.prefValue,"SAVED_SERVER_PREF",
+  "Preferences arriving before form mount must still be hydrated");
+ assert.equal(prefBeforeForm.preferencesHydrated,1,
+  "Exactly one successful hydration after form mounts");
+ assert.equal(prefBeforeForm.saveAllowed,true,
+  "Save allowed only after actual dynamic form hydration");
  for(const item of [lateMouse,lateKeyboard]){
   assert.equal(item.prefValue,"DISTRITO_DEMO");
   assert.equal(item.preferencesHydrated,0,"Programmatic autocomplete selection must prevent late hydration");
   assert.equal(item.saveAllowed,false,"Delayed form must have delegated submit protection");
   assert.match(item.summaryText,/Conservamos tus cambios locales/);
  }
- console.log("APD_CHROMIUM_DYNAMIC_PREF_FORM_AND_AUTOCOMPLETE_PASS "+JSON.stringify({
-  scenarios:9,
+ console.log("APD_CHROMIUM_DELAYED_FORM_FIRST_SOURCE_PASS "+JSON.stringify({
+  scenarios:10,
   slow_api_ms:slowApi.samples[0],
   slow_preferences_ms:slowPreferences.samples[0],
   active_gate_blocked:true,source_error_distinct:true,
