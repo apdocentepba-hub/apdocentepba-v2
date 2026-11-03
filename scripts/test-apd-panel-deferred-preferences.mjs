@@ -159,3 +159,39 @@ test("same user reload clears previous loaded offer state before plan is reverif
  h.resolvePlan(true);await second;await flush();
  assert.equal(h.events.filter(x=>x==="synced").length,2);
 });
+
+
+test("actual renderer updates only preferences when late hydration arrives",()=>{
+ const begin=source.indexOf("function renderDashboard(");
+ const end=source.indexOf("\nfunction renderPlanUI(",begin);
+ assert.ok(begin>0&&end>begin,"Real dashboard renderer is required");
+ const events=[];
+ const deps={
+  setText:(id,value)=>events.push(["text",id,value]),
+  setHTML:(id,value)=>events.push(["html",id,value]),
+  renderEstadisticasPanel:()=>events.push(["stats"]),
+  renderAlertasAPD:()=>events.push(["alerts"]),
+  document:{getElementById:()=>{events.push(["dom"]);return null;}},
+  buildPlanFallback:()=>({plan:{},subscription:{}}),
+  turnoTexto:()=> "Mañana",
+  planNombreHumano:()=> "Plan de prueba",
+  esc:value=>String(value).replaceAll("<","&lt;")
+ };
+ const names=Object.keys(deps);
+ const build=new Function(...names,
+  "let alertasState={items:[{source_offer_key:'FAKE'}]};\n"+
+  source.slice(begin,end)+"\nreturn renderDashboard;");
+ const render=build(...names.map(name=>deps[name]));
+ render({
+  docente:{id:"DEMO",nombre:"Ficticio"},
+  preferencias:{distrito_principal:"QUILMES",cargos_arr:["MATEMÁTICA"],
+   turno_csv:"M",nivel_modalidad:"Secundaria",
+   alertas_activas:true,alertas_email:true},
+  planInfo:{plan:{},subscription:{}},
+  apdPrefsOnly:true
+ });
+ assert.deepEqual(events.map(e=>e[1]),["panel-preferencias-resumen"]);
+ assert.match(events[0][2],/QUILMES/);
+ assert.match(events[0][2],/MATEMÁTICA/);
+ assert.doesNotMatch(events[0][2],/DEMO|FAKE/);
+});
