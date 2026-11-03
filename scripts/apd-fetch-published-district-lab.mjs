@@ -16,8 +16,11 @@ export async function apdFetchPublishedOnlyDistrict({
    throw Error("Published cursor bounded limits invalid");
  const canonical=normalizeDistrict(district||"");
  const variants=districtVariants(canonical);
- if(!canonical||!Array.isArray(variants)||!variants.length)
-  return {docs:[],query:"",totalBruto:0,totalFiltrado:0};
+ // An invalid district preference is not evidence of zero published offers.
+ // Reject rather than silently tell a teacher that no matching vacancies exist.
+ if(!canonical||!Array.isArray(variants)||!variants.length||
+    variants.some(v=>typeof v!=="string"||!v.trim()))
+  throw Error("Invalid ABC district identity or alias variants");
  const q=`(${variants.map(v=>`descdistrito:"${escapeSolr(v)}"`).join(" OR ")}) AND estado:"Publicada"`;
  const endpoint="https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select";
  const docs=[];
