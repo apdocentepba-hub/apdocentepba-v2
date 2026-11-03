@@ -14,11 +14,6 @@ const ALLOWED=[
  {name:"styles.css",type:/text\/css/i,maxBytes:600_000}
 ];
 const CACHE_TRIALS=2,MAX_BODY=1_000_000;
-function percentile(values,p){
- assert.ok(values.length>0);
- const sorted=[...values].sort((a,b)=>a-b);
- return Math.round(sorted[Math.max(0,Math.ceil(values.length*p)-1)]*10)/10;
-}
 function extractAssetHref(html,name){
  const pattern=name.endsWith(".css")
   ? /<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi
@@ -104,10 +99,10 @@ export async function probePublicEntrypoint({
   return [name,{
    trials:samples.length,bytes_min:Math.min(...samples.map(s=>s.bytes)),
    bytes_max:Math.max(...samples.map(s=>s.bytes)),
-   ttfb_p50_ms:percentile(samples.map(s=>s.ttfb_ms),0.5),
-   ttfb_p95_ms:percentile(samples.map(s=>s.ttfb_ms),0.95),
-   total_p50_ms:percentile(samples.map(s=>s.total_ms),0.5),
-   total_p95_ms:percentile(samples.map(s=>s.total_ms),0.95)
+   ttfb_min_ms:Math.min(...samples.map(s=>s.ttfb_ms)),
+   ttfb_max_ms:Math.max(...samples.map(s=>s.ttfb_ms)),
+   total_min_ms:Math.min(...samples.map(s=>s.total_ms)),
+   total_max_ms:Math.max(...samples.map(s=>s.total_ms))
   }];
  }));
  return {
