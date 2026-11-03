@@ -9,6 +9,7 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 const candidate=readFileSync("tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js","utf8");
+const baseline=readFileSync("tmp/apd-alerts-performance/app_v2_telemetry_candidate.js","utf8");
 const uiPatchSource=readFileSync("safe_dashboard_ui_patch.js","utf8");
 const actualPrefsCard=uiPatchSource.match(/function prefsCardHtml\(\) \{\s*return `([\s\S]*?)`;\s*\}/);
 assert.ok(actualPrefsCard?.[1]?.includes('id="form-preferencias"'),
@@ -18,6 +19,11 @@ const start=candidate.indexOf("async function cargarDashboard() {");
 const end=candidate.indexOf("\nfunction renderDashboard(",start);
 assert.ok(start>=0&&end>start,"Actual candidate dashboard not found");
 const dashboardSource=candidate.slice(start,end);
+const baselineStart=baseline.indexOf("async function cargarDashboard() {");
+const baselineEnd=baseline.indexOf("\nfunction renderDashboard(",baselineStart);
+assert.ok(baselineStart>=0&&baselineEnd>baselineStart,
+ "Instrumented baseline dashboard not found");
+const baselineDashboardSource=baseline.slice(baselineStart,baselineEnd);
 const meterSource=readFileSync("scripts/apd-panel-timing-meter.mjs","utf8")
  .replace("export function createApdPanelTimingMeter(","function createApdPanelTimingMeter(");
 const executable=["google-chrome","google-chrome-stable","chromium","chromium-browser"]
@@ -203,6 +209,65 @@ try{
   delays:{api:12,profile:15,prefs:0,plan:15},
   lateForm:true,mountDelayMs:90,useRealBootstrap:true
  });
+
+ // Real Chromium rendering path with ONLY synthetic delay profiles.
+ // The original instrumented function and deferred candidate run in a new
+ // document per trial, with identical API/profile/plan/offer mocks.
+ const quantile=(values,p)=>{
+  assert.ok(values.length>0);
+  const sorted=[...values].sort((a,b)=>a-b);
+  return Math.round(sorted[Math.ceil(sorted.length*p)-1]*10)/10;
+ };
+ async function comparePaint(profile,trials=9){
+  const samples={baseline:[],deferred:[]};
+  for(let i=0;i<trials;i++){
+   // Interleave trials to avoid treating browser warmup as a product win.
+   const order=i%2===0?["baseline","deferred"]:["deferred","baseline"];
+   for(const variant of order){
+    const response=await run({
+     dashboardSource:variant==="baseline"?baselineDashboardSource:dashboardSource,
+     delays:profile
+    });
+    assert.equal(response.paintText,"ALERTA_RENDERIZADA");
+    assert.equal(response.result.outcomes.rendered,1);
+    assert.equal(response.result.sample_count,1);
+    assert.equal(response.synchronized,1);
+    assert.ok(Number.isFinite(response.samples[0].rendered_ms));
+    assert.doesNotMatch(JSON.stringify(response.samples),
+      /SYNTHETIC_ONLY_SESSION|D_FAKE_1|Bearer|email/i);
+    samples[variant].push(response.samples[0].rendered_ms);
+   }
+  }
+  return {
+   synthetic_delays_ms:profile,
+   trials_per_variant:trials,
+   baseline_p50_ms:quantile(samples.baseline,0.5),
+   baseline_p95_ms:quantile(samples.baseline,0.95),
+   deferred_p50_ms:quantile(samples.deferred,0.5),
+   deferred_p95_ms:quantile(samples.deferred,0.95),
+   same_synthetic_alert_rendered:true,
+   browser_chromium:true,
+   live_site_or_auth_measured:false
+  };
+ }
+ const slowPrefProfile=await comparePaint({
+  api:12,profile:15,plan:15,prefs:190
+ });
+ const apiBoundProfile=await comparePaint({
+  api:140,profile:15,plan:15,prefs:12
+ });
+ assert.ok(slowPrefProfile.deferred_p50_ms<slowPrefProfile.baseline_p50_ms*0.72,
+  "Synthetic late preferences should materially reduce first alert paint");
+ assert.ok(apiBoundProfile.deferred_p50_ms<=apiBoundProfile.baseline_p50_ms+45,
+  "Deferring fast preferences should not significantly regress API-bound paint");
+ assert.ok(apiBoundProfile.deferred_p95_ms<=apiBoundProfile.baseline_p95_ms+75,
+  "Deferring fast preferences should not add a large synthetic tail penalty");
+ console.log("APD_CHROMIUM_INTERLEAVED_P50_P95_FAKE_SESSION "+JSON.stringify({
+  synthetic_profiles:[slowPrefProfile,apiBoundProfile],
+  real_auth_session:false,external_network_requests:0,
+  production_modified:false
+ }));
+
  for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard,prefBeforeForm,realBootstrapEarlyPrefs})){
   assert.equal(s.result.sample_count,1,name+" missing browser paint sample");
   assert.equal(s.samples.length,1);
