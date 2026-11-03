@@ -49,3 +49,17 @@ test("can not suppress guard by passing empty or non-html text",()=>{
  assert.throws(()=>auditRadarReleaseHtml("bad",page(2)),/invalid main HTML/);
  assert.throws(()=>auditRadarReleaseHtml(page(2),""),/invalid candidate HTML/);
 });
+
+test("ordinary authenticated app cache-buster changes do not create false radar-release failures",()=>{
+ const updated=original.replace("app_v2.js?v=20&rev=20261102-unverified-plan","app_v2.js?v=21&rev=20261103");
+ const state=auditRadarReleaseHtml(original,updated);
+ assert.equal(state.mode,"existing-radar-preserved");
+ assert.equal(state.version,2);
+});
+test("duplicate canonical app scripts, or missing app script, are not accepted",()=>{
+ const app='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
+ assert.throws(()=>auditRadarReleaseHtml(original,original.replace(app,app+app)),
+  /exactly one canonical app script/);
+ assert.throws(()=>auditRadarReleaseHtml(original,original.replace(app,"")),
+  /exactly one canonical app script/);
+});
