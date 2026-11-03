@@ -18,23 +18,45 @@ const meterSource=readFileSync("scripts/apd-panel-timing-meter.mjs","utf8")
 const executable=["google-chrome","google-chrome-stable","chromium","chromium-browser"]
  .find(x=>spawnSync("which",[x],{stdio:"ignore"}).status===0);
 assert.ok(executable,"Chromium not present in CI image");
-const directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-paint-"));
-const browser=spawn(executable,[
+const browserArgs=directory=>[
  "--headless=new","--no-sandbox","--disable-gpu","--disable-dev-shm-usage",
  "--disable-background-networking","--no-first-run","--no-default-browser-check",
  "--remote-debugging-port=0","--user-data-dir="+directory,"about:blank"
-],{stdio:"ignore"});
+];
+let directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-paint-"));
+let browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
 const sleep=ms=>new Promise(done=>setTimeout(done,ms));
 let socket,serial=0;
 const pending=new Map();
+async function stopForRetry(){
+ browser.kill("SIGTERM");
+ await new Promise(resolve=>{
+  if(browser.exitCode!==null||browser.signalCode!==null)return resolve();
+  const t=setTimeout(resolve,3000);
+  browser.once("exit",()=>{clearTimeout(t);resolve();});
+ });
+ rmSync(directory,{recursive:true,force:true,maxRetries:12,retryDelay:200});
+}
 async function debugPort(){
- for(let i=0;i<120;i++){
-  const file=path.join(directory,"DevToolsActivePort");
-  if(existsSync(file))return Number(readFileSync(file,"utf8").split("\n")[0]);
-  if(browser.exitCode!==null)throw Error("Chromium exited before debug port opened");
-  await sleep(100);
+ // Startup can fail intermittently on shared GitHub runners; retry ONLY
+ // before a debug connection was established, with a completely fresh profile.
+ for(let attempt=0;attempt<2;attempt++){
+  for(let i=0;i<120;i++){
+   const file=path.join(directory,"DevToolsActivePort");
+   if(existsSync(file)){
+    const port=Number(readFileSync(file,"utf8").split("\n")[0]);
+    if(Number.isInteger(port)&&port>0)return port;
+   }
+   if(browser.exitCode!==null||browser.signalCode!==null)break;
+   await sleep(100);
+  }
+  if(attempt===0){
+   await stopForRetry();
+   directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-retry-"));
+   browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
+  }
  }
- throw Error("Chromium debug port unavailable");
+ throw Error("Chromium debug port unavailable after 2 fresh-profile attempts");
 }
 async function cdp(method,params={}){
  const id=++serial;
