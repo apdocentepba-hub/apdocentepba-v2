@@ -5,6 +5,9 @@ on:
       - 'scripts/apd-abc-worker-key-two-pass-readonly.mjs'
       - 'scripts/audit-apd-abc-worker-key-twopass.mjs'
       - 'scripts/test-apd-abc-worker-key-twopass.mjs'
+      - 'scripts/apd-abc-cross-district-worker-keys-readonly.mjs'
+      - 'scripts/audit-apd-abc-cross-district-worker-keys.mjs'
+      - 'scripts/test-apd-abc-cross-district-worker-keys.mjs'
       - '.github/workflows/apd-abc-worker-key-twopass.yml'
   workflow_dispatch:
 permissions:
@@ -48,4 +51,33 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Verify Worker source, frontend and database are not changed
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
+
+  cross-district-global-uniqueness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline negative controls for cross-district key collisions
+        run: |
+          node --check scripts/apd-abc-cross-district-worker-keys-readonly.mjs
+          node --check scripts/audit-apd-abc-cross-district-worker-keys.mjs
+          node --test scripts/test-apd-abc-cross-district-worker-keys.mjs
+      - name: Verify cross-district Worker-key uniqueness with public GET only
+        run: node scripts/audit-apd-abc-cross-district-worker-keys.mjs
+      - name: Preserve aggregate-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-cross-district-keys-aggregate
+          path: tmp/apd-abc-key-twopass/cross-district-aggregates.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Ensure production Worker, database, and frontend stay untouched
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
