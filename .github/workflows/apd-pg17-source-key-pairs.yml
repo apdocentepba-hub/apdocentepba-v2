@@ -4,6 +4,9 @@ on:
     paths:
       - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
       - 'scripts/test-apd-source-key-pairs-http.mjs'
+      - 'scripts/apd-global-source-pair-stage-gate.mjs'
+      - 'scripts/test-apd-global-source-pair-stage-gate.mjs'
+      - 'scripts/test-apd-global-source-pairs-pg17-http.mjs'
       - 'scripts/test-apd-pg17-concurrent-districts-http.mjs'
       - 'tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql'
       - 'tests/sql/apd_ci_capture_status_readonly_pg17.sql'
@@ -300,6 +303,46 @@ jobs:
           END
           $apd_midflight_verify$;
           SELECT 'PASS: in-flight client SIGKILL; state reconciles with atomic row counts' AS result;
+          SQL
+      - name: Test cross-district two-pass source pair gate with no network
+        run: |
+          node --check scripts/apd-global-source-pair-stage-gate.mjs
+          node --check scripts/test-apd-global-source-pair-stage-gate.mjs
+          node --test scripts/test-apd-global-source-pair-stage-gate.mjs
+      - name: Stage and commit globally audited fictitious source pairs via disposable PostgREST
+        run: |
+          node --check scripts/test-apd-global-source-pairs-pg17-http.mjs
+          node scripts/test-apd-global-source-pairs-pg17-http.mjs
+      - name: Verify the two globally gated commits are atomic, district-safe and non-pruning
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_global_keys$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402'))<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key IN ('D_9401','D_9402'))<>2
+               OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9401' AND distrito='MORENO')
+               OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9402' AND distrito='TIGRE')
+               OR (SELECT count(*) FROM apd_scanner_pilot.runs
+                  WHERE run_id IN ('00000000-0000-0000-0000-000000009401',
+                                   '00000000-0000-0000-0000-000000009402')
+                  AND status='finalized')<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.source_id_key_pairs
+                  WHERE run_id IN ('00000000-0000-0000-0000-000000009401',
+                                   '00000000-0000-0000-0000-000000009402')
+                  AND verified_at IS NOT NULL)<>2
+               OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                  AND (distrito NOT IN ('MORENO','TIGRE')
+                       OR (source_offer_key='D_9401' AND distrito<>'MORENO')
+                       OR (source_offer_key='D_9402' AND distrito<>'TIGRE')))
+            THEN RAISE EXCEPTION 'Global preflight to atomic PG17 staging failed'; END IF;
+          END
+          $apd_global_keys$;
+          SELECT 'PASS: global pairs staged across two districts, twice verified, no collision or prune' AS result;
           SQL
       - name: Assert no production source, frontend, SQL or Supabase changes
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
