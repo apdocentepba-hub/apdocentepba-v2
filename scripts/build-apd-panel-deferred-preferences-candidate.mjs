@@ -102,14 +102,14 @@ d('  mostrarSeccion("panel-docente");',
  "  const keepDraft = oldPrefGuard?.owner === token && oldPrefGuard.dirty === true;",
  "  oldPrefGuard?.dispose?.();",
  "  const prefForm = document.getElementById('form-preferencias');",
- "  const prefGuard = {owner:token,dirty:keepDraft,state:'loading',dispose:()=>{}};",
+ "  const prefGuard = {owner:token,dirty:keepDraft,revision:oldPrefGuard?.owner===token ? (oldPrefGuard.revision||0) : 0,state:'loading',dispose:()=>{}};",
  "  const onPrefEdit = e => {",
  "    if (!current()) return;",
- "    if (e.target?.matches?.('input, select, textarea')) prefGuard.dirty = true;",
+ "    if (e.target?.matches?.('input, select, textarea')) {prefGuard.dirty = true;prefGuard.revision++;}",
  "  };",
  "  const onPrefClear = e => {",
  "    if (current() && e.target?.closest?.('#btn-clear-distritos, #btn-clear-cargos'))",
- "      prefGuard.dirty = true;",
+ "      {prefGuard.dirty = true;prefGuard.revision++;}",
  "  };",
  "  const onUnsafeSubmit = e => {",
  "    if (!current() || prefGuard.state === 'ready') return;",
@@ -185,6 +185,29 @@ renderer=edit(renderer,
  '  renderEstadisticasPanel(data.estadisticas?.total_alertas ?? null, data.estadisticas?.ultimo_acceso);',
  '  if(data.apdPrefsOnly)return;\n  renderEstadisticasPanel(data.estadisticas?.total_alertas ?? null, data.estadisticas?.ultimo_acceso);',
  "late preferences do not clear stats/history/alert render");
+// Match the actual save lifecycle, not just form hydration. A successful
+// server acknowledgement can clear dirty ONLY if no newer editing event occurred
+// after the submitted snapshot and the session/guard did not change.
+renderer=edit(renderer,
+ "async function guardarPreferencias(e) {\n  e.preventDefault();",
+ [
+ "async function guardarPreferencias(e) {",
+ "  e.preventDefault();",
+ "  const apdSaveGuard = window.__APD_LAB_PREF_GUARD;",
+ "  const apdSaveRevision = apdSaveGuard?.revision;"
+ ].join("\n"),
+ "capture save-start editor revision");
+renderer=edit(renderer,
+ '    showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");\n    await cargarDashboard();',
+ [
+ '    showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");',
+ "    if(apdSaveGuard && apdSaveGuard === window.__APD_LAB_PREF_GUARD &&",
+ "       apdSaveGuard.owner === token && apdSaveGuard.revision === apdSaveRevision)",
+ "      apdSaveGuard.dirty = false;",
+ "    await cargarDashboard();"
+ ].join("\n"),
+ "clear draft after server-confirmed save with revision CAS");
+
 const output="tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js";
 writeFileSync(output,text.slice(0,start)+dashboard+renderer);
 console.log(JSON.stringify({candidate:output,production_untouched:true,
