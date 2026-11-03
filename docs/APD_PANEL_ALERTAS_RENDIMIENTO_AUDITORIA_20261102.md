@@ -216,3 +216,14 @@ Si las facetas no existen, la respuesta contiene documentos a pesar de `rows=0`,
 **Resultados integrales del commit probado `1c75ce431ecdacaf43e8d1f2ee57b4a510c362e8`:** **141/141 pruebas Node aprobadas** en las suites registradas, comprobaciones de sintaxis, fuente ABC, Chromium y ausencia de modificación productiva; autenticación/plan/JS de panel en laboratorio `41710020475` **SUCCESS**; router `41710020465` **SUCCESS**.
 
 **Limitaciones no resueltas:** falta ensayo multiusuario del sistema desplegado con autorización, medición del tiempo autenticado p50/p95, revisión funcional y privacidad de observaciones, cobertura de los demás distritos, resultados de staging PG17 y proceso de respaldo/rollback. **No fusionar ni desplegar** desde este PR; `main` y archivos productivos sin cambios por esta intervención. Mantener la preparación productiva del rendimiento en **40% (2/5 hitos cerrados)** hasta que cambie evidencia de criterios pendientes.
+
+
+## 03/11/2026 — corte cooperativo de consultas ABC después del primer error
+
+Al revisar `scripts/build-apd-alert-panel-performance-candidate.mjs` se detectó que los dos trabajadores distritales del candidato paralelo seguían tomando trabajos de la cola mientras el `Promise.all` exterior ya había rechazado por un error de otro distrito. En caso de `429` de ABC, esto podía consumir GET innecesarios y empeorar la carga sobre el origen.
+
+**Cambio SOLO en el generador del Worker descartable:** se agrega una marca de fallo compartida que detiene la programación de distritos nuevos en cuanto uno falla; se espera a que terminen los GET ya iniciados (sujetos al límite de tiempo de la función de lectura), y se vuelve a lanzar el primer error original. No se devuelve un resultado parcial, vacío ni un contador de «cero alertas». Se mantiene la concurrencia máxima de dos y el orden de agregación de respuestas exitosas.
+
+Dos nuevas pruebas deterministas en `scripts/test-apd-alert-panel-performance-candidate.mjs` verifican: (a) un 429 con dos distritos activos impide iniciar los tres distritos restantes; (b) si uno termina y habilita un tercer GET antes del error de otro, ese tercer GET puede finalizar, pero no se inician los distritos cuarto ni quinto. El beneficio de reducir solicitudes no implica una reducción medida del tiempo de renderizado ni elimina los 429 en la fuente real.
+
+**Pendientes:** ejecutar las suites de GitHub Actions, cotejar la fuente ABC en condiciones de carga moderada con permiso, medir p50/p95 del panel autenticado y contrastar los eventos de error de origen antes/después. Se prohíbe activar el candidato únicamente por el resultado de CI.
