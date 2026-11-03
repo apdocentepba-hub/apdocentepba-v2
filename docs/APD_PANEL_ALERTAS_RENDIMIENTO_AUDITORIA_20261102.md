@@ -71,3 +71,27 @@ El resultado de ofertas, orden y deduplicación fue **idéntico** en cada compar
 **Advertencia de arquitectura:** el prototipo todavía NO está conectado al Worker, por lo que no se puede afirmar igualdad de resultados de filtrado con perfiles autorizados ni tiempos reales de panel. `observaciones` permanece en la proyección porque el Worker utiliza el campo, pero su contenido también requiere auditoría de privacidad antes de exhibirlo. Las diferencias de contadores de `debug_distritos` al pasar de todos los estados a solo «Publicada» deberán resolverse. No activar el prototipo, ni reemplazar el Worker, ni fusionar por el simple resultado verde de CI.
 
 **Próximo criterio de aceptación:** pruebas de paridad de alertas y PID usando documentos del lector proyectado, revisión de privacidad del `raw` actual, medición del panel autenticado y rollback verificable. Se mantienen intactas `main`, la web, usuarios, pagos, alertas y Supabase.
+
+## Contrato de filtros y PID — ensayo sobre funciones reales del Worker
+
+**CI `41559647293`: success**, pruebas del commit `d62e74466b02e00f0d5688bd6f919fbf363a365c`, con **16/16 casos** sobre el código canónico de `worker-live/worker_hotfix.js`. El ensayo `scripts/test-apd-projected-alert-pid-parity.mjs` ejecuta sin red las funciones reales `coincideOfertaConPreferenciasAPD`, `evaluatePidCompatibility` y `buildAlertItem`, junto con sus auxiliares originales. Compara el documento completo ficticio con su proyección a los 29 campos permitidos y comprueba igualdad de campos calculados, coincidencias y evaluación PID en doce escenarios: distrito, cargo, turno, nivel, puntaje por residencia, PID ausente, incompatibilidad de área o rama y estado no publicado.
+
+Tres controles negativos demuestran que las pruebas detectan diferencias al retirar campos relevantes de cargo/área, nivel y turno. El campo `raw` se excluye **del requisito de igualdad** porque el documento proyectado debe suprimir deliberadamente los campos personales de origen. Con el Worker actual, `buildAlertItem` devuelve `raw: oferta`, por lo que la consulta genérica sin proyección puede reenviar a clientes campos como `cuilautor` y `reemp_cuil` que vengan de ABC; esto debe bloquearse en cualquier integración futura. **La prueba es con documentos inventados**, no con sesiones autorizadas ni con cada variante del índice ABC.
+
+El primer intento falló por un error en el extractor de funciones **del test** (expresión regular mal escapada); se corrigió y se repitió la suite completa con éxito. Esto no demuestra un fallo ni una corrección del Worker productivo.
+
+## Auditoría agregada del texto libre `observaciones` — bloqueo de privacidad
+
+**CI `41559891372`: success**, con cuatro pruebas adicionales y una consulta pública acotada a `fl=observaciones`, estado «Publicada», sin solicitar IDs de ofertas, CUIL ni datos de sesión. Los valores de texto se analizaron **solo en memoria**; no se imprimieron ni guardaron, y únicamente se registraron cantidades agregadas.
+
+- **La Matanza:** 183 ofertas examinadas, **16 observaciones no vacías**; **0** posibles identificadores personales, correos o referencias telefónicas detectados por los patrones del ensayo.
+- **Avellaneda:** 65 ofertas examinadas, **16 observaciones no vacías**; **1 posible dirección de correo electrónico**, **0** coincidencias del patrón de identificador personal y **0** referencias telefónicas.
+- El contador de indicios **no es una auditoría semántica completa ni certifica ausencia de PII**. Un texto puede identificar a una persona sin coincidir con las expresiones regulares. Tampoco se conoce si el posible correo detectado identifica un contacto institucional o a una persona.
+
+**DECISIÓN DE SEGURIDAD:** la nueva consulta proyectada **no está autorizada para exponer `observaciones` ni `raw` textuales sin una política explícita de minimización/sanitización y pruebas de equivalencia funcional**. No eliminar silenciosamente observaciones que puedan ser útiles para el usuario ni afirmar privacidad total por el resultado de un regex. No enlazar el prototipo directamente con la respuesta del Worker. El estado sigue **DRAFT / sin fusión / sin despliegue**.
+
+## Progreso y aceptación pendiente
+
+La preparación de optimización se mantiene por ahora en **40% (2 de 5 hitos plenamente cerrados)**: diagnóstico y candidato de concurrencia probado. La tercera etapa avanzó con 16 verificaciones funcionales y 4 de privacidad, pero queda **bloqueada** por la posible presencia de texto personal en observaciones, la necesidad de validar campos y filtros reales en más distritos y un contrato seguro para `raw`. No declarar la plataforma acelerada. Las dos etapas posteriores siguen siendo medición autenticada pre/post, QA de carga y despliegue autorizado con reversión/backups.
+
+**Última validación del PR:** `41559891372` concluyó con todos los pasos del CI en success, incluyendo 6/6 pruebas originales, 10/10 de integridad del cursor, 16/16 de paridad funcional y 4/4 de privacidad. La revisión de privacidad puede detectar nuevas restricciones de promoción aun cuando CI sea verde.
