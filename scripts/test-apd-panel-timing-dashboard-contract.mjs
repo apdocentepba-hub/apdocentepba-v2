@@ -10,7 +10,7 @@ assert.ok(start>=0 && end>start,"Could not extract actual instrumented dashboard
 const dashboardSource=candidate.slice(start,end);
 function harness({active=true,apiFails=false,profileFails=false,delayProfile=false}={}){
  let token="SESSION_ONLY_FOR_FAKE_TEST",now=0;
- let resolver,rendered=[],synced=0,profileRenders=0;
+ const resolvers=new Map();let rendered=[],synced=0,profileRenders=0;
  const paint=[];
  const meter=createApdPanelTimingMeter({
   now:()=>now,nextPaint:done=>paint.push(done)
@@ -19,7 +19,7 @@ function harness({active=true,apiFails=false,profileFails=false,delayProfile=fal
  const node=id=>{
   if(!els.has(id))els.set(id,{
    textContent:"",innerHTML:"",className:"",style:{},
-   classList:{add(){},remove(){}},appendChild(){},
+   classList:{add(){},remove(){}},appendChild(child){this.textContent+=child.textContent||"";},
    setAttribute(){},addEventListener(){},
   });
   return els.get(id);
@@ -39,8 +39,8 @@ function harness({active=true,apiFails=false,profileFails=false,delayProfile=fal
   actualizarNav(){},mostrarSeccion(){},setPanelLoading(){},
   obtenerMisAlertas:()=>apiFails?Promise.reject(new Error("synthetic ABC fault")):
    Promise.resolve([{source_offer_key:"D_FAKE_1"}]),
-  obtenerDocentePorId:()=>profileFails?Promise.reject(new Error("synthetic profile fault")):
-   delayProfile?new Promise(resolve=>resolver=resolve):
+  obtenerDocentePorId:id=>profileFails?Promise.reject(new Error("synthetic profile fault")):
+   delayProfile?new Promise(resolve=>resolvers.set(id,resolve)):
    Promise.resolve({id:"FAKE",nombre:"Fake"}),
   obtenerPreferenciasPorUserId:async()=>({}),
   obtenerMiPlan:async()=>({access_active:active}),
@@ -57,6 +57,7 @@ function harness({active=true,apiFails=false,profileFails=false,delayProfile=fal
  const names=Object.keys(dependencies);
  const compiled=new Function(...names,
   "let dashboardRequestVersion=0;let dashboardLoadedOwner=null;"+
+  "let alertasState={items:[],index:0};"+
   "let planActual={access_active:null};\n"+
   dashboardSource+"\nreturn cargarDashboard;");
  const cargarDashboard=compiled(...names.map(k=>dependencies[k]));
@@ -66,7 +67,7 @@ function harness({active=true,apiFails=false,profileFails=false,delayProfile=fal
   tick:ms=>now+=ms,
   settlePaint:()=>{while(paint.length)paint.shift()();},
   setToken:x=>token=x,
-  resolveProfile:()=>{if(!resolver)throw Error("Profile not requested");resolver({id:"FAKE"});},
+  resolveProfile:(requested=token)=>{const fn=resolvers.get(requested);if(!fn)throw Error("Profile not requested");resolvers.delete(requested);fn({id:"FAKE"});},
   get rendered(){return rendered},
   get synced(){return synced},
   get profileRenders(){return profileRenders},
@@ -114,8 +115,9 @@ test("stale user while profile pending never renders old alerts or records old m
  // Current dashboard new session supersedes first request.
  const current=h.cargarDashboard();
  await Promise.resolve();
- h.resolveProfile();
+ h.resolveProfile("SECOND_FAKE_SESSION");
  await current;
+ h.resolveProfile("SESSION_ONLY_FOR_FAKE_TEST");
  await obsolete;
  await Promise.resolve();await Promise.resolve();
  h.tick(14);h.settlePaint();
