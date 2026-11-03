@@ -107,7 +107,7 @@ jobs:
       - name: Verify atomic durability of both races, with zero partial writes
         run: |
           psql -X -v ON_ERROR_STOP=1 <<'SQL'
-          DO $
+          DO $apd_verify$
           DECLARE
             v_full text;
             v_min text;
@@ -148,7 +148,7 @@ jobs:
             THEN
               RAISE EXCEPTION 'Parallel district abort or same-key race caused partial/foreign writes';
             END IF;
-          END$;
+          END$apd_verify$;
           SELECT 'PASS: fault-injected run rolled back, unrelated run committed, exactly one same-key winner; no pruning' AS result;
           SQL
       - name: Assert no production source, frontend, SQL or Supabase changes
