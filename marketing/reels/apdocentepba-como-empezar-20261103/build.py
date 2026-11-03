@@ -111,7 +111,7 @@ def one(screens):
   im=panel(0);d=ImageDraw.Draw(im)
   text(d,["¿BUSCÁS CARGOS","O MATERIAS","EN PBA?"],220,69,hi="EN PBA?")
   label(d,"MIRÁ CÓMO ORGANIZARTE",y=540)
-  mobile(im,screens["portada"],x=225,y=665,width=630,height=900)
+  mobile(im,screens["empezar"],x=225,y=665,width=630,height=900)
   footer(ImageDraw.Draw(im),["Una búsqueda más clara","empieza por tus preferencias."],1610)
   return im
 
@@ -127,8 +127,19 @@ def three(screens):
   im=panel(2);d=ImageDraw.Draw(im)
   text(d,["2. CONSULTÁ","TUS ALERTAS"],235,76,hi="TUS ALERTAS")
   label(d,"SEGÚN TU PLAN",y=472)
-  mobile(im,screens["portada"],x=225,y=620,width=630,height=965)
-  footer(ImageDraw.Draw(im),["Solo las opciones disponibles","para tu cuenta y preferencias."],1610)
+  # Esquema creado para explicar filtros; NO representa ofertas en tiempo real.
+  d.rounded_rectangle((119,642,961,1490),radius=44,fill=(13,53,68),outline=TEAL,width=5)
+  d.text((169,696),"MIS PREFERENCIAS",font=font(47,True),fill=WHITE)
+  for k,(name,description) in enumerate([
+      ("DISTRITO","Elegí tu zona"),
+      ("CARGO O MATERIA","Definí qué buscás"),
+      ("NIVEL / TURNO","Adaptalo a tu disponibilidad")]):
+      y=802+k*197
+      d.rounded_rectangle((159,y,919,y+162),radius=24,fill=(24,84,96),outline=(56,145,143),width=2)
+      d.text((195,y+22),name,font=font(34,True),fill=TEAL)
+      d.text((195,y+86),description,font=font(27),fill=WHITE)
+  d.text((167,1437),"ESQUEMA ILUSTRATIVO",font=font(27,True),fill=MUTED)
+  footer(ImageDraw.Draw(im),["Revisá las alertas disponibles","para tu cuenta y preferencias."],1574)
   return im
 
 def four(screens):
