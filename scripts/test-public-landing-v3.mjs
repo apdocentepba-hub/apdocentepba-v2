@@ -65,6 +65,8 @@ test("buttons/links have semantic accessible controls and non-misleading wording
   assert.ok(tag,"Password toggle unavailable: "+target);
   assert.match(tag[0],new RegExp('aria-controls="'+target+'"'));
   assert.match(tag[0],/aria-label="Mostrar u ocultar contraseña"/);
+  assert.match(tag[0],/data-account-patch-bound="1"/);
+  // The account profile patch must not attach a second click handler here.
   assert.doesNotMatch(tag[0],/tabindex="-1"/);
  }
  assert.match(registration,/type="email" id="reg-email"/);
