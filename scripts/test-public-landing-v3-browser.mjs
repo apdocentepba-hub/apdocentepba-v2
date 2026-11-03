@@ -153,6 +153,24 @@ try{
   assert.ok(login.asideWidth>150,"Login aside collapsed");
   assert.ok(login.privateNavHidden,"Private nav visible in login");
   if(width===390)assert.ok(login.themeBottom<login.passwordTop,"Mobile theme toggle overlays login password field");
+  const toggleLogin=await evaluate(`(()=>{
+   const input=document.getElementById("login-password");
+   const button=document.querySelector('[data-target="login-password"].pw-toggle');
+   const keyboardReachable=button.tabIndex>=0;
+   button.focus();
+   const focusable=document.activeElement===button;
+   button.click();
+   const revealed=input.type==="text";
+   button.click();
+   return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
+     accessibleName:button.getAttribute("aria-label"),
+     controls:button.getAttribute("aria-controls")};
+  })()`);
+  assert.ok(toggleLogin.keyboardReachable&&toggleLogin.focusable&&
+    toggleLogin.revealed&&toggleLogin.remasked&&
+    toggleLogin.accessibleName==="Mostrar u ocultar contraseña"&&
+    toggleLogin.controls==="login-password",
+   "Accessible password toggle broken: "+JSON.stringify(toggleLogin));
   await screenshot("login-"+width);
   const signup=await evaluate(`(()=>{
    document.querySelector("#login .form-foot .link-btn").click();
@@ -167,6 +185,24 @@ try{
   assert.ok(signup.visible&&signup.hasForm&&signup.hasConsent&&signup.google,
    "Registration navigation/controls broken "+JSON.stringify(signup));
   assert.ok(signup.overflow<=signup.viewport+4,"Registration overflow "+width);
+  const toggleRegistration=await evaluate(`(()=>{
+   const input=document.getElementById("reg-password");
+   const button=document.querySelector('[data-target="reg-password"].pw-toggle');
+   const keyboardReachable=button.tabIndex>=0;
+   button.focus();
+   const focusable=document.activeElement===button;
+   button.click();
+   const revealed=input.type==="text";
+   button.click();
+   return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
+     accessibleName:button.getAttribute("aria-label"),
+     controls:button.getAttribute("aria-controls")};
+  })()`);
+  assert.ok(toggleRegistration.keyboardReachable&&toggleRegistration.focusable&&
+    toggleRegistration.revealed&&toggleRegistration.remasked&&
+    toggleRegistration.accessibleName==="Mostrar u ocultar contraseña"&&
+    toggleRegistration.controls==="reg-password",
+   "Accessible password toggle broken: "+JSON.stringify(toggleRegistration));
   await screenshot("registration-"+width);
   const dark=await evaluate(`(()=>{
    document.body.classList.add("apd-dark");
