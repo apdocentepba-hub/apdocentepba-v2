@@ -9,6 +9,11 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 const candidate=readFileSync("tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js","utf8");
+const uiPatchSource=readFileSync("safe_dashboard_ui_patch.js","utf8");
+const actualPrefsCard=uiPatchSource.match(/function prefsCardHtml\(\) \{\s*return `([\s\S]*?)`;\s*\}/);
+assert.ok(actualPrefsCard?.[1]?.includes('id="form-preferencias"'),
+ "Actual deferred UI preference form markup not found");
+const prefsHtml=actualPrefsCard[1];
 const start=candidate.indexOf("async function cargarDashboard() {");
 const end=candidate.indexOf("\nfunction renderDashboard(",start);
 assert.ok(start>=0&&end>start,"Actual candidate dashboard not found");
@@ -54,7 +59,7 @@ async function evalBrowser(expression){
 }
 
 // Serializable browser function: no import, no request and no external state.
-async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false}){
+async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false,lateForm=false,selection=null,prefsHtml=''}){
  const createMeter=new Function(meterSource+"\nreturn createApdPanelTimingMeter;")();
  const meter=createMeter();
  window.__APD_LAB_PERF=meter;
@@ -91,15 +96,39 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  );
  const dashboard=compile(...names.map(n=>dependencies[n]));
  document.getElementById("panel-alertas").textContent="";
+ if(lateForm)document.getElementById("form-preferencias")?.remove();
  await dashboard();
+ if(lateForm){
+  document.getElementById("panel-content").insertAdjacentHTML("beforeend",prefsHtml);
+  assertRealFormAfterLoad();
+ }
+ function assertRealFormAfterLoad(){
+  if(!document.getElementById("form-preferencias"))throw Error("Dynamic form failed to mount");
+ }
  const prefInput=document.getElementById("pref-distrito-principal");
  if(editBeforePrefs){
   prefInput.value="UNSAVED_LOCAL_PREF";
   prefInput.dispatchEvent(new Event("input",{bubbles:true}));
  }
+ if(selection){
+  const list=document.getElementById("sug-distrito-1");
+  if(!list)throw Error("Real suggestion list absent");
+  list.style.display="block";
+  list.innerHTML='<div class="ac-item" data-index="0">DISTRITO_DEMO</div>';
+  const option=list.querySelector(".ac-item");
+  const applyChoice=()=>{prefInput.value="DISTRITO_DEMO";list.style.display="none";};
+  if(selection==="mouse"){
+   // Actual seleccionarAC changes .value directly without firing input/change.
+   option.addEventListener("mousedown",applyChoice);
+   option.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true}));
+  }else if(selection==="keyboard"){
+   prefInput.addEventListener("keydown",applyChoice);
+   prefInput.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}));
+  }else throw Error("Unknown test selection");
+ }
  for(let i=0;i<45&&meter.summary().sample_count<1;i++)
   await new Promise(done=>setTimeout(done,20));
- if(editBeforePrefs)await new Promise(done=>setTimeout(done,(delays.prefs??15)+55));
+ if(editBeforePrefs||selection)await new Promise(done=>setTimeout(done,(delays.prefs??15)+55));
  const submitEvent=new Event("submit",{bubbles:true,cancelable:true});
  const saveAllowed=document.getElementById("form-preferencias").dispatchEvent(submitEvent);
  const result=meter.summary();
@@ -133,14 +162,14 @@ try{
  // A blank data: page has no external assets. Block HTTP(S) to be explicit.
  await cdp("Network.setBlockedURLs",{urls:["http://*","https://*"]});
  await cdp("Page.navigate",{url:"data:text/html,"+
-   encodeURIComponent("<!doctype html><html><body><div id='panel-alertas'></div><div id='alertas-badge'></div><div id='panel-preferencias-resumen'></div><div id='preferencias-msg'></div><form id='form-preferencias'><input id='pref-distrito-principal' name='pref-distrito-principal'></form></body></html>")});
+   encodeURIComponent("<!doctype html><html><body><div id='panel-alertas'></div><div id='alertas-badge'></div><div id='panel-preferencias-resumen'></div><div id='preferencias-msg'></div><div id='panel-content'></div><form id='form-preferencias'><input id='pref-distrito-principal' name='pref-distrito-principal'></form></body></html>")});
  for(let i=0;i<50;i++){
   if(await evalBrowser('document.readyState==="complete"'))break;
   await sleep(50);
  }
  const run=async options=>evalBrowser("("+
   scenarioInBrowser.toString()+")("+JSON.stringify({
-   dashboardSource,meterSource,...options
+   dashboardSource,meterSource,prefsHtml,...options
   })+")");
  const slowApi=await run({delays:{api:170,profile:15,prefs:15,plan:15}});
  const slowPreferences=await run({delays:{api:12,profile:15,prefs:170,plan:15}});
@@ -149,7 +178,9 @@ try{
  const error=await run({failApi:true});
  const empty=await run({empty:true});
  const dirty=await run({delays:{api:12,profile:15,prefs:170,plan:15},editBeforePrefs:true});
- for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty})){
+ const lateMouse=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"mouse"});
+ const lateKeyboard=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"keyboard"});
+ for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard})){
   assert.equal(s.result.sample_count,1,name+" missing browser paint sample");
   assert.equal(s.samples.length,1);
   assert.equal(s.noExternalNetwork,true);
@@ -185,8 +216,14 @@ try{
  assert.equal(dirty.saveAllowed,false,"Saving incomplete/conflicting preferences must be blocked");
  assert.match(dirty.summaryText,/Conservamos tus cambios locales/);
  assert.match(dirty.preferencesMessage,/Recargá la página/);
- console.log("APD_CHROMIUM_DEFERRED_PREFS_EDIT_GUARD_PASS "+JSON.stringify({
-  scenarios:7,
+ for(const item of [lateMouse,lateKeyboard]){
+  assert.equal(item.prefValue,"DISTRITO_DEMO");
+  assert.equal(item.preferencesHydrated,0,"Programmatic autocomplete selection must prevent late hydration");
+  assert.equal(item.saveAllowed,false,"Delayed form must have delegated submit protection");
+  assert.match(item.summaryText,/Conservamos tus cambios locales/);
+ }
+ console.log("APD_CHROMIUM_DYNAMIC_PREF_FORM_AND_AUTOCOMPLETE_PASS "+JSON.stringify({
+  scenarios:9,
   slow_api_ms:slowApi.samples[0],
   slow_preferences_ms:slowPreferences.samples[0],
   active_gate_blocked:true,source_error_distinct:true,
