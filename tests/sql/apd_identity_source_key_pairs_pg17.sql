@@ -146,6 +146,10 @@ $$;
 REVOKE EXECUTE ON FUNCTION apd_scanner_api.register_source_identity(uuid,jsonb) FROM PUBLIC,apd_api_scanner;
 REVOKE EXECUTE ON FUNCTION apd_scanner_api.revalidate_source_identity(uuid,jsonb) FROM PUBLIC,apd_api_scanner;
 REVOKE EXECUTE ON FUNCTION apd_scanner_pilot.canonical_source_pairs(jsonb) FROM PUBLIC;
+-- PostgreSQL grants EXECUTE to PUBLIC on new RPC functions by default.
+-- Remove it BEFORE granting the scanner-specific permission.
+REVOKE EXECUTE ON FUNCTION apd_scanner_api.register_source_pairs(uuid,jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION apd_scanner_api.revalidate_source_pairs(uuid,jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION apd_scanner_api.register_source_pairs(uuid,jsonb) TO apd_api_scanner;
 GRANT EXECUTE ON FUNCTION apd_scanner_api.revalidate_source_pairs(uuid,jsonb) TO apd_api_scanner;
 GRANT EXECUTE ON FUNCTION apd_scanner_pilot.canonical_source_pairs(jsonb) TO apd_api_scanner;
