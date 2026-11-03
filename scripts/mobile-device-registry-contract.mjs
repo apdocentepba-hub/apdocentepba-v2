@@ -27,7 +27,7 @@ export class DeviceRegistryError extends Error{
 const reject=code=>{throw new DeviceRegistryError(code);};
 const copy=r=>r?Object.freeze({
  id:r.id,user_id:r.user_id,platform:r.platform,transport:r.transport,
- enabled:r.enabled,opted_in:r.opted_in,token_hash:r.token_hash
+ enabled:r.enabled,opted_in:r.opted_in
 }):null;
 
 /**
