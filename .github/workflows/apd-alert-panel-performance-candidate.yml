@@ -20,6 +20,7 @@ on:
       - 'scripts/build-apd-panel-timing-candidate.mjs'
       - 'scripts/test-apd-panel-timing-meter.mjs'
       - 'scripts/test-apd-panel-timing-dashboard-contract.mjs'
+      - 'scripts/test-apd-panel-first-paint-chromium.mjs'
       - 'scripts/apd-fetch-published-district-lab.mjs'
       - 'scripts/build-apd-published-minimized-candidate.mjs'
       - 'scripts/test-apd-published-worker-candidate.mjs'
@@ -150,6 +151,10 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-timing-dashboard-contract.mjs
           node --test scripts/test-apd-panel-timing-dashboard-contract.mjs
+      - name: Measure actual browser paints for real dashboard lifecycle using fake sessions only
+        run: |
+          node --check scripts/test-apd-panel-first-paint-chromium.mjs
+          node scripts/test-apd-panel-first-paint-chromium.mjs
       - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
         run: |
           node --check scripts/test-apd-live-source-probes-fail-closed.mjs
