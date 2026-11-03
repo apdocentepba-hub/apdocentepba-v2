@@ -164,7 +164,11 @@ try{
    button.click();
    return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
      accessibleName:button.getAttribute("aria-label"),
-     controls:button.getAttribute("aria-controls")};
+     controls:button.getAttribute("aria-controls"),
+     initPwTogglesType:typeof initPwToggles,
+     appLoaded:typeof loginPassword,
+     catalogPreloadType:typeof cargarCatalogoDistritosAutocomplete,
+     documentReady:document.readyState};
   })()`);
   assert.ok(toggleLogin.keyboardReachable&&toggleLogin.focusable&&
     toggleLogin.revealed&&toggleLogin.remasked&&
@@ -196,7 +200,11 @@ try{
    button.click();
    return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
      accessibleName:button.getAttribute("aria-label"),
-     controls:button.getAttribute("aria-controls")};
+     controls:button.getAttribute("aria-controls"),
+     initPwTogglesType:typeof initPwToggles,
+     appLoaded:typeof loginPassword,
+     catalogPreloadType:typeof cargarCatalogoDistritosAutocomplete,
+     documentReady:document.readyState};
   })()`);
   assert.ok(toggleRegistration.keyboardReachable&&toggleRegistration.focusable&&
     toggleRegistration.revealed&&toggleRegistration.remasked&&
