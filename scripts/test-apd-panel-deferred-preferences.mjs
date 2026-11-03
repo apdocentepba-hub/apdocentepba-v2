@@ -270,3 +270,74 @@ test("new user disposes prior user's dirty guard and hydrates only new session p
  h.resolvePrefs({marker:"OLD"},"FAKE_TOKEN_1");await flush();
  assert.equal(h.events.filter(x=>x==="formHydrated").length,1);
 });
+
+
+function createSaveLifecycleFixture(){
+ const begin=source.indexOf("async function guardarPreferencias(e) {");
+ const end=source.indexOf("\nfunction buildPreferenciasPayload(",begin);
+ assert.ok(begin>=0&&end>begin,"The real saving function must exist in lab candidate");
+ const guard={owner:"FAKE_TOKEN",dirty:true,revision:12};
+ const window={__APD_LAB_PREF_GUARD:guard};
+ const reloads=[], messages=[];
+ let resolveRequest,rejectRequest;
+ const serverResult=new Promise((resolve,reject)=>{resolveRequest=resolve;rejectRequest=reject;});
+ const deps={
+  window,
+  obtenerToken:()=> "FAKE_TOKEN",
+  planActual:{access_active:true,subscription:{source:"verified"}},
+  showMsg:(id,message,status)=>messages.push({id,message,status}),
+  document:{querySelector:()=>({})},
+  btnLoad(){},btnRestore(){},
+  buildPreferenciasPayload:()=>({distrito_principal:"FAKE"}),
+  guardarPreferenciasServidor:()=>serverResult,
+  renderPlanUI(){},
+  cargarDashboard:async()=>{reloads.push({dirty:window.__APD_LAB_PREF_GUARD?.dirty});},
+  console:{error(){}}
+ };
+ const names=Object.keys(deps);
+ const make=new Function(...names,source.slice(begin,end)+"\nreturn guardarPreferencias;");
+ const save=make(...names.map(n=>deps[n]));
+ return {
+  guard,window,save:()=>save({preventDefault(){},submitter:{}}),
+  resolve:response=>resolveRequest(response),
+  reject:()=>rejectRequest(Error("Simulated failed save")),
+  reloads,messages
+ };
+}
+test("confirmed save clears the submitted draft, allowing normal preferences refresh",async()=>{
+ const f=createSaveLifecycleFixture();
+ const saving=f.save();
+ assert.equal(f.guard.dirty,true,"Do not mark submitted data saved until server confirms");
+ f.resolve({ok:true,message:"SAVED"});
+ await saving;
+ assert.equal(f.guard.dirty,false);
+ assert.deepEqual(f.reloads,[{dirty:false}]);
+});
+test("concurrent edits after save started are not erased by older save success",async()=>{
+ const f=createSaveLifecycleFixture();
+ const saving=f.save();
+ f.guard.revision++;
+ f.guard.dirty=true;
+ f.resolve({ok:true});
+ await saving;
+ assert.equal(f.guard.dirty,true);
+ assert.deepEqual(f.reloads,[{dirty:true}]);
+});
+test("failed save never clears local dirty status or reloads preferences",async()=>{
+ const f=createSaveLifecycleFixture();
+ const saving=f.save();
+ f.reject();
+ await saving;
+ assert.equal(f.guard.dirty,true);
+ assert.deepEqual(f.reloads,[]);
+ assert.ok(f.messages.some(m=>m.status==="error"));
+});
+test("a switched-session guard cannot be cleared by an earlier session save",async()=>{
+ const f=createSaveLifecycleFixture();
+ const saving=f.save();
+ f.window.__APD_LAB_PREF_GUARD={owner:"SECOND_FAKE_TOKEN",dirty:true,revision:1};
+ f.resolve({ok:true});
+ await saving;
+ assert.equal(f.guard.dirty,true);
+ assert.equal(f.window.__APD_LAB_PREF_GUARD.dirty,true);
+});
