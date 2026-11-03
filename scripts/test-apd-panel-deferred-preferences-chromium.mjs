@@ -165,16 +165,22 @@ try{
  await cdp("Network.enable");
  // A blank data: page has no external assets. Block HTTP(S) to be explicit.
  await cdp("Network.setBlockedURLs",{urls:["http://*","https://*"]});
- await cdp("Page.navigate",{url:"data:text/html,"+
-   encodeURIComponent("<!doctype html><html><body><div id='panel-alertas'></div><div id='alertas-badge'></div><div id='panel-preferencias-resumen'></div><div id='preferencias-msg'></div><div id='panel-content'></div><form id='form-preferencias'><input id='pref-distrito-principal' name='pref-distrito-principal'></form></body></html>")});
- for(let i=0;i<50;i++){
-  if(await evalBrowser('document.readyState==="complete"'))break;
-  await sleep(50);
- }
- const run=async options=>evalBrowser("("+
-  scenarioInBrowser.toString()+")("+JSON.stringify({
-   dashboardSource,meterSource,prefsHtml,...options
-  })+")");
+ // Each scenario runs in a fresh browser document: tests must not inherit
+ // another fake user's dirty guard, old pending requests or stale DOM.
+ const labHtml="<html><body><div id='panel-alertas'></div><div id='alertas-badge'></div><div id='panel-preferencias-resumen'></div><div id='preferencias-msg'></div><div id='panel-content'></div><form id='form-preferencias'><input id='pref-distrito-principal' name='pref-distrito-principal'></form></body></html>";
+ let scenarioIndex=0;
+ const run=async options=>{
+  const html="<!doctype html>"+labHtml+"<!-- isolated browser scenario "+(++scenarioIndex)+" -->";
+  await cdp("Page.navigate",{url:"data:text/html,"+encodeURIComponent(html)});
+  for(let i=0;i<60;i++){
+   if(await evalBrowser('document.readyState==="complete"'))break;
+   await sleep(30);
+  }
+  return evalBrowser("("+
+   scenarioInBrowser.toString()+")("+JSON.stringify({
+    dashboardSource,meterSource,prefsHtml,...options
+   })+")");
+ };
  const slowApi=await run({delays:{api:170,profile:15,prefs:15,plan:15}});
  const slowPreferences=await run({delays:{api:12,profile:15,prefs:170,plan:15}});
  const inactive=await run({inactive:true});
