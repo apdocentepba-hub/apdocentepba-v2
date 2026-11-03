@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import {createHmac} from "node:crypto";
 import {prepareGlobalSourcePairsForLab} from "./apd-global-source-pair-stage-gate.mjs";
+import {prepareProjectedGlobalPairsForIsolatedPg17} from "./apd-global-projected-content-preflight-lab.mjs";
 const secret=process.env.APD_CI_FAKE_JWT_SECRET;
 assert.ok(secret&&secret.length>=32,"CI-only JWT secret required");
 const encode=v=>Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -38,7 +39,39 @@ async function rpc(name,body){
  assert.equal(response.ok,true,"Fake local PostgreSQL "+name+" HTTP "+response.status);
  return response.json();
 }
-const good=prepareGlobalSourcePairsForLab({first:cloned(),second:cloned()});
+// Both source passes are synthetic and independent; content must be stable
+// before any request reaches disposable PG17/PostgREST.
+const fakeProjected=Object.fromEntries(fakeOffers.map(({district,pairs})=>[
+ district,pairs.map(({id,source_offer_key})=>({
+  id,iddetalle:source_offer_key.slice(2),idoferta:"FAKE_"+source_offer_key,
+  descdistrito:district,estado:"Publicada",
+  descripcioncargo:"INFORMATICA",turno:"TM",
+  observaciones:"CI-ONLY FICTITIOUS TEXT"
+ }))
+]));
+const readProjected=async district=>{
+ const docs=structuredClone(fakeProjected[district]);
+ return {docs,totalBruto:docs.length,totalFiltrado:docs.length};
+};
+const good=await prepareProjectedGlobalPairsForIsolatedPg17({
+ districts:fakeOffers.map(x=>x.district),
+ readDistrict:readProjected,
+ keyFromOffer:doc=>"D_"+doc.iddetalle
+});
+assert.equal(good.summary.source_content_hashes_checked,true);
+let projectedPass=0;
+await assert.rejects(()=>prepareProjectedGlobalPairsForIsolatedPg17({
+ districts:fakeOffers.map(x=>x.district),
+ readDistrict:async district=>{
+  if(district==="MORENO")projectedPass++;
+  const result=await readProjected(district);
+  if(projectedPass===2 && district==="MORENO")
+   result.docs[0].observaciones="CHANGED AT SAME SOURCE COUNT";
+  return result;
+ },
+ keyFromOffer:doc=>"D_"+doc.iddetalle
+}),/source content drifted/);
+
 assert.equal(good.summary.total_worker_keys,2);
 assert.equal(good.summary.deploy_authorized,false);
 // Prove adversarial input never triggers a single remote write.
@@ -104,5 +137,6 @@ console.log(JSON.stringify({
  no_actual_ABC_records:true,
  no_actual_supabase_connection:true,
  source_ids_or_worker_keys_logged:false,
+ projected_content_hashes_checked:true,
  production_modified:false
 }));
