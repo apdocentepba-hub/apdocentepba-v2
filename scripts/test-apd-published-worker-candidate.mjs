@@ -21,6 +21,32 @@ function fakeApi(entries,settings={}){
   assert.equal(options.redirect,"error");
   assert.equal(options.cache,"no-store");
   assert.equal(url.hostname,"servicios3.abc.gob.ar");
+  // Source-side independent proof: ZERO documents, facet counts only.
+  if(url.searchParams.get("facet")==="true"){
+   assert.equal(url.searchParams.get("rows"),"0");
+   assert.equal(url.searchParams.has("fl"),false);
+   assert.equal(url.searchParams.has("cursorMark"),false);
+   assert.equal(url.searchParams.get("facet.field"),"estado");
+   assert.doesNotMatch(url.searchParams.toString(),/cuil|reemp|idsuna|observaciones/i);
+   const q=url.searchParams.get("q")||"";
+   assert.doesNotMatch(q,/estado:"Publicada"/);
+   const district=q.includes("LA MATANZA")?"LA MATANZA":"AVELLANEDA";
+   requests.push({district,facet:true});
+   if(settings.facetHttpError)return {ok:false,status:429};
+   const found=entries[district]?.length??0;
+   const published=settings.facetPublished?.(district)??found;
+   const total=settings.facetTotal?.(district)??Math.max(published,found);
+   const facet=published>0?["Publicada",published]:[];
+   if(total>published)facet.push("Cerrada",total-published);
+   const response={
+    response:{numFound:total,docs:[]},
+    facet_counts:{facet_fields:{estado:facet}}
+   };
+   if(settings.facetMalformed)delete response.facet_counts;
+   if(settings.facetPartial)response.responseHeader={partialResults:true};
+   const bytes=new TextEncoder().encode(JSON.stringify(response));
+   return {ok:true,status:200,arrayBuffer:async()=>bytes.buffer};
+  }
   assert.equal(url.searchParams.get("sort"),"id asc");
   assert.equal(url.searchParams.has("start"),false);
   assert.deepEqual(url.searchParams.get("fl").split(","),PUBLIC_ALERT_FIELDS);
@@ -191,4 +217,26 @@ test("privacy-and-performance combined generated Worker is syntax-complete",()=>
  assert.match(worker,/apdSafeObservationNotice\(oferta\.observaciones\)/);
  assert.ok(!original.includes("function apdMinimizedRawAlertOffer("));
  assert.ok(!original.includes("async function apdFetchPublishedOnlyDistrict("));
+});
+
+test("true zero published is accepted only after independent rows=0 state facet",async()=>{
+ const api=fakeApi({"LA MATANZA":[]},{facetTotal:()=>82,facetPublished:()=>0});
+ const result=await run(api);
+ assert.deepEqual(result.docs,[]);
+ assert.equal(result.totalBruto,0);
+ assert.equal(api.requests.length,2);
+ assert.equal(api.requests.filter(x=>x.facet===true).length,1);
+});
+test("false zero published conflicting with facet is a hard source error",async()=>{
+ const api=fakeApi({"LA MATANZA":[]},{facetTotal:()=>83,facetPublished:()=>2});
+ await assert.rejects(()=>run(api),/zero contradicts independent state facets/);
+ assert.equal(api.requests.length,2);
+});
+test("zero cannot be accepted when facet unsupported, partial or rate-limited",async()=>{
+ for(const flag of [{facetMalformed:true},{facetPartial:true},{facetHttpError:true}]){
+  const api=fakeApi({"LA MATANZA":[]},flag);
+  await assert.rejects(()=>run(api),
+   /zero-proof (?:facet response invalid|HTTP 429)/);
+  assert.equal(api.requests.length,2);
+ }
 });
