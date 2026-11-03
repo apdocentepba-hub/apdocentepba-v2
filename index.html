@@ -160,7 +160,7 @@
               <div class="field"><label for="reg-email">Email <span class="req">*</span></label><input type="email" id="reg-email" placeholder="tu@email.com" required autocomplete="email"></div>
               <div class="field"><label for="reg-celular">Celular</label><input type="text" id="reg-celular" placeholder="11 1234-5678" autocomplete="tel"></div>
             </div>
-            <div class="field"><label for="reg-password">Contraseña <span class="req">*</span></label><div class="pw-wrap"><input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"><button type="button" class="pw-toggle" data-target="reg-password" tabindex="-1">👁</button></div></div>
+            <div class="field"><label for="reg-password">Contraseña <span class="req">*</span></label><div class="pw-wrap"><input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"><button type="button" class="pw-toggle" data-target="reg-password" aria-controls="reg-password" aria-label="Mostrar u ocultar contraseña">👁</button></div></div>
             <div class="field" style="margin-top:10px"><label style="display:flex;gap:10px;align-items:flex-start;line-height:1.45"><input type="checkbox" id="reg-acepta-legal" style="margin-top:4px"><span>Acepto los términos, privacidad y suscripciones de APDocentePBA.</span></label></div>
             <div class="form-actions"><button type="submit" class="btn btn-primary btn-full">Crear mi cuenta</button></div>
             <div class="form-foot">¿Ya tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button></div>
@@ -186,7 +186,7 @@
           <div class="form-card-hdr"><h2>Bienvenido/a de nuevo</h2><p>Usá tu correo y contraseña para ingresar.</p></div>
           <form id="form-login" novalidate>
             <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"></div>
-            <div class="field"><label for="login-password">Contraseña</label><div class="pw-wrap"><input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"><button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button></div></div>
+            <div class="field"><label for="login-password">Contraseña</label><div class="pw-wrap"><input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"><button type="button" class="pw-toggle" data-target="login-password" aria-controls="login-password" aria-label="Mostrar u ocultar contraseña">👁</button></div></div>
             <div class="form-actions"><button type="submit" class="btn btn-primary btn-full">Ingresar</button></div>
             <div class="form-foot">¿No tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate</button></div>
             <span id="login-msg" class="msg"></span>
