@@ -1,0 +1,113 @@
+/* LAB ONLY: take the instrumented candidate, retain profile + plan as
+ * critical path, hydrate preferences asynchronously, fail closed on unknown
+ * entitlement, and never modify production files. Not deployable.
+ */
+import {readFileSync,writeFileSync} from "node:fs";
+const input="tmp/apd-alerts-performance/app_v2_telemetry_candidate.js";
+const text=readFileSync(input,"utf8");
+const start=text.indexOf("async function cargarDashboard() {");
+const end=text.indexOf("\nfunction renderDashboard(",start);
+if(start<0||end<=start)throw Error("Expected one dashboard function");
+let dashboard=text.slice(start,end);
+let renderer=text.slice(end);
+function edit(source,oldValue,newValue,label){
+ const count=source.split(oldValue).length-1;
+ if(count!==1)throw Error(label+": expected one source match, got "+count);
+ return source.replace(oldValue,newValue);
+}
+function d(oldValue,newValue,label){
+ dashboard=edit(dashboard,oldValue,newValue,label);
+}
+d("  const alertasPromise = obtenerMisAlertas(token)",
+  [
+   "  // Source errors are captured immediately; no unhandled rejection.",
+   "  const apdPrefsPromise = obtenerPreferenciasPorUserId(token)",
+   "    .then(raw => ({ok:true,raw}))",
+   "    .catch(error => ({ok:false,error}));",
+   "  const alertasPromise = obtenerMisAlertas(token)"
+  ].join("\n"),"start independent preferences");
+d(
+ [
+ "    const [docente, prefRaw, planInfo] = await Promise.all([",
+ "      obtenerDocentePorId(token),",
+ "      obtenerPreferenciasPorUserId(token),",
+ "      obtenerMiPlan(token)",
+ "    ]);"
+ ].join("\n"),
+ [
+ "    const [docente, planInfo] = await Promise.all([",
+ "      obtenerDocentePorId(token),",
+ "      obtenerMiPlan(token)",
+ "    ]);"
+ ].join("\n"),"remove preferences from critical path");
+d("    const preferencias = adaptarPreferencias(prefRaw);",
+  "    const preferencias = adaptarPreferencias(null);","initial placeholder preferences");
+d("    window.__APD_LAB_PERF.markProfile(apdLabRun);\n    cargarPrefsEnFormulario({ preferencias });",
+  [
+ "    window.__APD_LAB_PERF.markProfile(apdLabRun);",
+ "    const prefBox = document.getElementById('panel-preferencias-resumen');",
+ "    if(prefBox)prefBox.textContent = 'Cargando preferencias...';",
+ "    void apdPrefsPromise.then(result => {",
+ "      if(!current())return;",
+ "      const summary=document.getElementById('panel-preferencias-resumen');",
+ "      if(!result.ok){",
+ "        if(summary)summary.textContent = 'No pudimos verificar tus preferencias. Reintentá desde el panel.';",
+ "        return;",
+ "      }",
+ "      try{",
+ "        const actual=adaptarPreferencias(result.raw);",
+ "        renderDashboard({docente,preferencias:actual,planInfo:planActual,apdPrefsOnly:true});",
+ "        cargarPrefsEnFormulario({preferencias:actual});",
+ "      }catch(error){",
+ "        if(summary)summary.textContent = 'No pudimos mostrar tus preferencias. Reintentá desde el panel.';",
+ "      }",
+ "    });"
+ ].join("\n"),"only preferences change after readiness");
+d(
+ [
+ "      if (!result.ok) {",
+ "        console.error(\"ERROR ALERTAS:\", result.error);"
+ ].join("\n"),
+ [
+ "      if (planActual?.access_active !== true && planActual?.access_active !== false) {",
+ "        alertasState.items = []; alertasState.index = 0;",
+ "        const panel=document.getElementById('panel-alertas');",
+ "        if(panel)panel.textContent='No pudimos verificar tu plan. Reintentá desde el panel.';",
+ "        const badge=document.getElementById('alertas-badge');",
+ "        if(badge){badge.textContent='';badge.classList.add('hidden');}",
+ "        renderEstadisticasPanel(null, ultimoAcceso, true);",
+ "        window.__APD_LAB_PERF.finish(apdLabRun, 'plan_unverified');",
+ "        return;",
+ "      }",
+ "      if (!result.ok) {",
+ "        console.error(\"ERROR ALERTAS:\", result.error);"
+ ].join("\n"),"unknown plan never exposes offers");
+d(
+ "  const current = () => version === dashboardRequestVersion && obtenerToken() === token;",
+ [
+ "  const current = () => version === dashboardRequestVersion && obtenerToken() === token;",
+ "  // Also prevent the same user seeing previously loaded offers before revalidation.",
+ "  alertasState.items=[];alertasState.index=0;",
+ "  const previous=document.getElementById('panel-alertas');",
+ "  if(previous)previous.textContent='Verificando acceso y alertas...';",
+ "  const previousBadge=document.getElementById('alertas-badge');",
+ "  if(previousBadge){previousBadge.textContent='';previousBadge.classList.add('hidden');}"
+ ].join("\n"),"clear stale offers during plan check");
+renderer=edit(renderer,
+ '  setText("panel-bienvenida", nombre ? ',
+ '  if (!data.apdPrefsOnly) {\n  setText("panel-bienvenida", nombre ? ',
+ "avoid repainting profile on late preferences");
+renderer=edit(renderer,
+ '  setHTML("panel-preferencias-resumen",',
+ '  }\n  setHTML("panel-preferencias-resumen",',
+ "end profile-only section");
+renderer=edit(renderer,
+ '  renderEstadisticasPanel(data.estadisticas?.total_alertas ?? null, data.estadisticas?.ultimo_acceso);',
+ '  if(data.apdPrefsOnly)return;\n  renderEstadisticasPanel(data.estadisticas?.total_alertas ?? null, data.estadisticas?.ultimo_acceso);',
+ "late preferences do not clear stats/history/alert render");
+const output="tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js";
+writeFileSync(output,text.slice(0,start)+dashboard+renderer);
+console.log(JSON.stringify({candidate:output,production_untouched:true,
+  authenticating:true,plan_gate:"strict true or known inactive",
+  preference_hydration_nonblocking:true,remote_telemetry:false,
+  deployment:false}));
