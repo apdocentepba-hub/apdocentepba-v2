@@ -4,6 +4,8 @@ on:
     paths:
       - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
       - 'tests/sql/apd_server_staged_content_guard_pg17.sql'
+      - 'tests/sql/apd_executor_role_isolation_pg17.sql'
+      - 'scripts/test-apd-executor-role-pg17-http.mjs'
       - 'scripts/test-apd-server-staged-content-pg17-http.mjs'
       - 'scripts/test-apd-source-key-pairs-http.mjs'
       - 'scripts/apd-global-source-pair-stage-gate.mjs'
@@ -409,6 +411,40 @@ jobs:
           END
           $apd_server_guard$;
           SELECT 'PASS: guarded PG17 commit preserved only verified sanitized row, bypass rejected' AS result;
+          SQL
+      - name: Remove direct private SQL access from scanner JWT role
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_executor_role_isolation_pg17.sql
+          sleep 2
+      - name: Verify hardened PostgREST RPC remains functional and rejects bypass
+        run: |
+          node --check scripts/test-apd-executor-role-pg17-http.mjs
+          node scripts/test-apd-executor-role-pg17-http.mjs
+      - name: Assert role-isolated durable row and zero foreign writes
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_executor$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9701' AND distrito='AZUL'
+                    AND cargo='INFORMATICA' AND turno='TARDE'
+                    AND (raw IS NULL OR raw='null'::jsonb))<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9701' AND distrito='AZUL')<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009701'
+                    AND verified_at IS NOT NULL)<>1
+              OR has_table_privilege('apd_api_scanner',
+                  'apd_scanner_pilot.full_staged_payloads','UPDATE')
+              OR has_table_privilege('apd_api_scanner',
+                  'apd_scanner_pilot.source_payload_manifests','SELECT')
+              OR has_schema_privilege('apd_api_scanner',
+                  'apd_scanner_pilot','USAGE')
+              OR pg_has_role('apd_api_scanner','apd_ci_executor','MEMBER')
+            THEN RAISE EXCEPTION 'Isolated executor privilege or durable row failed'; END IF;
+          END
+          $apd_executor$;
+          SELECT 'PASS: scanner has no direct SQL access, only restricted RPC, atomic result preserved' AS result;
           SQL
       - name: Assert no production source, frontend, SQL or Supabase changes
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
