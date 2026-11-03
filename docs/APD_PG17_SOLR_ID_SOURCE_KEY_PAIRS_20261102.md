@@ -39,3 +39,16 @@ Se agregaron `tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql` (dispara
 **No es prueba de operación productiva:** los IDs, distritos y ofertas de este ensayo son ficticios; el trigger de error está limitado al esquema temporal. La simultaneidad se ejercitó con dos solicitudes HTTP en paralelo, no como prueba exhaustiva de todas las condiciones de planificación o interbloqueos posibles. No hubo migración, cambio de Worker ni modificación a Supabase.
 
 **Pendientes antes de producción:** probar interrupciones de red con resultado de commit ambiguo, conmutación segura entre Worker y API transaccional, idempotencia/reintento observando el estado, reglas obligatorias de rama y respaldo productivo restaurable. Ninguna salida de CI autoriza automáticamente el despliegue.
+
+## Recuperación tras perder la respuesta HTTP — ensayo de laboratorio
+
+**Problema:** una llamada `commit_capture` puede terminar correctamente en PostgreSQL y perder la respuesta antes de que el Worker la reciba. No corresponde volver a ejecutar la misma escritura automáticamente ni declarar fracaso de los datos sin consultar su estado.
+
+- `tests/sql/apd_ci_capture_status_readonly_pg17.sql` agrega exclusivamente al laboratorio la función `apd_scanner_api.capture_status(uuid)`: consulta `STABLE`, `SECURITY INVOKER`, sin modificaciones a tablas ni exposición de los datos de ofertas. El RPC informa distrito, estado, páginas y verificación de pares. Se revoca explícitamente el permiso de `PUBLIC` y solo se concede ejecución al rol privado del escáner.
+- `scripts/test-apd-capture-response-loss-http.mjs` prepara una captura ficticia de **Quilmes**, ejecuta una única confirmación real en el PG17 descartable, descarta intencionalmente la respuesta correcta para simular pérdida de acuse y utiliza **solo el RPC de lectura** para corroborar que la captura quedó `finalized`.
+- La prueba exige **un único intento de `commit_capture`**, **cero reintentos** y una única fila `D_9001` en ambas tablas; comprueba además que un cliente sin sesión de rol autorizado no pueda consultar el estado.
+- Este escenario simula la pérdida de respuesta después del COMMIT, **no** corta físicamente una conexión TCP ni prueba la recuperación completa ante caídas de red, interrupciones del proceso o reinicio del Worker.
+
+**Evidencia:** commit `ea680b13031378884ef8cb02d685c1d8521c9af7`, ejecución `41553991532` **success** y comprobación del router `41553991282` **success**. El ensayo de concurrencia y fallo inyectado también volvió a pasar en la misma ejecución, seguido del control SQL de durabilidad.
+
+**Pendiente para conectar un Worker real:** incorporar una política explícita de reconciliación, vencimientos de capturas y respuestas ambiguas, y verificar caída/reinicio real del cliente en un entorno aislado. Ningún cambio de este PR se aplicó a producción.
