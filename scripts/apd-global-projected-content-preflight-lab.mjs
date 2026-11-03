@@ -163,7 +163,33 @@ export async function prepareProjectedGlobalPairsForIsolatedPg17({
    throw Error('Projected preflight selected staging payload incomplete');
   return Object.freeze(result);
  }
+ // This validation is performed immediately before the pilot's HTTP call:
+ // refuse rows mutated between the verified projection and the transport.
+ // Return freshly reconstructed rows rather than caller-owned objects.
+ function validateStagedRowsForIsolatedPg17(district,stagedKeys,proposedRows){
+  const expected=stagedRowsForIsolatedPg17(district,stagedKeys);
+  if(!Array.isArray(proposedRows)||proposedRows.length!==expected.length)
+   throw Error('Projected preflight outgoing stage cardinality mismatch');
+  const byKey=new Map();
+  for(const row of proposedRows){
+   if(!row||typeof row!=='object'||Array.isArray(row)||
+      typeof row.source_offer_key!=='string'||byKey.has(row.source_offer_key))
+    throw Error('Projected preflight malformed outgoing staged row');
+   byKey.set(row.source_offer_key,row);
+  }
+  for(const item of expected){
+   const row=byKey.get(item.source_offer_key);
+   if(!row)throw Error('Projected preflight unexpected outgoing staged key');
+   const expectedKeys=Object.keys(item),actualKeys=Object.keys(row);
+   if(actualKeys.length!==expectedKeys.length||
+      actualKeys.some(key=>!Object.hasOwn(item,key))||
+      expectedKeys.some(key=>!Object.is(row[key],item[key])))
+    throw Error('Projected preflight outgoing staging content drifted');
+  }
+  return expected;
+ }
  return Object.freeze({summary,
   pairsForIsolatedStaging:gate.pairsForIsolatedStaging,
-  stagedRowsForIsolatedPg17});
+  stagedRowsForIsolatedPg17,
+  validateStagedRowsForIsolatedPg17});
 }
