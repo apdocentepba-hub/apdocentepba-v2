@@ -36,7 +36,7 @@ export function createApdPanelTimingMeter({
   const run=active.get(id);
   if(!run)return;
   // Never hold references to sessions, user IDs or alert payloads.
-  const allowed=["rendered","no_matches","plan_inactive","api_error","profile_error"];
+  const allowed=["rendered","no_matches","plan_inactive","plan_unverified","api_error","profile_error"];
   if(!allowed.includes(outcome))throw Error("Invalid timing outcome");
   active.delete(id);
   nextPaint(()=>{
