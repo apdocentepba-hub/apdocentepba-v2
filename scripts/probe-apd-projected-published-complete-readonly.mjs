@@ -38,4 +38,6 @@ try{
   no_zero_or_lost_offers_inferred:true,
   credentials:false,production_modified:false
  }));
+ // Mark live evidence unverified; never convert source errors to zero offers.
+ process.exitCode=1;
 }
