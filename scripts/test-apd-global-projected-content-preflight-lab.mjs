@@ -98,3 +98,56 @@ test('invalid config and oversized or malformed district requests reject',async(
  await assert.rejects(()=>run(mock(example()),['MORENO','MORENO']),/invalid laboratory dependencies/);
  await assert.rejects(()=>run(mock(example()),['moreno','TIGRE']),/invalid laboratory dependencies/);
 });
+
+test('only keys covered by the verified two-pass snapshot can become staged rows',async()=>{
+ const gate=await run(mock(example()));
+ const staged=gate.stagedRowsForIsolatedPg17('MORENO',['D_9402']);
+ assert.equal(staged.length,1);
+ assert.equal(staged[0].source_offer_key,'D_9402');
+ assert.equal(staged[0].idoferta,'OFF_9402');
+ assert.equal(staged[0].cargo,'INFORMATICA');
+ assert.equal(staged[0].turno,'TM');
+ assert.equal(staged[0].raw,null);
+ assert.equal(Object.isFrozen(staged[0]),true);
+ assert.deepEqual(Object.keys(staged[0]).sort(),[
+  'source_offer_key','idoferta','iddetalle','estado','distrito','escuela',
+  'cargo','area','nivel_modalidad','turno','jornada','hsmodulos',
+  'cursodivision','supl_desde','supl_hasta','finoferta','ult_movimiento','raw'
+ ].sort());
+ assert.doesNotMatch(JSON.stringify(staged),/SOLR_1|SOLR_2|privado|example.com/);
+ assert.throws(()=>gate.stagedRowsForIsolatedPg17('MORENO',['D_9999']),/not in source/);
+ assert.throws(()=>gate.stagedRowsForIsolatedPg17('MORENO',['D_9401','D_9401']),/not in source/);
+ assert.throws(()=>gate.stagedRowsForIsolatedPg17('QUILMES',[]),/unknown or empty/);
+});
+test('caller mutating original ABC documents after verification cannot alter staging',async()=>{
+ const data=example();
+ const readDistrict=async district=>{
+  const docs=data[district];
+  return {docs,totalBruto:docs.length,totalFiltrado:docs.length};
+ };
+ const gate=await run(readDistrict);
+ const before=gate.stagedRowsForIsolatedPg17('MORENO',['D_9401']);
+ data.MORENO[0].descripcioncargo='INJECTED_AFTER_PREFLIGHT';
+ data.MORENO[0].observaciones='SECRET_AFTER_PREFLIGHT';
+ const after=gate.stagedRowsForIsolatedPg17('MORENO',['D_9401']);
+ assert.deepEqual(after,before);
+ assert.equal(after[0].cargo,'INFORMATICA');
+});
+test('non-scalar field cannot silently flow into the staged SQL payload',async()=>{
+ const data=example();
+ data.MORENO[0].turno={nested:'unexpected'};
+ const gate=await run(mock(data));
+ assert.throws(()=>gate.stagedRowsForIsolatedPg17('MORENO',['D_9401']),
+  /non-scalar staged field/);
+});
+test('known content changes in the second snapshot prevent all staging',async()=>{
+ const first=example(),second=clone(first);
+ second.MORENO[0].descripcioncargo='DIFFERENT';
+ let calls=0;
+ const reader=async district=>{
+  if(district==='MORENO')calls++;
+  const docs=clone((calls===1?first:second)[district]);
+  return {docs,totalBruto:docs.length,totalFiltrado:docs.length};
+ };
+ await assert.rejects(()=>run(reader),/source content drifted/);
+});
