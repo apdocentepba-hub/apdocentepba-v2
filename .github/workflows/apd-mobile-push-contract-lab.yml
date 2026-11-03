@@ -8,6 +8,7 @@ on:
       - 'scripts/test-mobile-device-registry-contract.mjs'
       - 'scripts/mobile-push-outbox-contract.mjs'
       - 'scripts/test-mobile-push-outbox-contract.mjs'
+      - 'scripts/test-mobile-push-synthetic-e2e.mjs'
       - 'docs/mobile-push-mvp-20261103.md'
       - 'mobile/**'
       - '.github/workflows/apd-mobile-push-contract-lab.yml'
@@ -37,6 +38,7 @@ jobs:
           node --check scripts/mobile-push-outbox-contract.mjs
           node --check scripts/test-mobile-push-outbox-contract.mjs
           node --test scripts/test-mobile-push-outbox-contract.mjs
+          node --test scripts/test-mobile-push-synthetic-e2e.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
