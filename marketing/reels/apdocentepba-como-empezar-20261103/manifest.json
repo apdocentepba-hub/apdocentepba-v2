@@ -1,0 +1,20 @@
+{
+  "brand": "APDocentePBA",
+  "instagram": "@apdocentepba",
+  "source_public_only": {
+    "portada": "https://alertasapd.com.ar/",
+    "empezar": "https://alertasapd.com.ar/empezar.html",
+    "herramientas": "https://alertasapd.com.ar/herramientas-docentes.html"
+  },
+  "caption_promise": "organize preferences and review alerts according to plan; official application in ABC",
+  "video_type": "REEL",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration_seconds": 17.9,
+  "bytes": 1534781,
+  "sha256": "4d6f03dfb10fed036951ce3bb22ac9fcb641a8ecaf99e3687a650ed4214e9253",
+  "audio": "original synthesized music without third-party tracks",
+  "examples": "No live ABC offers or user accounts shown; page previews are public and illustrative",
+  "warning": "independent service, not DGCyE; alert != appointment or official application"
+}
