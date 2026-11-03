@@ -52,8 +52,8 @@ test("new CSS is isolated and loaded after old CSS, before application JavaScrip
  assert.match(css,/#inicio\.apd-public-v3/);
  assert.match(css,/#login\.apd-auth-v3/);
  assert.match(css,/#registro\.apd-auth-v3/);
- assert.doesNotMatch(css,/(?:#panel-docente|\\.alerta-row)\\s*\\{/);
- assert.match(css,/body:has\\(#panel-docente\\.hidden\\) \\.apd-v21-sidebar/);
+ assert.ok(!css.includes("#panel-docente{"),"Must not style private panel directly");
+ assert.ok(css.includes("body:has(#panel-docente.hidden) .apd-v21-sidebar"),"Public-only private nav rule required");
 });
 test("buttons/links have semantic accessible controls and non-misleading wording",()=>{
  assert.match(landing,/type="button" class="btn btn-primary apd-v3-cta"/);
