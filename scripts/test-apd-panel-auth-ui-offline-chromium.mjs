@@ -195,7 +195,7 @@ try{
  assert.equal(active.writes,1,"Should only sync synthetic authorized offer once");
  assert.equal(active.status.rendered,1);
  assert.ok(active.mockRoutes.some(x=>x.route==="account/profile"));
- assert.ok(active.mockRoutes.every(x=>x.authorized),"Protected requests must use bearer");
+ assert.ok(active.mockRoutes.every(x=>x.authorized),"Protected requests must use bearer: "+JSON.stringify(active.mockRoutes));
 
  const inactive=await isolatedScenario({active:false,preferencesDelay:20});
  assert.equal(inactive.alertCount,0);assert.equal(inactive.writes,0);
