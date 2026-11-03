@@ -1,0 +1,35 @@
+name: APD alert panel performance candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-apd-alert-panel-performance-candidate.mjs'
+      - 'scripts/test-apd-alert-panel-performance-candidate.mjs'
+      - '.github/workflows/apd-alert-panel-performance-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-offline-performance-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build candidate in ignored tmp directory only
+        run: |
+          node --check scripts/build-apd-alert-panel-performance-candidate.mjs
+          node scripts/build-apd-alert-panel-performance-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_hotfix.js
+      - name: Verify original-vs-candidate results and max-two ABC concurrency
+        run: |
+          node --check scripts/test-apd-alert-panel-performance-candidate.mjs
+          node --test scripts/test-apd-alert-panel-performance-candidate.mjs
+      - name: Explicitly verify production Worker, UI and Supabase unchanged
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js index.html supabase sql)"
