@@ -129,3 +129,26 @@ Se preparó un **segundo candidato descartable** desde el Worker de rendimiento,
 **Criterio para completar el hito de medición real:** comparar p50/p95 de `api_ms`, `profile_ms` y `rendered_ms` bajo las mismas preferencias, sesión de prueba autorizada, red y navegador; repetir con 1, 2 y varios distritos; verificar igualdad de claves/resultados, tasas de error, `429` y latencia de la fuente. La propia solución optimizada no debe adelantarse a la verificación de plan ni a los controles de privacidad de `raw` y observaciones.
 
 **Progreso honesto:** continúa **40% (2/5 hitos de preparación productiva)**. El instrumento de medición quedó implementado y probado offline, pero el hito 3 no se completa hasta tener p50/p95 reales reproducibles.
+
+## Worker integrado de laboratorio: consulta completa «Publicada» + privacidad + concurrencia
+
+**Se agregó una tercera variante, todavía NO desplegable:** `scripts/build-apd-published-minimized-candidate.mjs` genera `tmp/apd-alerts-performance/worker_published_minimized_candidate.js` a partir del candidato de concurrencia y privacidad existente. Solo reemplaza en **esa copia descartable** la función `traerOfertasAPDDeUnDistrito` por `apdFetchPublishedOnlyDistrict`, cuyo código se mantiene separado en `scripts/apd-fetch-published-district-lab.mjs`.
+
+- Consulta **solo `estado:"Publicada"`** usando `cursorMark` / `id asc`, 100 ofertas por página y hasta 12 páginas. Obtiene únicamente 29 campos de origen, sin CUIL/reemplazos. Mantiene dos distritos en paralelo como máximo, la regla real `source_offer_key` del Worker y el filtrado/PID ya comprobados en fixtures.
+- La carga **rechaza** `HTTP 429`, `partialResults`, resultados incompletos, modificación de `numFound` durante una lectura, estado/distrito incorrectos, identidades o claves duplicadas, campos inesperados y páginas mayores al límite. No reemplaza un fallo de ABC por el mensaje falso «no hay ofertas».
+- Los textos originales de `observaciones` pueden permanecer **transitoriamente en memoria del Worker** mientras éste procesa una respuesta pública de ABC; el constructor de alertas de la variante minimizada sustituye la observación libre por el aviso constante y no la devuelve al cliente. La inspección de `raw` sigue siendo una **condición de privacidad antes del despliegue**.
+- El contador interno `totalBruto` en el candidato pasa a contar **publicadas** en vez de todas las ofertas históricas; su semántica es distinta de la del Worker anterior y debe ser explicitada en reportes `debug_distritos`.
+
+**Pruebas de integridad y privacidad:** `scripts/test-apd-published-worker-candidate.mjs` aprobó **8/8 casos** sobre datos ficticios, verificando dos distritos con conjuntos completos, respuestas inválidas y la composición del Worker. El ensayo de salida de un solo endpoint con datos ficticios y las pruebas de `buildAlertItem`/PID y privacidad continuaron aprobando.
+
+**Primera ejecución del candidato construido contra ABC público real:** GitHub Actions `41563243137`, commit `aa6011493faba3cbe94ba35677fc8423d47e5057`, **success**. Lectura GET sin credenciales, dos distritos simultáneos, información agregada exclusivamente:
+- La Matanza: **183/183** publicadas recuperadas, **1.410,4 ms**.
+- Avellaneda: **65/65**, **1.172,4 ms**.
+- Tiempo conjunto: **1.411,2 ms**, sin campos fuera de la proyección autorizada en las ofertas recuperadas.
+- Son cifras desde **un runner de GitHub en una observación puntual**, no desde una sesión autenticada, ni un p50/p95, ni comparación bajo condiciones de red idénticas con el Worker desplegado.
+
+**Pruebas funcionales acumuladas en esa ejecución:** ocho suites con **62/62 casos aprobados** (6 velocidad/paridad, 10 cursor proyectado, 16 filtros/PID, 4 screening de observaciones, 6 minimización de alertas, 8 lector integrado, 7 medidor local, 5 ciclo real `cargarDashboard` con mocks). La sintaxis del Worker candidato y del JS frontend instrumentado aprobó. El CI verifica que los archivos publicados permanecen intactos.
+
+**Bloqueos para llevar la mejora a usuarios:** cobertura y concurrencia en distritos grandes (posibles más de 1.100 ofertas publicadas por distrito con límite actual), compatibilidad de alias distritales con ABC en todo PBA, prueba de carga/429, política funcional de acceso a observaciones originales sin exponer texto libre, permisos/plan y traza real desde navegador hasta primera alerta, respaldo restaurable y reversión. **Ni verde de CI ni esta muestra autoriza fusionar o desplegar.**
+
+**Preparación del panel:** permanece en **2/5 hitos (40%)**. Este avance agrega un prototipo integrado con fuente pública y evidencias de integridad, pero el hito de medición del panel autenticado y la aceptación de privacidad/UX siguen sin estar resueltos.
