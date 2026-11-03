@@ -34,3 +34,13 @@ Se valida sintaxis del Worker generado y se comprueba que no cambian archivos de
 - Obtener respaldo/restauración verificados y autorización específica para cualquier despliegue productivo. La propuesta no habilita el escáner transaccional nuevo ni escribe ofertas.
 
 **Estado de este PR:** optimización candidata aislada. No equivale a una mejora de velocidad comprobada en la página real; cualquier afirmación de segundos o porcentaje de aceleración requiere medición adicional.
+
+## Evidencia de candidato aislado y auditoría de assets
+
+**Commit evaluado:** `edb6119300efb76d88ceead61fd6441238146578`. GitHub Actions `41556659815`: **success**, con **6/6 pruebas funcionales** correctas y comprobación de que no se modificaron los archivos productivos. El primer ensayo falló por un nombre incorrecto de variable **en el fixture de prueba**, corregido antes de repetir toda la suite.
+
+En `index.html`, la auditoría estática `scripts/audit-apd-panel-static-assets.mjs` identificó **26 tags `script src`**, de los cuales **25 son locales**, todos sin `async` o `defer`, con **342.742 bytes** de JavaScript local sin comprimir. Ningún archivo local esperado faltó en el repositorio. El inventario **no es una medición de red**, de coste de parsing, de ejecución en el navegador ni de carga del panel autenticado; varios scripts se encuentran al final del cuerpo HTML, circunstancia que debe considerarse antes de modificar su orden.
+
+Próxima etapa: instrumentar tiempos del panel y endpoint con datos sintéticos/usuario autorizado, observar p50/p95, identificar dependencias del arranque y comparar los tiempos con y sin concurrencia limitada. No introducir caché de alertas de usuario sin aislamiento por identidad y plan. **No desplegar todavía.**
+
+**Progreso de optimización del panel:** 2/5 hitos de preparación (40%): (1) hotspots identificados, (2) candidato no productivo con paridad comprobada; faltan (3) medición antes/después con trazas seguras, (4) QA de permisos, filtros, suscripciones, límites y carga ABC, (5) implementación controlada y verificación de mejora real.
