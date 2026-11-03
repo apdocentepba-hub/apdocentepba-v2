@@ -29,6 +29,7 @@ on:
       - 'scripts/test-apd-published-two-pass-readonly.mjs'
       - 'scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs'
       - 'scripts/probe-apd-public-state-distribution-readonly.mjs'
+      - 'scripts/test-apd-live-source-probes-fail-closed.mjs'
       - 'scripts/probe-apd-combined-worker-candidate-public-readonly.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
@@ -149,6 +150,10 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-timing-dashboard-contract.mjs
           node --test scripts/test-apd-panel-timing-dashboard-contract.mjs
+      - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
+        run: |
+          node --check scripts/test-apd-live-source-probes-fail-closed.mjs
+          node --test scripts/test-apd-live-source-probes-fail-closed.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
