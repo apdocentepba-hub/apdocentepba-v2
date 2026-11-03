@@ -31,6 +31,18 @@ function fakeSource(offers,settings={}){
    assert.equal(opts.method,"GET");
    assert.equal(opts.credentials,"omit");
    assert.equal(opts.redirect,"error");
+   if(url.searchParams.get("facet")==="true"){
+    assert.equal(url.searchParams.get("rows"),"0");
+    assert.equal(url.searchParams.has("fl"),false);
+    assert.equal(url.searchParams.get("facet.field"),"estado");
+    urls.push(url);
+    const published=offers.length;
+    const rows=published?["Publicada",published]:[];
+    const data={response:{numFound:published,docs:[]},
+      facet_counts:{facet_fields:{estado:rows}}};
+    const bytes=new TextEncoder().encode(JSON.stringify(data));
+    return {ok:true,status:200,arrayBuffer:async()=>bytes.buffer};
+   }
    assert.equal(url.searchParams.get("sort"),"id asc");
    assert.equal(url.searchParams.get("fl")?.includes("cuilautor"),false);
    const cursor=url.searchParams.get("cursorMark");
@@ -92,7 +104,8 @@ test("truly empty source completes with zero, distinct from bad district",async(
  const output=await audit("AVELLANEDA",source);
  assert.equal(output.totalBruto,0);
  assert.deepEqual(output.docs,[]);
- assert.equal(source.urls.length,1);
+ assert.equal(source.urls.length,2);
+ assert.equal(source.urls[1].searchParams.get("facet"),"true");
 });
 test("all 1199 offers within page cap complete without any silent truncation",async()=>{
  const source=fakeSource(docSet("LA MATANZA",1199));
