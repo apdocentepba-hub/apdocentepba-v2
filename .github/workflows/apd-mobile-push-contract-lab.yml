@@ -13,6 +13,8 @@ on:
       - 'scripts/test-mobile-push-strict-session-lab.mjs'
       - 'scripts/mobile-push-endpoint-lab.mjs'
       - 'scripts/test-mobile-push-endpoint-lab.mjs'
+      - 'scripts/mobile-push-token-crypto-lab.mjs'
+      - 'scripts/test-mobile-push-token-crypto-lab.mjs'
       - 'docs/mobile-push-mvp-20261103.md'
       - 'mobile/**'
       - '.github/workflows/apd-mobile-push-contract-lab.yml'
@@ -47,6 +49,8 @@ jobs:
           node --test scripts/test-mobile-push-strict-session-lab.mjs
           node --check scripts/mobile-push-endpoint-lab.mjs
           node --test scripts/test-mobile-push-endpoint-lab.mjs
+          node --check scripts/mobile-push-token-crypto-lab.mjs
+          node --test scripts/test-mobile-push-token-crypto-lab.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
