@@ -8,24 +8,24 @@ Este directorio contiene un proyecto React Native + Expo SDK 58 que muestra las 
 
 Se necesita Node.js 22.13+ y, para ver la app en un dispositivo, un entorno compatible con Expo SDK 58.
 
-\`\`\`bash
+```bash
 cd mobile
 npm install
 npm test
 npx expo start
-\`\`\`
+```
 
 El QR generado por Expo permite abrir la sesión de desarrollo en un cliente compatible, en la misma red o mediante el mecanismo que ofrezca Expo. **Ese procedimiento no genera ni instala un APK independiente.** Tampoco se ha probado todavía en un teléfono físico.
 
 Para validar el empaquetado JS de Android (lo que verifica GitHub Actions):
 
-\`\`\`bash
+```bash
 cd mobile
 npm install
 npm run export:android
-\`\`\`
+```
 
-Salida: \`mobile/dist/android-lab\`. Es un conjunto de bundles y recursos, **no un archivo instalable**.
+Salida: `mobile/dist/android-lab`. Es un conjunto de bundles y recursos, **no un archivo instalable**.
 
 ## Qué sí funciona en esta etapa
 
