@@ -5,6 +5,9 @@ on:
       - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
       - 'tests/sql/apd_server_staged_content_guard_pg17.sql'
       - 'tests/sql/apd_executor_role_isolation_pg17.sql'
+      - 'scripts/apd-pg17-restore-fingerprints.sql'
+      - 'scripts/test-apd-restored-pg17-http.mjs'
+      - 'scripts/test-apd-pg17-backup-restore-ci.sh'
       - 'scripts/test-apd-executor-role-pg17-http.mjs'
       - 'scripts/test-apd-server-staged-content-pg17-http.mjs'
       - 'scripts/test-apd-source-key-pairs-http.mjs'
@@ -446,6 +449,10 @@ jobs:
           $apd_executor$;
           SELECT 'PASS: scanner has no direct SQL access, only restricted RPC, atomic result preserved' AS result;
           SQL
+      - name: Create custom PG17 backup, restore separate DB, compare every table and exercise guarded RPC
+        run: |
+          bash -n scripts/test-apd-pg17-backup-restore-ci.sh
+          bash scripts/test-apd-pg17-backup-restore-ci.sh
       - name: Assert no production source, frontend, SQL or Supabase changes
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
       - name: Stop disposable PostgREST
