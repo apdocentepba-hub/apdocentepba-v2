@@ -227,3 +227,19 @@ Al revisar `scripts/build-apd-alert-panel-performance-candidate.mjs` se detectó
 Dos nuevas pruebas deterministas en `scripts/test-apd-alert-panel-performance-candidate.mjs` verifican: (a) un 429 con dos distritos activos impide iniciar los tres distritos restantes; (b) si uno termina y habilita un tercer GET antes del error de otro, ese tercer GET puede finalizar, pero no se inician los distritos cuarto ni quinto. El beneficio de reducir solicitudes no implica una reducción medida del tiempo de renderizado ni elimina los 429 en la fuente real.
 
 **Pendientes:** ejecutar las suites de GitHub Actions, cotejar la fuente ABC en condiciones de carga moderada con permiso, medir p50/p95 del panel autenticado y contrastar los eventos de error de origen antes/después. Se prohíbe activar el candidato únicamente por el resultado de CI.
+
+
+## 03/11/2026 — benchmark comparativo de primera alerta en Chromium
+
+La medición de rendimiento previa incluía casos aislados, pero no calculaba p50/p95 repetibles **comparando ambos dashboards en el mismo navegador**. Se amplió `scripts/test-apd-panel-deferred-preferences-chromium.mjs` para cargar tanto el dashboard original instrumentado (solo un candidato temporal) como el candidato que difiere las preferencias, en documentos limpios y orden alternado, **9 ejecuciones por versión y escenario**, siempre con plan verificado y una alerta ficticia. Se preservaron los casos ya existentes de autorización/plan/error/formulario y la prueba no contacta servicios externos.
+
+**CI #41728690329: success**, commit `e4c91a64fd2cec0cf98552f55e56d487490ec52b`; el laboratorio adicional de autenticación #41728690241 y el control de router #41728690483 también aprobaron.
+
+| Condiciones de retardo simulado | Original p50 / p95 | Candidato p50 / p95 | Interpretación |
+|---|---|---|---|
+| API 12 ms, perfil 15 ms, plan 15 ms, preferencias 190 ms | 197 / 207,8 ms | 38,5 / 45,2 ms | Mejora de p50 ≈ 80%, al no bloquear alertas con preferencias |
+| API 140 ms, perfil 15 ms, plan 15 ms, preferencias 12 ms | 152,2 / 155,7 ms | 151,6 / 157,1 ms | Tiempo esencialmente dominado por la API; sin aceleración relevante |
+
+El navegador real fue Chromium, con datos/token completamente **inventados**, sin red y con funciones de renderización simuladas que invocan el dashboard auténtico. Se verificó la igualdad de la alerta sintética renderizada, bloqueo por planes y diferenciación de errores, además del retraso controlado de preferencias. El segundo perfil funciona como control negativo: evita afirmar una aceleración universal.
+
+**Limitación esencial:** estos resultados corresponden a demoras inyectadas, no a la latencia efectiva del Worker, ABC o un usuario autenticado en `alertasapd.com.ar`. No hay mejora productiva desplegada ni se debe informar el 80% como ganancia real del sitio. La etapa de instrumentación/medición autenticada p50/p95 sigue pendiente; el estado de preparación para despliegue permanece en **2/5 hitos (40%)**.
