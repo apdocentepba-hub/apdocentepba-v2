@@ -25,8 +25,9 @@ function extractAssetHref(html,name){
   : /<script\b[^>]*src=["'][^"']+["'][^>]*><\/script>/gi;
  const found=[];
  for(const result of html.matchAll(pattern)){
-  const attrs=result[0],m=attrs.match(new RegExp(
-   name.endsWith(".css")?'\\bhref=["\\']([^"\\']+)["\\']':'\\bsrc=["\\']([^"\\']+)["\\']',"i"));
+  const attrs=result[0];
+  const m=attrs.match(name.endsWith(".css")
+   ? /\bhref=["']([^"']+)["']/i : /\bsrc=["']([^"']+)["']/i);
   if(!m)continue;
   const raw=m[1];
   if(raw.split(/[?#]/)[0].replace(/^\.\//,"")===name)found.push(raw);
