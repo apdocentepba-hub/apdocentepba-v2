@@ -23,23 +23,33 @@ const meterSource=readFileSync("scripts/apd-panel-timing-meter.mjs","utf8")
 const executable=["google-chrome","google-chrome-stable","chromium","chromium-browser"]
  .find(x=>spawnSync("which",[x],{stdio:"ignore"}).status===0);
 assert.ok(executable,"Chromium not present in CI image");
-const directory=mkdtempSync(path.join(tmpdir(),"apd-first-alert-paint-"));
-const browser=spawn(executable,[
+const browserArgs=directory=>[
  "--headless=new","--no-sandbox","--disable-gpu","--disable-dev-shm-usage",
  "--disable-background-networking","--no-first-run","--no-default-browser-check",
  "--remote-debugging-port=0","--user-data-dir="+directory,"about:blank"
-],{stdio:"ignore"});
+];
+let directory=mkdtempSync(path.join(tmpdir(),"apd-real-auth-ui-"));
+let browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
 const sleep=ms=>new Promise(done=>setTimeout(done,ms));
 let socket,serial=0;
 const pending=new Map();
 async function debugPort(){
- for(let i=0;i<120;i++){
-  const file=path.join(directory,"DevToolsActivePort");
-  if(existsSync(file))return Number(readFileSync(file,"utf8").split("\n")[0]);
-  if(browser.exitCode!==null)throw Error("Chromium exited before debug port opened");
-  await sleep(100);
+ for(let attempt=0;attempt<2;attempt++){
+  for(let i=0;i<160;i++){
+   const file=path.join(directory,"DevToolsActivePort");
+   if(existsSync(file))return Number(readFileSync(file,"utf8").split("\n")[0]);
+   if(browser.exitCode!==null)break;
+   await sleep(100);
+  }
+  if(attempt===0){
+   browser.kill("SIGTERM");
+   await sleep(300);
+   rmSync(directory,{recursive:true,force:true});
+   directory=mkdtempSync(path.join(tmpdir(),"apd-real-auth-ui-retry-"));
+   browser=spawn(executable,browserArgs(directory),{stdio:"ignore"});
+  }
  }
- throw Error("Chromium debug port unavailable");
+ throw Error("Chromium debug port unavailable after 2 isolated attempts");
 }
 async function cdp(method,params={}){
  const id=++serial;
