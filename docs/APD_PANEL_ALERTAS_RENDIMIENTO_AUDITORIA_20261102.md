@@ -152,3 +152,22 @@ Se preparó un **segundo candidato descartable** desde el Worker de rendimiento,
 **Bloqueos para llevar la mejora a usuarios:** cobertura y concurrencia en distritos grandes (posibles más de 1.100 ofertas publicadas por distrito con límite actual), compatibilidad de alias distritales con ABC en todo PBA, prueba de carga/429, política funcional de acceso a observaciones originales sin exponer texto libre, permisos/plan y traza real desde navegador hasta primera alerta, respaldo restaurable y reversión. **Ni verde de CI ni esta muestra autoriza fusionar o desplegar.**
 
 **Preparación del panel:** permanece en **2/5 hitos (40%)**. Este avance agrega un prototipo integrado con fuente pública y evidencias de integridad, pero el hito de medición del panel autenticado y la aceptación de privacidad/UX siguen sin estar resueltos.
+
+## Ampliación del 03/11/2026 — seis distritos, eliminación de GET redundantes y fallo explícito ante distrito inválido
+
+**Cambio funcional exclusivo del prototipo:** `scripts/apd-fetch-published-district-lab.mjs` ya no interpreta un distrito vacío o un conjunto de alias inválido como ausencia legítima de ofertas. En su lugar **lanza error** para impedir que el usuario vea un mensaje falso de «cero alertas» ante preferencias mal formadas. También deja de solicitar la página final vacía cuando el número de `id` únicos recuperados coincide exactamente con el `numFound` informado por ABC. Si hay una página parcial, `numFound` inconsistente, clave duplicada, límite de páginas sin cubrir el total o error HTTP, continúa **fallando de forma explícita**.
+
+**Pruebas sobre funciones auténticas del Worker:** `scripts/test-apd-published-alias-and-limits.mjs` agrega 8 pruebas con datos ficticios de alias distritales `L DE ZAMORA`, `G SAN MARTIN`, `LA COSTA` y `GRAL PUEYRREDON`, distrito inválido y cero verdadero, 1.199 registros completos dentro del límite y 1.201 registros que deben rechazarse en vez de publicarse incompletos. Los controles de `scripts/test-apd-published-worker-candidate.mjs` ajustaron los números esperados a **2 páginas para 183 ofertas** y **1 página para 65 ofertas** con el nuevo final temprano, sin perder identidad o cobertura. En conjunto, los tests protegen el caso de corte de datos que motivó la optimización.
+
+**Cuatro distritos reales adicionales con el candidato integrado:** el script `scripts/probe-apd-published-four-districts-readonly.mjs` hizo solo GET públicos, ejecutó el alias canónico del Worker, no imprimió documentos individuales y limitó la concurrencia distrital a dos.
+- Quilmes: **98/98** ofertas «Publicadas», **1.080,9 ms**.
+- Berazategui: **109/109**, **1.061,1 ms**.
+- Lomas de Zamora: **92/92**, **202,3 ms**.
+- General San Martín: **63/63**, **194,7 ms**.
+- **362 ofertas completas**, **5 solicitudes GET**, pared conjunta **1.293,4 ms**, 4/4 distritos sin rechazo en la ejecución observada.
+
+**Reejecución en paralelo de los dos distritos previos:** La Matanza **183/183** (946,4 ms), Avellaneda **65/65** (708,7 ms); pared conjunta **946,9 ms** desde el runner. Las dos observaciones del mismo workflow cubrieron **seis distritos y 610 ofertas** en total, sin afirmar que constituyan una fotografía atómica común ni probar al usuario final. El contexto de ABC podría variar en segundos; los tiempos de GitHub no representan p50/p95 del panel.
+
+**Evidencia CI:** commit `de9bcbf1d9c52cfbb682102e4b5baddb378827a2`, workflow `41621161921` **success**; router duplicado `41621161927` **success**. En esta ejecución aprobaron **70/70 pruebas de 9 suites**, más los controles de sintaxis del Worker generado, lecturas públicas agregadas y diff productivo en cero. La primera ejecución `41620879273` falló porque las expectativas del test de paginación estaban desactualizadas y el fixture de exceso del límite era demasiado pequeño. Se corrigieron los tests y se repitió la suite entera, aprobada. Es importante conservar este historial en auditoría.
+
+**Riesgos pendientes:** la finalización al alcanzar `numFound` comprueba unicidad y cardinalidad por lectura, pero no reemplaza una segunda lectura para detectar cambios de contenido bajo recuento constante; los PR #235/#236 examinan esa dimensión por separado. La optimización todavía no corre en Worker productivo, y sigue pendiente validar todos los distritos, un p95 del panel autenticado, la política de privacidad/observaciones, el respaldo recuperable y el plan de reversión. No fusionar ni desplegar por este CI. El avance del panel se mantiene en **40% (2/5 hitos productivos cerrados)**.
