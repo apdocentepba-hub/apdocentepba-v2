@@ -46,4 +46,6 @@ try{
   no_privacy_clearance:true,no_zero_offer_inference:true,
   no_raw_observation_values_logged:true,no_production_writes:true
  }));
+ // Mark live evidence unverified; never convert source errors to zero offers.
+ process.exitCode=1;
 }
