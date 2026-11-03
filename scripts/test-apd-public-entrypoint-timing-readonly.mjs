@@ -37,6 +37,11 @@ test("two full browser-agnostic public probes; exactly eight GETs without creden
  assert.deepEqual(Object.keys(result.assets),
   ["document","app_v2.js","auth_session_patch.js","styles.css"]);
  assert.ok(result.assets["app_v2.js"].bytes_min>0);
+ assert.ok(result.assets["app_v2.js"].total_min_ms<=
+           result.assets["app_v2.js"].total_max_ms);
+ assert.equal(result.assets["app_v2.js"].total_p95_ms,undefined,
+  "Two observations must never be presented as a reliable p95");
+
  assert.equal(f.requests.length,8);
  const names=f.requests.map(({url})=>new URL(url).pathname);
  assert.deepEqual(names,[
