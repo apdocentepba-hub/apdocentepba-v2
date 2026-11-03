@@ -45,6 +45,8 @@ on:
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - 'scripts/probe-apd-public-entrypoint-timing-readonly.mjs'
       - 'scripts/test-apd-public-entrypoint-timing-readonly.mjs'
+      - 'scripts/apd-local-auth-timing-console.js'
+      - 'scripts/test-apd-local-auth-timing-console.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -216,6 +218,11 @@ jobs:
           node --test scripts/test-apd-public-entrypoint-timing-readonly.mjs
       - name: Read-only baseline of public landing HTML and three critical same-origin assets
         run: node scripts/probe-apd-public-entrypoint-timing-readonly.mjs
+      - name: Audit strictly local authenticated ResourceTiming diagnostic without accessing sessions
+        run: |
+          node --check scripts/apd-local-auth-timing-console.js
+          node --check scripts/test-apd-local-auth-timing-console.mjs
+          node --test scripts/test-apd-local-auth-timing-console.mjs
       - name: Explicitly verify production Worker, UI and Supabase unchanged
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql
