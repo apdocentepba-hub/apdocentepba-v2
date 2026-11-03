@@ -11,6 +11,9 @@ jobs:
   build-debug-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,9 +27,11 @@ jobs:
           java-version: '17'
       - name: Install Android SDK 37 for Expo SDK 58
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          command -v sdkmanager
-          sdkmanager --install 'platforms;android-37' 'build-tools;37.0.0'
+          SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK_BIN" ]; then SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"; fi
+          test -x "$SDK_BIN"
+          yes | "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null || true
+          "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --install 'platforms;android-37' 'build-tools;37.0.0'
       - name: Install isolated demo dependencies
         working-directory: mobile
         env:
