@@ -82,6 +82,17 @@ try{
   });
   await cdp("Page.navigate",{url:pathToFileURL(path.resolve("index.html")).href});
   await waitLoaded();await sleep(1200);
+  // Production app defaults to login when no session is present. Verify it,
+  // then explicitly visit the public home section for a separate screenshot.
+  const initial=await evaluate(`({
+   homeVisible:!document.getElementById("inicio").classList.contains("hidden"),
+   loginVisible:!document.getElementById("login").classList.contains("hidden"),
+   panelHidden:document.getElementById("panel-docente").classList.contains("hidden")
+  })`);
+  assert.ok(initial.panelHidden,"Private panel exposed without session");
+  assert.ok(initial.homeVisible||initial.loginVisible,
+   "No public view visible on first load");
+  await evaluate("mostrarSeccion('inicio');true");
   const first=await evaluate(`({
    homeVisible:!document.getElementById("inicio").classList.contains("hidden"),
    loginHidden:document.getElementById("login").classList.contains("hidden"),
