@@ -63,7 +63,7 @@ test("all 183 Published La Matanza offers recovered with no truncation (2 pages)
  assert.equal(result.totalBruto,183);
  assert.equal(result.totalFiltrado,183);
  assert.deepEqual(result.docs,docs);
- assert.equal(api.requests.length,1);
+ assert.equal(api.requests.length,2);
  assert.match(result.query,/estado:"Publicada"/);
 });
 test("Avellaneda 65 Published offers full coverage with 1 page",async()=>{
@@ -72,7 +72,7 @@ test("Avellaneda 65 Published offers full coverage with 1 page",async()=>{
  const result=await run(api,"AVELLANEDA");
  assert.deepEqual(result.docs,data);
  assert.equal(result.totalBruto,65);
- assert.equal(api.requests.length,2);
+ assert.equal(api.requests.length,1);
 });
 test("many historical non-Published rows do not cause a false 1600-row cutoff",async()=>{
  const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
@@ -110,7 +110,8 @@ test("changed ABC numFound, partialResults, 429 or page cap are hard errors",asy
  })),/total changed/);
  await assert.rejects(()=>run(fakeApi({"LA MATANZA":data},{partial:true})),/partial results/);
  await assert.rejects(()=>run(fakeApi({"LA MATANZA":data},{httpError:true})),/HTTP 429/);
- await assert.rejects(()=>run(fakeApi({"LA MATANZA":data}),"LA MATANZA",
+ const overCap=Array.from({length:250},(_,i)=>fakeOffer("LA MATANZA",i+1));
+ await assert.rejects(()=>run(fakeApi({"LA MATANZA":overCap}),"LA MATANZA",
   {rows:100,maxPages:2}),/bounded page cap/);
 });
 test("privacy-and-performance combined generated Worker is syntax-complete",()=>{
