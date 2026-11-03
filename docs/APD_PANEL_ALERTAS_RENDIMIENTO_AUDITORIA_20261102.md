@@ -243,3 +243,21 @@ La medición de rendimiento previa incluía casos aislados, pero no calculaba p5
 El navegador real fue Chromium, con datos/token completamente **inventados**, sin red y con funciones de renderización simuladas que invocan el dashboard auténtico. Se verificó la igualdad de la alerta sintética renderizada, bloqueo por planes y diferenciación de errores, además del retraso controlado de preferencias. El segundo perfil funciona como control negativo: evita afirmar una aceleración universal.
 
 **Limitación esencial:** estos resultados corresponden a demoras inyectadas, no a la latencia efectiva del Worker, ABC o un usuario autenticado en `alertasapd.com.ar`. No hay mejora productiva desplegada ni se debe informar el 80% como ganancia real del sitio. La etapa de instrumentación/medición autenticada p50/p95 sigue pendiente; el estado de preparación para despliegue permanece en **2/5 hitos (40%)**.
+
+
+## 03/11/2026 — línea de base anónima de red del sitio publicado
+
+Para separar una carga lenta de página/archivos estáticos de una demora real en el endpoint de alertas autenticadas, se creó `scripts/probe-apd-public-entrypoint-timing-readonly.mjs`, que consulta **solo** `https://alertasapd.com.ar/` y exactamente tres recursos estáticos del mismo origen (`app_v2.js`, `auth_session_patch.js` y `styles.css`). Ejecuta dos observaciones por recurso (8 GET en total), sin enviar cookies, tokens, cabeceras de autorización ni métodos de escritura. Rechaza redirecciones, estado distinto de 200, tipos MIME inesperados, marcadores HTML faltantes, rutas de recursos fuera del origen fijado, duplicados y límites de tamaño sobrepasados. No guarda ni imprime HTML ni JavaScript ni información de usuarios.
+
+**Evidencia:** GitHub Actions [#41731313855](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41731313855) terminó **success**, al igual que las suites de autenticación de laboratorio (#41731313882) y control de router (#41731313997). Las cinco pruebas unitarias del lector público aprobaron.
+
+| Recurso | Bytes de contenido recibidos | Primera/segunda observación: rango del tiempo total |
+|---|---:|---:|
+| Documento HTML | 21.512 | 25–235,9 ms |
+| app_v2.js | 92.105 | 45,7–104,2 ms |
+| auth_session_patch.js | 8.791 | 22,5–97,4 ms |
+| styles.css | 28.005 | 34,1–69 ms |
+
+Las cifras incluyen el tiempo de solicitud y lectura de cada respuesta desde el **runner remoto de GitHub**. El rango proviene de solo dos solicitudes y **no permite estimar de modo estadísticamente fiable la mediana ni el percentil 95** del sitio. No mide carga concurrente de scripts, bloqueo de CSS, parsing, ejecución JavaScript, primera pintura, conexiones de fuentes de terceros, navegación del usuario, endpoint `/api/mis-alertas` ni un plan autenticado. Las diferencias entre tiempos pueden provenir de red, caché y origen; todavía no se sabe qué proporción de la demora percibida corresponde a cada parte.
+
+**Resultado diagnóstico:** HTML, JS principal, parche de sesión y CSS estuvieron accesibles por GET anónimo en esa muestra; el peso recibido de solo esos cuatro recursos suma 150.413 bytes. La auditoría estática del repositorio identificó otros scripts, pero no se debe atribuir automáticamente el tiempo de alertas a esos recursos sin waterfall de navegador. El siguiente criterio medible requiere una sesión de prueba explícitamente autorizada y métricas locales redaccionadas del tiempo `/api/mis-alertas` y del primer renderizado de alertas; hasta obtenerla, mantener la preparación de despliegue en 2/5 hitos (40%) y NO fusionar ni desplegar estos candidatos.
