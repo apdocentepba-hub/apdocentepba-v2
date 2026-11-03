@@ -24,6 +24,8 @@ on:
       - 'scripts/build-apd-panel-deferred-preferences-candidate.mjs'
       - 'scripts/test-apd-panel-deferred-preferences.mjs'
       - 'scripts/test-apd-panel-deferred-preferences-chromium.mjs'
+      - 'scripts/build-apd-cargo-canonicalization-guard-candidate.mjs'
+      - 'scripts/test-apd-cargo-canonicalization-guard-candidate.mjs'
       - 'scripts/apd-fetch-published-district-lab.mjs'
       - 'scripts/build-apd-published-minimized-candidate.mjs'
       - 'scripts/test-apd-published-worker-candidate.mjs'
@@ -171,6 +173,15 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-deferred-preferences-chromium.mjs
           node scripts/test-apd-panel-deferred-preferences-chromium.mjs
+      - name: Build guarded catalog label candidate, keeping deployed cargo delegate intact
+        run: |
+          node --check scripts/build-apd-cargo-canonicalization-guard-candidate.mjs
+          node scripts/build-apd-cargo-canonicalization-guard-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_cargo_delegate_guard_candidate.js
+      - name: Verify late catalog results never overwrite edited or new-session cargo inputs
+        run: |
+          node --check scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
+          node --test scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
       - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
         run: |
           node --check scripts/test-apd-live-source-probes-fail-closed.mjs
