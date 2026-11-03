@@ -24,6 +24,7 @@ on:
       - 'scripts/build-apd-panel-deferred-preferences-candidate.mjs'
       - 'scripts/test-apd-panel-deferred-preferences.mjs'
       - 'scripts/test-apd-panel-deferred-preferences-chromium.mjs'
+      - 'scripts/test-apd-panel-auth-ui-offline-chromium.mjs'
       - 'scripts/build-apd-cargo-canonicalization-guard-candidate.mjs'
       - 'scripts/test-apd-cargo-canonicalization-guard-candidate.mjs'
       - 'scripts/apd-fetch-published-district-lab.mjs'
@@ -182,6 +183,10 @@ jobs:
         run: |
           node --check scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
           node --test scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
+      - name: Exercise real dashboard, auth and dynamic form with fully synthetic Worker in Chromium
+        run: |
+          node --check scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+          node scripts/test-apd-panel-auth-ui-offline-chromium.mjs
       - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
         run: |
           node --check scripts/test-apd-live-source-probes-fail-closed.mjs
