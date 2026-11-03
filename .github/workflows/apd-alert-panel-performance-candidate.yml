@@ -19,6 +19,7 @@ on:
       - 'scripts/apd-panel-timing-meter.mjs'
       - 'scripts/build-apd-panel-timing-candidate.mjs'
       - 'scripts/test-apd-panel-timing-meter.mjs'
+      - 'scripts/test-apd-panel-timing-dashboard-contract.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -99,6 +100,10 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-timing-meter.mjs
           node --test scripts/test-apd-panel-timing-meter.mjs
+      - name: Execute actual dashboard login/plan/alerts lifecycle with fake sessions
+        run: |
+          node --check scripts/test-apd-panel-timing-dashboard-contract.mjs
+          node --test scripts/test-apd-panel-timing-dashboard-contract.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
