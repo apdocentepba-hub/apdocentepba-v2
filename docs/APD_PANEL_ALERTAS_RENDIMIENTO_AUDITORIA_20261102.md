@@ -44,3 +44,30 @@ En `index.html`, la auditoría estática `scripts/audit-apd-panel-static-assets.
 Próxima etapa: instrumentar tiempos del panel y endpoint con datos sintéticos/usuario autorizado, observar p50/p95, identificar dependencias del arranque y comparar los tiempos con y sin concurrencia limitada. No introducir caché de alertas de usuario sin aislamiento por identidad y plan. **No desplegar todavía.**
 
 **Progreso de optimización del panel:** 2/5 hitos de preparación (40%): (1) hotspots identificados, (2) candidato no productivo con paridad comprobada; faltan (3) medición antes/después con trazas seguras, (4) QA de permisos, filtros, suscripciones, límites y carga ABC, (5) implementación controlada y verificación de mejora real.
+
+## Evidencias nuevas: tiempos, cobertura y fuente publicada con proyección mínima
+
+**Experimento sintético controlado:** ejecución de GitHub Actions `41557900091`, commit `74dc5e489f954511323da6c4c9ffaf9fae506126`, **success**. Cinco repeticiones por versión, latencia falsa de **45 ms/distrito**, sin red:
+- 1 distrito: mediana **45,4 → 45,4 ms** (sin diferencia).
+- 2 distritos: **90,3 → 45,2 ms**.
+- 4 distritos: **180,6 → 90,4 ms**.
+- 6 distritos: **270,9 → 135,5 ms**.
+- Lecturas independientes catálogo (35 ms) + ABC (55 ms) + PID (75 ms): **165,5 → 90,6 ms** en la simulación.
+El resultado de ofertas, orden y deduplicación fue **idéntico** en cada comparación. Los valores anteriores no son una promesa de aceleración del sitio real; p95 de esas cinco repeticiones quedó registrado en el log CI.
+
+**Observación limitada de red pública:** `41558124495`, cuatro solicitudes GET al primer bloque `rows=200` de ABC, sin autorización. Una lectura secuencial conjunta de La Matanza y Avellaneda tardó **2.009,7 ms**, y una lectura paralela conjunta **1.495,1 ms** en el runner de GitHub. Es solo una muestra por método con dispersión considerable; no representa el tiempo del panel autenticado ni puede usarse como p50/p95. El tamaño total de la primera página histórica de ambos distritos fue **669.623 bytes**.
+
+**Riesgo de cobertura importante detectado:** el Worker canónico hace consultas sin `estado:"Publicada"`, por páginas de 200 y límite de ocho páginas por distrito (máximo 1.600 filas). ABC informó **32.588** registros totales para La Matanza y **9.219** para Avellaneda bajo las consultas genéricas sin filtrar. El código actual no compara `numFound` con las páginas recuperadas. **No se puede inferir que se pierdan ofertas efectivamente**, pero tampoco se debe certificar cobertura completa con esas consultas. Por ello la aceleración mediante concurrencia limitada sigue siendo solo un candidato.
+
+**Factibilidad de consulta por estado y privacidad:** `41558340831` confirmó mediante GET público que para `estado:"Publicada"` el índice devolvía **183** registros de La Matanza y **65** de Avellaneda; el modo `cursorMark` retorna campos de oferta suficientes para evaluar un lector proyectado. El documento completo de Solr incluía nombres de campos asociados con CUIL/reemplazos; no se registró ningún valor personal.
+
+**Prototipo alternativo de bajo volumen y mínima exposición** (`scripts/apd-abc-published-projected-cursor-readonly.mjs`): exige `estado:"Publicada"`, `cursorMark`, `id asc`, proyecta exclusivamente **29** campos permitidos (sin `cuilautor`, `reemp_cuil` ni `reemp_apeynom`), exige el detalle numérico y calcula claves mediante **la función real del Worker**. Rechaza información parcial, IDs o claves duplicados, distrito incorrecto, cambios de `numFound`, páginas excesivas y cualquier campo fuera de la lista. No devuelve registros ni claves individuales.
+
+**Ejecución con ABC real**, CI `41558798474` **success**:
+- La Matanza: 183 ofertas «Publicadas» únicas, 183 claves únicas; **3 páginas**, **188.589 bytes**, **1.322,6 ms**.
+- Avellaneda: 65 ofertas «Publicadas» únicas, 65 claves únicas; **2 páginas**, **67.615 bytes**, **358,2 ms**.
+- Total de esos dos distritos: **248 ofertas**, **5 páginas y 256.204 bytes**, con consulta pública de solo lectura. El CI probó también **10/10 casos negativos/positivos ficticios**, incluidos datos personales inesperados, errores HTTP, páginas truncadas y colisiones. Esta ejecución es un solo recorrido completo por distrito y no reemplaza las pruebas de doble recorrido de los PR #235/#236.
+
+**Advertencia de arquitectura:** el prototipo todavía NO está conectado al Worker, por lo que no se puede afirmar igualdad de resultados de filtrado con perfiles autorizados ni tiempos reales de panel. `observaciones` permanece en la proyección porque el Worker utiliza el campo, pero su contenido también requiere auditoría de privacidad antes de exhibirlo. Las diferencias de contadores de `debug_distritos` al pasar de todos los estados a solo «Publicada» deberán resolverse. No activar el prototipo, ni reemplazar el Worker, ni fusionar por el simple resultado verde de CI.
+
+**Próximo criterio de aceptación:** pruebas de paridad de alertas y PID usando documentos del lector proyectado, revisión de privacidad del `raw` actual, medición del panel autenticado y rollback verificable. Se mantienen intactas `main`, la web, usuarios, pagos, alertas y Supabase.
