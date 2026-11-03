@@ -29,7 +29,7 @@ export function auditRadarReleaseHtml(mainHtml,candidateHtml){
  }
  // The canonical app must load first; its cache-buster may evolve without
  // that ordinary asset update becoming an illicit radar release.
- const appTags=[...candidateHtml.matchAll(/<script\\b[^>]*\\bsrc\\s*=\\s*["']app_v2\\.js(?:\\?[^"']*)?["'][^>]*><\\/script>/gi)];
+ const appTags=[...candidateHtml.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']app_v2\.js(?:\?[^"']*)?["'][^>]*><\/script>/gi)];
  const appIndex=appTags.length===1?appTags[0].index:-1;
  const radarIndex=candidateHtml.indexOf(newRef.tag);
  if(appIndex<0||radarIndex<appIndex)
