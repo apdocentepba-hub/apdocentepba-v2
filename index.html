@@ -41,6 +41,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="conversion-ux-2026.css?v=1">
   <link rel="stylesheet" href="apd_ui_v21.css?v=20261102-clean">
+  <link rel="stylesheet" href="public-landing-v3.css?v=20261103" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -71,45 +72,76 @@
   </header>
 
   <main>
-    <section id="inicio" class="section apd-home-2026">
-      <div class="container">
-        <div class="hero-card apd-hero-2026">
-          <div class="apd-public-copy-2026">
-            <div class="hero-eyebrow"><span class="apd-online-dot" aria-hidden="true"></span> PENSADO PARA DOCENTES DE BUENOS AIRES</div>
-            <h2 class="hero-title">Tus búsquedas docentes, <span class="apd-accent-text">más organizadas.</span></h2>
-            <p class="hero-desc">Elegí los distritos y cargos o materias que te interesan. Configurá tus preferencias, consultá las alertas disponibles en tu plan y dedicá menos esfuerzo a revisar información que no necesitás.</p>
-            <div class="hero-actions">
-              <button type="button" class="btn btn-primary btn-lg apd-main-cta" onclick="if (typeof obtenerToken === 'function' &amp;&amp; obtenerToken()) { cargarDashboard(); } else { mostrarSeccion('registro'); }">Configurar mis alertas <span aria-hidden="true">↗</span></button>
-              <a class="btn btn-outline btn-lg apd-second-cta" href="./herramientas.html">Explorar herramientas gratis</a>
+    <section id="inicio" class="section apd-home-2026 apd-public-v3" aria-labelledby="apd-public-title">
+      <div class="container apd-v3-container">
+        <div class="hero-card apd-hero-2026 apd-v3-hero">
+          <div class="apd-public-copy-2026 apd-v3-copy">
+            <div class="hero-eyebrow apd-v3-eyebrow"><span class="apd-v3-dot" aria-hidden="true"></span> TU ESPACIO DOCENTE EN BUENOS AIRES</div>
+            <h2 id="apd-public-title" class="hero-title apd-v3-title">Menos tiempo buscando.<br><strong>Más claridad para elegir.</strong></h2>
+            <p class="hero-desc apd-v3-description">Organizá distritos, cargos y materias en un solo lugar. Consultá las alertas que coincidan con tus preferencias y accedé a las herramientas docentes desde tu panel.</p>
+            <div class="hero-actions apd-v3-actions">
+              <button type="button" class="btn btn-primary apd-v3-cta" onclick="if (typeof obtenerToken === 'function' &amp;&amp; obtenerToken()) { cargarDashboard(); } else { mostrarSeccion('login'); }">Ingresar a mi panel <span aria-hidden="true">→</span></button>
+              <button type="button" class="btn btn-outline apd-v3-cta-secondary" onclick="mostrarSeccion('registro')">Crear una cuenta</button>
             </div>
-            <p class="apd-hero-disclaimer"><span aria-hidden="true">ⓘ</span> Plataforma independiente. Las ofertas y postulaciones se verifican siempre en ABC.</p>
+            <a class="apd-v3-secondary-link" href="./herramientas.html">Explorar herramientas gratuitas <span aria-hidden="true">↗</span></a>
+            <p class="apd-v3-trust"><span class="apd-v3-trust-symbol" aria-hidden="true">i</span><span>Servicio independiente de la DGCyE. La información se consulta según las funciones habilitadas en tu plan; verificá siempre la vigencia y la postulación en ABC.</span></p>
           </div>
-          <div class="apd-hero-visual" aria-label="Representación ilustrativa de cómo organizar preferencias de alertas">
-            <div class="apd-example-window">
-              <div class="apd-example-bar"><span class="apd-example-icon" aria-hidden="true">✳</span><strong>Mi búsqueda docente</strong><span class="apd-example-tag">VISTA DE EJEMPLO</span></div>
-              <div class="apd-example-content">
-                <div class="apd-example-caption">TUS PREFERENCIAS</div>
-                <div class="apd-example-field"><span><span class="apd-field-symbol" aria-hidden="true">⌖</span> Distrito</span><strong>Elegí tu zona</strong></div>
-                <div class="apd-example-field"><span><span class="apd-field-symbol" aria-hidden="true">▤</span> Cargo o materia</span><strong>Elegí lo que buscás</strong></div>
-                <div class="apd-example-flow"><span class="apd-flow-symbol" aria-hidden="true">✓</span><span><strong>Preferencias configuradas</strong><small>Consultá las alertas y canales habilitados para tu plan</small></span></div>
+          <div class="apd-hero-visual apd-v3-visual">
+            <div class="apd-v3-preview" role="img" aria-label="Vista ilustrativa del panel: distritos elegidos, criterios de búsqueda y tarjetas de alertas docentes. No contiene ofertas reales.">
+              <div class="apd-v3-preview-bar">
+                <span class="apd-v3-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="apd-v3-demo-tag">VISTA DE EJEMPLO</span>
               </div>
-              <div class="apd-example-footer"><span aria-hidden="true">🔔</span> Información enfocada en tus criterios</div>
+              <div class="apd-v3-screen">
+                <div class="apd-v3-rail" aria-hidden="true">
+                  <span class="apd-v3-rail-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> APDocente</span>
+                  <span class="apd-v3-rail-item is-active">▦ Resumen</span>
+                  <span class="apd-v3-rail-item">◉ Alertas</span>
+                  <span class="apd-v3-rail-item">⚙ Preferencias</span>
+                  <span class="apd-v3-rail-item">▤ Mi plan</span>
+                </div>
+                <div class="apd-v3-screen-main" aria-hidden="true">
+                  <span class="apd-v3-screen-overline">TU PANEL DOCENTE</span>
+                  <h3>Todo más organizado.</h3>
+                  <div class="apd-v3-preview-grid">
+                    <div class="apd-v3-preview-tile"><span>Distritos</span><strong>Tus zonas elegidas</strong></div>
+                    <div class="apd-v3-preview-tile"><span>Cargos y materias</span><strong>Tus preferencias</strong></div>
+                  </div>
+                  <div class="apd-v3-preview-alert">
+                    <div class="apd-v3-preview-alert-head"><strong>Alertas APD</strong><span class="apd-v3-preview-chip">Según tus filtros</span></div>
+                    <div class="apd-v3-preview-row"><span>Distrito</span><b>El que elijas</b></div>
+                    <div class="apd-v3-preview-row"><span>Cargo o materia</span><b>El que te interese</b></div>
+                    <div class="apd-v3-preview-row"><span>Fuente</span><b>ABC / APD oficial</b></div>
+                  </div>
+                </div>
+              </div>
+              <div class="apd-v3-preview-note">Ilustración del funcionamiento. Sin ofertas ni datos reales.</div>
             </div>
-            <p class="apd-visual-note">Ilustración orientativa. No representa una oferta real ni un aviso en tiempo real.</p>
           </div>
-          <div class="apd-hero-process" aria-label="Cómo funciona APDocente">
-            <div><span class="apd-process-number">01</span><p><strong>Elegí</strong><small>Distritos, cargos y materias</small></p></div>
-            <div><span class="apd-process-number">02</span><p><strong>Consultá</strong><small>Alertas según tu plan</small></p></div>
-            <div><span class="apd-process-number">03</span><p><strong>Verificá</strong><small>Siempre en fuentes oficiales</small></p></div>
-          </div>
+        </div>
+        <div class="apd-v3-steps" aria-label="Cómo usar APDocentePBA">
+          <div class="apd-v3-step"><span class="apd-v3-step-num" aria-hidden="true">01</span><div><strong>Definí tu búsqueda</strong><small>Elegí distritos, niveles, cargos o materias.</small></div></div>
+          <div class="apd-v3-step"><span class="apd-v3-step-num" aria-hidden="true">02</span><div><strong>Revisá tus alertas</strong><small>Consultá las coincidencias disponibles según tu plan.</small></div></div>
+          <div class="apd-v3-step"><span class="apd-v3-step-num" aria-hidden="true">03</span><div><strong>Confirmá en ABC</strong><small>Verificá condiciones y postulaciones en el sitio oficial.</small></div></div>
+        </div>
+        <div class="apd-v3-lower">
+          <div class="apd-v3-bottom-card"><div><strong>¿Ya tenés una cuenta?</strong><p>Ingresá para consultar tus alertas, preferencias y herramientas.</p></div><a href="#login" onclick="mostrarSeccion('login');return false;">Iniciar sesión ↗</a></div>
+          <div class="apd-v3-bottom-card"><div><strong>¿Buscás recursos docentes?</strong><p>Accedé a utilidades y guías, incluso sin iniciar sesión.</p></div><a href="./herramientas.html">Ver herramientas ↗</a></div>
         </div>
       </div>
     </section>
 
-    <section id="registro" class="section hidden">
-      <div class="container form-wrap">
-        <div class="form-card">
-          <div class="form-card-hdr"><h2>Crear cuenta</h2><p>Completá tus datos para empezar a recibir alertas</p></div>
+    <section id="registro" class="section hidden apd-auth-v3" aria-label="Crear cuenta en APDocentePBA">
+      <div class="container form-wrap apd-v3-auth-wrap">
+        <aside class="apd-auth-aside apd-v3-auth-aside">
+          <span class="apd-v3-auth-kicker">APDocentePBA · Empezá por acá</span>
+          <h2>Tu búsqueda docente, a tu manera.</h2>
+          <p>Configurá tus preferencias y accedé desde un mismo espacio a las alertas y herramientas habilitadas para tu cuenta.</p>
+          <ul class="apd-v3-auth-points"><li>Elegí distritos y cargos</li><li>Organizá tus alertas APD</li><li>Consultá recursos docentes</li></ul>
+          <span class="apd-v3-auth-source">Plataforma independiente. Las ofertas y las postulaciones se confirman en ABC oficial.</span>
+        </aside>
+        <div class="form-card apd-v3-auth-card">
+          <div class="form-card-hdr"><h2>Crear mi cuenta</h2><p>Completá tus datos para comenzar a configurar tu espacio.</p></div>
           <form id="form-registro" novalidate>
             <div class="grid-2">
               <div class="field"><label for="reg-nombre">Nombre <span class="req">*</span></label><input type="text" id="reg-nombre" placeholder="Tu nombre" required autocomplete="given-name"></div>
@@ -125,15 +157,24 @@
             <div class="form-foot">¿Ya tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('login')">Iniciá sesión</button></div>
             <span id="registro-msg" class="msg"></span>
           </form>
-          <div class="separator"><span>o continuá con Google</span></div><div class="google-wrap"><div id="google-btn-registro"></div></div>
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap"><div id="google-btn-registro"></div></div>
+          <p class="apd-v3-auth-note">Tus datos y acceso se gestionan con los controles de la plataforma.</p>
         </div>
       </div>
     </section>
 
-    <section id="login" class="section hidden">
-      <div class="container form-wrap">
-        <div class="form-card">
-          <div class="form-card-hdr"><h2>Iniciar sesión</h2><p>Ingresá para ver tus alertas y preferencias</p></div>
+    <section id="login" class="section hidden apd-auth-v3" aria-label="Ingresar a APDocentePBA">
+      <div class="container form-wrap apd-v3-auth-wrap">
+        <aside class="apd-auth-aside apd-v3-auth-aside">
+          <span class="apd-v3-auth-kicker">TU ESPACIO DOCENTE · PBA</span>
+          <h2>Volvé a tu panel. Seguí donde lo dejaste.</h2>
+          <p>Ingresá para ver tus preferencias y consultar las coincidencias de ofertas según tu plan.</p>
+          <ul class="apd-v3-auth-points"><li>Tus distritos guardados</li><li>Alertas APD organizadas</li><li>Herramientas a mano</li></ul>
+          <span class="apd-v3-auth-source">No reemplazamos los servicios oficiales de ABC ni gestionamos postulaciones.</span>
+        </aside>
+        <div class="form-card apd-v3-auth-card">
+          <div class="form-card-hdr"><h2>Bienvenido/a de nuevo</h2><p>Usá tu correo y contraseña para ingresar.</p></div>
           <form id="form-login" novalidate>
             <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="email"></div>
             <div class="field"><label for="login-password">Contraseña</label><div class="pw-wrap"><input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password"><button type="button" class="pw-toggle" data-target="login-password" tabindex="-1">👁</button></div></div>
@@ -141,7 +182,9 @@
             <div class="form-foot">¿No tenés cuenta? <button type="button" class="link-btn" onclick="mostrarSeccion('registro')">Registrate</button></div>
             <span id="login-msg" class="msg"></span>
           </form>
-          <div class="separator"><span>o continuá con Google</span></div><div class="google-wrap"><div id="google-btn-login"></div></div>
+          <div class="separator"><span>o continuá con Google</span></div>
+          <div class="google-wrap"><div id="google-btn-login"></div></div>
+          <p class="apd-v3-auth-note">¿Necesitás ayuda? <a href="./soporte.html">Contactá a soporte</a>.</p>
         </div>
       </div>
     </section>
