@@ -16,6 +16,9 @@ on:
       - 'scripts/apd-alert-payload-minimization.mjs'
       - 'scripts/build-apd-alert-privacy-candidate.mjs'
       - 'scripts/test-apd-alert-privacy-candidate.mjs'
+      - 'scripts/apd-panel-timing-meter.mjs'
+      - 'scripts/build-apd-panel-timing-candidate.mjs'
+      - 'scripts/test-apd-panel-timing-meter.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -86,6 +89,16 @@ jobs:
         run: |
           node --check scripts/test-apd-alert-privacy-candidate.mjs
           node --test scripts/test-apd-alert-privacy-candidate.mjs
+      - name: Build local-only first-alert-paint meter without production changes
+        run: |
+          node --check scripts/apd-panel-timing-meter.mjs
+          node --check scripts/build-apd-panel-timing-candidate.mjs
+          node scripts/build-apd-panel-timing-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_telemetry_candidate.js
+      - name: Verify PII-free timing, plan gating, stale-session discard, error distinction and sample cap
+        run: |
+          node --check scripts/test-apd-panel-timing-meter.mjs
+          node --test scripts/test-apd-panel-timing-meter.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
