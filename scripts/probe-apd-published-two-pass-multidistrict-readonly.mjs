@@ -87,3 +87,5 @@ console.log(JSON.stringify({
  no_authenticated_frontend_measurement:true,
  not_a_production_activation:true
 },null,2));
+// A successful offline test cannot stand in for an unavailable live ABC observation.
+if(output.some(row=>row?.status!=="STABLE_ON_TWO_PASSES"))process.exitCode=1;
