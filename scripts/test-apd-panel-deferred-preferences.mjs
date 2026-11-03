@@ -85,7 +85,7 @@ function fixture({plan=true,apiError=false,profilePending=false,planPending=fals
   clear:selector=>doc.fireClick(selector),
   submit:()=>{const e={type:"submit",defaultPrevented:false,
    preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
-   doc.fireEvent("submit",{...e,target:{id:"form-preferencias"}});return e;},
+   e.target={id:"form-preferencias"};doc.fireEvent("submit",e);return e;},
   setToken:value=>{token=value;},
   settlePaint:()=>{time+=20;while(paints.length)paints.shift()();},
   resolvePrefs:(value={},id=token)=>{
