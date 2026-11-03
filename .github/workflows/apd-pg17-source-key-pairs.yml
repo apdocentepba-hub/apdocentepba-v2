@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
+      - 'tests/sql/apd_server_staged_content_guard_pg17.sql'
+      - 'scripts/test-apd-server-staged-content-pg17-http.mjs'
       - 'scripts/test-apd-source-key-pairs-http.mjs'
       - 'scripts/apd-global-source-pair-stage-gate.mjs'
       - 'scripts/apd-global-projected-content-preflight-lab.mjs'
@@ -366,6 +368,47 @@ jobs:
           END
           $apd_global_keys$;
           SELECT 'PASS: global pairs staged across two districts, twice verified, no collision or prune' AS result;
+          SQL
+      - name: Enable mandatory server-side content guard after baseline legacy scenarios
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_server_staged_content_guard_pg17.sql
+          sleep 2
+      - name: Prove direct PostgREST bypass and tampering cannot commit
+        run: |
+          node --check scripts/test-apd-server-staged-content-pg17-http.mjs
+          node scripts/test-apd-server-staged-content-pg17-http.mjs
+      - name: Verify durable rows and rejected attempts after server-side guard
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_server_guard$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009601'
+                    AND verified_at IS NOT NULL)<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9601' AND distrito='PERGAMINO'
+                    AND cargo='INFORMATICA' AND escuela='ESCUELA DE PRUEBA'
+                    AND turno='MANANA'
+                    AND (raw IS NULL OR raw='null'::jsonb))<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9601' AND distrito='PERGAMINO')<>1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9602')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9602')
+              OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.runs
+                  WHERE run_id='00000000-0000-0000-0000-000000009602'
+                    AND status='ready')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009602')
+              OR has_function_privilege('apd_api_anon',
+                  'apd_scanner_api.register_staged_content(uuid,jsonb)','EXECUTE')
+              OR has_function_privilege('apd_api_authenticated',
+                  'apd_scanner_api.revalidate_staged_content(uuid,jsonb)','EXECUTE')
+            THEN RAISE EXCEPTION 'Server staged-content guard rollback or privileges failed'; END IF;
+          END
+          $apd_server_guard$;
+          SELECT 'PASS: guarded PG17 commit preserved only verified sanitized row, bypass rejected' AS result;
           SQL
       - name: Assert no production source, frontend, SQL or Supabase changes
         run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
