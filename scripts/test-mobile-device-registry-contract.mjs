@@ -49,7 +49,7 @@ test("device ID cannot be transferred from one user to another",()=>{
 test("session owner alone can revoke device, and revoked state disables sending",()=>{
  const db=build();db.register({actor,request});
  errors(()=>db.revoke({actor:actor2,deviceId:id}),"device_owned_by_other_user");
- assert.equal(db.getForUser({actor,id}),null);
+ assert.equal(db.getForUser({actor:actor2,deviceId:id}),null);
  assert.equal(db.revoke({actor,deviceId:id}),true);
  assert.deepEqual(db.getForUser({actor,deviceId:id}),{
   id,user_id:user,platform:"android",transport:"expo",enabled:false,opted_in:false
