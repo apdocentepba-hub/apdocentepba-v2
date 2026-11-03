@@ -43,6 +43,8 @@ on:
       - 'scripts/probe-apd-combined-worker-candidate-public-readonly.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
+      - 'scripts/probe-apd-public-entrypoint-timing-readonly.mjs'
+      - 'scripts/test-apd-public-entrypoint-timing-readonly.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -207,6 +209,13 @@ jobs:
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
           node scripts/audit-apd-panel-static-assets.mjs
+      - name: Verify bounded anonymous public entrypoint probe with fake HTTP responses
+        run: |
+          node --check scripts/probe-apd-public-entrypoint-timing-readonly.mjs
+          node --check scripts/test-apd-public-entrypoint-timing-readonly.mjs
+          node --test scripts/test-apd-public-entrypoint-timing-readonly.mjs
+      - name: Read-only baseline of public landing HTML and three critical same-origin assets
+        run: node scripts/probe-apd-public-entrypoint-timing-readonly.mjs
       - name: Explicitly verify production Worker, UI and Supabase unchanged
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql
