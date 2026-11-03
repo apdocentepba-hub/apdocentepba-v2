@@ -31,10 +31,8 @@ const names=[
  "buildAlertItem","estadoOfertaEsPublicada","ofertaEsVisibleParaAlerta"
 ];
 function originalFunction(name){
- const pattern=new RegExp("(?:^|\\n)function "+name+"\\\\(");
- const found=pattern.exec(worker);
- assert.ok(found,"Missing canonical Worker definition: "+name);
- const start=found.index+(worker[found.index]==="\n"?1:0);
+ const start=worker.indexOf("function "+name+"(");
+ assert.ok(start>=0,"Missing canonical Worker definition: "+name);
  const end=worker.indexOf("\n__name("+name+",",start);
  assert.ok(end>start,"Missing canonical Worker function marker: "+name);
  return worker.slice(start,end);
