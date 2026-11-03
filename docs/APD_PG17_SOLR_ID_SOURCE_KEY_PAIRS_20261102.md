@@ -157,3 +157,10 @@ Se incorporó `scripts/test-apd-pg17-backup-restore-ci.sh`, que **solo ejecuta e
 6. Verifica que los recuentos y huellas de la base **original** sigan idénticos al inicio; borra el contenedor, la base destino descartable y los archivos temporales al terminar.
 
 El respaldo de CI contiene exclusivamente fixtures, pero es un **respaldo con datos** y no debe publicarse como artefacto externo. El algoritmo MD5 aquí es solo una comparación de coherencia entre copias dentro de una ejecución, no una firma criptográfica de autenticidad de ABC. El volcado por esquema supone roles globales de la misma instancia PostgreSQL y **no incluye** respaldos de credenciales, roles globales, configuración de servicio PostgREST, almacenamiento Supabase, autenticación, funciones externas ni restauración de todo el proyecto. Se requiere un ensayo representativo y autorizado de Supabase, política de retención y recuperación ante desastre antes de cualquier cambio productivo.
+
+
+### Evidencia CI de restauración — 03/11/2026
+
+**GitHub Actions #41727155353: success.** El comando de `pg_dump -Fc` y el `pg_restore --single-transaction --exit-on-error` completaron sin incidencias. Se rechazó un archivo deliberadamente corrupto antes de restaurarlo; **10 tablas privadas** de la base nueva coincidieron con la base original en recuentos y huellas de contenido. La base restaurada conservó propietarios de funciones, `SECURITY DEFINER`, ACL y prohibición de SQL directo desde el rol JWT. La segunda instancia de PostgREST permitió consultar el estado de una captura finalizada y confirmar una captura ficticia nueva con todos los controles; rechazó **3/3 intentos indebidos**. La base original conservó su huella íntegra después de la prueba, sin podas ni acceso a fuentes reales.
+
+Esta prueba cierra el **ensayo de restauración del laboratorio PostgreSQL 17**, no el de Supabase. Quedan pendientes procedimiento completo de respaldo/recuperación real (roles globales, Auth, Storage, secrets, políticas de acceso, punto en el tiempo y rollback), medición autenticada del panel y compatibilidad entre los PR #236/#237. No mezclar el éxito del ensayo con autorización para desplegar.
