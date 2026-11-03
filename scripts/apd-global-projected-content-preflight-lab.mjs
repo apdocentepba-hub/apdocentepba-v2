@@ -21,6 +21,37 @@ export const LAB_PROJECTED_FIELDS = Object.freeze([
 const ALLOWED=new Set(LAB_PROJECTED_FIELDS);
 const DISTRICT=/^[A-Z0-9 ÁÉÍÓÚÜÑ()\/.,'-]{2,100}$/u;
 const KEY=/^D_[0-9]+$/;
+
+// Read-only laboratory replicas of worker-live/worker_hotfix.js functions:
+// norm, mapTurnoAPD and normalizarCursoDivisionServidor.
+// A separate CI contract tests these directly against extracted real functions.
+function workerNorm(value){
+ return String(value || "").toUpperCase().normalize("NFD")
+  .replace(/[\u0300-\u036f]/g,"")
+  .replace(/[^\p{L}\p{N}\s/().,-]/gu," ")
+  .replace(/\s+/g," ").trim();
+}
+function workerMapTurnoAPD(turno){
+ const x=workerNorm(turno);
+ if(x==="M"||x==="MANANA")return "MANANA";
+ if(x==="T"||x==="TARDE")return "TARDE";
+ if(x==="V"||x==="VESPERTINO")return "VESPERTINO";
+ if(x==="N"||x==="NOCHE")return "NOCHE";
+ if(x==="MT")return "MANANA";
+ if(x==="TT")return "TARDE";
+ if(x==="A"||x==="ALTERNADO")return "ALTERNADO";
+ return x;
+}
+function workerNormalizarCursoDivisionServidor(value){
+ let s=String(value || "").trim();
+ if(!s)return "";
+ s=s.replace(/Â°/g,"\xB0").replace(/º/g,"\xB0")
+  .replace(/\u015E/g,"\xB0").replace(/\uFFFD/g,"\xB0");
+ s=s.replace(/(\d)\s*°\s*(\d)\s*°?/g,"$1\xB0$2\xB0");
+ s=s.replace(/\s+/g," ").trim();
+ return s;
+}
+
 function stable(value){
  if(Array.isArray(value))return value.map(stable);
  if(value && typeof value==='object'){
@@ -50,7 +81,7 @@ function sourceSnapshot(district, result, keyFromOffer){
   const detail=String(doc.iddetalle??'');
   if(typeof id!=='string'||!id||id.length>300||id!==id.trim()||
      !/^\d+$/.test(detail)||doc.estado!=='Publicada'||
-     doc.descdistrito!==district)
+     workerNorm(doc.descdistrito)!==district)
    throw Error('Projected preflight rejected source identity or status');
   let key;
   try{key=keyFromOffer(doc)}catch{throw Error('Projected preflight Worker key derivation failed')}
@@ -137,18 +168,18 @@ export async function prepareProjectedGlobalPairsForIsolatedPg17({
    if(!doc)throw Error('Projected preflight missing verified source document');
    const row={
     source_offer_key:key,
-    idoferta:textField(doc,'idoferta'),
+    idoferta:textField(doc,'idoferta')||null,
     iddetalle:textField(doc,'iddetalle'),
     estado:'Publicada',
-    distrito:district,
+    distrito:workerNorm(doc.descdistrito),
     escuela:textField(doc,'escuela'),
     cargo:textField(doc,'descripcioncargo')||textField(doc,'cargo'),
     area:textField(doc,'descripcionarea'),
     nivel_modalidad:textField(doc,'descnivelmodalidad'),
-    turno:textField(doc,'turno'),
+    turno:workerMapTurnoAPD(textField(doc,'turno')),
     jornada:textField(doc,'jornada'),
     hsmodulos:textField(doc,'hsmodulos'),
-    cursodivision:textField(doc,'cursodivision'),
+    cursodivision:workerNormalizarCursoDivisionServidor(textField(doc,'cursodivision')),
     supl_desde:textField(doc,'supl_desde'),
     supl_hasta:textField(doc,'supl_hasta'),
     finoferta:textField(doc,'finoferta'),
