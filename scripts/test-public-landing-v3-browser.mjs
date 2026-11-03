@@ -39,7 +39,7 @@ async function cdp(method,params={}){
 }
 async function evaluate(expr){
  const result=await cdp("Runtime.evaluate",{
-  expression:expr,returnByValue:true,awaitPromise:true,userGesture:true
+  expression:expr,returnByValue:true,awaitPromise:true,userGesture:true,includeCommandLineAPI:true
  });
  if(result.exceptionDetails)throw Error("Browser JS failed: "+JSON.stringify(result.exceptionDetails));
  return result.result.value;
@@ -159,8 +159,10 @@ try{
    const keyboardReachable=button.tabIndex>=0;
    button.focus();
    const focusable=document.activeElement===button;
+   const listeners=typeof getEventListeners==="function"?(getEventListeners(button).click||[]).length:-1;
    button.click();
    const revealed=input.type==="text";
+   const iconAfterFirstClick=button.textContent;
    button.click();
    return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
      accessibleName:button.getAttribute("aria-label"),
@@ -168,7 +170,7 @@ try{
      initPwTogglesType:typeof initPwToggles,
      appLoaded:typeof loginPassword,
      catalogPreloadType:typeof cargarCatalogoDistritosAutocomplete,
-     documentReady:document.readyState};
+     documentReady:document.readyState,listeners,iconAfterFirstClick};
   })()`);
   assert.ok(toggleLogin.keyboardReachable&&toggleLogin.focusable&&
     toggleLogin.revealed&&toggleLogin.remasked&&
@@ -195,8 +197,10 @@ try{
    const keyboardReachable=button.tabIndex>=0;
    button.focus();
    const focusable=document.activeElement===button;
+   const listeners=typeof getEventListeners==="function"?(getEventListeners(button).click||[]).length:-1;
    button.click();
    const revealed=input.type==="text";
+   const iconAfterFirstClick=button.textContent;
    button.click();
    return {keyboardReachable,focusable,revealed,remasked:input.type==="password",
      accessibleName:button.getAttribute("aria-label"),
@@ -204,7 +208,7 @@ try{
      initPwTogglesType:typeof initPwToggles,
      appLoaded:typeof loginPassword,
      catalogPreloadType:typeof cargarCatalogoDistritosAutocomplete,
-     documentReady:document.readyState};
+     documentReady:document.readyState,listeners,iconAfterFirstClick};
   })()`);
   assert.ok(toggleRegistration.keyboardReachable&&toggleRegistration.focusable&&
     toggleRegistration.revealed&&toggleRegistration.remasked&&
