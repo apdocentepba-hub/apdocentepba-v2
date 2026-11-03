@@ -56,17 +56,17 @@ async function run(api,district="LA MATANZA",overrides={}){
   rows:100,maxPages:12,...overrides
  });
 }
-test("all 183 Published La Matanza offers recovered with no truncation (3 pages)",async()=>{
+test("all 183 Published La Matanza offers recovered with no truncation (2 pages)",async()=>{
  const docs=Array.from({length:183},(_,i)=>fakeOffer("LA MATANZA",i+1));
  const api=fakeApi({"LA MATANZA":docs});
  const result=await run(api);
  assert.equal(result.totalBruto,183);
  assert.equal(result.totalFiltrado,183);
  assert.deepEqual(result.docs,docs);
- assert.equal(api.requests.length,3);
+ assert.equal(api.requests.length,1);
  assert.match(result.query,/estado:"Publicada"/);
 });
-test("Avellaneda 65 Published offers full coverage with 2 pages",async()=>{
+test("Avellaneda 65 Published offers full coverage with 1 page",async()=>{
  const data=Array.from({length:65},(_,i)=>fakeOffer("AVELLANEDA",i+1));
  const api=fakeApi({AVELLANEDA:data});
  const result=await run(api,"AVELLANEDA");
