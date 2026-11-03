@@ -340,7 +340,7 @@ jobs:
                          OR area<>'LABORATORIO'
                          OR nivel_modalidad<>'TECNICA'
                          OR escuela<>'ESCUELA FICTICIA'
-                         OR turno<>'TM' OR raw IS DISTINCT FROM 'null'::jsonb))<>2
+                         OR turno<>'TM' OR (raw IS NOT NULL AND raw IS DISTINCT FROM 'null'::jsonb)))<>2
                OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
                   WHERE source_offer_key IN ('D_9401','D_9402')
                     AND estado='Publicada')<>2
