@@ -1,6 +1,6 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
-const {DEMO_OFFERS,DISTRICTS,SHIFTS,filterDemoOffers,toggleSaved,demoCounters}=require("./demo-state.cjs");
+const {DEMO_OFFERS,DISTRICTS,SHIFTS,filterDemoOffers,toggleSaved,demoCounters}=require("./demo-state.js");
 test("demo offers are clearly fictitious and have unique IDs",()=>{
  assert.ok(DEMO_OFFERS.length>=3);
  assert.equal(new Set(DEMO_OFFERS.map(x=>x.id)).size,DEMO_OFFERS.length);
