@@ -23,6 +23,8 @@ on:
       - 'scripts/apd-fetch-published-district-lab.mjs'
       - 'scripts/build-apd-published-minimized-candidate.mjs'
       - 'scripts/test-apd-published-worker-candidate.mjs'
+      - 'scripts/test-apd-published-alias-and-limits.mjs'
+      - 'scripts/probe-apd-published-four-districts-readonly.mjs'
       - 'scripts/probe-apd-combined-worker-candidate-public-readonly.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
@@ -104,6 +106,14 @@ jobs:
         run: |
           node --check scripts/test-apd-published-worker-candidate.mjs
           node --test scripts/test-apd-published-worker-candidate.mjs
+      - name: Verify real Worker district aliases, invalid inputs and near-limit cursor coverage
+        run: |
+          node --check scripts/test-apd-published-alias-and-limits.mjs
+          node --test scripts/test-apd-published-alias-and-limits.mjs
+      - name: Read four additional PBA districts with bounded public GETs (aggregate only)
+        run: |
+          node --check scripts/probe-apd-published-four-districts-readonly.mjs
+          node scripts/probe-apd-published-four-districts-readonly.mjs
       - name: Observe real ABC Published data with combined candidate (public GET, aggregate only)
         run: |
           node --check scripts/probe-apd-combined-worker-candidate-public-readonly.mjs
