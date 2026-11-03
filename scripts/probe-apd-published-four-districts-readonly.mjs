@@ -75,3 +75,5 @@ console.log(JSON.stringify({
  authenticated_panel_latency_measured:false,
  no_writes:true,no_deployment:true
 },null,2));
+// A successful offline test cannot stand in for an unavailable live ABC observation.
+if(output.some(row=>row?.result_complete!==true))process.exitCode=1;
