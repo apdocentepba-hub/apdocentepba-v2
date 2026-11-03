@@ -343,3 +343,122 @@ body.apd-dark #registro.apd-auth-v3 .apd-v3-auth-card .separator{color:#b2cbd6!i
 @media(prefers-reduced-motion:reduce){
   #inicio.apd-public-v3 .btn,#inicio.apd-public-v3 .apd-v3-preview{transition:none!important;transform:none!important;}
 }
+/* Final public-only overrides after visual audit of actual Chromium screenshots.
+ * Old header/tab patches are never altered, and private panel navigation shows
+ * only when #panel-docente is genuinely visible.
+ */
+body:has(#panel-docente.hidden) #navPrivado,
+body:has(#panel-docente.hidden) .apd-top-tabs,
+body:has(#panel-docente.hidden) .apd-v21-sidebar{
+  display:none!important;
+}
+body:has(#panel-docente.hidden) .header{
+  background:linear-gradient(105deg,#08283c,#0b4253)!important;
+  box-shadow:0 8px 24px rgba(5,37,53,.13)!important;
+}
+body:has(#panel-docente.hidden) .header-inner{
+  max-width:1270px!important;
+  margin:0 auto!important;
+  padding:14px clamp(14px,2.8vw,32px)!important;
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:14px 24px!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+}
+body:has(#panel-docente.hidden) .header .top-nav{
+  width:auto!important;display:flex!important;
+  align-items:center!important;justify-content:flex-end!important;
+  flex-wrap:wrap!important;gap:6px!important;
+}
+body:has(#panel-docente.hidden) .header .brand-icon{
+  background:rgba(194,245,227,.14)!important;
+  border:1px solid rgba(194,245,227,.23)!important;
+}
+body:has(#panel-docente.hidden) .header .top-nav>.btn-ghost{
+  padding:10px 11px!important;font-size:12px!important;
+  font-weight:750!important;
+}
+body:has(#panel-docente.hidden) .header #navPublico{display:flex!important;gap:7px!important;align-items:center!important;}
+body:has(#panel-docente.hidden) .header #btnRegistro{
+  background:#c9f5e4!important;border:1px solid #c9f5e4!important;
+  color:#0a4249!important;min-height:40px!important;
+  font-weight:850!important;border-radius:11px!important;
+}
+body:has(#panel-docente.hidden) .header #btnLogin{
+  min-height:40px!important;color:#efffff!important;
+  font-weight:800!important;border-radius:11px!important;
+}
+body:has(#panel-docente.hidden) .apd-v3-mobile-menu{display:none!important;}
+body #inicio.apd-public-v3 .apd-v3-hero .apd-v3-copy{
+  grid-column:1!important;grid-row:1!important;
+}
+body #inicio.apd-public-v3 .apd-v3-hero .apd-v3-visual{
+  grid-column:2!important;grid-row:1!important;
+  max-width:100%!important;
+}
+body #inicio.apd-public-v3 h2.apd-v3-title br{display:block!important;}
+body.apd-dark #inicio.apd-public-v3 .apd-v3-step,
+body.apd-dark #inicio.apd-public-v3 .apd-v3-bottom-card{
+  background:#10293b!important;border-color:#34566a!important;
+}
+body.apd-dark #inicio.apd-public-v3 .apd-v3-step strong,
+body.apd-dark #inicio.apd-public-v3 .apd-v3-bottom-card strong{color:#f2fbff!important;}
+body.apd-dark #inicio.apd-public-v3 .apd-v3-step small,
+body.apd-dark #inicio.apd-public-v3 .apd-v3-bottom-card p{color:#b9d1da!important;}
+body.apd-dark #inicio.apd-public-v3 .apd-v3-bottom-card a{color:#b6f4e3!important;}
+@media(max-width:1020px){
+  body #inicio.apd-public-v3 .apd-v3-hero .apd-v3-copy{
+    grid-column:1!important;grid-row:1!important;
+  }
+  body #inicio.apd-public-v3 .apd-v3-hero .apd-v3-visual{
+    grid-column:1!important;grid-row:2!important;
+  }
+}
+@media(max-width:760px){
+  body:has(#panel-docente.hidden) .header-inner{
+    display:grid!important;grid-template-columns:1fr!important;
+    gap:10px!important;padding:11px 14px!important;
+  }
+  body:has(#panel-docente.hidden) .header .top-nav{
+    display:flex!important;flex-wrap:nowrap!important;width:100%!important;
+    justify-content:space-between!important;gap:5px!important;
+  }
+  body:has(#panel-docente.hidden) .header .top-nav>.btn-ghost{display:none!important;}
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu{
+    display:block!important;position:relative;flex:0 1 auto;
+  }
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu summary{
+    list-style:none;cursor:pointer;font-size:12px;
+    font-weight:850;color:#edfcfa;
+    padding:10px 12px;border-radius:10px;
+    border:1px solid rgba(200,245,234,.26);
+    background:rgba(255,255,255,.07);
+  }
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu summary::-webkit-details-marker{display:none;}
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu[open] summary{background:rgba(255,255,255,.16);}
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu-links{
+    position:absolute;z-index:120;left:0;top:calc(100% + 8px);
+    width:min(250px,84vw);display:grid;gap:2px;
+    padding:8px;border-radius:13px;
+    border:1px solid #cfe5e8;background:#fff;
+    box-shadow:0 17px 35px rgba(4,28,43,.24);
+  }
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu-links a{
+    font-size:13px;font-weight:750;color:#164154!important;
+    text-decoration:none;padding:11px 12px;border-radius:8px;
+  }
+  body:has(#panel-docente.hidden) .apd-v3-mobile-menu-links a:hover{
+    background:#eaf7f5!important;
+  }
+  body:has(#panel-docente.hidden) .header #navPublico{
+    display:flex!important;flex-wrap:nowrap!important;gap:5px!important;
+    margin:0!important;
+  }
+  body:has(#panel-docente.hidden) .header #navPublico button{
+    min-height:38px!important;padding:9px 11px!important;font-size:12px!important;
+  }
+  body:has(#panel-docente.hidden) .apd-theme-toggle{
+    position:fixed!important;top:auto!important;bottom:14px!important;right:12px!important;
+  }
+}
