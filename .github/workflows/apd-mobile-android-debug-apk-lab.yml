@@ -31,7 +31,13 @@ jobs:
           if [ ! -x "$SDK_BIN" ]; then SDK_BIN="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"; fi
           test -x "$SDK_BIN"
           yes | "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null || true
-          "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --install 'platforms;android-37' 'build-tools;37.0.0'
+          # Google publishes API 37 with package name android-37.0 on this runner.
+          "$SDK_BIN" --sdk_root="$ANDROID_SDK_ROOT" --install 'platforms;android-37.0' 'build-tools;37.0.0'
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37.0/android.jar"
+          # Expo/AGP may resolve compileSdk=37 to android-37; alias only in disposable runner.
+          if [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_SDK_ROOT/platforms/android-37"
+          fi
       - name: Install isolated demo dependencies
         working-directory: mobile
         env:
