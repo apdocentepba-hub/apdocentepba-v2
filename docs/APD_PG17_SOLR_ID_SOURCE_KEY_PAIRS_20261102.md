@@ -25,3 +25,17 @@ GitHub Actions levanta PostgreSQL 17 y PostgREST de un solo uso, con secretos fi
 Este esquema es un **prototipo aislado**, no una migración lista para aplicar. Antes de producción deben revisarse el riesgo de carreras globales entre distritos, revocaciones y privilegios reales de Supabase, retención/privacidad del manifiesto de pares, validez temporal de ABC, permisos del Worker, referencias de usuarios, respaldo recuperable y reversión. La validación de `D_<iddetalle>` no reemplaza un diseño de compatibilidad para las rutas alternativas futuras.
 
 **Prohibido usar este SQL en la base real hasta que exista respaldo restaurable, revisión de seguridad y aprobación explícita.**
+
+## Concurrencia e interrupciones simuladas — comprobación del 02/11/2026
+
+Se agregaron `tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql` (disparador de error **solamente en el esquema de PostgreSQL 17 descartable**) y `scripts/test-apd-pg17-concurrent-districts-http.mjs` (peticiones PostgREST simultáneas).
+
+**Ensayo A: interrupción tras el UPSERT mínimo.** Dos capturas de distritos distintos quedan selladas y sus pares de origen revalidados. En el mismo instante, Avellaneda intenta confirmar `D_7001` y un trigger provoca una excepción al insertar la representación completa, cuando la transacción ya había escrito su representación mínima. En paralelo, La Matanza confirma `D_7002` correctamente. Se comprueba mediante SQL que `D_7001` **no figura en ninguna de las dos tablas**, que la captura fallida sigue pendiente y no avanzó el control de distrito, y que `D_7002` sí quedó confirmada.
+
+**Ensayo B: colisión verdaderamente concurrente.** La Matanza y Avellaneda intentan confirmar `D_8001` simultáneamente con identidades Solr distintas. Uno y solo uno completa `commit_capture`; el otro recibe rechazo. Las dos tablas deben contener exactamente una fila `D_8001` y el mismo distrito. Los controles SQL comparan además el total de registros, los estados de las capturas y que los datos originales `D_1001` no hayan sido transferidos.
+
+**Evidencia CI:** commit `d8ae24be28d8c59b708ad5bd79efdb8f25363078`, run `41553607897`, resultado **success**; `Check worker router duplicates`, run `41553607686`, **success**. El primer intento de la prueba tuvo un error en un delimitador de bloque PL/pgSQL del verificador SQL. Se corrigió ese delimitador y se volvió a ejecutar la prueba completa antes de aprobarla. Las pruebas de protección transaccional ya habían superado sus pasos previos.
+
+**No es prueba de operación productiva:** los IDs, distritos y ofertas de este ensayo son ficticios; el trigger de error está limitado al esquema temporal. La simultaneidad se ejercitó con dos solicitudes HTTP en paralelo, no como prueba exhaustiva de todas las condiciones de planificación o interbloqueos posibles. No hubo migración, cambio de Worker ni modificación a Supabase.
+
+**Pendientes antes de producción:** probar interrupciones de red con resultado de commit ambiguo, conmutación segura entre Worker y API transaccional, idempotencia/reintento observando el estado, reglas obligatorias de rama y respaldo productivo restaurable. Ninguna salida de CI autoriza automáticamente el despliegue.
