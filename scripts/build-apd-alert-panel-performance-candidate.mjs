@@ -19,15 +19,28 @@ const districtAfter=`  const debugDistritos = [];
   // Bounded GET concurrency; result aggregation remains in original district order.
   const districtResults = new Array(distritos.length);
   let districtCursor = 0;
+  let districtFailed = false;
+  let districtFailure;
   async function fetchNextDistrict() {
-    while (districtCursor < distritos.length) {
+    while (!districtFailed && districtCursor < distritos.length) {
       const index = districtCursor++;
-      districtResults[index] = await traerOfertasAPDDeUnDistrito(distritos[index]);
+      try {
+        districtResults[index] = await traerOfertasAPDDeUnDistrito(distritos[index]);
+      } catch (error) {
+        // Stop scheduling more ABC requests after the first observed error.
+        // Allow already-running district GETs to settle; never hide the error.
+        if (!districtFailed) {
+          districtFailure = error;
+          districtFailed = true;
+        }
+        return;
+      }
     }
   }
   await Promise.all(Array.from({
     length: Math.min(2, distritos.length)
   }, () => fetchNextDistrict()));
+  if (districtFailed) throw districtFailure;
   for (let index = 0; index < distritos.length; index++) {
     const distritoAPD = distritos[index];
     const info = districtResults[index];`;
