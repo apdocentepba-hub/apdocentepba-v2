@@ -13,6 +13,9 @@ on:
       - 'scripts/apd-public-observation-risk-readonly.mjs'
       - 'scripts/probe-apd-public-observations-readonly.mjs'
       - 'scripts/test-apd-public-observation-risk-readonly.mjs'
+      - 'scripts/apd-alert-payload-minimization.mjs'
+      - 'scripts/build-apd-alert-privacy-candidate.mjs'
+      - 'scripts/test-apd-alert-privacy-candidate.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -73,6 +76,16 @@ jobs:
         run: |
           node --check scripts/probe-apd-public-observations-readonly.mjs
           node scripts/probe-apd-public-observations-readonly.mjs
+      - name: Build strict privacy-minimized alert variant in disposable tmp only
+        run: |
+          node --check scripts/apd-alert-payload-minimization.mjs
+          node --check scripts/build-apd-alert-privacy-candidate.mjs
+          node scripts/build-apd-alert-privacy-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_privacy_candidate.js
+      - name: Check complete alert/PID field parity while withholding raw private data
+        run: |
+          node --check scripts/test-apd-alert-privacy-candidate.mjs
+          node --test scripts/test-apd-alert-privacy-candidate.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
