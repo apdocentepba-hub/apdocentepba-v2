@@ -63,3 +63,5 @@ console.log(JSON.stringify({
  no_offer_details_logged:true,no_writes:true,
  cannot_establish_why_previous_counts_changed:true
 },null,2));
+// A successful offline test cannot stand in for an unavailable live ABC observation.
+if(results.some(row=>row?.status!=="AGGREGATES_OK"))process.exitCode=1;
