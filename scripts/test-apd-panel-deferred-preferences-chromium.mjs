@@ -59,7 +59,7 @@ async function evalBrowser(expression){
 }
 
 // Serializable browser function: no import, no request and no external state.
-async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false,lateForm=false,selection=null,mountDelayMs=0,prefsHtml=''}){
+async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false,lateForm=false,selection=null,mountDelayMs=0,prefsHtml='',actualUiBootstrap='',useRealBootstrap=false}){
  const createMeter=new Function(meterSource+"\nreturn createApdPanelTimingMeter;")();
  const meter=createMeter();
  window.__APD_LAB_PERF=meter;
@@ -100,7 +100,14 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  await dashboard();
  if(lateForm){
   if(mountDelayMs>0)await new Promise(done=>setTimeout(done,mountDelayMs));
-  document.getElementById("panel-content").insertAdjacentHTML("beforeend",prefsHtml);
+  if(useRealBootstrap){
+   // Exercise the actual boot() and ensurePrefsCard(), not a cloned fixture.
+   (0,eval)(actualUiBootstrap);
+   if(!window.__apdStableDashboardBootstrapLoaded)
+    throw Error("Real dashboard patch was not initialized");
+  }else{
+   document.getElementById("panel-content").insertAdjacentHTML("beforeend",prefsHtml);
+  }
   assertRealFormAfterLoad();
  }
  function assertRealFormAfterLoad(){
@@ -139,6 +146,7 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
   prefValue:prefInput.value,saveAllowed,
   guardState:window.__APD_LAB_PREF_GUARD?.state,guardDirty:window.__APD_LAB_PREF_GUARD?.dirty,
   formMounted:!!document.getElementById('form-preferencias'),
+  bootstrapLoaded:!!window.__apdStableDashboardBootstrapLoaded,
   preferencesMessage:document.getElementById("preferencias-msg").textContent,
   summaryText:document.getElementById("panel-preferencias-resumen").textContent};
 }
@@ -178,7 +186,7 @@ try{
   }
   return evalBrowser("("+
    scenarioInBrowser.toString()+")("+JSON.stringify({
-    dashboardSource,meterSource,prefsHtml,...options
+    dashboardSource,meterSource,prefsHtml,actualUiBootstrap:uiPatchSource,...options
    })+")");
  };
  const slowApi=await run({delays:{api:170,profile:15,prefs:15,plan:15}});
@@ -191,7 +199,11 @@ try{
  const lateMouse=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"mouse"});
  const lateKeyboard=await run({delays:{api:12,profile:15,prefs:170,plan:15},lateForm:true,selection:"keyboard"});
  const prefBeforeForm=await run({delays:{api:12,profile:15,prefs:0,plan:15},lateForm:true,mountDelayMs:90});
- for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard,prefBeforeForm})){
+ const realBootstrapEarlyPrefs=await run({
+  delays:{api:12,profile:15,prefs:0,plan:15},
+  lateForm:true,mountDelayMs:90,useRealBootstrap:true
+ });
+ for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty,lateMouse,lateKeyboard,prefBeforeForm,realBootstrapEarlyPrefs})){
   assert.equal(s.result.sample_count,1,name+" missing browser paint sample");
   assert.equal(s.samples.length,1);
   assert.equal(s.noExternalNetwork,true);
@@ -233,14 +245,23 @@ try{
   "Exactly one successful hydration after form mounts");
  assert.equal(prefBeforeForm.saveAllowed,true,
   "Save allowed only after actual dynamic form hydration");
+ assert.equal(realBootstrapEarlyPrefs.bootstrapLoaded,true,
+  "Actual safe_dashboard_ui_patch.js boot did not run");
+ assert.equal(realBootstrapEarlyPrefs.formMounted,true,
+  "Actual safe_dashboard_ui_patch.js did not insert the real form");
+ assert.equal(realBootstrapEarlyPrefs.preferencesHydrated,1,
+  "Actual bootstrap form was not hydrated once");
+ assert.equal(realBootstrapEarlyPrefs.prefValue,"SAVED_SERVER_PREF",
+  "Actual bootstrap form must receive verified preference values");
+ assert.equal(realBootstrapEarlyPrefs.saveAllowed,true);
  for(const item of [lateMouse,lateKeyboard]){
   assert.equal(item.prefValue,"DISTRITO_DEMO");
   assert.equal(item.preferencesHydrated,0,"Programmatic autocomplete selection must prevent late hydration");
   assert.equal(item.saveAllowed,false,"Delayed form must have delegated submit protection");
   assert.match(item.summaryText,/Conservamos tus cambios locales/);
  }
- console.log("APD_CHROMIUM_DELAYED_FORM_FIRST_SOURCE_PASS "+JSON.stringify({
-  scenarios:10,
+ console.log("APD_CHROMIUM_REAL_UI_BOOTSTRAP_FORM_READY_PASS "+JSON.stringify({
+  scenarios:11,
   slow_api_ms:slowApi.samples[0],
   slow_preferences_ms:slowPreferences.samples[0],
   active_gate_blocked:true,source_error_distinct:true,
