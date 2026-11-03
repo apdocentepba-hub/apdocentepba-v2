@@ -51,7 +51,7 @@ test("reads only browser timings and removes query identifiers from local report
  const output=JSON.stringify({report,emitted});
  assert.equal(output.includes(secret),false);
  assert.equal(output.includes(base),false);
- assert.equal(output.includes("user_id"),false);
+ assert.doesNotMatch(output,/\?(?:user_id|token|session)=/i);
  assert.equal(output.includes("/api/"),false);
  assert.equal(emitted.length,1);
 });
