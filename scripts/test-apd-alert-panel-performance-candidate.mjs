@@ -56,7 +56,7 @@ test("candidate preserves exact offer order, deduplication and district debug me
  };
  const orig=testDistrictSource(original,async d=>fixtures[d]);
  const opt=testDistrictSource(candidate,async d=>fixtures[d]);
- const prefs={distritos};
+ const prefs={distritos:districts};
  assert.deepEqual(await opt(prefs),await orig(prefs));
  assert.deepEqual((await opt(prefs)).ofertas.map(x=>x.source_offer_key),
   ["D_4","D_2","D_3","D_1"]);
