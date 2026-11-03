@@ -10,6 +10,9 @@ on:
       - 'scripts/apd-abc-published-projected-cursor-readonly.mjs'
       - 'scripts/test-apd-abc-published-projected-cursor-readonly.mjs'
       - 'scripts/test-apd-projected-alert-pid-parity.mjs'
+      - 'scripts/apd-public-observation-risk-readonly.mjs'
+      - 'scripts/probe-apd-public-observations-readonly.mjs'
+      - 'scripts/test-apd-public-observation-risk-readonly.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -62,6 +65,14 @@ jobs:
         run: |
           node --check scripts/probe-apd-projected-published-complete-readonly.mjs
           node scripts/probe-apd-projected-published-complete-readonly.mjs
+      - name: Check free-text observation privacy using aggregate-only synthetic tests
+        run: |
+          node --check scripts/apd-public-observation-risk-readonly.mjs
+          node --test scripts/test-apd-public-observation-risk-readonly.mjs
+      - name: Read privacy-risk counts from public Published-only observations without logging values
+        run: |
+          node --check scripts/probe-apd-public-observations-readonly.mjs
+          node scripts/probe-apd-public-observations-readonly.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
