@@ -9,6 +9,7 @@ on:
       - 'scripts/probe-apd-published-full-cursor-shape-readonly.mjs'
       - 'scripts/apd-abc-published-projected-cursor-readonly.mjs'
       - 'scripts/test-apd-abc-published-projected-cursor-readonly.mjs'
+      - 'scripts/test-apd-projected-alert-pid-parity.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -53,6 +54,10 @@ jobs:
           node --check scripts/apd-abc-published-projected-cursor-readonly.mjs
           node --check scripts/test-apd-abc-published-projected-cursor-readonly.mjs
           node --test scripts/test-apd-abc-published-projected-cursor-readonly.mjs
+      - name: Compare canonical Worker filters, PID results and rendered alert fields with projected fake offers
+        run: |
+          node --check scripts/test-apd-projected-alert-pid-parity.mjs
+          node --test scripts/test-apd-projected-alert-pid-parity.mjs
       - name: Check complete published-only public ABC coverage without personal fields
         run: |
           node --check scripts/probe-apd-projected-published-complete-readonly.mjs
