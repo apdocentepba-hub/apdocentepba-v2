@@ -92,6 +92,43 @@ test("two bounded district requests start concurrently, never more than two",asy
  assert.equal(active,0);
 });
 
+test("HTTP 429 stops all queued districts after the first observed failure",async()=>{
+ const started=[],pending=new Map();
+ const fn=testDistrictSource(candidate,district=>{
+  started.push(district);
+  return new Promise((resolve,reject)=>pending.set(district,{resolve,reject}));
+ });
+ const task=fn({distritos:["A","B","C","D","E"]});
+ await pause();
+ assert.deepEqual(started,["A","B"]);
+ pending.get("A").reject(new Error("ABC HTTP 429"));
+ await pause();
+ assert.deepEqual(started,["A","B"],"Queued GETs must stop after 429");
+ pending.get("B").resolve({query:"B",totalBruto:0,totalFiltrado:0,docs:[]});
+ await assert.rejects(task,/HTTP 429/);
+ assert.deepEqual(started,["A","B"]);
+});
+
+test("inflight district drains but does not schedule subsequent districts after error",async()=>{
+ const started=[],pending=new Map();
+ const fn=testDistrictSource(candidate,district=>{
+  started.push(district);
+  return new Promise((resolve,reject)=>pending.set(district,{resolve,reject}));
+ });
+ const task=fn({distritos:["A","B","C","D","E"]});
+ await pause();
+ assert.deepEqual(started,["A","B"]);
+ pending.get("B").resolve({query:"B",totalBruto:0,totalFiltrado:0,docs:[]});
+ await pause();
+ assert.deepEqual(started,["A","B","C"]);
+ pending.get("A").reject(new Error("ABC incomplete source"));
+ await pause();
+ assert.deepEqual(started,["A","B","C"]);
+ pending.get("C").resolve({query:"C",totalBruto:0,totalFiltrado:0,docs:[]});
+ await assert.rejects(task,/ABC incomplete source/);
+ assert.deepEqual(started,["A","B","C"],"No D/E after source failure");
+});
+
 test("district ABC error fails closed rather than claiming zero alerts",async()=>{
  const fn=testDistrictSource(candidate,async district=>{
   if(district==="B")throw Error("ABC unavailable");
