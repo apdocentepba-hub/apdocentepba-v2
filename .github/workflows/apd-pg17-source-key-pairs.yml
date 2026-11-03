@@ -5,6 +5,8 @@ on:
       - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
       - 'scripts/test-apd-source-key-pairs-http.mjs'
       - 'scripts/apd-global-source-pair-stage-gate.mjs'
+      - 'scripts/apd-global-projected-content-preflight-lab.mjs'
+      - 'scripts/test-apd-global-projected-content-preflight-lab.mjs'
       - 'scripts/test-apd-global-source-pair-stage-gate.mjs'
       - 'scripts/test-apd-global-source-pairs-pg17-http.mjs'
       - 'scripts/test-apd-pg17-concurrent-districts-http.mjs'
@@ -309,6 +311,11 @@ jobs:
           node --check scripts/apd-global-source-pair-stage-gate.mjs
           node --check scripts/test-apd-global-source-pair-stage-gate.mjs
           node --test scripts/test-apd-global-source-pair-stage-gate.mjs
+      - name: Verify projected content hashes, source identity and cross-district isolation
+        run: |
+          node --check scripts/apd-global-projected-content-preflight-lab.mjs
+          node --check scripts/test-apd-global-projected-content-preflight-lab.mjs
+          node --test scripts/test-apd-global-projected-content-preflight-lab.mjs
       - name: Stage and commit globally audited fictitious source pairs via disposable PostgREST
         run: |
           node --check scripts/test-apd-global-source-pairs-pg17-http.mjs
