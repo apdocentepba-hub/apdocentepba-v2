@@ -333,6 +333,17 @@ jobs:
                   WHERE source_offer_key='D_9401' AND distrito='MORENO')
                OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
                   WHERE source_offer_key='D_9402' AND distrito='TIGRE')
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                    AND (idoferta<>'FAKE_'||source_offer_key
+                         OR cargo<>'INFORMATICA'
+                         OR area<>'LABORATORIO'
+                         OR nivel_modalidad<>'TECNICA'
+                         OR escuela<>'ESCUELA FICTICIA'
+                         OR turno<>'TM' OR raw IS DISTINCT FROM 'null'::jsonb))<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                    AND estado='Publicada')<>2
                OR (SELECT count(*) FROM apd_scanner_pilot.runs
                   WHERE run_id IN ('00000000-0000-0000-0000-000000009401',
                                    '00000000-0000-0000-0000-000000009402')
