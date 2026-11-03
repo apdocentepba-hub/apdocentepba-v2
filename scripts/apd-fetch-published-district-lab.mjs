@@ -75,10 +75,12 @@ export async function apdFetchPublishedOnlyDistrict({
      throw Error("ABC Published source duplicate or invalid offer identity");
    ids.add(id);keys.add(key);docs.push(offer);
   }
-  if(next===cursor){
-   if(ids.size!==total)throw Error("ABC Published incomplete cursor coverage");
+  // We have all expected UNIQUE rows: requesting one extra empty Solr page
+  // would add latency without improving completeness of this one-pass read.
+  // A later independent second pass still provides drift protection.
+  if(ids.size===total)
    return {docs,query:q,totalBruto:total,totalFiltrado:docs.length};
-  }
+  if(next===cursor)throw Error("ABC Published incomplete cursor coverage");
   if(rowsFound.length===0)throw Error("ABC cursor advanced on empty page");
   cursor=next;
  }
