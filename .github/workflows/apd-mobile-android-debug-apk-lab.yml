@@ -18,8 +18,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -33,7 +31,7 @@ jobs:
         working-directory: mobile
         env:
           EXPO_NO_TELEMETRY: '1'
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Prohibit production endpoints, credentials and push in this binary
         run: |
           node --test mobile/src/*.test.cjs
