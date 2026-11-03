@@ -29,7 +29,7 @@ for(const name of probes){
    name+" silently succeeded on 429: "+String(result.stdout).slice(0,400)+
    String(result.stderr).slice(0,400));
   const output=String(result.stdout)+String(result.stderr);
-  assert.match(output,/unavailable|blocked|AGGREGATES_UNAVAILABLE|DRIFT_OR_UNAVAILABLE|failed closed/i,
+  assert.match(output,/unavailable|blocked|AGGREGATES_UNAVAILABLE|DRIFT_OR_UNAVAILABLE|failed closed|no_privacy_clearance/i,
    "Source error was not explicitly recorded");
   assert.doesNotMatch(output,/SOLR_.*iddetalle|Bearer |access_token|refresh_token/i,
    "A live probe must not log offer identities or credentials");
