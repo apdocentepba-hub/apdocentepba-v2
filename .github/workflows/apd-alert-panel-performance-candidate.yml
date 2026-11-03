@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/build-apd-alert-panel-performance-candidate.mjs'
       - 'scripts/test-apd-alert-panel-performance-candidate.mjs'
+      - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -29,6 +30,10 @@ jobs:
         run: |
           node --check scripts/test-apd-alert-panel-performance-candidate.mjs
           node --test scripts/test-apd-alert-panel-performance-candidate.mjs
+      - name: Inventory synchronous panel assets without network requests
+        run: |
+          node --check scripts/audit-apd-panel-static-assets.mjs
+          node scripts/audit-apd-panel-static-assets.mjs
       - name: Explicitly verify production Worker, UI and Supabase unchanged
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql
