@@ -2,6 +2,12 @@
 
 **Estado verificable:** solo diseño y un contrato de eventos push con pruebas sin red. No hay aplicación Android/iOS compilada, APK/AAB, credenciales FCM/APNs, servicio de envío ni push real enviado. Este PR no modifica producción.
 
+## Avance adicional comprobado: prototipo Expo offline
+
+Se creó la carpeta `mobile/` con un proyecto React Native + Expo SDK 58, pantallas Inicio / Alertas / Filtros / Cuenta, ofertas **ficticias**, búsqueda y filtros locales, guardado temporal y advertencias de modo demostración. La CI de Android exportó el **paquete JavaScript mediante Metro**, sin errores, pero **NO compiló APK/AAB** y no se realizaron pruebas en un celular.
+
+La app todavía no se conecta al backend, no inicia sesión y no registra ni recibe notificaciones. Detalles y requisitos de prueba: `mobile/README.md`.
+
 ## Alcance del MVP
 
 Que un docente autenticado reciba en su Android **ofertas nuevas verificadas y compatibles** con sus preferencias del servicio APDocentePBA, sin duplicados ni notificaciones de ofertas vencidas. Al tocar la notificación, entrar al detalle autorizado y desde allí abrir la oferta en ABC. Reutilizar el mismo backend para iOS más adelante.
