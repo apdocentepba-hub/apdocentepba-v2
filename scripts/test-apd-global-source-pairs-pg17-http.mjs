@@ -45,7 +45,11 @@ const fakeProjected=Object.fromEntries(fakeOffers.map(({district,pairs})=>[
  district,pairs.map(({id,source_offer_key})=>({
   id,iddetalle:source_offer_key.slice(2),idoferta:"FAKE_"+source_offer_key,
   descdistrito:district,estado:"Publicada",
-  descripcioncargo:"INFORMATICA",turno:"TM",
+  descripcioncargo:"INFORMATICA",descripcionarea:"LABORATORIO",
+  descnivelmodalidad:"TECNICA",escuela:"ESCUELA FICTICIA",
+  turno:"TM",jornada:"SIMPLE",hsmodulos:"2",cursodivision:"1 A",
+  supl_desde:"",supl_hasta:"",finoferta:"2099-12-31",
+  ult_movimiento:"2026-11-02T16:00:00Z",
   observaciones:"CI-ONLY FICTITIOUS TEXT"
  }))
 ]));
@@ -93,16 +97,7 @@ const rows=[
  {district:"MORENO",key:"D_9401",run:"00000000-0000-0000-0000-000000009401"},
  {district:"TIGRE",key:"D_9402",run:"00000000-0000-0000-0000-000000009402"}
 ];
-function fakeStagedOffer(key,district){
- return {
-  source_offer_key:key,idoferta:"CI_ONLY_"+key,iddetalle:key.slice(2),
-  estado:"Publicada",distrito:district,escuela:"ESCUELA FICTICIA",
-  cargo:"INFORMATICA",area:"PRUEBA",nivel_modalidad:"TECNICA",
-  turno:"TM",jornada:"SIMPLE",hsmodulos:"2",cursodivision:"1 A",
-  supl_desde:"",supl_hasta:"",finoferta:"2099-12-31",
-  ult_movimiento:"2026-11-02T16:00:00Z",raw:{ci_only:true}
- };
-}
+
 for(const {district,key,run} of rows){
  const pairs=good.pairsForIsolatedStaging(district,[key]);
  assert.equal(pairs.length,1);
@@ -112,7 +107,7 @@ for(const {district,key,run} of rows){
  }),run);
  assert.equal(await rpc("stage_capture_page",{
   p_run_id:run,p_page_index:0,p_source_total:pairs.length,
-  p_rows:[fakeStagedOffer(key,district)]
+  p_rows:good.stagedRowsForIsolatedPg17(district,[key])
  }),1);
  assert.equal(await rpc("seal_capture",{p_run_id:run}),1);
  assert.equal(await rpc("register_source_pairs",{
@@ -138,5 +133,7 @@ console.log(JSON.stringify({
  no_actual_supabase_connection:true,
  source_ids_or_worker_keys_logged:false,
  projected_content_hashes_checked:true,
+ staged_rows_derived_from_verified_source:true,
+ raw_source_content_excluded_from_staging:true,
  production_modified:false
 }));
