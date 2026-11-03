@@ -172,5 +172,13 @@ try{
 }finally{
  for(const p of pending.values())clearTimeout(p.timer);
  pending.clear();socket?.close();browser.kill("SIGTERM");
- await sleep(200);rmSync(directory,{recursive:true,force:true});
+ // Chromium writes its profile asynchronously on exit. Wait for the process
+ // before removing its temporary folder; retry only filesystem ENOTEMPTY/EBUSY.
+ // This is test cleanup, not a dashboard behavioral change.
+ await new Promise(resolve=>{
+  if(browser.exitCode!==null||browser.signalCode!==null)return resolve();
+  const timeout=setTimeout(resolve,3000);
+  browser.once("exit",()=>{clearTimeout(timeout);resolve()});
+ });
+ rmSync(directory,{recursive:true,force:true,maxRetries:12,retryDelay:200});
 }
