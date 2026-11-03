@@ -64,3 +64,13 @@ Se agregaron `tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql` (dispara
 **Alcance y advertencias:** se probó la terminación forzada de un proceso cliente Node, no la caída de la base PostgreSQL, el reinicio de Cloudflare ni la pérdida de conexión **durante** una operación HTTP en curso. El primer escenario recibió encabezados de una respuesta correcta antes de morir, por lo que tampoco cubre una respuesta completamente indeterminada. No es un algoritmo de recuperación todavía incorporado al Worker publicado. El control demuestra que la infraestructura aislada distingue un lote confirmado de uno pendiente al reiniciar el proceso y evita repetirlo automáticamente.
 
 **Progreso de preparación técnica del escáner (milestones de esta revisión):** 5/7 = **71%**. Hitos: (1) commit atómico distrital PG17, (2) payload completo/RPC/PostgREST aislados, (3) validación exacta de ID Solr + clave Worker, (4) concurrencia y rollback por falla inducida, (5) pérdida de acuse y reinicio forzado del cliente comprobados. **Faltan:** (6) integración segura del Worker y manejo real de etapas y reintentos, (7) pruebas preproductivas con respaldos restaurables, autorización de despliegue y reversión completa. El porcentaje no indica disponibilidad en producción ni se extrapola a la aplicación en general.
+
+## Prueba de SIGKILL durante una solicitud HTTP en curso
+
+**Ejecución CI verificada:** `41555905093`, commit `2b46537e6f5f0dc09dfade7e15ce81060cf8293c`, **success**.
+
+El laboratorio instaló un trigger temporal en PostgreSQL 17 que ejecuta `pg_sleep(7)` **durante la inserción** de la clave ficticia `D_9201` para Hurlingham. El proceso cliente inició `commit_capture` contra PostgREST; el controlador observó la sesión activa con `wait_event='PgSleep'` en `pg_stat_activity` y mató al cliente con SIGKILL (exit 137). Un proceso nuevo, sin reenviar la escritura, consultó `capture_status`.
+
+**Resultado concreto de esa ejecución:** el estado observado fue `finalized`: el servidor había confirmado la transacción **después de morir el cliente**. El control SQL aprobó la correspondencia entre el estado y las filas de las dos representaciones, sin inserciones parciales ni reasignaciones. El ensayo admite también el desenlace `ready` con cero filas, porque una desconexión en ese instante puede causar cancelación y rollback. Nunca admite estados intermedios ni recaptura automática.
+
+Esto prueba un corte real del **proceso cliente** mientras la consulta del servidor está en ejecución, pero no prueba corte físico de red, caída del servidor PostgreSQL, reinicio de Cloudflare ni de la máquina. Por eso todavía es una prueba del mecanismo en laboratorio, no aprobación para desplegar.
