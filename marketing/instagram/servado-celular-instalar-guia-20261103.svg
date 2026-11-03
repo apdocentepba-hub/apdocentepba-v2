@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071d31"/><stop offset="1" stop-color="#15576c"/></linearGradient></defs>
+<rect width="1080" height="1350" fill="url(#bg)"/>
+<circle cx="1040" cy="110" r="340" fill="#78e6d5" opacity=".08"/>
+<rect x="66" y="68" width="60" height="60" rx="16" fill="#a7f5d8"/>
+<text x="83" y="111" font-family="Arial,sans-serif" font-size="39" fill="#0c3446">✓</text>
+<text x="150" y="113" font-family="Arial,sans-serif" font-weight="bold" font-size="43" fill="#ffffff">APDocentePBA</text>
+<rect x="65" y="162" width="450" height="50" rx="25" fill="#20596a"/>
+<text x="94" y="196" font-family="Arial,sans-serif" font-weight="bold" font-size="23" fill="#b8ffea">GUÍA PRÁCTICA · SERVADO</text>
+<text x="65" y="303" font-family="Arial,sans-serif" font-weight="bold" font-size="73" fill="#ffffff">¿Consultás el</text>
+<text x="65" y="397" font-family="Arial,sans-serif" font-weight="bold" font-size="73" fill="#a8ffdc">PAD desde el celu?</text>
+<text x="67" y="462" font-family="Arial,sans-serif" font-size="32" fill="#e0f7f2">Podés agregar SerVaDo a tu pantalla</text>
+<text x="67" y="508" font-family="Arial,sans-serif" font-size="32" fill="#e0f7f2">de inicio, sin buscarlo cada vez.</text>
+<rect x="63" y="558" width="954" height="565" rx="31" fill="#f4faf8"/>
+<text x="104" y="628" font-family="Arial,sans-serif" font-weight="bold" font-size="30" fill="#1b5b65">PASO A PASO</text>
+<g font-family="Arial,sans-serif" fill="#123d4d" font-size="34" font-weight="bold">
+<text x="105" y="714">1. Abrí servido.abc.gob.ar</text>
+<text x="105" y="805">2. Buscá «Instalar» o «Agregar</text>
+<text x="151" y="852">a pantalla de inicio».</text>
+<text x="105" y="943">3. Confirmá y abrilo desde</text>
+<text x="151" y="990">el ícono del celular.</text>
+</g>
+<text x="107" y="1070" font-family="Arial,sans-serif" font-size="25" fill="#497480">La opción depende del navegador y equipo.</text>
+<text x="68" y="1192" font-family="Arial,sans-serif" font-weight="bold" font-size="28" fill="#b2ffe1">Fuente: DGCyE · Guía oficial de SerVaDo</text>
+<text x="68" y="1240" font-family="Arial,sans-serif" font-size="26" fill="#e0f7f2">APDocentePBA es independiente de ABC/DGCyE.</text>
+<text x="68" y="1285" font-family="Arial,sans-serif" font-size="26" fill="#e0f7f2">No reemplaza la postulación oficial a APD.</text>
+</svg>
