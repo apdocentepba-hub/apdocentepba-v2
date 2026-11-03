@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/build-apd-alert-panel-performance-candidate.mjs'
       - 'scripts/test-apd-alert-panel-performance-candidate.mjs'
+      - 'scripts/benchmark-apd-alert-panel-performance-synthetic.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
   workflow_dispatch:
@@ -30,6 +31,10 @@ jobs:
         run: |
           node --check scripts/test-apd-alert-panel-performance-candidate.mjs
           node --test scripts/test-apd-alert-panel-performance-candidate.mjs
+      - name: Compare p50 and p95 against fixed synthetic upstream latency (not real production)
+        run: |
+          node --check scripts/benchmark-apd-alert-panel-performance-synthetic.mjs
+          node scripts/benchmark-apd-alert-panel-performance-synthetic.mjs
       - name: Inventory synchronous panel assets without network requests
         run: |
           node --check scripts/audit-apd-panel-static-assets.mjs
