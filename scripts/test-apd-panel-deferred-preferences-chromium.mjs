@@ -136,7 +136,10 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  const samples=meter.snapshot();
  return {result,paintText:document.getElementById("panel-alertas").textContent,
   synchronized,preferencesHydrated,preferencesOnlyCount,samples,noExternalNetwork:true,
-  prefValue:prefInput.value,saveAllowed,preferencesMessage:document.getElementById("preferencias-msg").textContent,
+  prefValue:prefInput.value,saveAllowed,
+  guardState:window.__APD_LAB_PREF_GUARD?.state,guardDirty:window.__APD_LAB_PREF_GUARD?.dirty,
+  formMounted:!!document.getElementById('form-preferencias'),
+  preferencesMessage:document.getElementById("preferencias-msg").textContent,
   summaryText:document.getElementById("panel-preferencias-resumen").textContent};
 }
 
@@ -219,7 +222,7 @@ try{
  assert.match(dirty.summaryText,/Conservamos tus cambios locales/);
  assert.match(dirty.preferencesMessage,/Recargá la página/);
  assert.equal(prefBeforeForm.prefValue,"SAVED_SERVER_PREF",
-  "Preferences arriving before form mount must still be hydrated");
+  "Preferences arriving before form mount must still be hydrated: "+JSON.stringify(prefBeforeForm));
  assert.equal(prefBeforeForm.preferencesHydrated,1,
   "Exactly one successful hydration after form mounts");
  assert.equal(prefBeforeForm.saveAllowed,true,
