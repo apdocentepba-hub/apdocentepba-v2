@@ -151,3 +151,32 @@ test('known content changes in the second snapshot prevent all staging',async()=
  };
  await assert.rejects(()=>run(reader),/source content drifted/);
 });
+
+test('outgoing staging gate rejects changed content, injected raw, duplicates and keys',async()=>{
+ const gate=await run(mock(example()));
+ const original=gate.stagedRowsForIsolatedPg17('MORENO',['D_9401','D_9402']);
+ const copy=()=>structuredClone(original);
+ assert.deepEqual(gate.validateStagedRowsForIsolatedPg17(
+  'MORENO',['D_9401','D_9402'],copy()),original);
+ const mutations=[
+  rows=>{rows[0].cargo='WRONG_CARGO'},
+  rows=>{rows[0].raw={personal:'secret'}},
+  rows=>{rows[0].observaciones='private@example.com'},
+  rows=>{rows[0].source_offer_key='D_9999'},
+  rows=>{rows[1].source_offer_key=rows[0].source_offer_key},
+  rows=>{rows.pop()}
+ ];
+ for(const mutate of mutations){
+  const rows=copy();mutate(rows);
+  assert.throws(()=>gate.validateStagedRowsForIsolatedPg17(
+   'MORENO',['D_9401','D_9402'],rows),/outgoing stage|outgoing staging|malformed outgoing/);
+ }
+});
+test('outgoing payload gate returns detached trusted rows, not proposed objects',async()=>{
+ const gate=await run(mock(example()));
+ const submitted=structuredClone(gate.stagedRowsForIsolatedPg17('TIGRE',['D_9501']));
+ const accepted=gate.validateStagedRowsForIsolatedPg17('TIGRE',['D_9501'],submitted);
+ submitted[0].cargo='MUTATED AFTER CHECK';
+ assert.equal(accepted[0].cargo,'INFORMATICA');
+ assert.equal(Object.isFrozen(accepted[0]),true);
+});
