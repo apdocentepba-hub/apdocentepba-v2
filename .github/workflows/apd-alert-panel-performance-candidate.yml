@@ -20,6 +20,9 @@ on:
       - 'scripts/build-apd-panel-timing-candidate.mjs'
       - 'scripts/test-apd-panel-timing-meter.mjs'
       - 'scripts/test-apd-panel-timing-dashboard-contract.mjs'
+      - 'scripts/apd-fetch-published-district-lab.mjs'
+      - 'scripts/build-apd-published-minimized-candidate.mjs'
+      - 'scripts/test-apd-published-worker-candidate.mjs'
       - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
       - 'scripts/audit-apd-panel-static-assets.mjs'
       - '.github/workflows/apd-alert-panel-performance-candidate.yml'
@@ -90,6 +93,16 @@ jobs:
         run: |
           node --check scripts/test-apd-alert-privacy-candidate.mjs
           node --test scripts/test-apd-alert-privacy-candidate.mjs
+      - name: Build complete Published-only Worker candidate with existing privacy and concurrency guards
+        run: |
+          node --check scripts/apd-fetch-published-district-lab.mjs
+          node --check scripts/build-apd-published-minimized-candidate.mjs
+          node scripts/build-apd-published-minimized-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_published_minimized_candidate.js
+      - name: Prove complete source coverage, 429 failures and private-field rejection with fake offers
+        run: |
+          node --check scripts/test-apd-published-worker-candidate.mjs
+          node --test scripts/test-apd-published-worker-candidate.mjs
       - name: Build local-only first-alert-paint meter without production changes
         run: |
           node --check scripts/apd-panel-timing-meter.mjs
