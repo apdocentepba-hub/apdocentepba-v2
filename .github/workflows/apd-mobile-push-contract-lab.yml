@@ -9,6 +9,8 @@ on:
       - 'scripts/mobile-push-outbox-contract.mjs'
       - 'scripts/test-mobile-push-outbox-contract.mjs'
       - 'scripts/test-mobile-push-synthetic-e2e.mjs'
+      - 'scripts/mobile-push-strict-session-lab.mjs'
+      - 'scripts/test-mobile-push-strict-session-lab.mjs'
       - 'docs/mobile-push-mvp-20261103.md'
       - 'mobile/**'
       - '.github/workflows/apd-mobile-push-contract-lab.yml'
@@ -39,6 +41,8 @@ jobs:
           node --check scripts/test-mobile-push-outbox-contract.mjs
           node --test scripts/test-mobile-push-outbox-contract.mjs
           node --test scripts/test-mobile-push-synthetic-e2e.mjs
+          node --check scripts/mobile-push-strict-session-lab.mjs
+          node --test scripts/test-mobile-push-strict-session-lab.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
