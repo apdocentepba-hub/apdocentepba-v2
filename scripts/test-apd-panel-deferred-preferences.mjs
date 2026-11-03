@@ -16,8 +16,8 @@ assert.doesNotMatch(dashboard,/const \[docente, prefRaw, planInfo\]/);
 async function flush(){
  for(let i=0;i<12;i++)await Promise.resolve();
 }
-function fixture({plan=true,apiError=false,profilePending=false,planPending=false}={}){
- let token="FAKE_TOKEN_1",time=0;
+function fixture({plan=true,apiError=false,profilePending=false,planPending=false,formInitiallyMissing=false}={}){
+ let token="FAKE_TOKEN_1",time=0,formExists=!formInitiallyMissing;
  const prefPending=new Map(),profiles=new Map(),plans=new Map(),paints=[];
  const events=[], els=new Map(),docHandlers=new Map();
  const node=id=>{
@@ -32,7 +32,8 @@ function fixture({plan=true,apiError=false,profilePending=false,planPending=fals
   return els.get(id);
  };
  const doc={
-  getElementById:node,
+  getElementById:id=>id==="form-preferencias"&&!formExists?null:node(id),
+  fireEvent:(type,event)=>{event.type=type;for(const fn of docHandlers.get(type)||[])fn(event);},
   addEventListener:(type,fn)=>{const a=docHandlers.get(type)||[];a.push(fn);docHandlers.set(type,a);},
   removeEventListener:(type,fn)=>docHandlers.set(type,(docHandlers.get(type)||[]).filter(f=>f!==fn)),
   fireClick:(selector)=>{for(const fn of docHandlers.get("click")||[])fn({target:{closest:x=>x.includes(selector)?{}:null}});},
@@ -72,12 +73,19 @@ function fixture({plan=true,apiError=false,profilePending=false,planPending=fals
  const compiled=make(...names.map(n=>deps[n]));
  return {
   load:compiled.load,meter,events,doc,
-  edit:()=>node("form-preferencias").dispatchEvent({type:"input",target:{matches:x=>x.includes("input")}}),
-  change:()=>node("form-preferencias").dispatchEvent({type:"change",target:{matches:x=>x.includes("input")}}),
+  edit:()=>doc.fireEvent("input",{target:{matches:x=>x.includes("input"),closest:x=>x==="#form-preferencias"?{}:null}}),
+  change:()=>doc.fireEvent("change",{target:{matches:x=>x.includes("input"),closest:x=>x==="#form-preferencias"?{}:null}}),
+  suggestionMouse:()=>doc.fireEvent("mousedown",{target:{closest:selector=>selector===".ac-item"?{closest:selector2=>selector2===".ac-list"?{closest:selector3=>selector3==="#form-preferencias"?{}:null}:null}:null}}),
+  suggestionKeyboard:()=>doc.fireEvent("keydown",{key:"Enter",target:{
+   matches:x=>x==="input",closest:x=>x==="#form-preferencias"?{}:null,
+   parentElement:{querySelector:x=>x===".ac-list"?{style:{display:"block"},querySelector:x=>x===".ac-item"?{}:null}:null}
+  }}),
+  mountForm:()=>{formExists=true;},
+  hasForm:()=>formExists,
   clear:selector=>doc.fireClick(selector),
   submit:()=>{const e={type:"submit",defaultPrevented:false,
    preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
-   node("form-preferencias").dispatchEvent(e);return e;},
+   doc.fireEvent("submit",{...e,target:{id:"form-preferencias"}});return e;},
   setToken:value=>{token=value;},
   settlePaint:()=>{time+=20;while(paints.length)paints.shift()();},
   resolvePrefs:(value={},id=token)=>{
@@ -340,4 +348,46 @@ test("a switched-session guard cannot be cleared by an earlier session save",asy
  await saving;
  assert.equal(f.guard.dirty,true);
  assert.equal(f.window.__APD_LAB_PREF_GUARD.dirty,true);
+});
+
+
+test("form created after dashboard starts still receives submit and edit protection",async()=>{
+ const h=fixture({formInitiallyMissing:true});
+ await h.load();await flush();
+ assert.equal(h.hasForm(),false);
+ h.mountForm();
+ assert.equal(h.submit().defaultPrevented,true,"Delegated capture must stop unsafe save on injected form");
+ h.edit();
+ h.resolvePrefs({marker:"REMOTE"});await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.equal(h.submit().defaultPrevented,true);
+});
+test("legacy autocomplete mouse selection marks unsaved draft without input event",async()=>{
+ const h=fixture();
+ await h.load();await flush();
+ h.suggestionMouse();
+ h.resolvePrefs({marker:"REMOTE"});await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.match(h.doc.getElementById("panel-preferencias-resumen").textContent,/Conservamos tus cambios locales/);
+ assert.equal(h.submit().defaultPrevented,true);
+});
+test("legacy autocomplete Enter selection marks unsaved draft without change event",async()=>{
+ const h=fixture();
+ await h.load();await flush();
+ h.suggestionKeyboard();
+ h.resolvePrefs({marker:"REMOTE"});await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.equal(h.submit().defaultPrevented,true);
+});
+test("delegated document listeners are disposed on each same-user reload",async()=>{
+ const h=fixture();
+ await h.load();await flush();
+ const before=['input','change','mousedown','keydown','submit','click'];
+ for(const event of before)assert.equal(h.doc.fireEvent instanceof Function,true);
+ await h.load();await flush();
+ // A single typed input should increment revision only once after old guard cleanup.
+ h.edit();
+ h.resolvePrefs({marker:"NEW"});await flush();
+ assert.equal(h.events.includes("formHydrated"),false);
+ assert.equal(h.submit().defaultPrevented,true);
 });
