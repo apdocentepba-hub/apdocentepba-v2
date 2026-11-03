@@ -54,7 +54,7 @@ async function evalBrowser(expression){
 }
 
 // Serializable browser function: no import, no request and no external state.
-async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false}){
+async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive=false,unverified=false,failApi=false,empty=false,editBeforePrefs=false}){
  const createMeter=new Function(meterSource+"\nreturn createApdPanelTimingMeter;")();
  const meter=createMeter();
  window.__APD_LAB_PERF=meter;
@@ -65,7 +65,7 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  });
  const dependencies={
   window,document,console:{warn(){},error(){}},
-  alert(){},logout(){},localStorage:{getItem:()=>fakeToken},
+  alert(){},logout(){},showMsg:(id,message)=>{document.getElementById(id).textContent=message;},localStorage:{getItem:()=>fakeToken},
   obtenerToken:()=>fakeToken,actualizarNav(){},
   mostrarSeccion(){},setPanelLoading(){},
   obtenerMisAlertas:()=>later(delays.api??15,empty?[]:[{source_offer_key:"D_FAKE_1"}],failApi),
@@ -74,7 +74,7 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
   obtenerMiPlan:()=>later(delays.plan??15,{access_active:unverified?null:!inactive}),
   adaptarPreferencias:()=>({}),buildPlanFallback:()=>({access_active:null}),
   renderDashboard:data=>{if(data.apdPrefsOnly)preferencesOnlyCount++;},
-  cargarPrefsEnFormulario(){preferencesHydrated++;},renderPlanUI(){},
+  cargarPrefsEnFormulario(){preferencesHydrated++;document.getElementById("pref-distrito-principal").value="SAVED_SERVER_PREF";},renderPlanUI(){},
   renderAlertasAPD:items=>{
    document.getElementById("panel-alertas").textContent=
     items.length?"ALERTA_RENDERIZADA":"SIN_ALERTAS";
@@ -92,12 +92,22 @@ async function scenarioInBrowser({dashboardSource,meterSource,delays={},inactive
  const dashboard=compile(...names.map(n=>dependencies[n]));
  document.getElementById("panel-alertas").textContent="";
  await dashboard();
+ const prefInput=document.getElementById("pref-distrito-principal");
+ if(editBeforePrefs){
+  prefInput.value="UNSAVED_LOCAL_PREF";
+  prefInput.dispatchEvent(new Event("input",{bubbles:true}));
+ }
  for(let i=0;i<45&&meter.summary().sample_count<1;i++)
   await new Promise(done=>setTimeout(done,20));
+ if(editBeforePrefs)await new Promise(done=>setTimeout(done,(delays.prefs??15)+55));
+ const submitEvent=new Event("submit",{bubbles:true,cancelable:true});
+ const saveAllowed=document.getElementById("form-preferencias").dispatchEvent(submitEvent);
  const result=meter.summary();
  const samples=meter.snapshot();
  return {result,paintText:document.getElementById("panel-alertas").textContent,
-  synchronized,preferencesHydrated,preferencesOnlyCount,samples,noExternalNetwork:true};
+  synchronized,preferencesHydrated,preferencesOnlyCount,samples,noExternalNetwork:true,
+  prefValue:prefInput.value,saveAllowed,preferencesMessage:document.getElementById("preferencias-msg").textContent,
+  summaryText:document.getElementById("panel-preferencias-resumen").textContent};
 }
 
 try{
@@ -123,7 +133,7 @@ try{
  // A blank data: page has no external assets. Block HTTP(S) to be explicit.
  await cdp("Network.setBlockedURLs",{urls:["http://*","https://*"]});
  await cdp("Page.navigate",{url:"data:text/html,"+
-   encodeURIComponent("<!doctype html><html><body><div id='panel-alertas'></div><div id='alertas-badge'></div></body></html>")});
+   encodeURIComponent("<!doctype html><html><body><div id='panel-alertas'></div><div id='alertas-badge'></div><div id='panel-preferencias-resumen'></div><div id='preferencias-msg'></div><form id='form-preferencias'><input id='pref-distrito-principal' name='pref-distrito-principal'></form></body></html>")});
  for(let i=0;i<50;i++){
   if(await evalBrowser('document.readyState==="complete"'))break;
   await sleep(50);
@@ -138,7 +148,8 @@ try{
  const unverified=await run({unverified:true});
  const error=await run({failApi:true});
  const empty=await run({empty:true});
- for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty})){
+ const dirty=await run({delays:{api:12,profile:15,prefs:170,plan:15},editBeforePrefs:true});
+ for(const [name,s] of Object.entries({slowApi,slowPreferences,inactive,unverified,error,empty,dirty})){
   assert.equal(s.result.sample_count,1,name+" missing browser paint sample");
   assert.equal(s.samples.length,1);
   assert.equal(s.noExternalNetwork,true);
@@ -169,8 +180,13 @@ try{
  assert.equal(error.synchronized,0);
  assert.equal(empty.result.outcomes.no_matches,1);
  assert.equal(empty.synchronized,1);
- console.log("APD_CHROMIUM_DEFERRED_PREFS_SYNTHETIC_PASS "+JSON.stringify({
-  scenarios:6,
+ assert.equal(dirty.prefValue,"UNSAVED_LOCAL_PREF","Late server data must never replace typed value");
+ assert.equal(dirty.preferencesHydrated,0,"Dirty editor must not apply server preferences");
+ assert.equal(dirty.saveAllowed,false,"Saving incomplete/conflicting preferences must be blocked");
+ assert.match(dirty.summaryText,/Conservamos tus cambios locales/);
+ assert.match(dirty.preferencesMessage,/Recargá la página/);
+ console.log("APD_CHROMIUM_DEFERRED_PREFS_EDIT_GUARD_PASS "+JSON.stringify({
+  scenarios:7,
   slow_api_ms:slowApi.samples[0],
   slow_preferences_ms:slowPreferences.samples[0],
   active_gate_blocked:true,source_error_distinct:true,
