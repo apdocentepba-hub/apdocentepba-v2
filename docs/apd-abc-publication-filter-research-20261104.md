@@ -57,3 +57,19 @@ Evidencia: [GitHub Actions #41832394209](https://github.com/apdocentepba-hub/apd
 - No se usaron credenciales ni cuentas de usuarios. No hubo cambios de base de datos, notificaciones, versiones ni tráfico en Cloudflare.
 - La prueba real controla el **contrato de recuperación de publicaciones** en dos distritos y en ese momento; no valida el resultado final de la API autenticada, coincidencia de preferencias, PID, vigencia ni el carrusel renderizado. Tampoco demuestra paridad en todos los 137 distritos ni garantiza estabilidad ante actualizaciones simultáneas de ABC.
 - La variante con filtro sigue **SIN UPLOAD Y SIN DEPLOY**; el candidato previo almacenado con **0 % de tráfico** no incluye el filtro. Continúan pendientes una prueba con cuenta propia autenticada, la medición end-to-end y la autorización específica para subir una nueva versión o cambiar tráfico.
+
+
+## Cierre de regresiones esenciales en laboratorio — 04/11/2026
+
+**Pipeline [#41835675006](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41835675006) SUCCESS:**
+- Router del Worker **generado real**, sin red, con base de datos ficticia: **4/4** por cada bundle, **8/8** en total. Rechaza bearer ausente/vencido, cuenta inactiva y sustituye un ID de usuario solicitado por el ID de la sesión autorizada.
+- Contrato de API + preferencias + carrusel: **2/2** casos por bundle, tanto el anterior ya almacenado sin tráfico como el segundo con filtro de publicaciones. El caso de plan no vigente se probó mediante funciones reales con servicios simulados, no mediante sesión productiva.
+- Compilaciones y pruebas existentes también aprobadas. Ninguna modificación en datos reales ni tráfico productivo.
+
+**Pipeline [#41836101614](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41836101614) SUCCESS:**
+- Ejecutado **el router completo compilado** de los dos candidatos con una cuenta ficticia de plan PLUS, sesión de prueba, dos distritos y seis ofertas inventadas. Ambos devolvieron **exactamente las dos ofertas compatibles** por cargo, nivel y turno, con dos lecturas ABC simuladas; no se usaron credenciales ni se consultó ABC real en este test.
+- Verificado que la identidad de la sesión prevalece frente a un user_id distinto provisto por el cliente.
+- La auditoría read-only de Cloudflare volvió a confirmar versión original 100 %, 29 bindings, cuatro cron y hash canónico. No hubo despliegue, subida ni cambios de usuarios.
+- Hallazgo de rendimiento **NO resuelto aún**: cuando no existe PID almacenado, el Worker prueba siete acciones de consulta PID **una detrás de otra**; ocurrió exactamente así en ambos tests completos. Puede sumar latencia a la carga; todavía no hay medición de duración real del servicio PID con una sesión autorizada. Evitar presentar la optimización ABC como garantía del tiempo total de panel.
+
+**Alcance y bloqueo:** El flujo real de producción con una cuenta autenticada de prueba, la latencia end-to-end, el comportamiento bajo cambios de ABC durante la consulta y una revisión de los siete fallback PID siguen pendientes. El segundo candidato filtrado está **solo en el repositorio**, no subido a Cloudflare. Ninguna asignación de tráfico está autorizada por estas pruebas.
