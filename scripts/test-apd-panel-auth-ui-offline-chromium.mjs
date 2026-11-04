@@ -102,6 +102,7 @@ async function saveScreenshot(name){
 }
 const authPatch=readFileSync("auth_session_patch.js","utf8");
 const uiPatch=readFileSync("safe_dashboard_ui_patch.js","utf8");
+const priorityScript=readFileSync("scripts/apd-panel-first-alert-layout-lab.js","utf8");
 assert.match(htmlSource,/id="panel-alertas"/);
 assert.doesNotMatch(htmlSource,/<script\b/i);
 function setupBrowser(config){
@@ -196,6 +197,12 @@ async function collectBrowser(){
     alertCardVisible:!!rect&&rect.width>80&&rect.height>25,
     width:rect?Math.round(rect.width):0,
     cssPresent:document.styleSheets.length>0,
+    alertCardFirst:document.getElementById("panel-content")?.firstElementChild?.contains(document.getElementById("panel-alertas"))===true,
+    mainFirst:document.getElementById("panel-docente")?.firstElementChild===document.querySelector("#panel-docente > .container"),
+    promoAtBottom:(()=>{
+     const p=document.getElementById("panel-docente");
+     return [...p.children].slice(-2).every(node=>node.matches(".apd-safe-side-ad"));
+    })(),
     authHidden:document.getElementById("login").classList.contains("hidden")};
   })()
  };
@@ -217,6 +224,7 @@ async function isolatedScenario({
  await cdp("Runtime.evaluate",{expression:candidate,returnByValue:false});
  await cdp("Runtime.evaluate",{expression:authPatch,returnByValue:false});
  await cdp("Runtime.evaluate",{expression:uiPatch,returnByValue:false});
+ await cdp("Runtime.evaluate",{expression:priorityScript,returnByValue:false});
  return evalBrowser("("+collectBrowser.toString()+")()");
 }
 try{
@@ -249,6 +257,9 @@ try{
  assert.equal(active.layout.cssPresent,true);
  assert.equal(active.layout.alertCardVisible,true);
  assert.equal(active.layout.authHidden,true);
+ assert.equal(active.layout.alertCardFirst,true,"Alerts must precede secondary cards");
+ assert.equal(active.layout.mainFirst,true,"Panel must precede nonessential promos");
+ assert.equal(active.layout.promoAtBottom,true,"Promos retained below the dashboard");
  await saveScreenshot("panel-real-ui-synthetic-desktop");
  const activeMobile=await isolatedScenario({active:true,preferencesDelay:160,viewportWidth:390});
  assert.equal(activeMobile.alertCount,1);
@@ -258,6 +269,9 @@ try{
  assert.equal(activeMobile.layout.alertCardVisible,true);
  assert.equal(activeMobile.layout.cssPresent,true);
  assert.equal(activeMobile.layout.authHidden,true);
+ assert.equal(activeMobile.layout.alertCardFirst,true,"Mobile alerts should be first");
+ assert.equal(activeMobile.layout.mainFirst,true);
+ assert.equal(activeMobile.layout.promoAtBottom,true);
  assert.ok(activeMobile.layout.scrollWidth<=activeMobile.layout.viewport+12,
    "Real V3 panel overflows mobile width: "+JSON.stringify(activeMobile.layout));
  await saveScreenshot("panel-real-ui-synthetic-mobile");
@@ -284,6 +298,7 @@ try{
  assert.equal(empty.writes,1);
  console.log("APD_REAL_AUTH_UI_OFFLINE_INTEGRATION_PASS "+
   JSON.stringify({scenarios:7,actual_main_html:true,real_v3_stylesheets:true,
+   first_alert_layout_candidate:true,
    desktop_and_mobile_visual_screenshots:true,no_live_network:true,actual_candidate_app:true,
    actual_auth_patch:true,actual_safe_ui_bootstrap:true,actual_dashboard_renderer:true,
    real_worker_requests:false,real_credentials:false,
