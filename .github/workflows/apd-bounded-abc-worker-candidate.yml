@@ -11,6 +11,9 @@ on:
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
       - 'scripts/check-apd-worker-anonymous-http-readonly.mjs'
+      - 'scripts/build-apd-worker-zero-traffic-config.mjs'
+      - 'scripts/test-apd-worker-zero-traffic-config.mjs'
+      - 'scripts/upload-apd-worker-zero-traffic-once.mjs'
       - 'scripts/test-apd-worker-anonymous-http-readonly.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
@@ -56,6 +59,16 @@ jobs:
           BUNDLE=$(find tmp/apd-bounded-abc-wrangler-dryrun -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
           test -n "$BUNDLE"
           node --check "$BUNDLE"
+      - name: Validate zero-traffic upload configuration against all four canonical crons
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/build-apd-worker-zero-traffic-config.mjs
+          node --check scripts/upload-apd-worker-zero-traffic-once.mjs
+          node --test scripts/test-apd-worker-zero-traffic-config.mjs
+          node scripts/build-apd-worker-zero-traffic-config.mjs
+          npx --yes wrangler@4.20.3 deploy tmp/apd-bounded-abc-worker-release/worker_hotfix.js --config tmp/apd-bounded-abc-worker-release/wrangler.zero-traffic.toml --dry-run --outdir tmp/apd-bounded-abc-upload-config-dryrun
       - name: Verify canonical snapshot and attest candidate SHA-256 + rollback prerequisites
         run: |
           node --check scripts/attest-apd-worker-candidate.mjs
