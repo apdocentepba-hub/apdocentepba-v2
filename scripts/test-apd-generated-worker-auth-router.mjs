@@ -11,7 +11,8 @@ const allowed={
  bounded:"tmp/apd-bounded-abc-worker-release/worker_hotfix.js",
  published:"tmp/apd-published-query-research/worker_hotfix.js",
  pid:"tmp/apd-published-pid-research/worker_hotfix.js",
- morning:"tmp/apd-morning-worker/worker_hotfix.js"
+ morning:"tmp/apd-morning-worker/worker_hotfix.js",
+ stored:"tmp/apd-channel-deadline-safe-worker/worker_hotfix.js"
 };
 const variant=process.env.APD_TEST_WORKER_VARIANT||"published";
 assert.ok(Object.hasOwn(allowed,variant),"Unexpected candidate variant");
