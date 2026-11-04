@@ -77,3 +77,30 @@ test("digest visibly warns to verify both ABC and district SAD before applying",
  assert.ok(html.includes("05/11/2026 a las 07:30 hs (Argentina)"));
  assert.ok(!html.includes("31/12/2099"));
 });
+
+test("initial email digest refuses expired or unresolved plans before any DB or email writes",async()=>{
+ const name="sendInitialAlertsDigestIfNeeded";
+ const start=text.indexOf("async function "+name+"(");
+ const end=text.indexOf("\n__name("+name+",",start);
+ assert.ok(start>0&&end>start,"Missing initial email function");
+ const source=text.slice(start,end);
+ let calls=[];
+ const make=(resolved,valid)=>new Function("resolverPlanUsuario","isPlanActivo","supabaseSelect",
+  "construirAlertasParaUsuario","enviarMailBrevo",
+  source+"\nreturn sendInitialAlertsDigestIfNeeded;")(
+   async()=>{calls.push("plan");return resolved;},
+   ()=>valid,
+   async()=>{calls.push("db");throw Error("Unexpected DB read");},
+   async()=>{calls.push("offers");throw Error("Unexpected ABC read");},
+   async()=>{calls.push("mail");throw Error("Unexpected email send");}
+  );
+ const user={id:"TEST_ACCOUNT",email:"synthetic@example.invalid"};
+ const prefs={alertas_activas:true,alertas_email:true};
+ for(const [resolved,active] of [[null,false],[{code:"PLUS",active:false},false]]){
+  calls=[];
+  const response=await make(resolved,active)({},user,prefs);
+  assert.equal(response.skipped,true);
+  assert.equal(response.reason,"plan_expired_or_inactive");
+  assert.deepEqual(calls,["plan"]);
+ }
+});
