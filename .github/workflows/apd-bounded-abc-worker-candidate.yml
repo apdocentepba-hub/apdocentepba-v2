@@ -7,6 +7,7 @@ on:
       - 'scripts/test-apd-bounded-abc-worker-release.mjs'
       - 'scripts/benchmark-apd-bounded-abc-synthetic.mjs'
       - 'scripts/test-apd-worker-to-carousel-contract.mjs'
+      - 'scripts/attest-apd-worker-candidate.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -40,6 +41,11 @@ jobs:
         run: |
           node --check scripts/test-apd-worker-to-carousel-contract.mjs
           node --test scripts/test-apd-worker-to-carousel-contract.mjs
+      - name: Verify canonical snapshot and attest candidate SHA-256 + rollback prerequisites
+        run: |
+          node --check scripts/attest-apd-worker-candidate.mjs
+          node scripts/test-live-source-equivalence.mjs
+          node scripts/attest-apd-worker-candidate.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
@@ -52,6 +58,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: apd-abc-bounded-worker-release-candidate
-          path: tmp/apd-bounded-abc-worker-release/worker_hotfix.js
+          path: |
+            tmp/apd-bounded-abc-worker-release/worker_hotfix.js
+            tmp/apd-bounded-abc-worker-release/attestation.json
           if-no-files-found: error
           retention-days: 7
