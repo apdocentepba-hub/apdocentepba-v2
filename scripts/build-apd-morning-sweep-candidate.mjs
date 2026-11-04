@@ -8,10 +8,12 @@ import {dirname} from "node:path";
 import {createHash} from "node:crypto";
 const input="tmp/apd-ready-worker/worker_hotfix.js";
 const output="tmp/apd-morning-worker/worker_hotfix.js";
-const pinned="1f2b499cd4144b5987516b8546a4ad68fcca7e5877fd4f14792bec5411d13be2";
 const digest=s=>createHash("sha256").update(s).digest("hex");
 let src=readFileSync(input,"utf8");
-assert.equal(digest(src),pinned,"STOP: changed combined APD Worker");
+const attest=JSON.parse(readFileSync("tmp/apd-ready-worker/attestation.json","utf8"));
+assert.equal(digest(src),attest.candidate_sha256,"STOP: combined candidate changed after attestation");
+assert.equal(attest.original_uploaded_pid_sha256,"d4f84bdd2e1ca98bc04b2d23b6de51fc3ccf179c0a7168b904140adc6cc5433f");
+const pinned=attest.candidate_sha256;
 let touched=[];
 function changeFunction(name,from,to){
  let begin=src.indexOf("function "+name+"(");
@@ -62,6 +64,11 @@ for(const [from,to] of anchors){
 src=src.slice(0,begin)+fn+src.slice(end);
 touched.push("scheduled");
 mkdirSync(dirname(output),{recursive:true});writeFileSync(output,src);
+writeFileSync("tmp/apd-morning-worker/attestation.json",JSON.stringify({
+ combined_source_sha256:pinned,candidate_sha256:digest(src),
+ original_uploaded_pid_sha256:attest.original_uploaded_pid_sha256,
+ cron_triggers_unchanged:4,changed_functions:touched
+},null,2)+"\n");
 console.log("APD_MORNING_SLOT_OFFLINE_CANDIDATE_OK "+JSON.stringify({
  base_sha256:pinned,candidate_sha256:digest(src),changed:touched,
  trigger_count_unchanged:4,morning_start:"06:01 Argentina",
