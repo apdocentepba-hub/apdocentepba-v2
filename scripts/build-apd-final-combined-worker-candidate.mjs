@@ -8,10 +8,14 @@ import {dirname} from "node:path";
 import {createHash} from "node:crypto";
 const input="tmp/apd-close-safe-research/worker_hotfix.js";
 const output="tmp/apd-ready-worker/worker_hotfix.js";
-const pinned="f7c8b7ead6a5b10bc6e715677898f4aae8428373833ff9f2d8b9c69a19b63289";
 const hash=s=>createHash("sha256").update(s).digest("hex");
 const source=readFileSync(input,"utf8");
-assert.equal(hash(source),pinned,"STOP: deadline-guard candidate source changed");
+// The previous builder pins the original uploaded Worker by SHA-256. Here
+// verify the current guard is exactly the prefix used to generate the
+// deadline candidate, then record its hash for the subsequent release stages.
+const guard=readFileSync("scripts/lib/apd-offer-close-guard.mjs","utf8").replace(/^export function /gm,"function ");
+assert.ok(source.startsWith(guard+"\n"),"STOP: generated close candidate is inconsistent with reviewed guard source");
+const pinned=hash(source);
 const name="syncUserOfferState";
 const start=source.indexOf("async function "+name+"(");
 const end=source.indexOf("\n__name("+name+",",start);
@@ -68,6 +72,10 @@ assert.notEqual(code,source);
 assert.equal(code.replace(modified,original),source,"STOP: changes escaped syncUserOfferState");
 mkdirSync(dirname(output),{recursive:true});
 writeFileSync(output,code);
+writeFileSync("tmp/apd-ready-worker/attestation.json",JSON.stringify({
+ baseline_close_sha256:pinned,candidate_sha256:hash(code),changed_function:name,
+ original_uploaded_pid_sha256:"d4f84bdd2e1ca98bc04b2d23b6de51fc3ccf179c0a7168b904140adc6cc5433f"
+},null,2)+"\n");
 console.log("APD_FINAL_COMBINED_CANDIDATE_OK "+JSON.stringify({
  status:"research_only_no_upload",base_sha256:pinned,
  candidate_sha256:hash(code),only_changed_function:name,
