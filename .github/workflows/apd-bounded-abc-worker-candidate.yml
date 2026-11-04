@@ -5,6 +5,7 @@ on:
       - 'worker-live/worker_hotfix.js'
       - 'scripts/build-apd-bounded-abc-worker-release.mjs'
       - 'scripts/test-apd-bounded-abc-worker-release.mjs'
+      - 'scripts/benchmark-apd-bounded-abc-synthetic.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -30,6 +31,10 @@ jobs:
       - name: Check only two functions changed and ABC parity under errors and concurrency
         run: |
           node --test scripts/test-apd-bounded-abc-worker-release.mjs
+      - name: Benchmark six synthetic district reads against unchanged production Worker routine
+        run: |
+          node --check scripts/benchmark-apd-bounded-abc-synthetic.mjs
+          node scripts/benchmark-apd-bounded-abc-synthetic.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
