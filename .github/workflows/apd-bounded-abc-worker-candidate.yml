@@ -21,6 +21,7 @@ on:
       - 'scripts/test-apd-bulk-sync-research.mjs'
       - 'scripts/lib/apd-offer-close-guard.mjs'
       - 'scripts/test-apd-offer-close-guard.mjs'
+      - 'scripts/test-apd-close-email-queue.mjs'
       - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
       - 'scripts/build-apd-close-safe-research-candidate.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
@@ -177,6 +178,8 @@ jobs:
           node scripts/build-apd-close-safe-research-candidate.mjs
           node --check tmp/apd-close-safe-research/worker_hotfix.js
           APD_TEST_WORKER_VARIANT=close node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          node --check scripts/test-apd-close-email-queue.mjs
+          node --test scripts/test-apd-close-email-queue.mjs
 
 
           APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-auth-router.mjs
