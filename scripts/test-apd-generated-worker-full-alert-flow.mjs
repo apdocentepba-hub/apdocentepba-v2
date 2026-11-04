@@ -70,7 +70,7 @@ function createMock(){
    const district=Object.keys(offers).find(d=>q.includes('descdistrito:"'+d+'"'));
    assert.ok(district,"Unexpected ABC district query "+q);
    const fq=u.searchParams.get("fq");
-   if(variant==="published")assert.equal(fq,'estado:"Publicada"');
+   if(variant!=="bounded")assert.equal(fq,'estado:"Publicada"');
    else assert.equal(fq,null);
    const docs=fq?offers[district].filter(d=>d.estado==="Publicada"):offers[district];
    const start=Number(u.searchParams.get("start")),rows=Number(u.searchParams.get("rows"));
