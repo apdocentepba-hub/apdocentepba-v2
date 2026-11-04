@@ -9,7 +9,8 @@ import {pathToFileURL} from "node:url";
 import {resolve} from "node:path";
 const allowed={
  bounded:"tmp/apd-bounded-abc-worker-release/worker_hotfix.js",
- published:"tmp/apd-published-query-research/worker_hotfix.js"
+ published:"tmp/apd-published-query-research/worker_hotfix.js",
+ pid:"tmp/apd-published-pid-research/worker_hotfix.js"
 };
 const variant=process.env.APD_TEST_WORKER_VARIANT||"published";
 assert.ok(Object.hasOwn(allowed,variant),"Unexpected candidate variant");
