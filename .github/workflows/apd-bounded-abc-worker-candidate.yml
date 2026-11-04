@@ -1,4 +1,5 @@
 name: APD ABC bounded Worker optimization - candidate only
+# Research regression: verify published-state filtering without changing uploaded 0%-traffic bundle.
 on:
   pull_request:
     paths:
