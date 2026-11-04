@@ -1,0 +1,47 @@
+name: APD V3 alert-first frontend release candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'apd_panel_priority_v3.js'
+      - 'public-landing-v3.css'
+      - 'scripts/test-apd-panel-priority-release.mjs'
+      - 'scripts/test-apd-radar-live-release.mjs'
+      - '.github/workflows/apd-v3-fast-dashboard-release-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check new script, effect-free layout guards and DOM identity
+        run: |
+          node --check apd_panel_priority_v3.js
+          node --check scripts/test-apd-panel-priority-release.mjs
+          node --test scripts/test-apd-panel-priority-release.mjs
+      - name: Verify public V3 login, protected session and panel UI contracts
+        run: |
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+          node --test scripts/test-ui-v21-release.mjs
+      - name: Check radar card unchanged and script-order constraints
+        run: |
+          node --test scripts/test-apd-radar-live-release.mjs
+      - name: Validate actual dashboard auth and preferences in Chromium with fake sessions
+        run: |
+          node scripts/build-apd-panel-timing-candidate.mjs
+          node scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+      - name: Verify no Worker, auth, SQL or Supabase changes
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"
