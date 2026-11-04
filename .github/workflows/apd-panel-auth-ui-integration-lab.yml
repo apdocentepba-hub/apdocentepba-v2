@@ -32,6 +32,14 @@ jobs:
         run: |
           node --check scripts/test-apd-panel-auth-ui-offline-chromium.mjs
           node scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+      - name: Retain rendered V3 desktop and mobile panel proof with fake accounts only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-panel-v3-synthetic-render
+          path: tmp/apd-panel-v3-synthetic-screens/*.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Ensure no production file modifications
         run: |
           git diff --exit-code -- app_v2.js index.html auth_session_patch.js safe_dashboard_ui_patch.js app_v2_cargo_delegate_fix.js
