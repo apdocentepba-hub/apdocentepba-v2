@@ -6,6 +6,7 @@ on:
       - 'scripts/build-apd-bounded-abc-worker-release.mjs'
       - 'scripts/test-apd-bounded-abc-worker-release.mjs'
       - 'scripts/benchmark-apd-bounded-abc-synthetic.mjs'
+      - 'scripts/test-apd-worker-to-carousel-contract.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -35,6 +36,10 @@ jobs:
         run: |
           node --check scripts/benchmark-apd-bounded-abc-synthetic.mjs
           node scripts/benchmark-apd-bounded-abc-synthetic.mjs
+      - name: Test actual Worker matched offers through API JSON to production carousel
+        run: |
+          node --check scripts/test-apd-worker-to-carousel-contract.mjs
+          node --test scripts/test-apd-worker-to-carousel-contract.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
