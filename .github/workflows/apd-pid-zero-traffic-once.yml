@@ -14,7 +14,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   upload-exact-candidate:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging/apd-worker-pid-zero-traffic-20261104' && github.event.head_commit.message == 'approve(apd): one-time 0-percent PID version upload'
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/staging/apd-worker-pid-zero-traffic-20261104' &&
+      github.event.head_commit.message == 'approve(apd): one-time 0-percent PID version upload'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
