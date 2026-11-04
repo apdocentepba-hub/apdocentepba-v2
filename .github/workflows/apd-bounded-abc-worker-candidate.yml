@@ -25,6 +25,8 @@ on:
       - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
       - 'scripts/build-apd-close-safe-research-candidate.mjs'
       - 'scripts/build-apd-final-combined-worker-candidate.mjs'
+      - 'scripts/build-apd-morning-sweep-candidate.mjs'
+      - 'scripts/test-apd-morning-sweep-candidate.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs'
@@ -193,6 +195,17 @@ jobs:
           BUNDLE=$(find tmp/apd-ready-worker/compiled -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
           test -n "$BUNDLE"
           node --check "$BUNDLE"
+          node --check scripts/build-apd-morning-sweep-candidate.mjs
+          node scripts/build-apd-morning-sweep-candidate.mjs
+          node --check tmp/apd-morning-worker/worker_hotfix.js
+          node --check scripts/test-apd-morning-sweep-candidate.mjs
+          node --test scripts/test-apd-morning-sweep-candidate.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          npx --yes wrangler@4.157.0 deploy tmp/apd-morning-worker/worker_hotfix.js --dry-run --outdir tmp/apd-morning-worker/compiled --name apd-morning-offline-review --compatibility-date 2026-04-01
+          MORNING_BUNDLE=$(find tmp/apd-morning-worker/compiled -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$MORNING_BUNDLE"
+          node --check "$MORNING_BUNDLE"
+
 
 
 
@@ -248,4 +261,11 @@ jobs:
         with:
           name: apd-final-combined-worker-candidate-offline
           path: tmp/apd-ready-worker/worker_hotfix.js
+          if-no-files-found: error
+      - name: Archive morning-alert Worker (existing 4 crons, no deployment)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-morning-urgent-digest-candidate-offline
+          path: tmp/apd-morning-worker/worker_hotfix.js
           if-no-files-found: error
