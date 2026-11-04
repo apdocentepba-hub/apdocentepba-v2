@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {execFileSync} from "node:child_process";
 // Review-only source comparison: the baseline is the pre-change Worker commit.
  // No network, authenticated data, or production deployments occur in this test.
-const original=execFileSync("git",["show","706c7b6522aa8e0565a5f9b253480911f0446455:worker-live/worker_hotfix.js"],{encoding:"utf8",maxBuffer:10*1024*1024});
-const candidate=readFileSync("worker-live/worker_hotfix.js","utf8");
+const original=readFileSync("worker-live/worker_hotfix.js","utf8");
+const candidate=readFileSync("tmp/apd-bounded-abc-worker-release/worker_hotfix.js","utf8");
 function load(name,source,deps){
  const start=source.indexOf("async function "+name+"(");
  const end=source.indexOf("\n__name("+name+",",start);
