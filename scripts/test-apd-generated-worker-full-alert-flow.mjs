@@ -10,7 +10,8 @@ import {resolve} from "node:path";
 const bundles={
  bounded:"tmp/apd-bounded-abc-worker-release/worker_hotfix.js",
  published:"tmp/apd-published-query-research/worker_hotfix.js",
- pid:"tmp/apd-published-pid-research/worker_hotfix.js"
+ pid:"tmp/apd-published-pid-research/worker_hotfix.js",
+ close:"tmp/apd-close-safe-research/worker_hotfix.js"
 };
 const variant=process.env.APD_TEST_WORKER_VARIANT||"published";
 assert.ok(Object.hasOwn(bundles,variant),"Unexpected bundle");
@@ -32,9 +33,21 @@ const offers={
  ]};
 for(const [district,docs] of Object.entries(offers)){
  for(const d of docs){
-  Object.assign(d,{descdistrito:district,finoferta:"2099-12-31",
+  Object.assign(d,{descdistrito:district,finoferta:"2099-12-31T23:59:59-03:00",
    ult_movimiento:"2026-11-04T11:00:00Z",idoferta:d.iddetalle});
  }
+}
+if(variant==="close"){
+ offers.QUILMES.push({
+  iddetalle:14,idoferta:14,descdistrito:"QUILMES",descripcioncargo:"PROFESOR DE MATEMÁTICA (MTM)",
+  estado:"Publicada",turno:"T",descnivelmodalidad:"SECUNDARIA",
+  finoferta:"2020-01-01T13:00:00Z",ult_movimiento:"2020-01-01T00:00:00Z"
+ });
+ offers.QUILMES.push({
+  iddetalle:15,idoferta:15,descdistrito:"QUILMES",descripcioncargo:"PROFESOR DE MATEMÁTICA (MTM)",
+  estado:"Publicada",turno:"T",descnivelmodalidad:"SECUNDARIA",
+  finoferta:"2099-12-31",ult_movimiento:"2026-11-04T11:00:00Z"
+ });
 }
 const fixtures={
  users:[{id:"ALICE",nombre:"Prueba",apellido:"Interna",email:"test@example.invalid",activo:true}],
@@ -104,6 +117,11 @@ test("actual authenticated Worker with active preferences returns exactly two co
   assert.equal(payload.user.id,"ALICE");
   assert.deepEqual(payload.resultados.map(x=>String(x.iddetalle)),["11","21"]);
   assert.equal(payload.total,2);
+  if(variant==="close"){
+   assert.ok(payload.descartadas_total>=2,"Close guard must reject expired and unverified offers");
+   assert.ok(payload.descartadas_preview.some(x=>x.iddetalle===14&&x.motivo==="cierre_deadline_reached"));
+   assert.ok(payload.descartadas_preview.some(x=>x.iddetalle===15&&x.motivo==="cierre_hour_unverified"));
+  }
   assert.equal(mocks.seen.abc.length,2,"one ABC request per district; no 8-page waste");
   assert.deepEqual(mocks.seen.abc.map(x=>x.district).sort(),["QUILMES","TIGRE"]);
   assert.ok(mocks.seen.pid>=1,"PID lookup must be safely attempted");
