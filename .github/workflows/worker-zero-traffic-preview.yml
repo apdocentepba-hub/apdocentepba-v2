@@ -40,7 +40,7 @@ jobs:
           path: tmp/apd-stored-deadline
           repository: apdocentepba-hub/apdocentepba-v2
           run-id: 41920096624
-          github-token: \${{ github.token }}
+          github-token: ${{ github.token }}
 
       - name: Verify source hash and prepare four-cron upload config
         run: |
