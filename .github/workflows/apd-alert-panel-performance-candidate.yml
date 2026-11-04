@@ -1,0 +1,234 @@
+name: APD alert panel performance candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-apd-alert-panel-performance-candidate.mjs'
+      - 'scripts/test-apd-alert-panel-performance-candidate.mjs'
+      - 'scripts/benchmark-apd-alert-panel-performance-synthetic.mjs'
+      - 'scripts/probe-apd-public-abc-latency-readonly.mjs'
+      - 'scripts/probe-apd-published-full-cursor-shape-readonly.mjs'
+      - 'scripts/apd-abc-published-projected-cursor-readonly.mjs'
+      - 'scripts/test-apd-abc-published-projected-cursor-readonly.mjs'
+      - 'scripts/test-apd-projected-alert-pid-parity.mjs'
+      - 'scripts/apd-public-observation-risk-readonly.mjs'
+      - 'scripts/probe-apd-public-observations-readonly.mjs'
+      - 'scripts/test-apd-public-observation-risk-readonly.mjs'
+      - 'scripts/apd-alert-payload-minimization.mjs'
+      - 'scripts/build-apd-alert-privacy-candidate.mjs'
+      - 'scripts/test-apd-alert-privacy-candidate.mjs'
+      - 'scripts/apd-panel-timing-meter.mjs'
+      - 'scripts/build-apd-panel-timing-candidate.mjs'
+      - 'scripts/test-apd-panel-timing-meter.mjs'
+      - 'scripts/test-apd-panel-timing-dashboard-contract.mjs'
+      - 'scripts/test-apd-panel-first-paint-chromium.mjs'
+      - 'scripts/build-apd-panel-deferred-preferences-candidate.mjs'
+      - 'scripts/test-apd-panel-deferred-preferences.mjs'
+      - 'scripts/test-apd-panel-deferred-preferences-chromium.mjs'
+      - 'scripts/test-apd-panel-auth-ui-offline-chromium.mjs'
+      - 'scripts/build-apd-cargo-canonicalization-guard-candidate.mjs'
+      - 'scripts/test-apd-cargo-canonicalization-guard-candidate.mjs'
+      - 'scripts/apd-fetch-published-district-lab.mjs'
+      - 'scripts/build-apd-published-minimized-candidate.mjs'
+      - 'scripts/test-apd-published-worker-candidate.mjs'
+      - 'scripts/test-apd-published-alias-and-limits.mjs'
+      - 'scripts/probe-apd-published-four-districts-readonly.mjs'
+      - 'scripts/audit-apd-published-two-pass-readonly.mjs'
+      - 'scripts/test-apd-published-two-pass-readonly.mjs'
+      - 'scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs'
+      - 'scripts/audit-apd-global-published-keys-readonly.mjs'
+      - 'scripts/test-apd-global-published-keys-readonly.mjs'
+      - 'scripts/probe-apd-global-published-keys-readonly.mjs'
+      - 'scripts/probe-apd-public-state-distribution-readonly.mjs'
+      - 'scripts/test-apd-live-source-probes-fail-closed.mjs'
+      - 'scripts/probe-apd-combined-worker-candidate-public-readonly.mjs'
+      - 'scripts/probe-apd-projected-published-complete-readonly.mjs'
+      - 'scripts/audit-apd-panel-static-assets.mjs'
+      - 'scripts/probe-apd-public-entrypoint-timing-readonly.mjs'
+      - 'scripts/test-apd-public-entrypoint-timing-readonly.mjs'
+      - 'scripts/apd-local-auth-timing-console.js'
+      - 'scripts/test-apd-local-auth-timing-console.mjs'
+      - '.github/workflows/apd-alert-panel-performance-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-offline-performance-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build candidate in ignored tmp directory only
+        run: |
+          node --check scripts/build-apd-alert-panel-performance-candidate.mjs
+          node scripts/build-apd-alert-panel-performance-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_hotfix.js
+      - name: Verify original-vs-candidate results and max-two ABC concurrency
+        run: |
+          node --check scripts/test-apd-alert-panel-performance-candidate.mjs
+          node --test scripts/test-apd-alert-panel-performance-candidate.mjs
+      - name: Compare p50 and p95 against fixed synthetic upstream latency (not real production)
+        run: |
+          node --check scripts/benchmark-apd-alert-panel-performance-synthetic.mjs
+          node scripts/benchmark-apd-alert-panel-performance-synthetic.mjs
+      - name: Optional four-GET public ABC latency observation (not a real user dashboard)
+        run: |
+          node --check scripts/probe-apd-public-abc-latency-readonly.mjs
+          node scripts/probe-apd-public-abc-latency-readonly.mjs
+      - name: Inspect full published-only cursor source fields without logging offers
+        run: |
+          node --check scripts/probe-apd-published-full-cursor-shape-readonly.mjs
+          node scripts/probe-apd-published-full-cursor-shape-readonly.mjs
+      - name: Validate fail-closed Published-only projected cursor with fake ABC pages
+        run: |
+          node --check scripts/apd-abc-published-projected-cursor-readonly.mjs
+          node --check scripts/test-apd-abc-published-projected-cursor-readonly.mjs
+          node --test scripts/test-apd-abc-published-projected-cursor-readonly.mjs
+      - name: Compare canonical Worker filters, PID results and rendered alert fields with projected fake offers
+        run: |
+          node --check scripts/test-apd-projected-alert-pid-parity.mjs
+          node --test scripts/test-apd-projected-alert-pid-parity.mjs
+      - name: Check complete published-only public ABC coverage without personal fields
+        run: |
+          node --check scripts/probe-apd-projected-published-complete-readonly.mjs
+          node scripts/probe-apd-projected-published-complete-readonly.mjs
+      - name: Check free-text observation privacy using aggregate-only synthetic tests
+        run: |
+          node --check scripts/apd-public-observation-risk-readonly.mjs
+          node --test scripts/test-apd-public-observation-risk-readonly.mjs
+      - name: Read privacy-risk counts from public Published-only observations without logging values
+        run: |
+          node --check scripts/probe-apd-public-observations-readonly.mjs
+          node scripts/probe-apd-public-observations-readonly.mjs
+      - name: Build strict privacy-minimized alert variant in disposable tmp only
+        run: |
+          node --check scripts/apd-alert-payload-minimization.mjs
+          node --check scripts/build-apd-alert-privacy-candidate.mjs
+          node scripts/build-apd-alert-privacy-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_privacy_candidate.js
+      - name: Check complete alert/PID field parity while withholding raw private data
+        run: |
+          node --check scripts/test-apd-alert-privacy-candidate.mjs
+          node --test scripts/test-apd-alert-privacy-candidate.mjs
+      - name: Build complete Published-only Worker candidate with existing privacy and concurrency guards
+        run: |
+          node --check scripts/apd-fetch-published-district-lab.mjs
+          node --check scripts/build-apd-published-minimized-candidate.mjs
+          node scripts/build-apd-published-minimized-candidate.mjs
+          node --check tmp/apd-alerts-performance/worker_published_minimized_candidate.js
+      - name: Prove complete source coverage, 429 failures and private-field rejection with fake offers
+        run: |
+          node --check scripts/test-apd-published-worker-candidate.mjs
+          node --test scripts/test-apd-published-worker-candidate.mjs
+      - name: Verify real Worker district aliases, invalid inputs and near-limit cursor coverage
+        run: |
+          node --check scripts/test-apd-published-alias-and-limits.mjs
+          node --test scripts/test-apd-published-alias-and-limits.mjs
+      - name: Enforce identical Solr ID, Worker key and projected content across independent captures
+        run: |
+          node --check scripts/audit-apd-published-two-pass-readonly.mjs
+          node --check scripts/test-apd-published-two-pass-readonly.mjs
+          node --test scripts/test-apd-published-two-pass-readonly.mjs
+      - name: Observe four public PBA districts twice; aggregate stable/drift status only
+        run: |
+          node --check scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs
+          node scripts/probe-apd-published-two-pass-multidistrict-readonly.mjs
+      - name: Reject cross-district Worker key collisions and equal-count content drift
+        run: |
+          node --check scripts/audit-apd-global-published-keys-readonly.mjs
+          node --check scripts/test-apd-global-published-keys-readonly.mjs
+          node --test scripts/test-apd-global-published-keys-readonly.mjs
+      - name: Verify two full snapshots of six PBA districts with public ABC keys only in memory
+        run: |
+          node --check scripts/probe-apd-global-published-keys-readonly.mjs
+          node scripts/probe-apd-global-published-keys-readonly.mjs
+      - name: Diagnose unexpected public Published count drop via zero-document state facets
+        run: |
+          node --check scripts/probe-apd-public-state-distribution-readonly.mjs
+          node scripts/probe-apd-public-state-distribution-readonly.mjs
+      - name: Read four additional PBA districts with bounded public GETs (aggregate only)
+        run: |
+          node --check scripts/probe-apd-published-four-districts-readonly.mjs
+          node scripts/probe-apd-published-four-districts-readonly.mjs
+      - name: Observe real ABC Published data with combined candidate (public GET, aggregate only)
+        run: |
+          node --check scripts/probe-apd-combined-worker-candidate-public-readonly.mjs
+          node scripts/probe-apd-combined-worker-candidate-public-readonly.mjs
+      - name: Build local-only first-alert-paint meter without production changes
+        run: |
+          node --check scripts/apd-panel-timing-meter.mjs
+          node --check scripts/build-apd-panel-timing-candidate.mjs
+          node scripts/build-apd-panel-timing-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_telemetry_candidate.js
+      - name: Verify PII-free timing, plan gating, stale-session discard, error distinction and sample cap
+        run: |
+          node --check scripts/test-apd-panel-timing-meter.mjs
+          node --test scripts/test-apd-panel-timing-meter.mjs
+      - name: Execute actual dashboard login/plan/alerts lifecycle with fake sessions
+        run: |
+          node --check scripts/test-apd-panel-timing-dashboard-contract.mjs
+          node --test scripts/test-apd-panel-timing-dashboard-contract.mjs
+      - name: Measure actual browser paints for real dashboard lifecycle using fake sessions only
+        run: |
+          node --check scripts/test-apd-panel-first-paint-chromium.mjs
+          node scripts/test-apd-panel-first-paint-chromium.mjs
+      - name: Build deferred-preferences browser candidate only, never publish
+        run: |
+          node --check scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js
+      - name: Assert preference hydration, security, stale sessions and error isolation
+        run: |
+          node --check scripts/test-apd-panel-deferred-preferences.mjs
+          node --test scripts/test-apd-panel-deferred-preferences.mjs
+      - name: Measure preference-deferred first alert paint in Chromium with synthetic data
+        run: |
+          node --check scripts/test-apd-panel-deferred-preferences-chromium.mjs
+          node scripts/test-apd-panel-deferred-preferences-chromium.mjs
+      - name: Build guarded catalog label candidate, keeping deployed cargo delegate intact
+        run: |
+          node --check scripts/build-apd-cargo-canonicalization-guard-candidate.mjs
+          node scripts/build-apd-cargo-canonicalization-guard-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_cargo_delegate_guard_candidate.js
+      - name: Verify late catalog results never overwrite edited or new-session cargo inputs
+        run: |
+          node --check scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
+          node --test scripts/test-apd-cargo-canonicalization-guard-candidate.mjs
+      - name: Exercise real dashboard, auth and dynamic form with fully synthetic Worker in Chromium
+        run: |
+          node --check scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+          node scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+      - name: Prove ABC outage and HTTP 429 cannot yield green live-source evidence
+        run: |
+          node --check scripts/test-apd-live-source-probes-fail-closed.mjs
+          node --test scripts/test-apd-live-source-probes-fail-closed.mjs
+      - name: Inventory synchronous panel assets without network requests
+        run: |
+          node --check scripts/audit-apd-panel-static-assets.mjs
+          node scripts/audit-apd-panel-static-assets.mjs
+      - name: Verify bounded anonymous public entrypoint probe with fake HTTP responses
+        run: |
+          node --check scripts/probe-apd-public-entrypoint-timing-readonly.mjs
+          node --check scripts/test-apd-public-entrypoint-timing-readonly.mjs
+          node --test scripts/test-apd-public-entrypoint-timing-readonly.mjs
+      - name: Read-only baseline of public landing HTML and three critical same-origin assets
+        run: node scripts/probe-apd-public-entrypoint-timing-readonly.mjs
+      - name: Audit strictly local authenticated ResourceTiming diagnostic without accessing sessions
+        run: |
+          node --check scripts/apd-local-auth-timing-console.js
+          node --check scripts/test-apd-local-auth-timing-console.mjs
+          node --test scripts/test-apd-local-auth-timing-console.mjs
+      - name: Verify integrated v3 public login contracts before allowing index.html changes
+        run: |
+          node --check scripts/test-public-landing-v3.mjs
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+      - name: Verify no Worker, panel logic, session code or Supabase changes
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"

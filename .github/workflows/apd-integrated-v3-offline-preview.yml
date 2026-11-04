@@ -1,0 +1,56 @@
+name: APD integrated v3 offline visual preview (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'public-landing-v3.css'
+      - 'scripts/apd-offline-preview-bridge.js'
+      - 'scripts/build-apd-offline-integrated-preview.mjs'
+      - 'scripts/test-apd-offline-integrated-preview.mjs'
+      - '.github/workflows/apd-integrated-v3-offline-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-integration-no-network:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify authentication and public v3 markup contracts
+        run: |
+          node --check scripts/test-public-landing-v3.mjs
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+      - name: Build safe visual preview without production JavaScript
+        run: |
+          node --check scripts/apd-offline-preview-bridge.js
+          node --check scripts/build-apd-offline-integrated-preview.mjs
+          node scripts/build-apd-offline-integrated-preview.mjs
+      - name: Verify offline navigation, no credentials and disabled submissions
+        run: |
+          node --check scripts/test-apd-offline-integrated-preview.mjs
+          node --test scripts/test-apd-offline-integrated-preview.mjs
+      - name: Verify deferred preference candidate remains compatible with integrated HTML
+        run: |
+          node scripts/build-apd-panel-timing-candidate.mjs
+          node scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node --test scripts/test-apd-panel-deferred-preferences.mjs
+          node --test scripts/test-apd-panel-timing-meter.mjs
+      - name: Validate production code untouched by integration branch
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"
+      - name: Upload downloadable standalone offline visual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-v3-integrated-offline-demo
+          path: tmp/apd-integrated-offline-preview/
+          if-no-files-found: error
+          retention-days: 14

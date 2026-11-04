@@ -1,0 +1,45 @@
+name: APD public landing and login v3 (preview only)
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'public-landing-v3.css'
+      - 'scripts/test-public-landing-v3.mjs'
+      - 'scripts/test-public-landing-v3-browser.mjs'
+      - '.github/workflows/public-landing-v3-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-redesign-visual-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static public/Google auth and rollback contract
+        run: |
+          node --check scripts/test-public-landing-v3.mjs
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+          node --test scripts/test-ui-v21-release.mjs
+      - name: Chromium public homepage and login/registration visual smoke
+        run: |
+          node --check scripts/test-public-landing-v3-browser.mjs
+          node scripts/test-public-landing-v3-browser.mjs
+      - name: Enforce no changes to Worker, auth JS, plans, Supabase, dashboards or notification logic
+        run: |
+          git diff --exit-code origin/main --             worker-live worker.js app_v2.js auth_session_patch.js             apd_ui_v21.js apd_ui_v21.css supabase sql             panel_tabs_patch.js safe_dashboard_restore.js             safe_dashboard_ui_patch.js plan_checkout_patch.js
+      - name: Save UI proof screenshots for private review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-public-v3-home-login-registration
+          path: tmp/public-landing-v3-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
