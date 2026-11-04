@@ -24,6 +24,7 @@ on:
       - 'scripts/test-apd-close-email-queue.mjs'
       - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
       - 'scripts/build-apd-close-safe-research-candidate.mjs'
+      - 'scripts/build-apd-final-combined-worker-candidate.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs'
@@ -180,6 +181,19 @@ jobs:
           APD_TEST_WORKER_VARIANT=close node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
           node --check scripts/test-apd-close-email-queue.mjs
           node --test scripts/test-apd-close-email-queue.mjs
+          # Required release gate: same codebase must pass BOTH deadline and bulk tests.
+          node --check scripts/build-apd-final-combined-worker-candidate.mjs
+          node scripts/build-apd-final-combined-worker-candidate.mjs
+          node --check tmp/apd-ready-worker/worker_hotfix.js
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-bulk-sync-research.mjs
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          APD_TEST_WORKER_VARIANT=final node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          # This dry-run has no Cloudflare credentials or live traffic.
+          npx --yes wrangler@4.157.0 deploy tmp/apd-ready-worker/worker_hotfix.js --dry-run --outdir tmp/apd-ready-worker/compiled --name apd-final-all-in-one-check --compatibility-date 2026-04-01
+          BUNDLE=$(find tmp/apd-ready-worker/compiled -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$BUNDLE"
+          node --check "$BUNDLE"
+
 
 
           APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-auth-router.mjs
@@ -228,3 +242,10 @@ jobs:
             tmp/apd-bounded-abc-worker-release/attestation.json
           if-no-files-found: error
           retention-days: 7
+      - name: Archive unified Worker candidate for separate release review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-final-combined-worker-candidate-offline
+          path: tmp/apd-ready-worker/worker_hotfix.js
+          if-no-files-found: error
