@@ -1,0 +1,76 @@
+name: APD PID Worker - authorized one-time 0-percent version upload
+# Runs ONLY when the explicit approval marker is created in the dedicated staging branch.
+# No deploy and no production traffic allocation.
+on:
+  push:
+    branches:
+      - staging/apd-worker-pid-zero-traffic-20261104
+    paths:
+      - .release/approve-apd-pid-upload-20261104.txt
+permissions:
+  contents: read
+concurrency:
+  group: apd-pid-zero-traffic-20261104
+  cancel-in-progress: false
+jobs:
+  upload-exact-candidate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging/apd-worker-pid-zero-traffic-20261104' && github.event.head_commit.message == 'approve(apd): one-time 0-percent PID version upload'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate approval marker and generate exact three-stage candidate
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          test "$(cat .release/approve-apd-pid-upload-20261104.txt)" = "AUTHORIZED_ONE_SHOT_ZERO_TRAFFIC_PID_20261104"
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/build-apd-published-filter-research-candidate.mjs
+          node scripts/build-apd-pid-bounded-research-candidate.mjs
+          printf '%s  %s\n' 'd4f84bdd2e1ca98bc04b2d23b6de51fc3ccf179c0a7168b904140adc6cc5433f' 'tmp/apd-published-pid-research/worker_hotfix.js' | sha256sum --check
+          node --check tmp/apd-published-pid-research/worker_hotfix.js
+          node --check scripts/upload-apd-worker-pid-zero-traffic-once.mjs
+      - name: Run regression tests against exact PID candidate before any upload
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          node --test scripts/test-apd-bounded-abc-worker-release.mjs
+          node --test scripts/test-apd-generated-filter-candidate-differential.mjs
+          node --test scripts/test-apd-bounded-pid-fallback.mjs
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-worker-to-carousel-contract.mjs
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          node --test scripts/test-apd-worker-zero-traffic-config.mjs
+      - name: Check Cloudflare active version, 29 bindings and 4 crons read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/check-apd-worker-live-version-readonly.mjs
+      - name: Authorized versions upload only - no deploy or traffic change
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_ZERO_TRAFFIC_UPLOAD_APPROVED: yes_pid_20261104
+        run: |
+          set -euo pipefail
+          node scripts/upload-apd-worker-pid-zero-traffic-once.mjs
+      - name: Archive sanitized receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-pid-zero-traffic-upload-receipt
+          path: tmp/apd-published-pid-research/zero-traffic-upload-receipt.json
+          if-no-files-found: error
+          retention-days: 30
