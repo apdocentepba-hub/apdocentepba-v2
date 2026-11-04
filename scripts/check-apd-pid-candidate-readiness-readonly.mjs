@@ -15,7 +15,8 @@ const MODULE_SHA256="cba6427814e9bd0d50c597c7db1c678fd6715862d0a921b80baea1d23b9
 const SHA=x=>createHash("sha256").update(x).digest("hex");
 async function get(path,token,request){
  const u=new URL(API+path);
- assert.equal(u.origin,API,"Cloudflare origin violation");
+ assert.equal(u.origin,new URL(API).origin,"Cloudflare origin violation");
+ assert.ok(u.pathname.startsWith("/client/v4/"),"Cloudflare API path escape");
  assert.equal(u.protocol,"https:");
  const response=await request(u.toString(),{
   method:"GET",redirect:"error",cache:"no-store",
