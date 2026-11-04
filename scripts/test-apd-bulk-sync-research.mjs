@@ -5,8 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {performance} from "node:perf_hooks";
-const original=readFileSync("tmp/apd-published-pid-research/worker_hotfix.js","utf8");
-const candidate=readFileSync("tmp/apd-bulk-sync-research/worker_hotfix.js","utf8");
+const original=readFileSync(process.env.APD_TEST_FINAL_WORKER==="1"?"tmp/apd-close-safe-research/worker_hotfix.js":"tmp/apd-published-pid-research/worker_hotfix.js","utf8");
+const candidate=readFileSync(process.env.APD_TEST_FINAL_WORKER==="1"?"tmp/apd-ready-worker/worker_hotfix.js":"tmp/apd-bulk-sync-research/worker_hotfix.js","utf8");
 const fnName="syncUserOfferState";
 function extract(text){
  const start=text.indexOf("async function "+fnName+"(");
