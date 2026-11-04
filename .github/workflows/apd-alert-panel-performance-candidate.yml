@@ -223,7 +223,12 @@ jobs:
           node --check scripts/apd-local-auth-timing-console.js
           node --check scripts/test-apd-local-auth-timing-console.mjs
           node --test scripts/test-apd-local-auth-timing-console.mjs
-      - name: Explicitly verify production Worker, UI and Supabase unchanged
+      - name: Verify integrated v3 public login contracts before allowing index.html changes
         run: |
-          git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql
-          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js index.html supabase sql)"
+          node --check scripts/test-public-landing-v3.mjs
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+      - name: Verify no Worker, panel logic, session code or Supabase changes
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"
