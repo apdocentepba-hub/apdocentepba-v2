@@ -1,0 +1,60 @@
+name: APD one-shot upload new Worker VERSION with ZERO production traffic
+on:
+  push:
+    branches:
+      - staging/apd-worker-zero-traffic-20261104
+    paths:
+      - release/apd-zero-traffic-upload.trigger
+permissions:
+  contents: read
+concurrency:
+  group: apd-worker-zero-traffic-upload-20261104
+  cancel-in-progress: false
+jobs:
+  upload-undeployed-version:
+    if: github.ref == 'refs/heads/staging/apd-worker-zero-traffic-20261104' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prove clean source and generate exact candidate
+        run: |
+          set -euo pipefail
+          node scripts/test-live-source-equivalence.mjs
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/attest-apd-worker-candidate.mjs
+          node --test scripts/test-apd-bounded-abc-worker-release.mjs
+          node --test scripts/test-apd-worker-to-carousel-contract.mjs
+          node --test scripts/test-apd-worker-zero-traffic-config.mjs
+          node scripts/build-apd-worker-zero-traffic-config.mjs
+          node --test scripts/test-apd-worker-live-version-readonly.mjs
+          node --test scripts/test-apd-worker-anonymous-http-readonly.mjs
+      - name: Confirm exact Wrangler version supports defensive version-upload switches
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.20.3 versions upload --help > tmp/apd-wrangler-upload-help.txt
+          grep -q -- '--keep-vars' tmp/apd-wrangler-upload-help.txt
+          grep -q -- '--strict' tmp/apd-wrangler-upload-help.txt
+      - name: UPLOAD VERSION ONLY (0-percent traffic); fail closed on any drift
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_ZERO_TRAFFIC_UPLOAD_APPROVED: yes_20261104
+        run: |
+          node scripts/upload-apd-worker-zero-traffic-once.mjs
+      - name: Save sanitized 0-traffic receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-worker-zero-traffic-upload-proof-20261104
+          path: |
+            tmp/apd-bounded-abc-worker-release/zero-traffic-upload-receipt.json
+            tmp/apd-bounded-abc-worker-release/attestation.json
+          if-no-files-found: error
+          retention-days: 14
