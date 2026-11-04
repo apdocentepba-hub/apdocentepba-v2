@@ -22,8 +22,8 @@ Referencias para contrastar:
 ## Evidencia y versión
 
 - [PR #245](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/245) — cambios aislados, sin fusionar.
-- [CI de control de fechas y correos, ejecución 41912596346](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41912596346): **SUCCESS**.
-- Hash SHA256 de última versión offline en esa ejecución: `c4bc191256bb465244bf0fcd69838add30a13d5f48ba2fc8bccf337e3225bba8`.
+- [CI final con artefacto persistente, ejecución 41913070434](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41913070434): **SUCCESS**, sin fallas de test. Incluye artefacto `apd-email-deadline-verification-offline` (GitHub Actions artifact **13363701632**), con Worker y attestation SHA256.
+- Hash SHA256 de última versión offline aprobada: `c4bc191256bb465244bf0fcd69838add30a13d5f48ba2fc8bccf337e3225bba8`.
 - Versión más reciente ya subida a Cloudflare con **0 %** pero **sin** este último endurecimiento: `29ef1c70-3cc9-4ddc-ac05-31000546aad3`.
 - La versión productiva original permanece `da0632dd-1b9e-4332-9c4a-75b5eade8d74`, al **100 %** (última comprobación GET-only de subida/preview).
 
