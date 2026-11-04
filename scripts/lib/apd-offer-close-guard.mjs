@@ -43,12 +43,26 @@ export function parseApdDeadlineInstant(value,options={}) {
 }
 export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
   const obj=offer?.offer_payload || offer || {};
+  // Re-reading saved offer_payload can nest the ABC raw record multiple
+  // times. Empty normalized fields must NOT shadow the official raw fields.
   const raw=obj?.raw || {};
-  const state=String(obj?.estado ?? obj?.estado_oferta ?? raw?.estado ?? raw?.estado_oferta ?? "").trim().toUpperCase();
+  const nested=raw?.raw || {};
+  const original=nested?.raw || {};
+  const pick=(...values)=>values.find(v=>String(v??"").trim())||"";
+  const state=String(pick(
+    obj?.estado,obj?.estado_oferta,obj?.estado_actual,
+    raw?.estado,raw?.estado_oferta,
+    nested?.estado,nested?.estado_oferta,
+    original?.estado,original?.estado_oferta
+  )).trim().toUpperCase();
   if(state!=="PUBLICADA") return {eligible:false,reason:"not_published"};
-  // Prefer the authoritative source instant over a formatted display label.
-  const rawDeadline=obj?.finoferta || raw?.finoferta || obj?.fecha_cierre_raw ||
-    obj?.fecha_cierre || raw?.fecha_cierre || obj?.cierre || "";
+  // Raw ABC finoferta wins over display labels after any nesting depth.
+  const rawDeadline=pick(
+    obj?.finoferta,raw?.finoferta,nested?.finoferta,original?.finoferta,
+    obj?.fecha_cierre_raw,raw?.fecha_cierre_raw,nested?.fecha_cierre_raw,
+    obj?.fecha_cierre,raw?.fecha_cierre,nested?.fecha_cierre,
+    obj?.cierre,raw?.cierre
+  );
   const parse=parseApdDeadlineInstant(rawDeadline,{abcWallTime:true});
   if(!parse.ok) return {eligible:false,reason:parse.reason};
   if(parse.instant_ms<=Number(nowMs)) return {eligible:false,reason:"deadline_reached",closes_at_ms:parse.instant_ms};
