@@ -1,0 +1,6 @@
+{
+  "worker": "ancient-wildflower-cd37",
+  "uploaded_version": "29ef1c70-3cc9-4ddc-ac05-31000546aad3",
+  "checks": "cloudflare_GET_and_anonymous_http_only",
+  "mutation": false
+}
