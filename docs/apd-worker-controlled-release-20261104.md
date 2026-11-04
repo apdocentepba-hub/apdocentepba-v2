@@ -58,6 +58,15 @@ Fuentes oficiales:
 - El SHA-256 del código candidato anterior al bundling puede **no coincidir** con el SHA-256 del módulo posteriormente construido por Wrangler. Después de cualquier upload aprobado, comparar el hash exacto de los bytes que Cloudflare guarda, no asumir que el hash fuente es el hash del bundle.
 - Esta prueba no garantiza por sí sola conservación de las 29 vinculaciones del Worker: antes de promover, inspeccionar la versión subida y compararlas nuevamente contra la versión activa.
 
+## Evidencia nueva: versión candidata subida sin tráfico (04/11/2026)
+
+- Resultado **comprobado**: Cloudflare creó la versión **97ff1908-768a-474e-a83d-6f0d35da40f0**, con **0 % de tráfico**.
+- La versión original **da0632dd-1b9e-4332-9c4a-75b5eade8d74** sigue al **100 %**, tanto antes como después de la operación.
+- Módulo compilado de la candidata: SHA-256 **6117ee0930cee018d135f3622dad24aada7cef22b85e538fea714691ac39cb75**. La fuente antes del bundle conserva SHA-256 **6ee13869ec0d6363806e1bfc8990d529f7386b956c7bd30530f5e0109c861b6e**.
+- Se compararon las **29 vinculaciones**, incluido el ID del KV, y se confirmó que siguen las **4 tareas cron** de la versión activa. Se utilizó Wrangler 4.157.0 con `versions upload --keep-vars --strict` y una configuración temporal generada a partir del manifiesto canónico.
+- Prueba y recibo de GitHub Actions: https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41827373916
+- **No significa que esté en producción**: la versión nueva no recibe solicitudes normales. No se realizaron consultas autenticadas ni se midieron latencias reales de esa versión. La publicación para usuarios requiere autorización posterior.
+
 ## Criterios para declarar finalizada la optimización
 
 1. Fuente y versión previas reproducibles y recuperables.
