@@ -109,9 +109,38 @@ try{
   assert.ok(item.abc_url?.startsWith("http"));
   assert.ok(item.finoferta||item.fecha_cierre);
  }
+ // Execute exact production frontend expiry/status filters on live ABC-backed API JSON.
+ const frontend=readFileSync("app_v2.js","utf8");
+ const getFrontendFn=(name)=>{
+  const begin=frontend.indexOf("function "+name+"(");
+  const end=frontend.indexOf("\n}",begin);
+  assert.ok(begin>=0&&end>begin,"Missing frontend function "+name);
+  return frontend.slice(begin,end+2);
+ };
+ const filterOps=new Function(["parseFechaAPD","estadoOfertaInactiva","ofertaVencidaPorFecha","filtrarAlertasVigentes"]
+   .map(getFrontendFn).join("\n")+"\nreturn {parseFechaAPD,estadoOfertaInactiva,ofertaVencidaPorFecha,filtrarAlertasVigentes};")();
+ const fixtures=[
+  {source_offer_key:"EXPIRED",finoferta:"2020-01-01",estado:"Publicada"},
+  {source_offer_key:"ACTIVE",finoferta:"2099-12-31",estado:"Publicada"},
+  {source_offer_key:"CLOSED",finoferta:"2099-12-31",estado:"Cerrada"}
+ ];
+ assert.deepEqual(filterOps.filtrarAlertasVigentes(fixtures).map(x=>x.source_offer_key),
+  ["ACTIVE"],"Expired and closed offers must stay hidden");
+ const visible=filterOps.filtrarAlertasVigentes(data.resultados);
+ assert.ok(visible.length<=data.resultados.length);
+ for(const offer of visible){
+  assert.equal(filterOps.estadoOfertaInactiva(offer),false);
+  assert.equal(filterOps.ofertaVencidaPorFecha(offer),false);
+ }
+ for(const removed of data.resultados.filter(x=>!visible.includes(x))) {
+  assert.ok(filterOps.estadoOfertaInactiva(removed)||filterOps.ofertaVencidaPorFecha(removed),
+   "Every removed offer should be expired or inactive");
+ }
  console.log("APD_PID_ACTUAL_WORKER_PUBLIC_ABC_SYNTHETIC_ACCOUNT_OK "+JSON.stringify({
   source:"live_public_ABC",candidate_sha256:"d4f84bdd2e1ca98bc04b2d23b6de51fc3ccf179c0a7168b904140adc6cc5433f",
   districts:[...allowedDistricts],published_offers_returned:data.resultados.length,
+  frontend_current_offers:visible.length,frontend_expired_or_inactive_removed:data.resultados.length-visible.length,
+  frontend_filter:"production_app_v2.js_exact_functions",
   source_offers_total:data.total_fuente,abc_gets:metrics.abc.length,
   duration_total_ms:Math.round(performance.now()-t0),pid_stub_calls:metrics.pid,
   real_pid_latency_measured:false,real_user_login:false,
