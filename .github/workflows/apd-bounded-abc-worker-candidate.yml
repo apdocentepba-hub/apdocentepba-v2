@@ -10,6 +10,8 @@ on:
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
+      - 'scripts/check-apd-worker-anonymous-http-readonly.mjs'
+      - 'scripts/test-apd-worker-anonymous-http-readonly.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
 permissions:
@@ -56,6 +58,11 @@ jobs:
           node --check scripts/check-apd-worker-live-version-readonly.mjs
           node --test scripts/test-apd-worker-live-version-readonly.mjs
           node scripts/check-apd-worker-live-version-readonly.mjs
+      - name: Check live Worker anonymous 401/200 HTTP contracts using GET and OPTIONS only
+        run: |
+          node --check scripts/check-apd-worker-anonymous-http-readonly.mjs
+          node --test scripts/test-apd-worker-anonymous-http-readonly.mjs
+          node scripts/check-apd-worker-anonymous-http-readonly.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
