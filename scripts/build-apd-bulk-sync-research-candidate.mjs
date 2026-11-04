@@ -31,9 +31,15 @@ assert.equal(modified.split(pivot).length,2,"Missing activeIds dedup");
 const batch=[
 '  // PostgREST accepts arrays for bulk upsert; cap requests at 100 rows.',
 '  // Repeated offer IDs use the final payload, preserving sequential last-write-wins.',
-'  const pending = [...upserts.values()];',
-'  for (let offset = 0; offset < pending.length; offset += 100) {',
-'    const batchRows = pending.slice(offset, offset + 100);',
+'  // Group rows by shape: never send first_seen_at on an existing row.',
+'  // PostgREST arrays need homogeneous columns to preserve original timestamps.',
+'  const updates = []; const inserts = [];',
+'  for (const row of upserts.values()) {',
+'    (Object.prototype.hasOwnProperty.call(row, "first_seen_at") ? inserts : updates).push(row);',
+'  }',
+'  for (const pending of [updates, inserts]) {',
+'    for (let offset = 0; offset < pending.length; offset += 100) {',
+'      const batchRows = pending.slice(offset, offset + 100);',
 '    const upsertResp = await fetch(',
 '      env.SUPABASE_URL + "/rest/v1/user_offer_state?on_conflict=user_id,offer_id",',
 '      {',
@@ -52,6 +58,7 @@ const batch=[
 '      throw new Error("No se pudo upsert user_offer_state (lote desde " + offset',
 '        + ", " + batchRows.length + " ofertas): " + upsertResp.status + " " + text);',
 '    }',
+'  }',
 '  }'
 ].join("\n")+"\n";
 modified=modified.replace(pivot,batch+pivot);
