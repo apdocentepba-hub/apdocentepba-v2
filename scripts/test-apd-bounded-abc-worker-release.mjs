@@ -14,6 +14,17 @@ function load(name,source,deps){
  return new Function(...names,source.slice(start,end)+"\nreturn "+name+";")
   (...names.map(n=>deps[n]));
 }
+test("ONLY the two audited Worker hot functions changed",()=>{
+ let reverted=candidate;
+ for(const fn of ["traerOfertasAPDPorDistritos","construirAlertasParaUsuario"]){
+  const begin="async function "+fn+"(";
+  const oStart=original.indexOf(begin),oStop=original.indexOf("\n__name("+fn+",",oStart);
+  const cStart=reverted.indexOf(begin),cStop=reverted.indexOf("\n__name("+fn+",",cStart);
+  assert.ok(oStart>=0&&oStop>oStart&&cStart>=0&&cStop>cStart,"missing "+fn);
+  reverted=reverted.slice(0,cStart)+original.slice(oStart,oStop)+reverted.slice(cStop);
+ }
+ assert.equal(reverted,original,"No other production Worker code may change");
+});
 const pause=()=>new Promise(resolve=>setImmediate(resolve));
 const date=value=>value?new Date(value):null;
 const offer=(key,dateStr)=>({source_offer_key:key,ult_movimiento:dateStr,
