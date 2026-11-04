@@ -1,5 +1,5 @@
-/* Creates an OFFLINE revised email presentation from the exact 0%-traffic
- * final Worker. Does not replace the uploaded version or send any emails.
+/* Creates an OFFLINE revised email presentation from the exact pinned PID
+ * Worker lineage and strictly regenerated closure+morning candidate. Does not replace the uploaded version or send any emails.
  */
 import assert from "node:assert/strict";
 import {readFileSync,writeFileSync,mkdirSync} from "node:fs";
@@ -7,10 +7,13 @@ import {dirname} from "node:path";
 import {createHash} from "node:crypto";
 const input="tmp/apd-morning-worker/worker_hotfix.js";
 const output="tmp/apd-mail-verified-worker/worker_hotfix.js";
-const pinned="0d6f54103c7821960cdd28fbf395fa10ba3837dc60aa9618fb4c82d1380a73fe";
+const attestation=JSON.parse(readFileSync("tmp/apd-morning-worker/attestation.json","utf8"));
+const pinned=attestation.candidate_sha256;
+assert.equal(attestation.original_uploaded_pid_sha256,"d4f84bdd2e1ca98bc04b2d23b6de51fc3ccf179c0a7168b904140adc6cc5433f");
+assert.equal(attestation.cron_triggers_unchanged,4);
 const sha=s=>createHash("sha256").update(s).digest("hex");
 const original=readFileSync(input,"utf8");
-assert.equal(sha(original),pinned,"STOP: 0%-uploaded source drifted");
+assert.equal(sha(original),pinned,"STOP: rebuilt morning candidate drifted from attestation");
 let src=original;
 const changed=[];
 function patch(name,from,to){
