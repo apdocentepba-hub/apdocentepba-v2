@@ -1,0 +1,144 @@
+name: APDocentePBA promote canary to 100 once
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/worker-promote-once.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      WORKER_NAME: ancient-wildflower-cd37
+      ACCOUNT_ID: f446c729ea2148db5f90126e61e5abcd
+      CANDIDATE_VERSION: 0b289fe2-e978-414a-a1ae-9f849d7354ae
+      PRODUCTION_VERSION: da0632dd-1b9e-4332-9c4a-75b5eade8d74
+      EXPECTED_SHA256: dee977aea3c1370b744f4a75a910c7429a2ed7b661dfa84d4b74d231db4422db
+      EXPECTED_TAG: apd-dee977-4df9bcc2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Wrangler
+        run: npm install
+
+      - name: Recheck exact tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: apd-stored-channel-deadline-safe-offline
+          path: tmp/apd-stored-deadline
+          repository: apdocentepba-hub/apdocentepba-v2
+          run-id: 41920096624
+          github-token: ${{ github.token }}
+
+      - name: Verify artifact hash and attestation
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const root = 'tmp/apd-stored-deadline';
+          const source = fs.readFileSync(root + '/worker_hotfix.js');
+          const sha = crypto.createHash('sha256').update(source).digest('hex');
+          const proof = JSON.parse(fs.readFileSync(root + '/attestation.json', 'utf8'));
+          if (sha !== process.env.EXPECTED_SHA256 || proof.candidate_sha256 !== sha) throw new Error('Candidate SHA mismatch');
+          if (proof.cloudflare_uploaded !== false || proof.production_modified !== false || proof.emails_sent !== 0 || proof.db_writes !== 0) throw new Error('Offline artifact attestation failed');
+          console.log('Exact candidate SHA-256 and artifact attestation verified.');
+          NODE
+
+      - name: Require current 1 percent canary, exact bindings and unchanged four cron schedules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/promote
+          mkdir -p "$ROOT"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}"
+          curl -fsS -H "$auth" "$base/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-before.json"
+          curl -fsS -H "$auth" "$base/workers/scripts/${WORKER_NAME}/schedules" > "$ROOT/schedules-before.json"
+          curl -fsS -H "$auth" "$base/workers/workers/${WORKER_NAME}/versions/${CANDIDATE_VERSION}?include=modules" > "$ROOT/candidate.json"
+          ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const root = process.env.ROOT;
+          const deployments = JSON.parse(fs.readFileSync(root + '/deployments-before.json', 'utf8'));
+          const current = (deployments.result?.deployments?.[0]?.versions || [])
+            .filter(x => Number(x.percentage) > 0);
+          const byId = new Map(current.map(x => [x.version_id, Number(x.percentage)]));
+          if (!deployments.success || current.length !== 2 ||
+              byId.get(process.env.CANDIDATE_VERSION) !== 1 ||
+              byId.get(process.env.PRODUCTION_VERSION) !== 99) {
+            throw new Error('Expected the already-authorized 1%/99% canary; refusing promotion.');
+          }
+          const schedules = JSON.parse(fs.readFileSync(root + '/schedules-before.json', 'utf8'));
+          const expectedCrons = ['0 01 * * *', '0 17 * * *', '0 21 * * *', '1-59/2 * * * *'].sort();
+          const crons = (schedules.result?.schedules || []).map(x => x.cron).sort();
+          if (!schedules.success || JSON.stringify(crons) !== JSON.stringify(expectedCrons)) {
+            throw new Error('Live cron schedule mismatch; refusing promotion.');
+          }
+          const candidate = JSON.parse(fs.readFileSync(root + '/candidate.json', 'utf8'));
+          if (!candidate.success || candidate.result?.id !== process.env.CANDIDATE_VERSION ||
+              candidate.result.annotations?.['workers/tag'] !== process.env.EXPECTED_TAG) {
+            throw new Error('Candidate ID or tag mismatch.');
+          }
+          const actual = candidate.result.bindings || [];
+          const expected = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8')).bindings || [];
+          if (actual.length !== 29 || expected.length !== 29) throw new Error('Expected exactly 29 bindings.');
+          const map = new Map(actual.map(x => [x.name + ':' + x.type, x]));
+          for (const item of expected) {
+            const binding = map.get(item.name + ':' + item.type);
+            if (!binding) throw new Error('Candidate missing binding ' + item.name);
+            if (item.name === 'EMAIL_SWEEP_STATE' &&
+                String(binding.namespace_id || binding.id || '').trim() !== item.namespace_id) {
+              throw new Error('Candidate KV namespace mismatch.');
+            }
+          }
+          console.log('Preflight OK: 1%/99% canary, 29 candidate bindings, four cron schedules.');
+          NODE
+
+      - name: Promote the approved candidate to 100 percent
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler versions deploy "${CANDIDATE_VERSION}@100%" \
+            --name "${WORKER_NAME}" \
+            --message "APDocentePBA expiry fix 100%; sha256=${EXPECTED_SHA256}" \
+            --yes
+
+      - name: Verify 100 percent deployment and unchanged cron schedules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          ROOT=tmp/promote
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}"
+          curl -fsS -H "$auth" "$base/workers/scripts/${WORKER_NAME}/deployments" > "$ROOT/deployments-after.json"
+          curl -fsS -H "$auth" "$base/workers/scripts/${WORKER_NAME}/schedules" > "$ROOT/schedules-after.json"
+          ROOT="$ROOT" node - <<'NODE'
+          const fs = require('fs');
+          const root = process.env.ROOT;
+          const deployments = JSON.parse(fs.readFileSync(root + '/deployments-after.json', 'utf8'));
+          const active = (deployments.result?.deployments?.[0]?.versions || [])
+            .filter(x => Number(x.percentage) > 0);
+          if (!deployments.success || active.length !== 1 ||
+              active[0].version_id !== process.env.CANDIDATE_VERSION ||
+              Number(active[0].percentage) !== 100) {
+            throw new Error('Candidate is not confirmed at 100% traffic.');
+          }
+          const schedules = JSON.parse(fs.readFileSync(root + '/schedules-after.json', 'utf8'));
+          const expectedCrons = ['0 01 * * *', '0 17 * * *', '0 21 * * *', '1-59/2 * * * *'].sort();
+          const crons = (schedules.result?.schedules || []).map(x => x.cron).sort();
+          if (!schedules.success || JSON.stringify(crons) !== JSON.stringify(expectedCrons)) {
+            throw new Error('Cron schedules changed during promotion.');
+          }
+          console.log('Promotion verified: candidate at 100%; all four cron schedules unchanged.');
+          NODE
