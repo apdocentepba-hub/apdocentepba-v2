@@ -138,7 +138,8 @@ async function main(){
 async function api(method,path,token){
  assert.equal(method,"GET","No HTTP writes through attestation API");
  const url=new URL(origin+path);
- assert.equal(url.origin,origin);
+ assert.equal(url.origin,new URL(origin).origin);
+ assert.ok(url.pathname.startsWith("/client/v4/"),"STOP: Cloudflare API path escape");
  const r=await fetch(url,{
   method,headers:{"Authorization":"Bearer "+token,"Accept":"application/json"},
   redirect:"error",cache:"no-store",signal:AbortSignal.timeout(18000)
