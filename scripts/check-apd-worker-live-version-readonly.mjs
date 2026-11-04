@@ -74,6 +74,12 @@ export async function checkLive({env=process.env,request=fetch,manifestOverride=
   assert.match(String(expectedHash||""),/^[a-f0-9]{64}$/i);
   assert.equal(actualHash,expectedHash,"STOP: active Worker source SHA-256 mismatch for "+stored.name);
  }
+ const schedules=await get("/accounts/"+account+"/workers/scripts/"+name+"/schedules");
+ assert.ok(Array.isArray(schedules.schedules),"Active Cron Triggers could not be read");
+ const expectedCron=[...(manifest.schedules??[])].sort();
+ const activeCron=schedules.schedules.map(x=>String(x.cron||"")).sort();
+ assert.ok(expectedCron.length>0,"Canonical manifest lacks cron triggers");
+ assert.deepEqual(activeCron,expectedCron,"STOP: live Cron Triggers differ from canonical manifest");
  const bindingList=active.bindings??[];
  assert.ok(Array.isArray(bindingList),"Active resource binding metadata missing");
  const bindings=new Map(bindingList.map(b=>[String(b.name)+":"+String(b.type),b]));
@@ -92,6 +98,7 @@ export async function checkLive({env=process.env,request=fetch,manifestOverride=
   compared_to_capture_at:manifest.captured_at??null,
   active_module_count:active.modules.length,
   verified_required_binding_count:(manifest.bindings??[]).length,
+  verified_live_schedule_count:activeCron.length,
   active_worker_source_sha256:hash(Buffer.from(active.modules.find(x=>x.name===manifest.main_module).content_base64,"base64")),
   read_only:true,production_mutation:false,account_credentials_logged:false
  };
