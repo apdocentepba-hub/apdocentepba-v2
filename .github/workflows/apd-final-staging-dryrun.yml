@@ -1,0 +1,83 @@
+name: APD final unified Worker - staging offline release rehearsal
+# One-time dry rehearsal, no Cloudflare credentials or production writes.
+on:
+  push:
+    branches:
+      - staging/apd-final-offline-reviewed-20261104
+    paths:
+      - '.github/workflows/apd-final-staging-dryrun.yml'
+permissions:
+  contents: read
+jobs:
+  reproduce-final-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ''
+      CLOUDFLARE_ACCOUNT_ID: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prove release marker absent and uploader cannot run in this workflow
+        run: |
+          set -euo pipefail
+          test ! -e .release/approve-apd-final-upload-20261104.txt
+          node --check scripts/upload-apd-final-zero-traffic-once.mjs
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const s=fs.readFileSync('scripts/upload-apd-final-zero-traffic-once.mjs','utf8');
+          if(!s.includes('versions","upload"') ||
+              !s.includes('APD_FINAL_ZERO_TRAFFIC_UPLOAD_APPROVED') ||
+              !s.includes('refs/heads/staging/apd-final-offline-reviewed-20261104') ||
+              !s.includes('AUTHORIZED_ONE_SHOT_ZERO_TRAFFIC_FINAL_20261104') ||
+              !s.includes('"--keep-vars","--strict"') ||
+              !s.includes('active_production_traffic_changed:false'))
+            process.exit(1);
+          const w=fs.readFileSync('.github/workflows/apd-final-zero-traffic-once.yml','utf8');
+          if(!w.includes("paths:") || !w.includes(".release/approve-apd-final-upload-20261104.txt")
+             || !w.includes("github.event.head_commit.message == 'approve(apd): one-time 0-percent final version upload'"))
+            process.exit(1);
+          console.log('APD_UPLOAD_GATE_INERT_NO_MARKER_OK');
+          NODE
+      - name: Rebuild six stages and attest exact approved Worker source
+        run: |
+          set -euo pipefail
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/build-apd-published-filter-research-candidate.mjs
+          node scripts/build-apd-pid-bounded-research-candidate.mjs
+          node scripts/build-apd-close-safe-research-candidate.mjs
+          node scripts/build-apd-final-combined-worker-candidate.mjs
+          node scripts/build-apd-morning-sweep-candidate.mjs
+          printf '%s  %s\n' 'c748dc0f1b9ba070c806620947037acc528822f64d404d1d6efa85bd8fb58d85' tmp/apd-morning-worker/worker_hotfix.js | sha256sum --check
+          node --check tmp/apd-morning-worker/worker_hotfix.js
+      - name: Run acceptance checks with synthetic users and no live sends
+        run: |
+          set -euo pipefail
+          node --test scripts/test-apd-offer-close-guard.mjs
+          node --test scripts/test-apd-morning-sweep-candidate.mjs
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-bulk-sync-research.mjs
+          APD_TEST_MORNING_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          node --test scripts/test-apd-worker-zero-traffic-config.mjs
+      - name: Prepare only a Wrangler dry-run bundle
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.157.0 deploy tmp/apd-morning-worker/worker_hotfix.js --dry-run --outdir tmp/apd-final-staging-dryrun --name apd-zero-traffic-staging-dryrun --compatibility-date 2026-04-01
+          BUNDLE=$(find tmp/apd-final-staging-dryrun -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$BUNDLE"
+          node --check "$BUNDLE"
+          echo 'APD_STAGING_FINAL_OFFLINE_RELEASE_REHEARSAL_PASS'
+      - name: Archive exact candidate and attestation only
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-final-staging-zero-traffic-candidate
+          path: |
+            tmp/apd-morning-worker/worker_hotfix.js
+            tmp/apd-morning-worker/attestation.json
+          if-no-files-found: error
+          retention-days: 7
