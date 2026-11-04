@@ -41,7 +41,7 @@ function confirmAuthorization() {
 
 async function cloudGet(path, accountToken) {
   const url = new URL(endpoint + path);
-  assert.equal(url.origin, endpoint);
+  assert.equal(url.origin, new URL(endpoint).origin);
   assert.ok(url.pathname.startsWith("/client/v4/"),"SAFE ABORT: escaped Cloudflare API");
   const response = await fetch(url,{
     method:"GET",redirect:"error",cache:"no-store",
