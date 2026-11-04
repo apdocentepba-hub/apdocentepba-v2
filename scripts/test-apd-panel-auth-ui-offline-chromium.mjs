@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
-import {existsSync,mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {existsSync,mkdtempSync,readFileSync,rmSync,mkdirSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -74,6 +74,32 @@ const htmlSource=readFileSync("index.html","utf8")
  .replace(/<link\b[^>]*>/gi,"")
  .replace(/<img\b[^>]*>/gi,"")
  .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,"");
+// Load the real deployed stylesheet cascade into the isolated data: page.
+ // All live network URLs stay blocked by Chrome DevTools; no production API runs.
+const stylesheetSources=[...readFileSync("index.html","utf8")
+ .matchAll(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi)]
+ .map(m=>m[0].match(/\bhref=["']([^"']+)["']/i)?.[1])
+ .filter(url=>url && !/^https?:\/\//i.test(url))
+ .map(url=>url.split("?")[0].replace(/^\.\//,""));
+assert.ok(stylesheetSources.includes("public-landing-v3.css"),"New V3 stylesheet missing");
+assert.ok(stylesheetSources.length>=6,"Real page stylesheet cascade incomplete");
+for(const file of stylesheetSources){
+ assert.match(file,/^[a-z0-9_-]+\.css$/i);
+ assert.ok(existsSync(file),"Missing page CSS: "+file);
+}
+const cssBundle=stylesheetSources.map(file=>readFileSync(file,"utf8")).join("\n");
+const screenshotDir="tmp/apd-panel-v3-synthetic-screens";
+mkdirSync(screenshotDir,{recursive:true});
+async function saveScreenshot(name){
+ const shot=await cdp("Page.captureScreenshot",{
+  format:"png",captureBeyondViewport:true,fromSurface:true
+ });
+ const file=path.join(screenshotDir,name+".png");
+ writeFileSync(file,Buffer.from(shot.data,"base64"));
+ const bytes=readFileSync(file);
+ assert.equal(bytes.subarray(0,8).toString("hex"),"89504e470d0a1a0a","Invalid PNG screenshot");
+ assert.ok(bytes.length>12000,"Screenshot too small to prove styled real panel");
+}
 const authPatch=readFileSync("auth_session_patch.js","utf8");
 const uiPatch=readFileSync("safe_dashboard_ui_patch.js","utf8");
 assert.match(htmlSource,/id="panel-alertas"/);
@@ -160,20 +186,33 @@ async function collectBrowser(){
   guardState:window.__APD_LAB_PREF_GUARD?.state||null,
   prefsValue:document.getElementById("pref-distrito-principal")?.value||"",
   bootstrapLoaded:!!window.__apdStableDashboardBootstrapLoaded,
-  formExists:!!document.getElementById("form-preferencias")
+  formExists:!!document.getElementById("form-preferencias"),
+  layout:(()=>{
+   const panel=document.getElementById("panel-docente");
+   const alertCard=document.getElementById("panel-alertas")?.closest(".panel-card");
+   const rect=alertCard?.getBoundingClientRect();
+   return {viewport:window.innerWidth,scrollWidth:document.documentElement.scrollWidth,
+    panelVisible:!panel.classList.contains("hidden") && getComputedStyle(panel).display!=="none",
+    alertCardVisible:!!rect&&rect.width>80&&rect.height>25,
+    width:rect?Math.round(rect.width):0,
+    cssPresent:document.styleSheets.length>0,
+    authHidden:document.getElementById("login").classList.contains("hidden")};
+  })()
  };
 }
 let scenario=0;
 async function isolatedScenario({
- active=true,identityMatches=true,unauthorized=false,empty=false,preferencesDelay=150
+ active=true,identityMatches=true,unauthorized=false,empty=false,preferencesDelay=150,viewportWidth=1440
 }={}){
  const config={active,identityMatches,unauthorized,empty,preferencesDelay};
+ await cdp("Emulation.setDeviceMetricsOverride",{width:viewportWidth,height:950,deviceScaleFactor:1,mobile:viewportWidth<600});
  const html=htmlSource+"<!-- test scenario "+(++scenario)+" -->";
  await cdp("Page.navigate",{url:"data:text/html,"+encodeURIComponent(html)});
  for(let i=0;i<70;i++){
   if(await evalBrowser('document.readyState==="complete"'))break;
   await sleep(30);
  }
+ await evalBrowser("(()=>{const style=document.createElement(\'style\');style.textContent="+JSON.stringify(cssBundle)+";document.head.appendChild(style);return true;})()");
  await evalBrowser("("+setupBrowser.toString()+")("+JSON.stringify(config)+")");
  await cdp("Runtime.evaluate",{expression:candidate,returnByValue:false});
  await cdp("Runtime.evaluate",{expression:authPatch,returnByValue:false});
@@ -206,6 +245,22 @@ try{
  assert.equal(active.offerRendered,true,"Real renderer cannot show fake offer");
  assert.equal(active.writes,1,"Should only sync synthetic authorized offer once");
  assert.equal(active.status.rendered,1);
+ assert.equal(active.layout.panelVisible,true);
+ assert.equal(active.layout.cssPresent,true);
+ assert.equal(active.layout.alertCardVisible,true);
+ assert.equal(active.layout.authHidden,true);
+ await saveScreenshot("panel-real-ui-synthetic-desktop");
+ const activeMobile=await isolatedScenario({active:true,preferencesDelay:160,viewportWidth:390});
+ assert.equal(activeMobile.alertCount,1);
+ assert.equal(activeMobile.offerRendered,true);
+ assert.equal(activeMobile.guardState,"ready");
+ assert.equal(activeMobile.layout.panelVisible,true);
+ assert.equal(activeMobile.layout.alertCardVisible,true);
+ assert.equal(activeMobile.layout.cssPresent,true);
+ assert.equal(activeMobile.layout.authHidden,true);
+ assert.ok(activeMobile.layout.scrollWidth<=activeMobile.layout.viewport+12,
+   "Real V3 panel overflows mobile width: "+JSON.stringify(activeMobile.layout));
+ await saveScreenshot("panel-real-ui-synthetic-mobile");
  assert.ok(active.mockRoutes.some(x=>x.route==="account/profile"));
  assert.ok(active.mockRoutes.filter(x=>x.protected).every(x=>x.authorized),
   "Protected requests must use bearer: "+JSON.stringify(active.mockRoutes));
@@ -228,7 +283,8 @@ try{
  assert.equal(empty.alertCount,0);assert.equal(empty.status.no_matches,1);
  assert.equal(empty.writes,1);
  console.log("APD_REAL_AUTH_UI_OFFLINE_INTEGRATION_PASS "+
-  JSON.stringify({scenarios:6,actual_main_html:true,actual_candidate_app:true,
+  JSON.stringify({scenarios:7,actual_main_html:true,real_v3_stylesheets:true,
+   desktop_and_mobile_visual_screenshots:true,no_live_network:true,actual_candidate_app:true,
    actual_auth_patch:true,actual_safe_ui_bootstrap:true,actual_dashboard_renderer:true,
    real_worker_requests:false,real_credentials:false,
    active_pref_hydration:active.guardState,plan_gates_checked:true,
