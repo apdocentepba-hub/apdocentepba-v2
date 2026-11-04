@@ -78,6 +78,20 @@ test("real normalization of nested stored ABC offer never queues after closure",
  assert.equal(result.reason,"deadline_not_verified_or_expired");
  assert.deepEqual(inserts,[]);
 });
+test("email reader keeps ABC 07:30 closing offer open at 05:00 Argentina",()=>{
+ const begin=code.indexOf("function ofertaVigente(");
+ const end=code.indexOf("\n__name(ofertaVigente,",begin);
+ assert.ok(begin>=0&&end>begin);
+ const body=code.slice(begin,end);
+ assert.doesNotMatch(body,/parseFechaFlexible2/,"Legacy UTC clock must not override source-specific deadline");
+ const frozen=Date.parse("2026-11-05T08:00:00Z"); // 05:00 BA
+ const active=new Function("apdOfferDeadlineStatus",body+"\nreturn ofertaVigente;")(
+  x=>apdOfferDeadlineStatus(x,frozen)
+ );
+ assert.equal(active({estado:"Publicada",finoferta:"2026-11-05T07:30:00Z"}),true);
+ assert.equal(active({estado:"Cerrada",finoferta:"2026-11-05T07:30:00Z"}),false);
+ assert.equal(active({estado:"Publicada",finoferta:"2026-11-05T04:30:00Z"}),false);
+});
 test("email cron and initial digest include precise closure gate",()=>{
  function body(n){
   const s=code.indexOf("async function "+n+"(");
