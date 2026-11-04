@@ -107,3 +107,21 @@ test("nested saved data stays eligible when all known states agree and closure i
  assert.equal(s.eligible,true);
  assert.equal(s.reason,"verified_open");
 });
+
+test("user-visible fecha_cierre does NOT prove an offer is still open",()=>{
+ for(const item of [
+  {estado:"Publicada",fecha_cierre:"31/12/2099, 23:59"},
+  {estado:"Publicada",cierre:"31/12/2099, 23:59"},
+  {estado:"Publicada",finoferta:"",fecha_cierre:"31/12/2099, 23:59"},
+  {offer_payload:{estado:"Publicada",fecha_cierre:"31/12/2099, 23:59",raw:{estado:"Publicada"}}}
+ ]){
+  const result=apdOfferDeadlineStatus(item,Date.parse("2026-11-04T20:00:00Z"));
+  assert.equal(result.eligible,false);
+  assert.equal(result.reason,"missing_deadline");
+ }
+});
+test("deeper ABC original finoferta takes precedence over stale outer value",()=>{
+ const item={estado:"Publicada",finoferta:"2099-12-31T10:30:00Z",
+  raw:{estado:"Publicada",finoferta:"2020-01-01T07:30:00Z"}};
+ assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T20:00:00Z")).reason,"deadline_reached");
+});
