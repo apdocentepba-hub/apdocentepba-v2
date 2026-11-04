@@ -5,8 +5,10 @@ import {readFileSync,writeFileSync,mkdirSync,copyFileSync,existsSync} from "node
 import path from "node:path";
 const source=readFileSync("index.html","utf8");
 const bridge="scripts/apd-offline-preview-bridge.js";
+const priority="scripts/apd-panel-first-alert-layout-lab.js";
 const out="tmp/apd-integrated-offline-preview";
 if(!existsSync(bridge))throw Error("Preview UI bridge missing");
+if(!existsSync(priority))throw Error("Prioritized alerts script missing");
 if(!source.includes('id="login"')||!source.includes('id="registro"')||
  !source.includes('id="panel-docente"')||
  !source.includes("public-landing-v3.css"))
@@ -45,8 +47,8 @@ const banner=[
  '</nav><span style="font-weight:400">No ingreses credenciales reales. No funciona el login ni se envían formularios.</span></div>'
 ].join("");
 html=html.replace("<body>","<body>\n"+banner);
-html=html.replace("</body>",'<script src="apd-offline-preview-bridge.js"></script>\n</body>');
-if(/<script\b[^>]*src=["'](?!apd-offline-preview-bridge\.js)[^"']+["']/i.test(html))
+html=html.replace("</body>",'<script src="apd-panel-first-alert-layout-lab.js"></script>\n<script src="apd-offline-preview-bridge.js"></script>\n</body>');
+if(/<script\b[^>]*src=["'](?!(?:apd-offline-preview-bridge|apd-panel-first-alert-layout-lab)\.js)[^"']+["']/i.test(html))
  throw Error("Unexpected production JavaScript remains");
 if(/\s+on(?:click|load|submit|error)\s*=/i.test(html))
  throw Error("Inline action handler remains");
@@ -58,10 +60,12 @@ mkdirSync(out,{recursive:true});
 writeFileSync(path.join(out,"index.html"),html);
 for(const file of [...new Set(css)])copyFileSync(file,path.join(out,file));
 copyFileSync(bridge,path.join(out,"apd-offline-preview-bridge.js"));
+copyFileSync(priority,path.join(out,"apd-panel-first-alert-layout-lab.js"));
 writeFileSync(path.join(out,"LEEME.txt"),[
  "APDOCENTEPBA — Vista previa v3 + panel ilustrativo (SIN CONEXION)",
  "Abrí index.html con el navegador. Elegí Portada, Ingreso, Registro o Panel ilustrativo.",
  "Los datos del panel son completamente inventados.",
+ "Las alertas se muestran antes que los bloques secundarios y las promociones.",
  "No ingreses correos, contraseñas ni datos personales reales.",
  "Los formularios y los enlaces externos están deshabilitados.",
  "No incluye el motor ABC, Worker, autenticación ni las mejoras de rendimiento ejecutables.",
@@ -69,7 +73,7 @@ writeFileSync(path.join(out,"LEEME.txt"),[
  "Este ZIP NO es un paquete para instalar ni subir a producción."
 ].join("\n")+"\n");
 console.log(JSON.stringify({proof:"apd_integrated_offline_visual_preview",
- directory:out,files:css.length+3,contains_production_runtime_js:false,
+ directory:out,files:css.length+4,contains_production_runtime_js:false,
  csp_blocks_network:true,forms_disabled:true,
  integration_scope:"public redesign + visually navigable mock, no real auth",
  no_deployment:true}));
