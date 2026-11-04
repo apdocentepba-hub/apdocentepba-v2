@@ -50,7 +50,7 @@ async function main(){
  const conf=generate();
  assert.equal(conf.trigger_count,4);
  // Safely test whether installed Wrangler supports non-mutating upload flags.
- const argsBase=["--yes","wrangler@4.20.3"];
+ const argsBase=["--yes","wrangler@4.157.0"];
  const help=spawnSync("npx",[...argsBase,"versions","upload","--help"],{
    encoding:"utf8",stdio:["ignore","pipe","pipe"],timeout:90000,maxBuffer:1024*1024
  });
@@ -61,7 +61,7 @@ async function main(){
  }
  // Security-critical: upload, NOT deploy. Do not pass --yes to versions upload;
  // noninteractive CI must fail if the CLI asks for unexpected confirmations.
- const uploadArgs=["--yes","wrangler@4.20.3","versions","upload",
+ const uploadArgs=["--yes","wrangler@4.157.0","versions","upload",
   "tmp/apd-bounded-abc-worker-release/worker_hotfix.js",
   "--config","tmp/apd-bounded-abc-worker-release/wrangler.zero-traffic.toml",
   "--name",worker,"--keep-vars","--strict",
