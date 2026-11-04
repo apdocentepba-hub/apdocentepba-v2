@@ -53,6 +53,17 @@ test("ABC publishes 07:30Z and this field must close at 07:30 Argentina, not 04:
  assert.equal(parseApdDeadlineInstant(field.finoferta).instant_ms,Date.parse("2026-11-05T07:30:00Z"),
   "Generic ISO Z must still mean absolute UTC");
 });
+test("two rounds of stored-offer normalization cannot erase ABC status or exact close",()=>{
+ const official={estado:"Publicada",finoferta:"2026-11-05T07:30:00Z"};
+ const once={estado:"",fecha_cierre:"05/11/2026",raw:official};
+ const twice={estado:"",fecha_cierre:"05/11/2026",raw:once};
+ const before=Date.parse("2026-11-05T10:29:59Z");
+ const at=Date.parse("2026-11-05T10:30:00Z");
+ assert.equal(apdOfferDeadlineStatus(twice,before).eligible,true);
+ assert.equal(apdOfferDeadlineStatus(twice,at).reason,"deadline_reached");
+ twice.estado="Cerrada";
+ assert.equal(apdOfferDeadlineStatus(twice,before).reason,"not_published");
+});
 test("date parser rejects ambiguous GMT formats, does not guess",()=>{
  for(const f of ["Nov 4, 2026 12:30","04-11-2026 12:30","2026-11-04 12:30 ART"]){
   assert.equal(parseApdDeadlineInstant(f).ok,false);
