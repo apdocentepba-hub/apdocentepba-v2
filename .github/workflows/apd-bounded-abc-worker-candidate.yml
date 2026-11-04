@@ -13,6 +13,7 @@ on:
       - 'scripts/probe-apd-abc-published-filter-readonly.mjs'
       - 'scripts/test-apd-published-state-filter-research.mjs'
       - 'scripts/test-apd-generated-filter-candidate-differential.mjs'
+      - 'scripts/test-apd-generated-worker-auth-router.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
       - 'scripts/build-apd-published-filter-research-candidate.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
@@ -129,6 +130,10 @@ jobs:
           node --test scripts/test-apd-published-state-filter-research.mjs
           node --check scripts/test-apd-generated-filter-candidate-differential.mjs
           node --test scripts/test-apd-generated-filter-candidate-differential.mjs
+          node --check scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=bounded node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=published node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=published node --test scripts/test-apd-worker-to-carousel-contract.mjs
           npx --yes wrangler@4.157.0 deploy tmp/apd-published-query-research/worker_hotfix.js --dry-run --outdir tmp/apd-published-research-dryrun --name apd-published-state-research --compatibility-date 2026-04-01
       - name: Confirm actual generated reader and independent ABC published query match (4 GETs max)
         timeout-minutes: 2
