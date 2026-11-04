@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {apdOfferDeadlineStatus} from "./lib/apd-offer-close-guard.mjs";
-const code=readFileSync("tmp/apd-close-safe-research/worker_hotfix.js","utf8");
+const code=readFileSync(process.env.APD_TEST_FINAL_WORKER==="1"?"tmp/apd-ready-worker/worker_hotfix.js":"tmp/apd-close-safe-research/worker_hotfix.js","utf8");
 const name="sendEmailAlertForUser";
 const start=code.indexOf("async function "+name+"(");
 const end=code.indexOf("\n__name("+name+",",start);
