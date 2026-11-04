@@ -224,7 +224,18 @@ try{
   })()`);
   assert.notEqual(dark.cardBackground,"rgb(255, 255, 255)",
    "Registration dark card erroneously white");
-  seen.push({width,home:true,login:true,registration:true,layout:true,dark:true});
+
+  // Production DOM, visual-only. No login, session or backend calls are made.
+  const panel=await evaluate("(()=>{\n for(const id of [\"inicio\",\"login\",\"registro\"])document.getElementById(id).classList.add(\"hidden\");\n const panel=document.getElementById(\"panel-docente\");\n panel.classList.remove(\"hidden\");\n const result=window.__APD_PANEL_PRIORITY_V3?.apply?.();\n const grid=document.getElementById(\"panel-content\");\n const offers=document.getElementById(\"panel-alertas\");\n const card=offers?.closest(\".panel-card\");\n const main=panel.querySelector(\":scope > .container\");\n const promos=[...panel.querySelectorAll(\":scope > .apd-safe-side-ad\")];\n const demo=document.createElement(\"p\");\n demo.textContent=\"ALERTA FICTICIA PARA PRUEBA VISUAL, SIN CONSULTAR ABC\";\n offers.replaceChildren(demo);\n const rect=card?.getBoundingClientRect();\n return {result,alertFirst:grid.firstElementChild===card,\n  mainFirst:panel.firstElementChild===main,\n  promosLast:promos.length===2&&panel.lastElementChild===promos[1]&&\n    panel.children[panel.children.length-2]===promos[0],\n  fakeOnly:offers.textContent.includes(\"ALERTA FICTICIA\"),\n  loginHidden:document.getElementById(\"login\").classList.contains(\"hidden\"),\n  alertWidth:rect?.width??0,alertHeight:rect?.height??0,\n  viewport:window.innerWidth,scrollWidth:document.documentElement.scrollWidth\n };\n})()");
+  assert.ok(panel.result?.ok===true&&panel.alertFirst&&panel.mainFirst&&
+    panel.promosLast&&panel.loginHidden&&panel.fakeOnly,
+    "Real DOM priority contract failed at "+width+": "+JSON.stringify(panel));
+  assert.ok(panel.alertWidth>100&&panel.alertHeight>30,
+    "Priority alert card not visible: "+JSON.stringify(panel));
+  assert.ok(panel.scrollWidth<=panel.viewport+12,
+    "Priority alert card overflows viewport: "+JSON.stringify(panel));
+  await screenshot("panel-alerts-first-"+width);
+  seen.push({width,home:true,login:true,registration:true,layout:true,dark:true,alertFirst:true});
   await evaluate('document.body.classList.remove("apd-dark")');
  }
  console.log("APD_PUBLIC_V3_BROWSER_PASSED "+JSON.stringify(seen));
