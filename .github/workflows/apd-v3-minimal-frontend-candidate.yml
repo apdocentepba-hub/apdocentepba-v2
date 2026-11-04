@@ -1,0 +1,53 @@
+name: APD V3 minimal frontend release candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'public-landing-v3.css'
+      - 'apd_panel_priority_v3.js'
+      - 'scripts/test-public-landing-v3.mjs'
+      - 'scripts/test-public-landing-v3-browser.mjs'
+      - 'scripts/test-apd-panel-priority-release.mjs'
+      - 'scripts/check-apd-v3-public-release-readonly.mjs'
+      - 'scripts/test-apd-v3-public-release-readonly.mjs'
+      - 'scripts/test-apd-radar-live-release.mjs'
+      - '.github/workflows/apd-v3-minimal-frontend-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate DOM ordering, idempotency, and privacy
+        run: |
+          node --check apd_panel_priority_v3.js
+          node --test scripts/test-apd-panel-priority-release.mjs
+      - name: Validate public login V3, sessions, and existing panel UI
+        run: |
+          node --test scripts/test-public-landing-v3.mjs
+          node scripts/test-auth-session-regression.mjs
+          node --test scripts/test-ui-v21-release.mjs
+      - name: Preserve radar script and existing loaded scripts
+        run: |
+          node --test scripts/test-apd-radar-live-release.mjs
+      - name: Run real Chromium desktop/mobile layout and login smoke
+        run: |
+          node --check scripts/test-public-landing-v3-browser.mjs
+          node scripts/test-public-landing-v3-browser.mjs
+      - name: Prove anonymous before/after release checks fail closed
+        run: |
+          node --check scripts/check-apd-v3-public-release-readonly.mjs
+          node --test scripts/test-apd-v3-public-release-readonly.mjs
+      - name: Reject changes to Worker, auth source, panel logic or database
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"

@@ -12,16 +12,67 @@ const NEW='<script src="candidates/radar_provincia_live_20261102.js?v=2"></scrip
 const url="https://alertasapd.com.ar/candidates/radar_provincia_live_20261102.js";
 const hash=x=>createHash("sha256").update(x).digest("hex");
 
-test("release modifies one and only one frontend script reference",()=>{
- assert.equal(prior.split(OLD).length-1,1,"main must have one old radar script");
- assert.equal(prior.split(NEW).length-1,0,"main must not already use the candidate");
- assert.equal(source,prior.replace(OLD,NEW),"Unexpected production HTML change");
- assert.equal(source.split(NEW).length-1,1,"Exactly one new radar script required");
- assert.equal(source.split(OLD).length-1,0,"Legacy banner script must not load");
+function scriptReferences(html){
+ return [...html.matchAll(/<script\b[^>]*\bsrc=["'][^"']+["'][^>]*><\/script>/gi)]
+   .map(match=>match[0]);
+}
+function radarCard(html){
+ const marker='<span class="card-lbl">📍 Radar provincial</span>';
+ const i=html.indexOf(marker);
+ assert.ok(i>=0,"Radar heading missing");
+ const begin=html.lastIndexOf('<div class="panel-card span-12">',i);
+ const next=html.indexOf('<div class="panel-card span-12" id="panel-listados-pid-card"',i);
+ assert.ok(begin>=0&&next>i,"Radar card bounds missing");
+ return html.slice(begin,next);
+}
+function assertExistingRadarUnchanged(oldHtml,newHtml){
+ const oldScripts=scriptReferences(oldHtml);
+ const added='<script src="apd_panel_priority_v3.js?v=1"></script>';
+ const proposed=scriptReferences(newHtml);
+ const count=proposed.filter(tag=>tag===added).length;
+ assert.ok(count<=1,"Only one approved first-alert UI script is allowed");
+ assert.deepEqual(proposed.filter(tag=>tag!==added),oldScripts,
+   "A non-radar change must not alter any already loaded script tags/order");
+ if(count===1){
+  assert.ok(newHtml.indexOf(added)>newHtml.indexOf('<script src="apd_ui_v21.js?v=20261102-clean"></script>'),
+   "First-alert UI script must load after existing panel scripts");
+  assert.match(newHtml,/id="panel-alertas"/);
+ }
+ assert.equal(radarCard(newHtml),radarCard(oldHtml),
+   "A non-radar change must not alter the existing provincial radar card");
+}
+test("radar release transition OR unchanged already-live radar on public redesign",()=>{
+ const oldCount=prior.split(OLD).length-1;
+ const newCount=prior.split(NEW).length-1;
+ assert.equal(oldCount+newCount,1,
+  "Main must contain exactly one known radar version");
+ if(oldCount===1){
+  // Strict one-line migration contract. Do not loosen the actual radar rollout.
+  assert.equal(newCount,0,"Prior radar must be v1 on legacy-to-v2 release");
+  assert.equal(source,prior.replace(OLD,NEW),
+   "Radar release may modify only the one versioned script reference");
+ }else{
+  // v2 is already live. The visual/login PR must leave radar and script order
+  // unchanged; don't require a historical v1 tag that main no longer has.
+  assert.equal(oldCount,0);
+  assertExistingRadarUnchanged(prior,source);
+ }
+ assert.equal(source.split(NEW).length-1,1,"Exactly one v2 radar script required");
+ assert.equal(source.split(OLD).length-1,0,"Legacy radar script must not load");
  assert.ok(source.indexOf("app_v2.js?v=20&rev=20261102-unverified-plan")<
-   source.indexOf(NEW),"Canonical API URL must load before live radar");
+   source.indexOf(NEW),"Canonical API must load before radar");
  assert.equal(source.split('id="panel-radar-provincia"').length-1,1);
  assert.equal(source.split('id="btn-refresh-provincia"').length-1,1);
+});
+test("a visual redesign cannot change radar code, script order or radar card",()=>{
+ if(prior.includes(NEW)){
+  assertExistingRadarUnchanged(prior,source);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,source.replace(NEW,OLD)),
+   /script tags\/order/);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace("Refrescar radar</button>","Reemplazar radar</button>")),
+   /radar card/);
+ }
 });
 test("new radar uses the existing panel and anonymous, read-only scan-state API",()=>{
  assert.match(candidate,/const nativeRadar = byId\("panel-radar-provincia"\)/);
