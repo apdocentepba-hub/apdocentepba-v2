@@ -19,7 +19,7 @@ test("reject unexpected unauthenticated access instead of claiming smoke success
 });
 test("reject method mutation or non-API paths before any external request",async()=>{
  let calls=0;
- const request=async()=>{calls++;return {status:401};};
+ const request=async(url,args)=>{calls++;return {status:new URL(url).pathname==="/api/version"||new URL(url).pathname==="/api/planes"||args.method==="OPTIONS"?200:401};};
  await assert.rejects(checkAnonymous({request,addCases:[{method:"POST",path:"/api/test",expect:401}]}),/Read-only methods only/);
  assert.equal(calls,6);
 });
