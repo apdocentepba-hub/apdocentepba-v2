@@ -45,6 +45,17 @@ jobs:
         run: |
           node --check scripts/test-apd-worker-to-carousel-contract.mjs
           node --test scripts/test-apd-worker-to-carousel-contract.mjs
+      - name: Bundle candidate with pinned Wrangler in dry-run mode; no Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.20.3 deploy tmp/apd-bounded-abc-worker-release/worker_hotfix.js --dry-run --outdir tmp/apd-bounded-abc-wrangler-dryrun --name apd-abc-bounded-candidate-check --compatibility-date 2026-04-01
+          test -d tmp/apd-bounded-abc-wrangler-dryrun
+          BUNDLE=$(find tmp/apd-bounded-abc-wrangler-dryrun -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$BUNDLE"
+          node --check "$BUNDLE"
       - name: Verify canonical snapshot and attest candidate SHA-256 + rollback prerequisites
         run: |
           node --check scripts/attest-apd-worker-candidate.mjs
