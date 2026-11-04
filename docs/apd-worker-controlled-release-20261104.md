@@ -51,6 +51,13 @@ Fuentes oficiales:
 - https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management/
 - https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/
 
+## Empaquetado comprobado (sin upload)
+
+- GitHub CI https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41824719698 compiló el candidato usando Wrangler **4.20.3** con --dry-run y sin CLOUDFLARE_API_TOKEN ni CLOUDFLARE_ACCOUNT_ID.
+- La operación terminó correctamente, produjo un archivo JavaScript de salida y Node verificó su sintaxis. Ningún Worker fue subido ni desplegado.
+- El SHA-256 del código candidato anterior al bundling puede **no coincidir** con el SHA-256 del módulo posteriormente construido por Wrangler. Después de cualquier upload aprobado, comparar el hash exacto de los bytes que Cloudflare guarda, no asumir que el hash fuente es el hash del bundle.
+- Esta prueba no garantiza por sí sola conservación de las 29 vinculaciones del Worker: antes de promover, inspeccionar la versión subida y compararlas nuevamente contra la versión activa.
+
 ## Criterios para declarar finalizada la optimización
 
 1. Fuente y versión previas reproducibles y recuperables.
