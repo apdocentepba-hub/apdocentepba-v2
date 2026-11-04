@@ -1,0 +1,30 @@
+name: APD final uploaded 0-percent preview - read-only smoke
+on:
+  push:
+    branches:
+      - staging/apd-final-zero-traffic-20261104
+    paths:
+      - release-smoke/apd-final-zero-preview-20261104.json
+
+permissions:
+  contents: read
+jobs:
+  inspect-only:
+    if: "github.event.head_commit.message == 'test(apd): verify 0-percent preview after authorized upload'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect exact Cloudflare version and anonymous-only preview HTTP contracts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node --check scripts/smoke-apd-final-zero-preview-readonly.mjs
+          node scripts/smoke-apd-final-zero-preview-readonly.mjs
