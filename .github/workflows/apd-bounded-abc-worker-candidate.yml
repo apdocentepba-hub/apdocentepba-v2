@@ -202,6 +202,7 @@ jobs:
           node --check scripts/test-apd-morning-sweep-candidate.mjs
           node --test scripts/test-apd-morning-sweep-candidate.mjs
           APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
           APD_TEST_MORNING_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
           node --check scripts/probe-apd-final-worker-live-abc-readonly.mjs
           node scripts/probe-apd-final-worker-live-abc-readonly.mjs
