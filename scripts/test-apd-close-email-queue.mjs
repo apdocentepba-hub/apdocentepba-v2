@@ -64,5 +64,6 @@ test("email cron and initial digest include precise closure gate",()=>{
  assert.match(body("runEmailAlertsSweep"),/\.filter\(item => apdOfferDeadlineStatus\(item\?\.offer_payload \|\| item\)\.eligible\)/);
  assert.match(body("sendInitialAlertsDigestIfNeeded"),/candidates\.filter\(item => apdOfferDeadlineStatus\(item\)\.eligible\)/);
  assert.match(body("refreshEmailUserOfferStateFromAbc"),/fetchPublishedOffersForEmailDistrict/);
- assert.match(code.slice(code.indexOf("function ofertaVigente("),code.indexOf("\n__name(ofertaVigente")),/apdOfferDeadlineStatus\(oferta\)/);
+ const visibleFn=code.slice(code.indexOf("function ofertaVigente("),code.indexOf("\n__name(ofertaVigente"));
+ assert.match(visibleFn,/apdOfferDeadlineStatus\(oferta\)/);
 });
