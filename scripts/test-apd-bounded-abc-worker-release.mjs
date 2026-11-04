@@ -153,7 +153,7 @@ test("district ABC error fails closed rather than claiming zero alerts",async()=
 function alertBuilder(source,callbacks){
  const deps={
   obtenerUsuario:async()=>({id:"test-id",activo:true}),
-  obtenerPreferenciasUsuario:async()=>({user_id:"test-id",alertas_activas:true}),
+  obtenerPreferenciasUsuario:async()=>(callbacks.preferences||{user_id:"test-id",alertas_activas:true}),
   cargarCatalogos:callbacks.catalogs,
   canonizarPreferenciasConCatalogo:p=>p,
   traerOfertasAPDPorDistritos:callbacks.districts,
@@ -163,7 +163,7 @@ function alertBuilder(source,callbacks){
   ofertaEsVisibleParaAlerta:()=>true,
   estadoOfertaEsPublicada:()=>true,
   buildSourceOfferKeyFromOferta:o=>o.source_offer_key,
-  coincideOfertaConPreferenciasAPD:()=>({match:true}),
+  coincideOfertaConPreferenciasAPD:callbacks.matches||(()=>({match:true})),
   evaluatePidCompatibility:()=>({compatible:true}),
   buildAlertItem:o=>({source_offer_key:o.source_offer_key,finoferta:o.finoferta}),
   parseFechaFlexible:date
@@ -202,4 +202,71 @@ test("PID error fallback remains fail-safe and offers are preserved",async()=>{
  const baseline=await alertBuilder(original,cb)({},"test-id");
  assert.deepEqual(optimized,baseline);
 });
+
+function realPreferenceMatcher(source) {
+ const names=[
+  "norm","unique","normDistritoABC","resolveOfferDistrict",
+  "distritosPrefsAPD","extraerSigla","normalizarTextoSimple",
+  "matchDistritos","matchCargosMaterias","categoriasNivel","matchNivelModalidad",
+  "turnosPrefs","mapTurnoAPD","matchTurno","coincideOfertaConPreferenciasAPD"
+ ];
+ const statements=names.map(name=>{
+  const start=source.indexOf("function "+name+"(");
+  const end=source.indexOf("\n__name("+name+",",start);
+  assert.ok(start>=0&&end>start,"Missing actual Worker matcher: "+name);
+  return source.slice(start,end);
+ });
+ return new Function(statements.join("\n")+
+  "\nreturn coincideOfertaConPreferenciasAPD;")();
+}
+const userPrefs=()=>({
+ distrito_principal:"AVELLANEDA",otros_distritos_apd:[],
+ cargos:["MATEMÁTICA (MTM)"],materias:[],
+ niveles:["SECUNDARIO"],turnos:["T"],alertas_activas:true
+});
+const exampleOffer=(key,changes={})=>({
+ source_offer_key:key,descdistrito:"AVELLANEDA",
+ descripcioncargo:"PROFESOR DE MATEMÁTICA (MTM)",
+ descnivelmodalidad:"EDUCACIÓN SECUNDARIA",turno:"T",
+ finoferta:"2026-11-08",estado:"Publicada",...changes
+});
+test("actual Worker matcher accepts canonical cargo abbreviations, even when labels differ",()=>{
+ const matcher=realPreferenceMatcher(candidate);
+ const prefs=userPrefs();
+ assert.equal(matcher(exampleOffer("D_OK"),prefs).match,true);
+ assert.equal(matcher(exampleOffer("D_OTHER_DISTRICT",{descdistrito:"QUILMES"}),prefs).match,false);
+ assert.equal(matcher(exampleOffer("D_OTHER_CARGO",{descripcioncargo:"HISTORIA (HIS)"}),prefs).match,false);
+ assert.equal(matcher(exampleOffer("D_OTHER_LEVEL",{descnivelmodalidad:"EDUCACIÓN PRIMARIA"}),prefs).match,false);
+ assert.equal(matcher(exampleOffer("D_OTHER_SHIFT",{turno:"M"}),prefs).match,false);
+ assert.equal(matcher(exampleOffer("D_MISSING_CARGO",{descripcioncargo:""}),prefs).match,false);
+ const anyShift={...prefs,turnos:[]};
+ assert.equal(matcher(exampleOffer("D_MORNING",{turno:"M"}),anyShift).match,true);
+});
+test("actual matching and carousel feed are identical before/after concurrent ABC reads",async()=>{
+ const fixtures=[
+  exampleOffer("D_OK"),
+  exampleOffer("D_WRONG_DISTRICT",{descdistrito:"QUILMES"}),
+  exampleOffer("D_WRONG_CARGO",{descripcioncargo:"HISTORIA (HIS)"}),
+  exampleOffer("D_WRONG_LEVEL",{descnivelmodalidad:"PRIMARIO"}),
+  exampleOffer("D_WRONG_SHIFT",{turno:"M"})
+ ];
+ const common={
+  preferences:userPrefs(),
+  catalogs:async()=>({distritos:[],cargos:[]}),
+  districts:async()=>({ofertas:fixtures,debugDistritos:[]}),
+  pid:async()=>null
+ };
+ const before=await alertBuilder(original,{
+  ...common,matches:realPreferenceMatcher(original)
+ })({},"test-id");
+ const after=await alertBuilder(candidate,{
+  ...common,matches:realPreferenceMatcher(candidate)
+ })({},"test-id");
+ assert.deepEqual(after,before,"Worker release must preserve real preference matches");
+ assert.equal(after.total_fuente,5);
+ assert.equal(after.total,1);
+ assert.equal(after.descartadas_total,4);
+ assert.deepEqual(after.resultados.map(x=>x.source_offer_key),["D_OK"]);
+});
+
 console.log("APD_BOUNDED_ABC_WORKER_RELEASE_TESTS_ONLY: no authenticated production data accessed");
