@@ -94,8 +94,9 @@ test("morning digest is restricted to offers with imminent verified closing time
   {offer_payload:{estado:"Publicada",finoferta:"2026-11-05T05:00:00Z"},id:4},
   {offer_payload:{estado:"Publicada",finoferta:"2026-11-05"},id:5}
  ];
- const morning=apply("2026-11-05_06",docs,apdOfferDeadlineStatus,()=>0,day);
- const afternoon=apply("2026-11-05_14",docs,apdOfferDeadlineStatus,()=>0,day);
+ const atFixedTime=offer=>apdOfferDeadlineStatus(offer,now);
+ const morning=apply("2026-11-05_06",docs,atFixedTime,()=>0,day);
+ const afternoon=apply("2026-11-05_14",docs,atFixedTime,()=>0,day);
  assert.deepEqual(morning.map(x=>x.id),[1,2]);
  assert.deepEqual(afternoon.map(x=>x.id),[1,2,3]);
 });
