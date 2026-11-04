@@ -218,6 +218,8 @@ jobs:
           node scripts/build-apd-stored-channels-safe-candidate.mjs
           node --check tmp/apd-channel-deadline-safe-worker/worker_hotfix.js
           node --test scripts/test-apd-stored-channel-deadline-gates.mjs
+          APD_TEST_WORKER_VARIANT=stored node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=stored node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
           APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
           node --check scripts/probe-apd-final-worker-live-abc-readonly.mjs
           node scripts/probe-apd-final-worker-live-abc-readonly.mjs
