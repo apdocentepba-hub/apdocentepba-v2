@@ -101,11 +101,11 @@ test("email cron and initial digest include precise closure gate",()=>{
  }
  const sweep=body("runEmailAlertsSweep");
  if(process.env.APD_TEST_MORNING_WORKER==="1"){
-  assert.match(sweep,/storedAlerts\\.filter\\(item => \\{/);
+  assert.match(sweep,/storedAlerts\.filter\(item => \{/);
   assert.match(sweep,/const closing = apdOfferDeadlineStatus/);
-  assert.match(sweep,/return closing\\.eligible &&/);
+  assert.match(sweep,/return closing\.eligible &&/);
  }else{
-  assert.match(sweep,/storedAlerts\\.filter\\(item => apdOfferDeadlineStatus/);
+  assert.match(sweep,/storedAlerts\.filter\(item => apdOfferDeadlineStatus/);
  }
  assert.match(body("runEmailAlertsSweep"),/\.filter\(item => apdOfferDeadlineStatus\(item\?\.offer_payload \|\| item\)\.eligible\)/);
  assert.match(body("sendInitialAlertsDigestIfNeeded"),/candidates\.filter\(item => apdOfferDeadlineStatus\(item\)\.eligible\)/);
