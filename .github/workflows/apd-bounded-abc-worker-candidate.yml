@@ -10,6 +10,7 @@ on:
       - 'scripts/probe-apd-abc-two-districts-live-readonly.mjs'
       - 'scripts/probe-apd-abc-status-first-page-readonly.mjs'
       - 'scripts/probe-apd-abc-published-filter-readonly.mjs'
+      - 'scripts/test-apd-published-state-filter-research.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
@@ -108,6 +109,10 @@ jobs:
         run: |
           node --check scripts/probe-apd-abc-published-filter-readonly.mjs
           node scripts/probe-apd-abc-published-filter-readonly.mjs
+      - name: Research-only ABC state query: avoid closed offers, keep published, fail on 429
+        run: |
+          node --check scripts/test-apd-published-state-filter-research.mjs
+          node --test scripts/test-apd-published-state-filter-research.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
