@@ -7664,10 +7664,13 @@ async function construirAlertasParaUsuario(env, userId) {
       resultados: []
     };
   }
+  // Start the independent, read-only PID lookup immediately; await it only
+  // once the ABC offer results are available. No new network calls.
+  const pidPromise = obtenerUltimaPidGuardada(userId).catch(() => null);
   const catalogos = await cargarCatalogos(env);
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
-  const pidData = await obtenerUltimaPidGuardada(userId).catch(() => null);
+  const pidData = await pidPromise;
   const pidRows = normalizePidRows(pidData);
   const districtIndex = buildDistrictIndex(catalogos);
   const pidMeta = pidData?.result ? {
@@ -10063,8 +10066,35 @@ async function traerOfertasAPDPorDistritos(prefs) {
   const todas = [];
   const vistos = /* @__PURE__ */ new Set();
   const debugDistritos = [];
-  for (const distritoAPD of distritos) {
-    const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+  // Bounded parallel ABC reads: at most two districts in flight.
+  // Assemble results below in original district order: no lost matches or
+  // changed deduplication, sorting, diagnostic fields or filter behavior.
+  const districtResults = new Array(distritos.length);
+  let districtCursor = 0;
+  let districtFailed = false;
+  let districtFailure;
+  async function fetchNextDistrict() {
+    while (!districtFailed && districtCursor < distritos.length) {
+      const index = districtCursor++;
+      try {
+        districtResults[index] = await traerOfertasAPDDeUnDistrito(distritos[index]);
+      } catch (error) {
+        // Stop scheduling new requests and let in-flight GETs settle.
+        if (!districtFailed) {
+          districtFailed = true;
+          districtFailure = error;
+        }
+        return;
+      }
+    }
+  }
+  await Promise.all(Array.from({
+    length: Math.min(2, distritos.length)
+  }, () => fetchNextDistrict()));
+  if (districtFailed) throw districtFailure;
+  for (let index = 0; index < distritos.length; index++) {
+    const distritoAPD = distritos[index];
+    const info = districtResults[index];
     debugDistritos.push({
       distrito_apd: distritoAPD,
       estrategia: "fetch_por_distrito_completo",
