@@ -18,3 +18,6 @@ no_payments: true
 retry_after_safe_preflight_abort: 2
 wrangler_pinned_version: 4.157.0
 reason: 4.20.3 CLI defensive flags check failed before any upload; retain strict+keep-vars
+
+retry_after_safe_preflight_abort: 3
+reason: fixed Cloudflare API URL origin comparison; no previous upload attempted
