@@ -13,7 +13,7 @@ test("preview retains real v3 section IDs and CSS but strips all live applicatio
   assert.ok(html.includes(marker),"Missing "+marker);
  const scripts=[...html.matchAll(/<script\b[^>]*src=["']([^"']+)["'][^>]*>/gi)]
   .map(m=>m[1]);
- assert.deepEqual(scripts,["apd-offline-preview-bridge.js"]);
+ assert.deepEqual(scripts,["apd-panel-first-alert-layout-lab.js","apd-offline-preview-bridge.js"]);
  assert.doesNotMatch(html,/<script\b[^>]*>(?!\s*<\/script>)[\s\S]*?<\/script>/i);
  assert.doesNotMatch(html,/\s+on(?:click|load|submit|error)\s*=/i);
  assert.doesNotMatch(html,/<(?:script|link)\b[^>]*(?:https?:)?\/\/(?:accounts\.google|fonts\.google)/i);
@@ -35,6 +35,11 @@ test("offline package includes all local stylesheets and no production runtime J
  assert.equal(found.some(f=>f==="worker.js"),false);
  assert.equal(found.some(f=>f.endsWith(".map")),false);
  assert.ok(found.includes("LEEME.txt"));
+ assert.ok(found.includes("apd-panel-first-alert-layout-lab.js"));
+ const priority=readFileSync(path.join(root,"apd-panel-first-alert-layout-lab.js"),"utf8");
+ assert.doesNotMatch(priority,/\bfetch\s*\(|XMLHttpRequest|sendBeacon|localStorage|sessionStorage/);
+ assert.match(priority,/grid\.insertBefore\(alertCard,grid\.firstElementChild\)/);
+ assert.match(priority,/panel\.appendChild\(aside\)/);
  const instructions=readFileSync(path.join(root,"LEEME.txt"),"utf8");
  assert.match(instructions,/SIN CONEXION/);
  assert.match(instructions,/NO es un paquete/);
