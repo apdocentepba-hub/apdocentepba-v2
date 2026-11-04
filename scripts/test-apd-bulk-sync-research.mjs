@@ -52,7 +52,7 @@ function fixture({existing=[],failPost=false,delayMs=0}={}){
     rows.set(item.offer_id,{...prior,...item});
     stats.offered.push(item.offer_id);
    }
-   return new Response("",{status:204});
+   return new Response(null,{status:204});
   }
   if(method==="PATCH"){
    stats.patch++;
@@ -65,7 +65,7 @@ function fixture({existing=[],failPost=false,delayMs=0}={}){
     assert.ok(row,"Unknown stored row ID "+id);
     row.is_active=false;
    }
-   return new Response("",{status:204});
+   return new Response(null,{status:204});
   }
   throw Error("Forbidden method "+method);
  };
