@@ -277,6 +277,16 @@ jobs:
           name: apd-final-combined-worker-candidate-offline
           path: tmp/apd-ready-worker/worker_hotfix.js
           if-no-files-found: error
+      - name: Archive safer deadline email Worker with its source SHA (OFFLINE, no deployment)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-email-deadline-verification-offline
+          path: |
+            tmp/apd-mail-verified-worker/worker_hotfix.js
+            tmp/apd-mail-verified-worker/attestation.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Archive morning-alert Worker (existing 4 crons, no deployment)
         if: success()
         uses: actions/upload-artifact@v4
