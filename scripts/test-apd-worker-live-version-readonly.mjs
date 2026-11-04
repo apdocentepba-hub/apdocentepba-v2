@@ -12,6 +12,7 @@ function fixtures(changes={}){
   schema_version:2,worker_name:"ancient-wildflower-cd37",version_id:version,
   captured_at:"2026-11-04T00:00:00Z",main_module:"worker_hotfix.js",
   modules:[{name:"worker_hotfix.js",sha256:hash}],
+  schedules:["0 01 * * *","0 17 * * *","0 21 * * *","1-59/2 * * * *"],
   bindings:[{name:"EMAIL_SWEEP_STATE",type:"kv_namespace",namespace_id:"kv-only-test"},{name:"SUPABASE_URL",type:"plain_text"}]
  };
  const deployments={deployments:[{versions:[{version_id:version,percentage:100}]}]};
@@ -27,6 +28,7 @@ function fixtures(changes={}){
   let result;
   if(url.includes("/accounts?"))result=accounts;
   else if(url.endsWith("/deployments"))result=deployments;
+  else if(url.endsWith("/schedules"))result=changes.schedules??{schedules:manifest.schedules.map(cron=>({cron}))};
   else if(url.includes("/versions/"))result=active;
   else throw Error("Unexpected mock endpoint");
   return {status:200,json:async()=>({success:true,result})};
@@ -74,6 +76,10 @@ test("Cloudflare account must be explicit or unambiguous",async()=>{
  f.env.CLOUDFLARE_ACCOUNT_ID="";
  await assert.rejects(checkLive(f),/Ambiguous Cloudflare accounts/);
 });
+test("fails closed if a production cron trigger is lost",async()=>{
+ const f=fixtures({schedules:{schedules:[{cron:"0 01 * * *"},{cron:"0 17 * * *"},{cron:"0 21 * * *"}]}});
+ await assert.rejects(checkLive(f),/Cron Triggers differ/);
+});
 test("GET requests only and credentials not logged to any returned object",async()=>{
  const f=fixtures();
  const calls=[];const request=f.request;
@@ -83,6 +89,6 @@ test("GET requests only and credentials not logged to any returned object",async
  };
  const result=await checkLive(f);
  assert.equal(result.live_verified,true);
- assert.equal(calls.length,3);
+ assert.equal(calls.length,4);
  assert.ok(calls.every(c=>c.method==="GET"&&c.redirect==="error"&&c.url.startsWith("https://api.cloudflare.com/")));
 });
