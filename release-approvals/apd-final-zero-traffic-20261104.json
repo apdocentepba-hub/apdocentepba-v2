@@ -1,0 +1,8 @@
+{
+  "project": "APDocentePBA",
+  "action": "upload_version_only",
+  "worker": "ancient-wildflower-cd37",
+  "candidate_source_sha256": "0d6f54103c7821960cdd28fbf395fa10ba3837dc60aa9618fb4c82d1380a73fe",
+  "production_traffic_percent_change": 0,
+  "approval": "user_explicit_mandale_2026-11-04"
+}
