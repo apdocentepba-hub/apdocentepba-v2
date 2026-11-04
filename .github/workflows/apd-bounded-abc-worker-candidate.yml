@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'worker-live/worker_hotfix.js'
+      - 'scripts/build-apd-bounded-abc-worker-release.mjs'
       - 'scripts/test-apd-bounded-abc-worker-release.mjs'
       - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
   workflow_dispatch:
@@ -20,17 +21,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check compiled Worker candidate parses without deploying
+      - name: Generate isolated Worker candidate from the immutable production snapshot
         run: |
-          node --check worker-live/worker_hotfix.js
+          node --check scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node --check tmp/apd-bounded-abc-worker-release/worker_hotfix.js
           node --check scripts/test-apd-bounded-abc-worker-release.mjs
       - name: Check only two functions changed and ABC parity under errors and concurrency
         run: |
           node --test scripts/test-apd-bounded-abc-worker-release.mjs
-      - name: Preserve frontend, login, plans, and database exactly
+      - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
-          git diff --exit-code origin/main -- app_v2.js index.html auth_session_patch.js supabase sql
-          test -z "$(git status --porcelain -- app_v2.js index.html auth_session_patch.js supabase sql)"
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql)"
       - name: Verify release has no direct deployment or additional secrets
         run: |
           node -e "const p=require('./package.json');if(!String(p.scripts['deploy:worker']).includes('direct repository deploy disabled'))process.exit(1)"
+      - name: Archive candidate code for later independent, authorized deploy review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-bounded-worker-release-candidate
+          path: tmp/apd-bounded-abc-worker-release/worker_hotfix.js
+          if-no-files-found: error
+          retention-days: 7
