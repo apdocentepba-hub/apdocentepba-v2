@@ -38,9 +38,17 @@ jobs:
       - name: Confirm exact Wrangler version supports defensive version-upload switches
         run: |
           set -euo pipefail
-          npx --yes wrangler@4.20.3 versions upload --help > tmp/apd-wrangler-upload-help.txt
+          npx --yes wrangler@4.157.0 versions upload --help > tmp/apd-wrangler-upload-help.txt
           grep -q -- '--keep-vars' tmp/apd-wrangler-upload-help.txt
           grep -q -- '--strict' tmp/apd-wrangler-upload-help.txt
+      - name: Strict Wrangler 4.157 no-credentials dry-run using all four live cron triggers
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.157.0 deploy tmp/apd-bounded-abc-worker-release/worker_hotfix.js --config tmp/apd-bounded-abc-worker-release/wrangler.zero-traffic.toml --dry-run --outdir tmp/apd-worker-upload-staging-dryrun
+          test -d tmp/apd-worker-upload-staging-dryrun
       - name: UPLOAD VERSION ONLY (0-percent traffic); fail closed on any drift
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
