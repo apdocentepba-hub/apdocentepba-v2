@@ -12,7 +12,8 @@ const bundles={
  published:"tmp/apd-published-query-research/worker_hotfix.js",
  pid:"tmp/apd-published-pid-research/worker_hotfix.js",
  close:"tmp/apd-close-safe-research/worker_hotfix.js",
- final:"tmp/apd-ready-worker/worker_hotfix.js"
+ final:"tmp/apd-ready-worker/worker_hotfix.js",
+ morning:"tmp/apd-morning-worker/worker_hotfix.js"
 };
 const variant=process.env.APD_TEST_WORKER_VARIANT||"published";
 assert.ok(Object.hasOwn(bundles,variant),"Unexpected bundle");
@@ -38,7 +39,7 @@ for(const [district,docs] of Object.entries(offers)){
    ult_movimiento:"2026-11-04T11:00:00Z",idoferta:d.iddetalle});
  }
 }
-if(variant==="close"||variant==="final"){
+if(variant==="close"||variant==="final"||variant==="morning"){
  offers.QUILMES.push({
   iddetalle:14,idoferta:14,descdistrito:"QUILMES",descripcioncargo:"PROFESOR DE MATEMÁTICA (MTM)",
   estado:"Publicada",turno:"T",descnivelmodalidad:"SECUNDARIA",
@@ -118,7 +119,7 @@ test("actual authenticated Worker with active preferences returns exactly two co
   assert.equal(payload.user.id,"ALICE");
   assert.deepEqual(payload.resultados.map(x=>String(x.iddetalle)),["11","21"]);
   assert.equal(payload.total,2);
-  if(variant==="close"||variant==="final"){
+  if(variant==="close"||variant==="final"||variant==="morning"){
    assert.ok(payload.descartadas_total>=2,"Close guard must reject expired and unverified offers");
    assert.ok(payload.descartadas_preview.some(x=>x.iddetalle===14&&x.motivo==="cierre_deadline_reached"));
    assert.ok(payload.descartadas_preview.some(x=>x.iddetalle===15&&x.motivo==="cierre_hour_unverified"));
