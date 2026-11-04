@@ -1,10 +1,12 @@
 /* Single conservative deadline gate for ABC APD offers.
- * An ISO date with Z/offset is an absolute instant.
- * A local date+time without offset uses Buenos Aires (UTC-03:00 in 2026).
+ * Generic ISO dates with Z/offset are absolute instants.
+ * ABC's Solr finoferta convention requires local Argentina wall time even
+ * when its field has a Z suffix: 07:30Z in ABC means 07:30 Argentina.
+ * This source-specific mapping is evidence-based and remains a release gate.
  * A date without time or a missing/invalid deadline is NOT verifiably open.
  * No I/O, no account data, no mutations.
  */
-export function parseApdDeadlineInstant(value) {
+export function parseApdDeadlineInstant(value,options={}) {
   const raw = String(value ?? "").trim();
   if (!raw) return {ok:false,reason:"missing_deadline"};
   let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})?)?$/i);
@@ -28,7 +30,7 @@ export function parseApdDeadlineInstant(value) {
     return {ok:false,reason:"invalid_deadline"};
   }
   let offsetMinutes = -180; // Local ABC timestamps without a zone: Argentina 2026.
-  if (zone && zone.toUpperCase()==="Z") offsetMinutes=0;
+  if (zone && zone.toUpperCase()==="Z") offsetMinutes=options.abcWallTime===true?-180:0;
   else if (zone) {
     const sign=zone.startsWith("-")?-1:1;
     const oh=Number(zone.slice(1,3)),om=Number(zone.slice(4,6));
@@ -37,7 +39,7 @@ export function parseApdDeadlineInstant(value) {
   }
   const instant=utcParts-offsetMinutes*60000;
   if (!Number.isFinite(instant)) return {ok:false,reason:"invalid_deadline"};
-  return {ok:true,instant_ms:instant,source:zone?"explicit_timezone":"argentina_local_time"};
+  return {ok:true,instant_ms:instant,source:zone?.toUpperCase()==="Z"&&options.abcWallTime===true?"abc_local_wall_time":zone?"explicit_timezone":"argentina_local_time"};
 }
 export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
   const obj=offer?.offer_payload || offer || {};
@@ -47,7 +49,7 @@ export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
   // Prefer the authoritative source instant over a formatted display label.
   const rawDeadline=obj?.finoferta || raw?.finoferta || obj?.fecha_cierre_raw ||
     obj?.fecha_cierre || raw?.fecha_cierre || obj?.cierre || "";
-  const parse=parseApdDeadlineInstant(rawDeadline);
+  const parse=parseApdDeadlineInstant(rawDeadline,{abcWallTime:true});
   if(!parse.ok) return {eligible:false,reason:parse.reason};
   if(parse.instant_ms<=Number(nowMs)) return {eligible:false,reason:"deadline_reached",closes_at_ms:parse.instant_ms};
   return {eligible:true,reason:"verified_open",closes_at_ms:parse.instant_ms};
