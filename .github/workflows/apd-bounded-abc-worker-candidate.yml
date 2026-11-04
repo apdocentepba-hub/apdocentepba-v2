@@ -21,6 +21,9 @@ on:
       - 'scripts/test-apd-bulk-sync-research.mjs'
       - 'scripts/lib/apd-offer-close-guard.mjs'
       - 'scripts/test-apd-offer-close-guard.mjs'
+      - 'scripts/lib/apd-mail-close-proof.mjs'
+      - 'scripts/build-apd-mail-close-proof-candidate.mjs'
+      - 'scripts/test-apd-mail-close-proof.mjs'
       - 'scripts/test-apd-close-email-queue.mjs'
       - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
       - 'scripts/build-apd-close-safe-research-candidate.mjs'
@@ -204,6 +207,12 @@ jobs:
           APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
           APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
           APD_TEST_MORNING_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          # Presentation-only safer email template, separate from the uploaded 0% Worker
+          node --check scripts/build-apd-mail-close-proof-candidate.mjs
+          node scripts/build-apd-mail-close-proof-candidate.mjs
+          node --check tmp/apd-mail-verified-worker/worker_hotfix.js
+          node --test scripts/test-apd-mail-close-proof.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
           node --check scripts/probe-apd-final-worker-live-abc-readonly.mjs
           node scripts/probe-apd-final-worker-live-abc-readonly.mjs
 
