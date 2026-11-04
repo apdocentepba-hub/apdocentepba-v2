@@ -9,6 +9,7 @@ on:
       - 'scripts/test-apd-worker-to-carousel-contract.mjs'
       - 'scripts/probe-apd-abc-two-districts-live-readonly.mjs'
       - 'scripts/probe-apd-abc-status-first-page-readonly.mjs'
+      - 'scripts/probe-apd-abc-published-filter-readonly.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
@@ -102,6 +103,11 @@ jobs:
         run: |
           node --check scripts/probe-apd-abc-status-first-page-readonly.mjs
           node scripts/probe-apd-abc-status-first-page-readonly.mjs
+      - name: Probe ABC published-state Solr filtering (2 read-only requests)
+        timeout-minutes: 2
+        run: |
+          node --check scripts/probe-apd-abc-published-filter-readonly.mjs
+          node scripts/probe-apd-abc-published-filter-readonly.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
