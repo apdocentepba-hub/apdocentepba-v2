@@ -1,0 +1,36 @@
+name: APD ABC bounded Worker optimization - candidate only
+on:
+  pull_request:
+    paths:
+      - 'worker-live/worker_hotfix.js'
+      - 'scripts/test-apd-bounded-abc-worker-release.mjs'
+      - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check compiled Worker candidate parses without deploying
+        run: |
+          node --check worker-live/worker_hotfix.js
+          node --check scripts/test-apd-bounded-abc-worker-release.mjs
+      - name: Check only two functions changed and ABC parity under errors and concurrency
+        run: |
+          node --test scripts/test-apd-bounded-abc-worker-release.mjs
+      - name: Preserve frontend, login, plans, and database exactly
+        run: |
+          git diff --exit-code origin/main -- app_v2.js index.html auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- app_v2.js index.html auth_session_patch.js supabase sql)"
+      - name: Verify release has no direct deployment or additional secrets
+        run: |
+          node -e "const p=require('./package.json');if(!String(p.scripts['deploy:worker']).includes('direct repository deploy disabled'))process.exit(1)"
