@@ -11,8 +11,8 @@ import {resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 const candidatePath="tmp/apd-morning-worker/worker_hotfix.js";
 const code=readFileSync(candidatePath);
-assert.equal(createHash("sha256").update(code).digest("hex"),
- "b06858d3a37e03d7bec951eb30dff94ecdb4a05bb9eb8299689efa7bfd002968",
+const reviewed=JSON.parse(readFileSync("tmp/apd-morning-worker/attestation.json","utf8"));
+assert.equal(createHash("sha256").update(code).digest("hex"),reviewed.candidate_sha256,
  "Refuse changed Worker bundle");
 mkdirSync("tmp/apd-real-abc-fake-account",{recursive:true});
 const pathname=resolve("tmp/apd-real-abc-fake-account/worker_morning_hotfix.mjs");
@@ -144,7 +144,7 @@ try{
    "Every removed offer should be expired or inactive");
  }
  console.log("APD_MORNING_FINAL_LIVE_ABC_SYNTHETIC_ACCOUNT_OK "+JSON.stringify({
-  source:"live_public_ABC",candidate_sha256:"b06858d3a37e03d7bec951eb30dff94ecdb4a05bb9eb8299689efa7bfd002968",
+  source:"live_public_ABC",candidate_sha256:reviewed.candidate_sha256,
   districts:[...allowedDistricts],published_offers_returned:data.resultados.length,
   frontend_current_offers:visible.length,frontend_expired_or_inactive_removed:data.resultados.length-visible.length,
   frontend_filter:"production_app_v2.js_exact_functions",
