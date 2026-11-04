@@ -225,15 +225,18 @@ try{
   assert.notEqual(dark.cardBackground,"rgb(255, 255, 255)",
    "Registration dark card erroneously white");
 
-  // Production DOM, visual-only. No login, session or backend calls are made.
-  const panel=await evaluate("(()=>{\n for(const id of [\"inicio\",\"login\",\"registro\"])document.getElementById(id).classList.add(\"hidden\");\n const panel=document.getElementById(\"panel-docente\");\n panel.classList.remove(\"hidden\");\n const result=window.__APD_PANEL_PRIORITY_V3?.apply?.();\n const grid=document.getElementById(\"panel-content\");\n const offers=document.getElementById(\"panel-alertas\");\n const card=offers?.closest(\".panel-card\");\n const main=panel.querySelector(\":scope > .container\");\n const promos=[...panel.querySelectorAll(\":scope > .apd-safe-side-ad\")];\n const demo=document.createElement(\"p\");\n demo.textContent=\"ALERTA FICTICIA PARA PRUEBA VISUAL, SIN CONSULTAR ABC\";\n offers.replaceChildren(demo);\n const rect=card?.getBoundingClientRect();\n return {result,alertFirst:grid.firstElementChild===card,\n  mainFirst:panel.firstElementChild===main,\n  promosLast:promos.length===2&&panel.lastElementChild===promos[1]&&\n    panel.children[panel.children.length-2]===promos[0],\n  fakeOnly:offers.textContent.includes(\"ALERTA FICTICIA\"),\n  loginHidden:document.getElementById(\"login\").classList.contains(\"hidden\"),\n  alertWidth:rect?.width??0,alertHeight:rect?.height??0,\n  viewport:window.innerWidth,scrollWidth:document.documentElement.scrollWidth\n };\n})()");
-  assert.ok(panel.result?.ok===true&&panel.alertFirst&&panel.mainFirst&&
-    panel.promosLast&&panel.loginHidden&&panel.fakeOnly,
-    "Real DOM priority contract failed at "+width+": "+JSON.stringify(panel));
+  // Actual production tab DOM with fake content. No user login or backend calls.
+  const panel=await evaluate("(()=>{\n for(const id of [\"inicio\",\"login\",\"registro\"])document.getElementById(id).classList.add(\"hidden\");\n const panel=document.getElementById(\"panel-docente\");\n panel.classList.remove(\"hidden\");\n const result=window.__APD_PANEL_PRIORITY_V3?.apply?.();\n const activation=typeof window.APD_activatePanelTab===\"function\";\n if(activation)window.APD_activatePanelTab(\"alertas\",false);\n const pane=document.getElementById(\"panel-tab-pane-alertas\");\n const offers=document.getElementById(\"panel-alertas\");\n const card=offers?.closest(\".panel-card\");\n const promos=[...panel.querySelectorAll(\".apd-safe-side-ad\")];\n const demo=document.createElement(\"p\");\n demo.textContent=\"ALERTA FICTICIA PARA PRUEBA VISUAL, SIN CONSULTAR ABC\";\n offers.replaceChildren(demo);\n const rect=card?.getBoundingClientRect();\n return {result,activation,alertInsidePane:!!pane&&!!card&&pane.contains(card),\n  activePane:pane?.classList.contains(\"is-active\")??false,\n  stylePresent:!!document.getElementById(\"apd-priority-v3-style\"),\n  alertOrder:card?getComputedStyle(card).order:null,\n  promosRetained:promos.length===2,\n  promosInRepository:promos.length===2&&promos.every(item=>!!item.closest(\"#panel-tab-pane-repo\")),\n  fakeOnly:offers.textContent.includes(\"ALERTA FICTICIA\"),\n  loginHidden:document.getElementById(\"login\").classList.contains(\"hidden\"),\n  alertWidth:rect?.width??0,alertHeight:rect?.height??0,\n  viewport:window.innerWidth,scrollWidth:document.documentElement.scrollWidth\n };\n})()");
+  assert.ok(panel.result?.ok===true&&panel.activation&&panel.alertInsidePane&&
+    panel.activePane&&panel.stylePresent&&panel.promosRetained&&
+    panel.promosInRepository&&panel.loginHidden&&panel.fakeOnly,
+    "Live tabs/alerts layout contract failed at "+width+": "+JSON.stringify(panel));
+  assert.equal(Number(panel.alertOrder),-10,
+    "Alert card must be first in the existing Alertas tab "+JSON.stringify(panel));
   assert.ok(panel.alertWidth>100&&panel.alertHeight>30,
-    "Priority alert card not visible: "+JSON.stringify(panel));
+    "Tab alert card not visible: "+JSON.stringify(panel));
   assert.ok(panel.scrollWidth<=panel.viewport+12,
-    "Priority alert card overflows viewport: "+JSON.stringify(panel));
+    "Prioritized alert pane overflows viewport: "+JSON.stringify(panel));
   await screenshot("panel-alerts-first-"+width);
   seen.push({width,home:true,login:true,registration:true,layout:true,dark:true,alertFirst:true});
   await evaluate('document.body.classList.remove("apd-dark")');
