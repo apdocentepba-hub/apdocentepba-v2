@@ -1,10 +1,8 @@
 name: APD one-shot upload new Worker VERSION with ZERO production traffic
+# ONE-SHOT CONSUMED: successful 0%-traffic upload recorded in run 41827373916.
+# Intentionally inert: a new approval and a NEW workflow are needed for uploads.
 on:
-  push:
-    branches:
-      - staging/apd-worker-zero-traffic-20261104
-    paths:
-      - release/apd-zero-traffic-upload.trigger
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
