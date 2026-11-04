@@ -45,6 +45,19 @@ patch("buildDigestHtml",
  '                  <table role="presentation"'
  ].join("\n").replace(/@@/g,"$")
 );
+patch("sendInitialAlertsDigestIfNeeded",
+ '  const existing = await supabaseSelect(',
+ [
+ '  // A preferences opt-in is not authorization to email an expired plan.',
+ '  const activePlanForInitialEmail = await resolverPlanUsuario(env, user.id).catch(() => null);',
+ '  if (!activePlanForInitialEmail || !isPlanActivo(activePlanForInitialEmail)) {',
+ '    return {ok:true,skipped:true,reason:"plan_expired_or_inactive"};',
+ '  }',
+ '  const existing = await supabaseSelect('
+ ].join("\n"));
+patch("sendInitialAlertsDigestIfNeeded",
+ '  const resolvedPlanForInitialEmail = await resolverPlanUsuario(env, user.id).catch(() => null);',
+ '  const resolvedPlanForInitialEmail = activePlanForInitialEmail;');
 const helper=readFileSync("scripts/lib/apd-mail-close-proof.mjs","utf8")
  .replace(/^import \{apdOfferDeadlineStatus\} from "\.\/apd-offer-close-guard\.mjs";\s*/m,"")
  .replace(/^export function /gm,"function ");
@@ -52,7 +65,7 @@ assert.ok(!/\bimport\b/.test(helper.replace(/\/\*[\s\S]*?\*\//g,"")),"Unexpected
 assert.equal((helper.match(/^function /gm)||[]).length,2);
 const finalSource=helper+"\n"+src;
 assert.notEqual(finalSource,original);
-assert.deepEqual(changed,["renderMailOfferCard","renderMailOfferCard","buildDigestHtml","buildDigestHtml"]);
+assert.deepEqual(changed,["renderMailOfferCard","renderMailOfferCard","buildDigestHtml","buildDigestHtml","sendInitialAlertsDigestIfNeeded","sendInitialAlertsDigestIfNeeded"]);
 mkdirSync(dirname(output),{recursive:true});
 writeFileSync(output,finalSource);
 console.log("APD_MAIL_CLOSE_PROOF_CANDIDATE_OK "+JSON.stringify({
