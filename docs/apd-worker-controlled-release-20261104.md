@@ -67,6 +67,19 @@ Fuentes oficiales:
 - Prueba y recibo de GitHub Actions: https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41827373916
 - **No significa que esté en producción**: la versión nueva no recibe solicitudes normales. No se realizaron consultas autenticadas ni se midieron latencias reales de esa versión. La publicación para usuarios requiere autorización posterior.
 
+## Smoke público de la versión sin tráfico (04/11/2026)
+
+URL de versión **comprobada**: https://97ff1908-ancient-wildflower-cd37.apdocentepba.workers.dev/ (no utilizar como endpoint productivo).
+
+| Consulta de solo lectura | Resultado |
+|---|---|
+| API pública de versión | HTTP 200, igual a la versión activa |
+| API pública de planes | HTTP 200, **7/7 planes idénticos** y misma política de precio fundador respecto del Worker activo |
+| API privada de alertas con UUID falso sin sesión | HTTP 401, «No autenticado» |
+| API privada de plan con UUID falso sin sesión | HTTP 401, «No autenticado» |
+
+Las pruebas no usaron credenciales de usuarios ni pidieron ofertas de ABC. El candidato permanece con **0 %** del tráfico, y el servidor anterior con **100 %**. El endpoint de versión no está protegido por autenticación y las URL de versión se pueden consultar externamente cuando Cloudflare las habilita: no usarlo para datos o cambios reales sin las mismas garantías que en producción. **Todavía faltan las pruebas autenticadas, el benchmark real y la autorización expresa de promoción.**
+
 ## Criterios para declarar finalizada la optimización
 
 1. Fuente y versión previas reproducibles y recuperables.
