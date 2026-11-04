@@ -68,6 +68,12 @@ assert.notEqual(finalSource,original);
 assert.deepEqual(changed,["renderMailOfferCard","renderMailOfferCard","buildDigestHtml","buildDigestHtml","sendInitialAlertsDigestIfNeeded","sendInitialAlertsDigestIfNeeded"]);
 mkdirSync(dirname(output),{recursive:true});
 writeFileSync(output,finalSource);
+writeFileSync("tmp/apd-mail-verified-worker/attestation.json",JSON.stringify({
+  source_base_sha256:pinned,candidate_sha256:sha(finalSource),
+  source_lineage:"pinned 0-percent PID release plus close/morning/email hardening",
+  uploaded:false,production_traffic_changed:false,emails_sent:0,
+  changed_functions:[...new Set(changed)]
+},null,2)+"\n");
 console.log("APD_MAIL_CLOSE_PROOF_CANDIDATE_OK "+JSON.stringify({
  source_base_sha256:pinned,source_candidate_sha256:sha(finalSource),
  changed_functions:[...new Set(changed)],validated_close_only:true,
