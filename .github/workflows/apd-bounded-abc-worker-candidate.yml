@@ -23,6 +23,7 @@ on:
       - 'scripts/build-apd-published-filter-research-candidate.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
+      - 'scripts/check-apd-pid-candidate-readiness-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
       - 'scripts/check-apd-worker-anonymous-http-readonly.mjs'
       - 'scripts/build-apd-worker-zero-traffic-config.mjs'
@@ -96,6 +97,13 @@ jobs:
           node --check scripts/check-apd-worker-live-version-readonly.mjs
           node --test scripts/test-apd-worker-live-version-readonly.mjs
           node scripts/check-apd-worker-live-version-readonly.mjs
+      - name: Attest existing 0-percent PID candidate bytes, resources and rollback target using GET only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --check scripts/check-apd-pid-candidate-readiness-readonly.mjs
+          node scripts/check-apd-pid-candidate-readiness-readonly.mjs
       - name: Check live Worker anonymous 401/200 HTTP contracts using GET and OPTIONS only
         run: |
           node --check scripts/check-apd-worker-anonymous-http-readonly.mjs
