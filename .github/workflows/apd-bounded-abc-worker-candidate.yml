@@ -24,6 +24,8 @@ on:
       - 'scripts/lib/apd-mail-close-proof.mjs'
       - 'scripts/build-apd-mail-close-proof-candidate.mjs'
       - 'scripts/test-apd-mail-close-proof.mjs'
+      - 'scripts/build-apd-stored-channels-safe-candidate.mjs'
+      - 'scripts/test-apd-stored-channel-deadline-gates.mjs'
       - 'scripts/test-apd-close-email-queue.mjs'
       - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
       - 'scripts/build-apd-close-safe-research-candidate.mjs'
@@ -212,6 +214,10 @@ jobs:
           node scripts/build-apd-mail-close-proof-candidate.mjs
           node --check tmp/apd-mail-verified-worker/worker_hotfix.js
           node --test scripts/test-apd-mail-close-proof.mjs
+          node --check scripts/build-apd-stored-channels-safe-candidate.mjs
+          node scripts/build-apd-stored-channels-safe-candidate.mjs
+          node --check tmp/apd-channel-deadline-safe-worker/worker_hotfix.js
+          node --test scripts/test-apd-stored-channel-deadline-gates.mjs
           APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
           node --check scripts/probe-apd-final-worker-live-abc-readonly.mjs
           node scripts/probe-apd-final-worker-live-abc-readonly.mjs
@@ -277,6 +283,16 @@ jobs:
           name: apd-final-combined-worker-candidate-offline
           path: tmp/apd-ready-worker/worker_hotfix.js
           if-no-files-found: error
+      - name: Archive stored-channel deadline-safe Worker with its SHA (OFFLINE only)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-stored-channel-deadline-safe-offline
+          path: |
+            tmp/apd-channel-deadline-safe-worker/worker_hotfix.js
+            tmp/apd-channel-deadline-safe-worker/attestation.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Archive safer deadline email Worker with its source SHA (OFFLINE, no deployment)
         if: success()
         uses: actions/upload-artifact@v4
