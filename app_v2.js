@@ -982,9 +982,9 @@ async function obtenerMisAlertas(userId) {
 
 function renderAlertasAPD(alertas) {
   // Do not retain or render alert details for a non-entitled account.
-  alertasState.items = planActual?.access_active === false
-    ? []
-    : filtrarAlertasVigentes(alertas);
+  alertasState.items = planActual?.access_active === true
+    ? filtrarAlertasVigentes(alertas)
+    : [];
   alertasState.index = 0;
   renderAlertaActual();
 }
@@ -1345,7 +1345,8 @@ function renderAlertaActual() {
   // Authoritative flag from the authenticated /api/mi-plan response.
   // A missing flag (e.g. temporary network failure) is NOT a known expiry.
   const needsRenewal = planActual?.access_active === false;
-  const total = needsRenewal ? 0 : items.length;
+  const accessUnverified = planActual?.access_active !== true && !needsRenewal;
+  const total = planActual?.access_active === true ? items.length : 0;
 
   if (!box) return;
 
@@ -1378,6 +1379,19 @@ function renderAlertaActual() {
         document.getElementById("panel-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
+    return;
+  }
+
+  if (accessUnverified) {
+    box.innerHTML = `
+      <div class="empty-state" role="status">
+        <h3>No pudimos verificar tu plan</h3>
+        <p>Por seguridad, las alertas quedan ocultas hasta que podamos confirmar tu acceso.</p>
+        <p class="empty-hint">Tus preferencias se conservan. Reintentá la consulta, sin volver a cargarlas.</p>
+        <button type="button" class="btn btn-primary" id="apd-retry-unverified-plan">Reintentar verificación</button>
+      </div>
+    `;
+    box.querySelector("#apd-retry-unverified-plan")?.addEventListener("click", () => { void cargarDashboard(); });
     return;
   }
 
@@ -1784,6 +1798,14 @@ async function cargarDashboard() {
       .forEach(id => { const node = document.getElementById(id); if (node) node.textContent = ""; });
   }
   const current = () => version === dashboardRequestVersion && obtenerToken() === token;
+  // A previous account's or earlier refresh's offers must not remain visible
+  // while the server checks access again. This never edits saved preferences.
+  alertasState.items = [];
+  alertasState.index = 0;
+  const previousAlerts = document.getElementById("panel-alertas");
+  if (previousAlerts) previousAlerts.textContent = "Verificando acceso y alertas...";
+  const previousBadge = document.getElementById("alertas-badge");
+  if (previousBadge) { previousBadge.textContent = ""; previousBadge.classList.add("hidden"); }
   mostrarSeccion("panel-docente");
   setPanelLoading(true);
 
@@ -1827,9 +1849,11 @@ async function cargarDashboard() {
     // ni mostrar una falla de API como si hubiera cero coincidencias.
     void alertasPromise.then(result => {
       if (!current()) return;
-      if (planActual?.access_active === false) {
+      if (planActual?.access_active !== true) {
+        // Distinguish expiry from transient plan-verification failure.
+        // Neither state can display or cache personalized offers.
         renderAlertasAPD([]);
-        renderEstadisticasPanel(null, ultimoAcceso);
+        renderEstadisticasPanel(null, ultimoAcceso, true);
         return;
       }
       if (!result.ok) {
@@ -1858,7 +1882,7 @@ async function cargarDashboard() {
       }
       const items = Array.isArray(result.items) ? result.items : [];
       renderAlertasAPD(items);
-      renderEstadisticasPanel(planActual?.access_active === false ? null : items.length, ultimoAcceso);
+      renderEstadisticasPanel(items.length, ultimoAcceso);
       sincronizarOfertasPanel(items);
     });
     if (typeof cargarHistoricoPanel === "function") {
