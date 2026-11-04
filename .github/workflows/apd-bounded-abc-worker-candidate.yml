@@ -12,6 +12,7 @@ on:
       - 'scripts/probe-apd-abc-status-first-page-readonly.mjs'
       - 'scripts/probe-apd-abc-published-filter-readonly.mjs'
       - 'scripts/test-apd-published-state-filter-research.mjs'
+      - 'scripts/build-apd-published-filter-research-candidate.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
       - 'scripts/test-apd-worker-live-version-readonly.mjs'
@@ -114,6 +115,17 @@ jobs:
         run: |
           node --check scripts/test-apd-published-state-filter-research.mjs
           node --test scripts/test-apd-published-state-filter-research.mjs
+      - name: Compile separate published-only research candidate without deploying it
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          node --check scripts/build-apd-published-filter-research-candidate.mjs
+          node scripts/build-apd-published-filter-research-candidate.mjs
+          node --check tmp/apd-published-query-research/worker_hotfix.js
+          node --test scripts/test-apd-published-state-filter-research.mjs
+          npx --yes wrangler@4.157.0 deploy tmp/apd-published-query-research/worker_hotfix.js --dry-run --outdir tmp/apd-published-research-dryrun --name apd-published-state-research --compatibility-date 2026-04-01
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
