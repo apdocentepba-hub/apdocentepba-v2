@@ -1,0 +1,32 @@
+name: APD PID 0-percent version read-only smoke
+on:
+  push:
+    branches:
+      - staging/apd-worker-pid-zero-traffic-20261104
+    paths:
+      - .release/smoke-apd-pid-20261104.txt
+permissions:
+  contents: read
+jobs:
+  public-version-http:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/staging/apd-worker-pid-zero-traffic-20261104'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate version URL with public read-only methods
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          test "$(cat .release/smoke-apd-pid-20261104.txt)" = "READ_ONLY_SMOKE_PID_VERSION_90e76973"
+          node --check scripts/probe-apd-pid-version-url-readonly.mjs
+          node scripts/probe-apd-pid-version-url-readonly.mjs
