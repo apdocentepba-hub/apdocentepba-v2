@@ -19,6 +19,9 @@ on:
       - 'scripts/test-apd-bounded-pid-fallback.mjs'
       - 'scripts/build-apd-bulk-sync-research-candidate.mjs'
       - 'scripts/test-apd-bulk-sync-research.mjs'
+      - 'scripts/lib/apd-offer-close-guard.mjs'
+      - 'scripts/test-apd-offer-close-guard.mjs'
+      - 'scripts/build-apd-close-safe-research-candidate.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs'
       - 'scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs'
@@ -163,6 +166,14 @@ jobs:
           node --check tmp/apd-bulk-sync-research/worker_hotfix.js
           node --check scripts/test-apd-bulk-sync-research.mjs
           node --test scripts/test-apd-bulk-sync-research.mjs
+          node --check scripts/lib/apd-offer-close-guard.mjs
+          node --check scripts/test-apd-offer-close-guard.mjs
+          node --test scripts/test-apd-offer-close-guard.mjs
+          node --check scripts/build-apd-close-safe-research-candidate.mjs
+          node scripts/build-apd-close-safe-research-candidate.mjs
+          node --check tmp/apd-close-safe-research/worker_hotfix.js
+          APD_TEST_WORKER_VARIANT=close node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+
 
           APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-auth-router.mjs
           APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-worker-to-carousel-contract.mjs
