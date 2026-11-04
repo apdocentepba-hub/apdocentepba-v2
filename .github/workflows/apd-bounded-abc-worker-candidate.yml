@@ -111,7 +111,7 @@ jobs:
         run: |
           node --check scripts/probe-apd-abc-published-filter-readonly.mjs
           node scripts/probe-apd-abc-published-filter-readonly.mjs
-      - name: Research-only ABC state query: avoid closed offers, keep published, fail on 429
+      - name: "Research-only ABC state query: avoid closed offers, keep published, fail on 429"
         run: |
           node --check scripts/test-apd-published-state-filter-research.mjs
           node --test scripts/test-apd-published-state-filter-research.mjs
