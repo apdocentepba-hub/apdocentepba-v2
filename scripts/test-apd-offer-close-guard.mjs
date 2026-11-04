@@ -69,3 +69,17 @@ test("date parser rejects ambiguous GMT formats, does not guess",()=>{
   assert.equal(parseApdDeadlineInstant(f).ok,false);
  }
 });
+
+test("official nested ABC Cerrada overrides cached Publicada label",()=>{
+ const item={offer_payload:{estado:"Publicada",fecha_cierre:"05/11/2026, 07:30",raw:{
+   estado:"Publicada",raw:{estado:"Cerrada",finoferta:"2099-12-31T07:30:00Z"}
+ }}};
+ assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T15:00:00Z")).eligible,false);
+ assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T15:00:00Z")).reason,"not_published");
+});
+test("nested raw official finoferta wins over formatted future closing label",()=>{
+ const item={offer_payload:{estado:"Publicada",fecha_cierre:"31/12/2099, 23:59",raw:{
+   raw:{estado:"Publicada",finoferta:"2020-01-01T07:30:00Z"}
+ }}};
+ assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T15:00:00Z")).reason,"deadline_reached");
+});
