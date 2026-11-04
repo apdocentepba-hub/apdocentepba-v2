@@ -1,0 +1,71 @@
+name: APD final Worker authorized one-time 0-percent upload
+on:
+  push:
+    branches:
+      - staging/apd-final-zero-traffic-20261104
+    paths:
+      - release-approvals/apd-final-zero-traffic-20261104.json
+
+permissions:
+  contents: read
+concurrency:
+  group: apd-final-zero-traffic-20261104
+  cancel-in-progress: false
+
+jobs:
+  upload-only:
+    if: github.event.head_commit.message == 'release(apd): authorized one-time 0-percent final Worker upload'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rebuild exact final Worker from immutable candidate source
+        run: |
+          set -euo pipefail
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/build-apd-published-filter-research-candidate.mjs
+          node scripts/build-apd-pid-bounded-research-candidate.mjs
+          node scripts/build-apd-close-safe-research-candidate.mjs
+          node scripts/build-apd-final-combined-worker-candidate.mjs
+          node scripts/build-apd-morning-sweep-candidate.mjs
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const crypto=require('node:crypto');
+          const s=fs.readFileSync('tmp/apd-morning-worker/worker_hotfix.js');
+          const h=crypto.createHash('sha256').update(s).digest('hex');
+          if(h!=='0d6f54103c7821960cdd28fbf395fa10ba3837dc60aa9618fb4c82d1380a73fe')
+            throw Error('SAFE ABORT: final candidate content is not the reviewed build');
+          console.log('APD_FINAL_WORKER_HASH_VERIFIED '+h);
+          NODE
+      - name: Run all no-network release-regression gates
+        run: |
+          set -euo pipefail
+          node --test scripts/test-apd-offer-close-guard.mjs
+          APD_TEST_MORNING_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-bulk-sync-research.mjs
+          node --test scripts/test-apd-morning-sweep-candidate.mjs
+          node --check tmp/apd-morning-worker/worker_hotfix.js
+      - name: Verify account, upload immutable version WITHOUT traffic, attest live unchanged
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_UPLOAD_APPROVED: yes_20261104_zero_only
+          APD_EVENT_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          node scripts/upload-apd-final-zero-traffic-once.mjs
+      - name: Save proof of 0-percent upload (no secrets)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-final-zero-traffic-20261104-receipt
+          path: tmp/apd-final-zero-traffic/receipt.json
+          if-no-files-found: error
+          retention-days: 30
