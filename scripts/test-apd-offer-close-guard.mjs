@@ -83,3 +83,27 @@ test("nested raw official finoferta wins over formatted future closing label",()
  }}};
  assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T15:00:00Z")).reason,"deadline_reached");
 });
+
+test("conflicting saved status is never advertised regardless of nesting order",()=>{
+ const open={estado:"Publicada",finoferta:"2099-12-31T07:30:00Z"};
+ const closed={estado:"Cerrada",finoferta:"2099-12-31T07:30:00Z"};
+ for(const item of [
+   {estado:"Cerrada",raw:open},
+   {estado:"Publicada",raw:closed},
+   {estado:"Publicada",raw:{estado:"Publicada",raw:closed}},
+   {offer_payload:{estado:"Publicada",raw:{estado:"Designada",raw:open}}},
+   {offer_payload:{estado:"Cerrada",raw:{estado:"Publicada",raw:open}}}
+ ]){
+   const status=apdOfferDeadlineStatus(item,Date.parse("2026-11-04T18:00:00Z"));
+   assert.equal(status.eligible,false,"Conflicting state must be rejected");
+   assert.equal(status.reason,"not_published");
+ }
+});
+test("nested saved data stays eligible when all known states agree and closure is future",()=>{
+ const item={offer_payload:{estado:"Publicada",raw:{estado:"Publicada",raw:{
+   estado:"Publicada",finoferta:"2099-12-31T07:30:00Z"
+ }}}};
+ const s=apdOfferDeadlineStatus(item,Date.parse("2026-11-04T18:00:00Z"));
+ assert.equal(s.eligible,true);
+ assert.equal(s.reason,"verified_open");
+});
