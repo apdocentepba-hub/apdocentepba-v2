@@ -42,6 +42,8 @@ function fixture({existing=[],failPost=false,delayMs=0}={}){
    const arr=Array.isArray(data)?data:[data];
    stats.batchSizes.push(arr.length);
    assert.ok(arr.length>0);
+   const firstSeenColumns=new Set(arr.map(x=>Object.prototype.hasOwnProperty.call(x,"first_seen_at")));
+   assert.equal(firstSeenColumns.size,1,"Mixed first_seen_at column shapes would null out existing dates in PostgREST");
    // Simulate PostgreSQL restriction: one ON CONFLICT key only once per batch.
    const unique=new Set();
    for(const item of arr){
@@ -130,6 +132,21 @@ test("bounded batch upserts remain sequential and never exceed 100 offers",async
  const {b,next}=await compare(offers,[]);
  assert.deepEqual(b.stats.batchSizes,[100,100,51]);
  assert.equal(next.total_active,count);
+});
+test("mixing existing and new offers preserves existing first_seen_at",async()=>{
+ const oldDate="2024-01-01T00:00:00Z";
+ const existing=[{id:"row-1",offer_id:"D_1",first_seen_at:oldDate,is_active:true}];
+ const offers=[
+  {iddetalle:1,source_offer_key:"D_1",cargo:"existing modified"},
+  {iddetalle:2,source_offer_key:"D_2",cargo:"new"}
+ ];
+ const {a,b,next}=await compare(offers,existing);
+ assert.equal(a.stats.post,2);
+ assert.equal(b.stats.post,2);
+ assert.deepEqual(b.stats.batchSizes,[1,1],"Existing and new records must never share a bulk batch");
+ assert.equal(b.rows.get("D_1").first_seen_at,oldDate);
+ assert.ok(b.rows.get("D_2").first_seen_at);
+ assert.equal(next.total_active,2);
 });
 test("invalid user ID is rejected before any DB call",async()=>{
  const f=fixture();
