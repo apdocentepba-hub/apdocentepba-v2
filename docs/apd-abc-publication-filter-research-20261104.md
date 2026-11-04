@@ -48,3 +48,12 @@ Evidencia: [GitHub Actions #41832394209](https://github.com/apdocentepba-hub/apd
 6. No alterar usuarios, planes, pagos ni notificaciones al ensayar.
 
 **No hacer merge ni deploy de esta variante por los resultados anteriores solamente.** Falta una prueba autenticada de usuario de ensayo, latencia end-to-end y autorización separada para otra carga Cloudflare.
+
+
+## Validación diferencial y contraste con ABC real — segunda ronda, 04/11/2026
+
+- [CI #41833439695](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41833439695): **SUCCESS**. Cuatro pruebas contra los **dos bundles generados reales**, no contra una recreación manual del parche: hash exacto, cambio único de filtro, paridad de campos/orden/deduplicación con más de 200 publicados, rescate de una publicación posterior a 1.600 registros previos y propagación de errores HTTP 429/503. **4/4 aprobadas**.
+- [CI #41833837482](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41833837482): **SUCCESS**. Ensayo **real, anónimo y de solo lectura** desde la función efectiva del segundo bundle. Se comparó la consulta Solr mediante filtro separado de estado Publicada frente a la consulta independiente que incorpora ese estado en la expresión principal (máximo 4 GET, dos distritos). **Quilmes: 6/6** y **Tigre: 93/93** publicados, con **idénticos identificadores y campos estables**. Estos conteos describen el estado «Publicada» de la fuente y **no prueban que todas esas ofertas sigan abiertas por fecha**.
+- No se usaron credenciales ni cuentas de usuarios. No hubo cambios de base de datos, notificaciones, versiones ni tráfico en Cloudflare.
+- La prueba real controla el **contrato de recuperación de publicaciones** en dos distritos y en ese momento; no valida el resultado final de la API autenticada, coincidencia de preferencias, PID, vigencia ni el carrusel renderizado. Tampoco demuestra paridad en todos los 137 distritos ni garantiza estabilidad ante actualizaciones simultáneas de ABC.
+- La variante con filtro sigue **SIN UPLOAD Y SIN DEPLOY**; el candidato previo almacenado con **0 % de tráfico** no incluye el filtro. Continúan pendientes una prueba con cuenta propia autenticada, la medición end-to-end y la autorización específica para subir una nueva versión o cambiar tráfico.
