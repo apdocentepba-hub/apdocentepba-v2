@@ -38,8 +38,14 @@ patch("construirAlertasParaUsuario",
  "    if (!ofertaEsVisibleParaAlerta(oferta)) {"
  ].join("\n"));
 patch("ofertaVigente",
+ [
  '  const estado = norm2(oferta?.estado || "");',
- '  if (!apdOfferDeadlineStatus(oferta).eligible) return false;\n  const estado = norm2(oferta?.estado || "");');
+ '  if (["ANULADA", "DESIGNADA", "DESIERTA", "CERRADA", "FINALIZADA", "NO VIGENTE"].includes(estado)) return false;',
+ '  const cierre = parseFechaFlexible2(oferta?.finoferta || oferta?.fecha_cierre || "");',
+ '  if (cierre && cierre.getTime() < Date.now()) return false;',
+ '  return true;'
+ ].join("\n"),
+ '  // Do not apply the old UTC-runtime interpretation after the ABC local gate.\n  return apdOfferDeadlineStatus(oferta).eligible;');
 patch("sendInitialAlertsDigestIfNeeded",
  "  const items = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];",
  "  const candidates = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];\n  const items = candidates.filter(item => apdOfferDeadlineStatus(item).eligible);");
