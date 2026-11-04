@@ -49,11 +49,13 @@ export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
   const nested=raw?.raw || {};
   const original=nested?.raw || {};
   const pick=(...values)=>values.find(v=>String(v??"").trim())||"";
+  // Prefer the deepest ABC record over a cached normalized display status.
+  // A stale "Publicada" label must never override an official "Cerrada".
   const state=String(pick(
-    obj?.estado,obj?.estado_oferta,obj?.estado_actual,
-    raw?.estado,raw?.estado_oferta,
+    original?.estado,original?.estado_oferta,
     nested?.estado,nested?.estado_oferta,
-    original?.estado,original?.estado_oferta
+    raw?.estado,raw?.estado_oferta,
+    obj?.estado,obj?.estado_oferta,obj?.estado_actual
   )).trim().toUpperCase();
   if(state!=="PUBLICADA") return {eligible:false,reason:"not_published"};
   // Raw ABC finoferta wins over display labels after any nesting depth.
