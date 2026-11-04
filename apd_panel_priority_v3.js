@@ -1,27 +1,35 @@
-/* APDocentePBA V3: prioritized alerts UI, proposed for production review.
- * No HTTP calls, no auth access, no content rewriting. Moves existing nodes,
- * retaining their event handlers and user-edited input state.
+/* APDocentePBA V3 — first-alert presentation, tab-aware.
+ * The live dashboard is divided into tabs by panel_tabs_patch.js.
+ * Do not move its cards/asides: doing so breaks the live tab architecture.
+ * CSS order prioritizes the ACTUAL alert card inside its existing Alertas tab,
+ * and puts the Alertas tab button first without replacing saved tab choices.
+ * No fetches, credentials, DOM replacement or plan logic.
  */
 (function(){
  "use strict";
+ const STYLE_ID="apd-priority-v3-style";
+ const css=[
+  '#panel-tab-pane-alertas .panel-tab-grid > .panel-card:has(#panel-alertas){order:-10!important;grid-column:1/-1!important}',
+  '.apd-top-tabs [data-top-tab-key="alertas"]{order:-10!important}',
+  '#panel-tabs-nav [data-tab-key="alertas"]{order:-10!important}'
+ ].join("\n");
  function apply(){
   const panel=document.getElementById("panel-docente");
-  if(!panel)return {ok:false,reason:"panel_missing"};
-  const container=panel.querySelector(":scope > .container");
-  const grid=container?.querySelector("#panel-content");
   const alerts=document.getElementById("panel-alertas");
-  const alertCard=alerts?.closest(".panel-card");
-  const asides=[...panel.querySelectorAll(":scope > .apd-safe-side-ad")];
-  if(!container||!grid||!alertCard||alertCard.parentElement!==grid||
-     asides.length!==2||asides.some(a=>a.parentElement!==panel))
-    return {ok:false,reason:"unexpected_layout"};
-  if(grid.firstElementChild!==alertCard)
-    grid.insertBefore(alertCard,grid.firstElementChild);
-  if(panel.firstElementChild!==container)
-    panel.insertBefore(container,panel.firstElementChild);
-  for(const aside of asides)panel.appendChild(aside);
-  return {ok:true,alert_first:grid.firstElementChild===alertCard,
-    main_first:panel.firstElementChild===container,asides_after_main:true};
+  if(!panel||!alerts||!panel.contains(alerts))
+   return {ok:false,reason:"missing_panel_or_alerts"};
+  let style=document.getElementById(STYLE_ID);
+  if(!style){
+   style=document.createElement("style");
+   style.id=STYLE_ID;
+   style.textContent=css;
+   document.head.appendChild(style);
+  }
+  const pane=document.getElementById("panel-tab-pane-alertas");
+  const card=alerts.closest(".panel-card");
+  const assigned=!!pane&&!!card&&pane.contains(card);
+  return {ok:true,method:"css_tab_scoped",tab_ready:assigned,
+   original_card_retained:true,stored_tab_selection_untouched:true};
  }
  Object.defineProperty(window,"__APD_PANEL_PRIORITY_V3",{
   configurable:true,value:Object.freeze({apply})
