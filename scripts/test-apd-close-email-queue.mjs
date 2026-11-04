@@ -6,19 +6,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {apdOfferDeadlineStatus} from "./lib/apd-offer-close-guard.mjs";
-const code=readFileSync(process.env.APD_TEST_FINAL_WORKER==="1"?"tmp/apd-ready-worker/worker_hotfix.js":"tmp/apd-close-safe-research/worker_hotfix.js","utf8");
+const code=readFileSync(process.env.APD_TEST_MORNING_WORKER==="1"?"tmp/apd-morning-worker/worker_hotfix.js":process.env.APD_TEST_FINAL_WORKER==="1"?"tmp/apd-ready-worker/worker_hotfix.js":"tmp/apd-close-safe-research/worker_hotfix.js","utf8");
 const name="sendEmailAlertForUser";
 const start=code.indexOf("async function "+name+"(");
 const end=code.indexOf("\n__name("+name+",",start);
 assert.ok(start>=0&&end>start);
 const fn=code.slice(start,end);
+const normalizeStart=code.indexOf("function normalizeOfferPayload(");
+const normalizeEnd=code.indexOf("\n__name(normalizeOfferPayload,",normalizeStart);
+assert.ok(normalizeStart>=0&&normalizeEnd>normalizeStart);
+const normalizeOfferPayload=new Function("canonicalOfferIdentity",
+ code.slice(normalizeStart,normalizeEnd)+"\nreturn normalizeOfferPayload;")(
+  p=>String(p?.source_offer_key||p?.raw?.source_offer_key||p?.iddetalle||"TEST_ID")
+);
 const inserts=[];
 const send=new Function(
  "buildEmailAlertKey","normalizeOfferPayload","apdOfferDeadlineStatus","supabaseInsert",
  fn+"\nreturn "+name+";"
 )(
  ()=>"SYNTHETIC_ALERT_KEY",
- x=>x,
+ normalizeOfferPayload,
  apdOfferDeadlineStatus,
  async(env,table,payload)=>{inserts.push({table,payload});return {id:"MOCK_ID"};}
 );
@@ -52,6 +59,24 @@ test("verified open offer is queued through same function with synthetic DB",asy
  assert.equal(result.ok,true);
  assert.equal(result.queued,true);
  assert.deepEqual(inserts.map(x=>x.table),["pending_notifications","notification_delivery_logs"]);
+});
+test("real normalization of nested stored ABC offer still queues while open",async()=>{
+ inserts.length=0;
+ const official={estado:"Publicada",finoferta:"2099-12-31T07:30:00Z"};
+ const stored={estado:"",fecha_cierre:"31/12/2099",raw:{estado:"",raw:official}};
+ const result=await send(env,user,{offer_payload:stored});
+ assert.equal(result.ok,true);
+ assert.equal(result.queued,true);
+ assert.deepEqual(inserts.map(x=>x.table),["pending_notifications","notification_delivery_logs"]);
+});
+test("real normalization of nested stored ABC offer never queues after closure",async()=>{
+ inserts.length=0;
+ const official={estado:"Publicada",finoferta:"2020-01-01T07:30:00Z"};
+ const stored={estado:"",fecha_cierre:"01/01/2020",raw:{estado:"",raw:official}};
+ const result=await send(env,user,{offer_payload:stored});
+ assert.equal(result.skipped,true);
+ assert.equal(result.reason,"deadline_not_verified_or_expired");
+ assert.deepEqual(inserts,[]);
 });
 test("email cron and initial digest include precise closure gate",()=>{
  function body(n){
