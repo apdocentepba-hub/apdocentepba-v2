@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-const bundlePaths={bounded:"tmp/apd-bounded-abc-worker-release/worker_hotfix.js",published:"tmp/apd-published-query-research/worker_hotfix.js"};
+const bundlePaths={bounded:"tmp/apd-bounded-abc-worker-release/worker_hotfix.js",published:"tmp/apd-published-query-research/worker_hotfix.js",pid:"tmp/apd-published-pid-research/worker_hotfix.js"};
 const variant=process.env.APD_TEST_WORKER_VARIANT||"bounded";
 assert.ok(Object.hasOwn(bundlePaths,variant),"Only two immutable research bundles may be tested");
 const worker=readFileSync(bundlePaths[variant],"utf8");
