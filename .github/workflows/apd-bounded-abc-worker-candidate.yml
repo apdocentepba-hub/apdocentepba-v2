@@ -18,6 +18,7 @@ on:
       - 'scripts/build-apd-pid-bounded-research-candidate.mjs'
       - 'scripts/test-apd-bounded-pid-fallback.mjs'
       - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
+      - 'scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs'
       - 'scripts/build-apd-published-filter-research-candidate.mjs'
       - 'scripts/attest-apd-worker-candidate.mjs'
       - 'scripts/check-apd-worker-live-version-readonly.mjs'
@@ -158,6 +159,14 @@ jobs:
         run: |
           node --check scripts/probe-apd-generated-filter-live-parity-readonly.mjs
           node scripts/probe-apd-generated-filter-live-parity-readonly.mjs
+      - name: Confirm uploaded PID candidate source parity across six live ABC districts (12 public GETs max)
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs
+          node scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs
       - name: Preserve Worker source, frontend, login, plans, and database exactly
         run: |
           git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
