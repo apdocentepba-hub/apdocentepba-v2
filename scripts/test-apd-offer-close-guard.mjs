@@ -125,3 +125,26 @@ test("deeper ABC original finoferta takes precedence over stale outer value",()=
   raw:{estado:"Publicada",finoferta:"2020-01-01T07:30:00Z"}};
  assert.equal(apdOfferDeadlineStatus(item,Date.parse("2026-11-04T20:00:00Z")).reason,"deadline_reached");
 });
+
+test("two documented SAD closing clocks 07:30 and 10:30 remain Argentina-local when ABC emits Z",()=>{
+ const day="2026-11-05";
+ for(const hhmm of ["07:30","10:30"]){
+  const abc=day+"T"+hhmm+":00Z";
+  const local=Date.parse(day+"T"+hhmm+":00-03:00");
+  assert.equal(parseApdDeadlineInstant(abc,{abcWallTime:true}).instant_ms,local);
+  assert.equal(apdOfferDeadlineStatus(offer(abc),local-1).eligible,true);
+  assert.equal(apdOfferDeadlineStatus(offer(abc),local).eligible,false);
+  const genericUtc=Date.parse(abc);
+  assert.equal(local-genericUtc,3*60*60*1000,"Never silently interpret ABC Z as generic UTC");
+ }
+});
+test("district rescheduling is honored when ABC replaces a closing time with a later official finoferta",()=>{
+ const today=Date.parse("2026-11-05T10:31:00Z");
+ assert.equal(apdOfferDeadlineStatus(offer("2026-11-05T07:30:00Z"),today).eligible,false);
+ assert.equal(apdOfferDeadlineStatus(offer("2026-11-06T07:30:00Z"),today).eligible,true);
+ // Conservative contradiction handling: obsolete label saying Cerrada is not
+ // sufficient grounds to mark a new ABC deadline open.
+ assert.equal(apdOfferDeadlineStatus({
+  estado:"Cerrada",raw:{estado:"Publicada",finoferta:"2026-11-06T07:30:00Z"}
+ },today).eligible,false);
+});
