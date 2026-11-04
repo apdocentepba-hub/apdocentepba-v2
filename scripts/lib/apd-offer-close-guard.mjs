@@ -61,12 +61,13 @@ export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
   if(!states.length || states.some(state=>state!=="PUBLICADA")) {
     return {eligible:false,reason:"not_published"};
   }
-  // Raw ABC finoferta wins over display labels after any nesting depth.
+  // Trust the original ABC source field rather than a derived display label.
+  // A cached "fecha_cierre" (or "cierre") without finoferta is not proof
+  // that a teacher can still apply. Prefer the deepest official record.
   const rawDeadline=pick(
-    obj?.finoferta,raw?.finoferta,nested?.finoferta,original?.finoferta,
-    obj?.fecha_cierre_raw,raw?.fecha_cierre_raw,nested?.fecha_cierre_raw,
-    obj?.fecha_cierre,raw?.fecha_cierre,nested?.fecha_cierre,
-    obj?.cierre,raw?.cierre
+    original?.finoferta,nested?.finoferta,raw?.finoferta,obj?.finoferta,
+    original?.fecha_cierre_raw,nested?.fecha_cierre_raw,
+    raw?.fecha_cierre_raw,obj?.fecha_cierre_raw
   );
   const parse=parseApdDeadlineInstant(rawDeadline,{abcWallTime:true});
   if(!parse.ok) return {eligible:false,reason:parse.reason};
