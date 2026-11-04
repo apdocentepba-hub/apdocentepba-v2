@@ -26,8 +26,18 @@ function radarCard(html){
  return html.slice(begin,next);
 }
 function assertExistingRadarUnchanged(oldHtml,newHtml){
- assert.deepEqual(scriptReferences(newHtml),scriptReferences(oldHtml),
+ const oldScripts=scriptReferences(oldHtml);
+ const added='<script src="apd_panel_priority_v3.js?v=1"></script>';
+ const proposed=scriptReferences(newHtml);
+ const count=proposed.filter(tag=>tag===added).length;
+ assert.ok(count<=1,"Only one approved first-alert UI script is allowed");
+ assert.deepEqual(proposed.filter(tag=>tag!==added),oldScripts,
    "A non-radar change must not alter any already loaded script tags/order");
+ if(count===1){
+  assert.ok(newHtml.indexOf(added)>newHtml.indexOf('<script src="apd_ui_v21.js?v=20261102-clean"></script>'),
+   "First-alert UI script must load after existing panel scripts");
+  assert.match(newHtml,/id="panel-alertas"/);
+ }
  assert.equal(radarCard(newHtml),radarCard(oldHtml),
    "A non-radar change must not alter the existing provincial radar card");
 }
