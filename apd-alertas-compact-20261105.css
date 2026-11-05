@@ -1,0 +1,66 @@
+/* Ajuste visual aislado para el carrusel de alertas.
+   Revisión en rama de prueba; no cambia datos, lógica ni canales. */
+#panel-alertas .alerta-carousel-shell{
+  max-width:1080px;
+  margin:0 auto;
+}
+#panel-alertas .alerta-stage{
+  max-width:1040px;
+  margin:0 auto;
+  padding:0 112px;
+}
+#panel-alertas .alerta-main-card{
+  width:min(100%, 790px);
+  margin-inline:auto;
+}
+#panel-alertas .alerta-floating{
+  padding:14px 16px;
+  border-radius:18px;
+  box-shadow:0 10px 26px rgba(15,52,96,.09);
+}
+#panel-alertas .alerta-window-preview{
+  width:126px;
+  top:54px;
+  bottom:54px;
+  padding:12px;
+  border-radius:16px;
+  opacity:.24;
+  box-shadow:none;
+}
+#panel-alertas .alerta-window-preview-left{left:0;transform:scale(.94) rotate(-1deg)}
+#panel-alertas .alerta-window-preview-right{right:0;transform:scale(.94) rotate(1deg)}
+#panel-alertas .alerta-window-preview:hover{opacity:.5;box-shadow:0 8px 18px rgba(15,52,96,.08)}
+#panel-alertas .alerta-windowbar{margin-bottom:8px}
+#panel-alertas .alerta-topbar{margin-bottom:8px}
+#panel-alertas .alerta-nav{width:36px;height:36px;font-size:16px}
+#panel-alertas .alerta-progress{height:6px;margin-bottom:10px}
+#panel-alertas .alerta-tags{gap:5px;margin-bottom:7px}
+#panel-alertas .alerta-title{font-size:19px;margin:7px 0 5px}
+#panel-alertas .alerta-grid{gap:7px 10px}
+#panel-alertas .alerta-row{gap:3px;padding:7px 10px;border-radius:11px}
+#panel-alertas .alerta-val{font-size:12px;line-height:1.3}
+#panel-alertas .alerta-meta-card{margin-top:10px;padding:10px;border-radius:13px}
+#panel-alertas .alerta-meta-head{margin-bottom:7px}
+#panel-alertas .alerta-meta-grid{gap:7px}
+#panel-alertas .alerta-meta-item{padding:7px 9px;border-radius:10px}
+#panel-alertas .alerta-meta-v{font-size:12px;line-height:1.25}
+#panel-alertas .alerta-meta-note{margin-top:7px;font-size:12px;line-height:1.4}
+#panel-alertas .alerta-actions{gap:8px;margin-top:10px}
+#panel-alertas .alerta-dot{width:8px;height:8px}
+#panel-alertas .alerta-dot.is-active{width:22px}
+
+@media(max-width:900px){
+  #panel-alertas .alerta-stage{padding:0 76px}
+  #panel-alertas .alerta-window-preview{width:104px;opacity:.16}
+  #panel-alertas .alerta-main-card{width:min(100%,760px)}
+}
+@media(max-width:640px){
+  #panel-alertas .alerta-stage{padding:0}
+  #panel-alertas .alerta-window-preview{display:none}
+  #panel-alertas .alerta-floating{padding:12px;border-radius:15px}
+  #panel-alertas .alerta-grid,
+  #panel-alertas .alerta-meta-grid{grid-template-columns:1fr}
+  #panel-alertas .alerta-meta-item-wide{grid-column:auto}
+  #panel-alertas .alerta-nav{width:34px;height:34px}
+  #panel-alertas .alerta-title{font-size:18px}
+}
