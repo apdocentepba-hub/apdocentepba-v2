@@ -1,0 +1,24 @@
+name: APD public exact school code WFS mapping proof
+on:
+  push:
+    branches:
+      - research/mapa-escolar-apd-20261105
+    paths:
+      - '.github/workflows/apd-public-offer-wfs-exact-join-20261105.yml'
+      - 'scripts/test-apd-public-offers-school-wfs-join-20261105.mjs'
+permissions:
+  contents: read
+jobs:
+  exact-join:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check scripts/test-apd-public-offers-school-wfs-join-20261105.mjs
+          node scripts/test-apd-public-offers-school-wfs-join-20261105.mjs
