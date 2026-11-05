@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/apd-email-live-hotfix-once.yml'
+      - 'scripts/apd-live-email-nested-fix-20261105.mjs'
   workflow_dispatch:
 permissions:
   contents: read
