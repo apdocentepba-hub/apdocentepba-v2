@@ -1,0 +1,76 @@
+name: APD emergency email deadline fix one-time controlled release
+on:
+  push:
+    paths:
+      - '.github/workflows/apd-email-live-hotfix-once.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  minimal-live-email-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: apd-email-live-hotfix-20261105
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only source validation and reproduce nested deadline regression
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node --check scripts/apd-live-email-nested-fix-20261105.mjs
+          node scripts/apd-live-email-nested-fix-20261105.mjs prepare
+          node --check tmp/apd-live-email-hotfix-20261105/worker_hotfix.js
+      - name: Install pinned Wrangler from existing project
+        run: npm install --no-audit --no-fund
+      - name: Upload patched Worker version with zero production traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler versions upload \
+            --config tmp/apd-live-email-hotfix-20261105/wrangler.toml \
+            --no-bundle \
+            --preview-alias apd-email-hotfix \
+            --tag apd-email-deep-expiry-20261105 \
+            --message "Email deadline nested raw bugfix - source-locked"
+      - name: Verify uploaded version bytes and all 29 bindings and preview contracts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/apd-live-email-nested-fix-20261105.mjs verify
+      - name: Promote verified patch to 100 percent with automatic rollback on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${APD_NEW_ID:-}"
+          test -n "${APD_OLD_ID:-}"
+          node scripts/apd-live-email-nested-fix-20261105.mjs check-old
+          promoted=true
+          rollback() {
+            if [ "$promoted" = true ]; then
+              echo "Post-deploy gate failed; restoring previous production Worker."
+              npx wrangler versions deploy "${APD_OLD_ID}@100%" --yes \
+                --config tmp/apd-live-email-hotfix-20261105/wrangler.toml \
+                --message "Automatic rollback after failed 2026-11-05 email hotfix" || true
+            fi
+          }
+          trap rollback ERR
+          npx wrangler versions deploy "${APD_NEW_ID}@100%" --yes \
+            --config tmp/apd-live-email-hotfix-20261105/wrangler.toml \
+            --message "Verified nested email deadline fix 2026-11-05"
+          node scripts/apd-live-email-nested-fix-20261105.mjs check-new
+          promoted=false
+          trap - ERR
+          echo "APD_DEPLOY_VERIFIED new=${APD_NEW_ID} previous=${APD_OLD_ID}"
