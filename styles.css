@@ -1168,3 +1168,58 @@ input::placeholder{color:#b0b7c3}
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Visual pass: compact APD carousel without hiding offer or PID information. */
+.alerta-carousel-shell{width:100%}
+.alerta-stage{max-width:1120px;margin:0 auto;padding:0 76px}
+.alerta-main-card{width:100%;max-width:920px;margin:0 auto}
+.alerta-floating{padding:14px 16px;border-radius:18px;box-shadow:0 10px 26px rgba(15,52,96,.10)}
+.alerta-windowbar{margin-bottom:8px}
+.alerta-topbar{margin-bottom:8px}
+.alerta-nav{width:38px;height:38px}
+.alerta-progress{height:6px;margin-bottom:12px}
+.alerta-tags{gap:5px;margin:8px 0}
+.alerta-title{font-size:19px;line-height:1.22;margin:4px 0 8px}
+.alerta-grid-clean{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:6px}
+.alerta-grid-clean > *:last-child:nth-child(odd){grid-column:auto}
+.alerta-meta-card{padding:12px;margin-top:12px;border-radius:14px}
+.alerta-meta-head{margin-bottom:8px}
+.alerta-meta-grid{gap:8px}
+.alerta-meta-item{padding:9px 11px}
+.alerta-pid-card .alerta-meta-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.alerta-pid-card .alerta-meta-item{padding:8px 10px}
+.alerta-pid-card .alerta-meta-v{font-size:13px;line-height:1.3}
+.alerta-meta-note{margin-top:8px;font-size:12px;line-height:1.4}
+.alerta-actions{margin-top:12px}
+
+.alerta-window-preview{
+  top:50%;
+  bottom:auto;
+  width:132px;
+  height:270px;
+  max-height:44vh;
+  padding:12px;
+}
+.alerta-window-preview-left{transform:translateY(-50%) scale(.92) rotate(-2deg)}
+.alerta-window-preview-right{transform:translateY(-50%) scale(.92) rotate(2deg)}
+
+@media (max-width:1100px){
+  .alerta-stage{padding:0 52px}
+  .alerta-main-card{max-width:820px}
+  .alerta-window-preview{width:106px;height:230px}
+  .alerta-grid-clean{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .alerta-grid-clean > *:last-child:nth-child(odd){grid-column:1/-1}
+  .alerta-pid-card .alerta-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media (max-width:767px){
+  .alerta-stage{padding:0}
+  .alerta-window-preview{display:none}
+  .alerta-floating{padding:12px;border-radius:16px}
+  .alerta-grid-clean,.alerta-pid-card .alerta-meta-grid{grid-template-columns:1fr}
+  .alerta-grid-clean > *:last-child:nth-child(odd){grid-column:auto}
+  .alerta-meta-card{padding:10px}
+  .alerta-title{font-size:18px}
+  .alerta-nav{width:36px;height:36px}
+}
