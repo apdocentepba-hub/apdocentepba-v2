@@ -1,0 +1,24 @@
+name: APD school map public data read only research
+on:
+  push:
+    branches:
+      - research/mapa-escolar-apd-20261105
+    paths:
+      - '.github/workflows/apd-school-map-public-research-20261105.yml'
+      - 'scripts/research-public-abc-school-map-20261105.mjs'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check scripts/research-public-abc-school-map-20261105.mjs
+          node scripts/research-public-abc-school-map-20261105.mjs
