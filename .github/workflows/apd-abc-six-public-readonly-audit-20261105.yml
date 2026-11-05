@@ -1,0 +1,25 @@
+name: APD compare six saved offers to official ABC read-only
+on:
+  push:
+    branches:
+      - audit/apd-abc-six-20261105
+    paths:
+      - '.github/workflows/apd-abc-six-public-readonly-audit-20261105.yml'
+      - 'scripts/audit-apd-six-official-abc-readonly-20261105.mjs'
+permissions:
+  contents: read
+jobs:
+  compare-abc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax and compare six public IDs with official ABC Solr (GET only)
+        run: |
+          node --check scripts/audit-apd-six-official-abc-readonly-20261105.mjs
+          node scripts/audit-apd-six-official-abc-readonly-20261105.mjs
