@@ -21,8 +21,13 @@ jobs:
           node --input-type=module <<'NODE'
           import crypto from 'node:crypto';
           const token=process.env.CLOUDFLARE_API_TOKEN;
-          const account=process.env.CLOUDFLARE_ACCOUNT_ID;
-          if(!token || !account) throw new Error('Cloudflare credentials unavailable');
+          if(!token) throw new Error('Cloudflare read-only API token unavailable');
+          let account=process.env.CLOUDFLARE_ACCOUNT_ID;
+          if(!account){
+            const a=await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=50',{headers:{Authorization:'Bearer '+token}}).then(r=>r.json());
+            if(!a.success || !Array.isArray(a.result) || a.result.length!==1) throw new Error('Expected one authorized Cloudflare account');
+            account=a.result[0].id;
+          }
           const worker='ancient-wildflower-cd37';
           const api='https://api.cloudflare.com/client/v4/accounts/'+account;
           async function get(path){
