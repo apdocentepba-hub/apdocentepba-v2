@@ -21,7 +21,8 @@ const featureTypes=ftBlock.map(m=>{
 });
 const candidates=featureTypes.filter(x=>/unidad|estableci|educativ|escuela|local|ue|predio/i.test(x.name+' '+x.title));
 const probes=[];
-for(const item of candidates.slice(0,2)){
+const priorityLayers=['me:nivel_secundario_gestion_estatal','me:mejaam_secundaria_gestion_estatal','me:modalidad_tecnico_profesional_secundaria_gestion_estatal'];
+for(const item of [...priorityLayers.map(name=>({name})),...candidates.slice(0,1)]){
  const u=new URL(root);u.search=new URLSearchParams({service:'WFS',request:'GetFeature',version:'2.0.0',typeNames:item.name,count:'2',outputFormat:'application/json'});
  try{
   const r=await get(u);
