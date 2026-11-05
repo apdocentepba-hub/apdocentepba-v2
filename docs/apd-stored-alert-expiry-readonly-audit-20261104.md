@@ -45,3 +45,11 @@ Garantías del código preparado:
 5. Solo después, solicitar autorización independiente para canary de tráfico y posterior producción. No prometer entrega instantánea de alertas: el sistema de correo tiene franjas horarias.
 
 **No se enviaron correos, mensajes de WhatsApp o Telegram, no se hicieron gastos, no se cambiaron planes, no se limpiaron datos de producción y no se activó esta versión.**
+
+## Hallazgo posterior: filtros de cierre en el resumen por email
+
+La revisión del Worker candidato identificó un riesgo en la ruta de email: el payload guardado se normaliza varias veces durante la carga, el enriquecimiento y el render. El guard anterior inspeccionaba una cantidad fija de capas `raw`; en esa ruta podía no alcanzar el `finoferta` original de ABC y clasificar como “no verificable” una oferta futura. Esto es consistente con la omisión del resumen reportada, pero no reemplaza la confirmación con logs de la ejecución productiva.
+
+Se preparó una corrección en `scripts/lib/apd-offer-close-guard.mjs`: recorre de forma acotada hasta 32 niveles del grafo `raw/offer_payload`, mantiene el rechazo ante estados cerrados o conflictivos y da prioridad al `finoferta` fuente sobre etiquetas de presentación. La salida del candidato debe regenerarse desde esta rutina antes de cualquier uso.
+
+**Estado:** código preparado en rama `fix/apd-stored-email-deep-expiry-20261104`; todavía no se reconstruyó el artefacto ni se repitieron las pruebas. No se subió nada a Cloudflare y no cambió el tráfico.
