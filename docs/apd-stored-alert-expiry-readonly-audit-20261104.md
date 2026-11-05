@@ -65,3 +65,13 @@ Se preparó una corrección en `scripts/lib/apd-offer-close-guard.mjs`: recorre 
 - Sin llamadas a usuarios, sin correos enviados y sin cambios en producción.
 
 El ZIP offline `APDocentePBA-worker-candidate-358c142b.zip` contiene el Worker, la atestación y esta información de verificación. La revisión con cuenta real permanece pendiente.
+
+
+## Resultado del preview aislado (2026-11-05)
+
+- El flujo de GitHub Actions `42011749862` terminó correctamente. Subió la versión `5b70c426-a806-4ba6-bb71-78f8fb0a1c0c` bajo el alias de preview `apd-candidate`, con SHA-256 del módulo `358c142b4e5f837029453294a78f1a0934912c7e417f8adef6f00fab92d6ffd1`.
+- Cloudflare confirmó 29 bindings y el hash del módulo coincidió byte por byte con el candidato. La configuración declarada por Wrangler incluye los cuatro cron registrados en producción; la lectura de Settings mostró 4 cron. `versions upload` no ejecuta `triggers deploy`, según el propio log de Wrangler.
+- La versión productiva antes y después fue `0b289fe2-e978-414a-a1ae-9f849d7354ae`, al 100 %. El candidato quedó como versión de preview sin promoción ni tráfico productivo.
+- Smoke del preview con ID ficticio: endpoints protegidos respondieron 401; `/api/version`, `/api/planes` y OPTIONS respondieron correctamente. No se usaron cuentas reales y no se enviaron correos ni alertas.
+- El PR de preparación se cerró sin fusionar porque GitHub mostró 62 archivos por divergencia de la rama. El cierre no revierte ni elimina la versión preview ya cargada.
+- La autorización para cambiar el porcentaje de tráfico productivo sigue pendiente y no se solicitó ni ejecutó ningún cambio de tráfico.
