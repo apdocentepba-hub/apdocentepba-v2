@@ -1,0 +1,24 @@
+name: APD PBA public WFS layer schema research
+on:
+  push:
+    branches:
+      - research/mapa-escolar-apd-20261105
+    paths:
+      - '.github/workflows/apd-school-wfs-layer-probe-20261105.yml'
+      - 'scripts/research-school-wfs-layer-schema-20261105.mjs'
+permissions:
+  contents: read
+jobs:
+  schema-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check scripts/research-school-wfs-layer-schema-20261105.mjs
+          node scripts/research-school-wfs-layer-schema-20261105.mjs
