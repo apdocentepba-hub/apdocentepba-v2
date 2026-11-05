@@ -42,33 +42,34 @@ export function parseApdDeadlineInstant(value,options={}) {
   return {ok:true,instant_ms:instant,source:zone?.toUpperCase()==="Z"&&options.abcWallTime===true?"abc_local_wall_time":zone?"explicit_timezone":"argentina_local_time"};
 }
 export function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
-  const obj=offer?.offer_payload || offer || {};
-  // Re-reading saved offer_payload can nest the ABC raw record multiple
-  // times. Empty normalized fields must NOT shadow the official raw fields.
-  const raw=obj?.raw || {};
-  const nested=raw?.raw || {};
-  const original=nested?.raw || {};
-  const pick=(...values)=>values.find(v=>String(v??"").trim())||"";
-  // Fail closed on conflicting states across saved normalization layers.
-  // A cached "Publicada" must not overrule an official "Cerrada"; likewise
-  // a more recent closed label must not be overruled by stale raw "Publicada".
-  const states=[
-    original?.estado,original?.estado_oferta,original?.estado_actual,
-    nested?.estado,nested?.estado_oferta,nested?.estado_actual,
-    raw?.estado,raw?.estado_oferta,raw?.estado_actual,
-    obj?.estado,obj?.estado_oferta,obj?.estado_actual
-  ].map(x=>String(x??"").trim().toUpperCase()).filter(Boolean);
-  if(!states.length || states.some(state=>state!=="PUBLICADA")) {
+  // Stored alert payloads may be normalized repeatedly before the final
+  // email/channel render. Walk the complete bounded raw/payload graph so a
+  // valid source finoferta is not lost just because wrappers were added.
+  const root=offer && typeof offer==="object" ? offer : {};
+  const layers=[], seen=new Set(), pending=[{value:root,depth:0}];
+  for(let i=0;i<pending.length && layers.length<128;i++){
+    const {value,depth}=pending[i];
+    if(!value || typeof value!=="object" || depth>32 || seen.has(value)) continue;
+    seen.add(value);
+    layers.push(value);
+    if(value.offer_payload && typeof value.offer_payload==="object"){
+      pending.push({value:value.offer_payload,depth:depth+1});
+    }
+    if(value.raw && typeof value.raw==="object"){
+      pending.push({value:value.raw,depth:depth+1});
+    }
+  }
+  const stateFields=["estado","estado_oferta","estado_actual","estado_raw"];
+  const states=layers.flatMap(layer=>stateFields.map(key=>layer[key]))
+    .map(value=>String(value??"").trim().toUpperCase()).filter(Boolean);
+  // Fail closed if any saved layer records a closed or otherwise unknown state.
+  if(!states.length || states.some(state=>state!=="PUBLICADA")){
     return {eligible:false,reason:"not_published"};
   }
-  // Trust the original ABC source field rather than a derived display label.
-  // A cached "fecha_cierre" (or "cierre") without finoferta is not proof
-  // that a teacher can still apply. Prefer the deepest official record.
-  const rawDeadline=pick(
-    original?.finoferta,nested?.finoferta,raw?.finoferta,obj?.finoferta,
-    original?.fecha_cierre_raw,nested?.fecha_cierre_raw,
-    raw?.fecha_cierre_raw,obj?.fecha_cierre_raw
-  );
+  const deepest=layers.slice().reverse();
+  const firstField=key=>deepest.map(layer=>String(layer?.[key]??"").trim()).find(Boolean)||"";
+  // The source timestamp always outranks human-facing/derived labels.
+  const rawDeadline=firstField("finoferta")||firstField("fecha_cierre_raw");
   const parse=parseApdDeadlineInstant(rawDeadline,{abcWallTime:true});
   if(!parse.ok) return {eligible:false,reason:parse.reason};
   if(parse.instant_ms<=Number(nowMs)) return {eligible:false,reason:"deadline_reached",closes_at_ms:parse.instant_ms};
