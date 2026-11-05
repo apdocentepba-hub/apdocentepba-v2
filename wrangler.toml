@@ -15,7 +15,7 @@ keep_vars = true
 enabled = true
 
 [triggers]
-crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *"]
+crons = ["0 01 * * *", "0 17 * * *", "0 21 * * *", "1-59/2 * * * *"]
 
 [[kv_namespaces]]
 binding = "EMAIL_SWEEP_STATE"
