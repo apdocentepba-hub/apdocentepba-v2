@@ -8,8 +8,8 @@
   "modules": [
     {
       "name": "worker_hotfix.js",
-      "sha256": "335a62e1ab6127cf50b38000845766c7d7d5e2c314e2e002e996e41ace146a9c",
-      "bytes": 637281
+      "sha256": "358c142b4e5f837029453294a78f1a0934912c7e417f8adef6f00fab92d6ffd1",
+      "bytes": 647868
     }
   ],
   "bindings": [
@@ -136,5 +136,10 @@
     "0 17 * * *",
     "0 21 * * *",
     "1-59/2 * * * *"
-  ]
+  ],
+  "candidate_build": {
+    "base_sha256": "dee977aea3c1370b744f4a75a910c7429a2ed7b661dfa84d4b74d231db4422db",
+    "candidate_sha256": "358c142b4e5f837029453294a78f1a0934912c7e417f8adef6f00fab92d6ffd1",
+    "uploaded": false
+  }
 }
