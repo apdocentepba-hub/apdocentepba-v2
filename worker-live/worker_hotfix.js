@@ -1,3 +1,108 @@
+/* Presentation-only closing time formatter, based on the SAME guarded instant
+ * used for alert eligibility. Never parse display labels as local deadlines.
+ */
+function apdMailClosingLabel(offer,nowMs=Date.now()){
+  const status=apdOfferDeadlineStatus(offer,nowMs);
+  if(!status.eligible) return {safe:false,text:"Cierre no verificable. Consultá ABC.",reason:status.reason};
+  const parts=new Intl.DateTimeFormat("en-GB",{
+    timeZone:"America/Argentina/Buenos_Aires",
+    day:"2-digit",month:"2-digit",year:"numeric",
+    hour:"2-digit",minute:"2-digit",hourCycle:"h23",hour12:false
+  }).formatToParts(new Date(status.closes_at_ms));
+  const get=t=>parts.find(p=>p.type===t)?.value||"";
+  const text=get("day")+"/"+get("month")+"/"+get("year")+
+    " a las "+get("hour")+":"+get("minute")+" hs (Argentina)";
+  return {safe:true,text,closes_at_ms:status.closes_at_ms};
+}
+function apdMailGeneratedAtLabel(nowMs=Date.now()){
+  const parts=new Intl.DateTimeFormat("en-GB",{
+    timeZone:"America/Argentina/Buenos_Aires",
+    day:"2-digit",month:"2-digit",year:"numeric",
+    hour:"2-digit",minute:"2-digit",hourCycle:"h23",hour12:false
+  }).formatToParts(new Date(nowMs));
+  const get=t=>parts.find(p=>p.type===t)?.value||"";
+  return get("day")+"/"+get("month")+"/"+get("year")+
+    " "+get("hour")+":"+get("minute")+" hs (Argentina)";
+}
+
+/* Single conservative deadline gate for ABC APD offers.
+ * Generic ISO dates with Z/offset are absolute instants.
+ * ABC's Solr finoferta convention requires local Argentina wall time even
+ * when its field has a Z suffix: 07:30Z in ABC means 07:30 Argentina.
+ * This source-specific mapping is evidence-based and remains a release gate.
+ * A date without time or a missing/invalid deadline is NOT verifiably open.
+ * No I/O, no account data, no mutations.
+ */
+function parseApdDeadlineInstant(value,options={}) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return {ok:false,reason:"missing_deadline"};
+  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})?)?$/i);
+  let year,month,day,hour,minute,second,millisecond,zone;
+  if (match) {
+    [,year,month,day,hour,minute,second,millisecond,zone] = match;
+  } else {
+    match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (!match) return {ok:false,reason:"unsupported_deadline_format"};
+    [,day,month,year,hour,minute,second] = match;
+    zone = null;
+  }
+  if (hour == null || minute == null) return {ok:false,reason:"hour_unverified"};
+  const y=Number(year),m=Number(month),d=Number(day),h=Number(hour),mi=Number(minute),s=Number(second||0),ms=Number(String(millisecond||"").padEnd(3,"0")||0);
+  if (y<2000||y>2100||m<1||m>12||d<1||d>31||h>23||mi>59||s>59||ms>999) {
+    return {ok:false,reason:"invalid_deadline"};
+  }
+  const utcParts=Date.UTC(y,m-1,d,h,mi,s,ms);
+  const check=new Date(utcParts);
+  if (check.getUTCFullYear()!==y||check.getUTCMonth()!==m-1||check.getUTCDate()!==d) {
+    return {ok:false,reason:"invalid_deadline"};
+  }
+  let offsetMinutes = -180; // Local ABC timestamps without a zone: Argentina 2026.
+  if (zone && zone.toUpperCase()==="Z") offsetMinutes=options.abcWallTime===true?-180:0;
+  else if (zone) {
+    const sign=zone.startsWith("-")?-1:1;
+    const oh=Number(zone.slice(1,3)),om=Number(zone.slice(4,6));
+    if (oh>23||om>59) return {ok:false,reason:"invalid_deadline"};
+    offsetMinutes=sign*(oh*60+om);
+  }
+  const instant=utcParts-offsetMinutes*60000;
+  if (!Number.isFinite(instant)) return {ok:false,reason:"invalid_deadline"};
+  return {ok:true,instant_ms:instant,source:zone?.toUpperCase()==="Z"&&options.abcWallTime===true?"abc_local_wall_time":zone?"explicit_timezone":"argentina_local_time"};
+}
+function apdOfferDeadlineStatus(offer,nowMs=Date.now()){
+  // Stored alert payloads may be normalized repeatedly before the final
+  // email/channel render. Walk the complete bounded raw/payload graph so a
+  // valid source finoferta is not lost just because wrappers were added.
+  const root=offer && typeof offer==="object" ? offer : {};
+  const layers=[], seen=new Set(), pending=[{value:root,depth:0}];
+  for(let i=0;i<pending.length && layers.length<128;i++){
+    const {value,depth}=pending[i];
+    if(!value || typeof value!=="object" || depth>32 || seen.has(value)) continue;
+    seen.add(value);
+    layers.push(value);
+    if(value.offer_payload && typeof value.offer_payload==="object"){
+      pending.push({value:value.offer_payload,depth:depth+1});
+    }
+    if(value.raw && typeof value.raw==="object"){
+      pending.push({value:value.raw,depth:depth+1});
+    }
+  }
+  const stateFields=["estado","estado_oferta","estado_actual","estado_raw"];
+  const states=layers.flatMap(layer=>stateFields.map(key=>layer[key]))
+    .map(value=>String(value??"").trim().toUpperCase()).filter(Boolean);
+  // Fail closed if any saved layer records a closed or otherwise unknown state.
+  if(!states.length || states.some(state=>state!=="PUBLICADA")){
+    return {eligible:false,reason:"not_published"};
+  }
+  const deepest=layers.slice().reverse();
+  const firstField=key=>deepest.map(layer=>String(layer?.[key]??"").trim()).find(Boolean)||"";
+  // The source timestamp always outranks human-facing/derived labels.
+  const rawDeadline=firstField("finoferta")||firstField("fecha_cierre_raw");
+  const parse=parseApdDeadlineInstant(rawDeadline,{abcWallTime:true});
+  if(!parse.ok) return {eligible:false,reason:parse.reason};
+  if(parse.instant_ms<=Number(nowMs)) return {eligible:false,reason:"deadline_reached",closes_at_ms:parse.instant_ms};
+  return {eligible:true,reason:"verified_open",closes_at_ms:parse.instant_ms};
+}
+
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -878,7 +983,7 @@ async function fetchStoredOffers(env, userId) {
   return (Array.isArray(rows) ? rows : []).map((row) => ({
     ...row.offer_payload || {},
     offer_id: row.offer_id || row.offer_payload?.offer_id || ""
-  }));
+  })).filter(item => apdOfferDeadlineStatus(item).eligible);
 }
 __name(fetchStoredOffers, "fetchStoredOffers");
 __name2(fetchStoredOffers, "fetchStoredOffers");
@@ -1996,6 +2101,7 @@ function renderMailOfferCard(row) {
   const p = normalizeOfferPayload(raw);
   const chance = buildMailChanceInfo(p);
   const titulo = p.cargo || p.materia || p.title || "Oferta APD";
+  const cierreValidado = apdMailClosingLabel(raw);
   const rawOferta = p?.raw || raw?.raw || {};
   const escuela = String(
     p.escuela || p.nombreestablecimiento || raw.escuela || raw.nombreestablecimiento || rawOferta.escuela || rawOferta.nombreestablecimiento || ""
@@ -2199,7 +2305,7 @@ function renderMailOfferCard(row) {
                   </td>
                 </tr>
                 <tr>
-                  <td width="50%" style="padding:0 6px 0 0;vertical-align:top;">${mailInfoBox("CIERRE", escHtml(p.fecha_cierre || p.finoferta || "\u2014"))}</td>
+                  <td width="50%" style="padding:0 6px 0 0;vertical-align:top;">${mailInfoBox("CIERRE DE POSTULACIÓN (ABC)", escHtml(cierreValidado.text))}</td>
                   <td width="50%" style="padding:0 0 0 6px;vertical-align:top;">${mailInfoBox("ESTADO", escHtml(p.estado || "\u2014"))}</td>
                 </tr>
               </table>
@@ -2382,6 +2488,7 @@ async function syncUserOfferState(env, userId, offers) {
   const existingRows = Array.isArray(existing) ? existing : [];
   const map = new Map(existingRows.map((x) => [String(x.offer_id || ""), x]));
   const activeIds = [];
+  const upserts = /* @__PURE__ */ new Map();
   const offersList = Array.isArray(offers) ? offers : [];
   for (const offer of offersList) {
     const id = String(getOfferId(offer) || "").trim();
@@ -2397,23 +2504,38 @@ async function syncUserOfferState(env, userId, offers) {
     if (!map.has(id)) {
       payload.first_seen_at = now;
     }
+    upserts.set(id, payload);
+  }
+  // PostgREST accepts arrays for bulk upsert; cap requests at 100 rows.
+  // Repeated offer IDs use the final payload, preserving sequential last-write-wins.
+  // Group rows by shape: never send first_seen_at on an existing row.
+  // PostgREST arrays need homogeneous columns to preserve original timestamps.
+  const updates = []; const inserts = [];
+  for (const row of upserts.values()) {
+    (Object.prototype.hasOwnProperty.call(row, "first_seen_at") ? inserts : updates).push(row);
+  }
+  for (const pending of [updates, inserts]) {
+    for (let offset = 0; offset < pending.length; offset += 100) {
+      const batchRows = pending.slice(offset, offset + 100);
     const upsertResp = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/user_offer_state?on_conflict=user_id,offer_id`,
+      env.SUPABASE_URL + "/rest/v1/user_offer_state?on_conflict=user_id,offer_id",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
           Prefer: "resolution=merge-duplicates"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(batchRows)
       }
     );
     if (!upsertResp.ok) {
       const text = await upsertResp.text().catch(() => "");
-      throw new Error(`No se pudo upsert user_offer_state para ${id}: ${upsertResp.status} ${text}`);
+      throw new Error("No se pudo upsert user_offer_state (lote desde " + offset
+        + ", " + batchRows.length + " ofertas): " + upsertResp.status + " " + text);
     }
+  }
   }
   const uniqueActiveIds = [...new Set(activeIds)];
   const toDisable = existingRows.filter((x) => !uniqueActiveIds.includes(String(x.offer_id || ""))).map((x) => x.id).filter(Boolean);
@@ -3541,6 +3663,11 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
   if (!preferencias?.alertas_activas || !preferencias?.alertas_email) {
     return { ok: true, skipped: true, reason: "email_alerts_disabled" };
   }
+  // A preferences opt-in is not authorization to email an expired plan.
+  const activePlanForInitialEmail = await resolverPlanUsuario(env, user.id).catch(() => null);
+  if (!activePlanForInitialEmail || !isPlanActivo(activePlanForInitialEmail)) {
+    return {ok:true,skipped:true,reason:"plan_expired_or_inactive"};
+  }
   const existing = await supabaseSelect(
     env,
     `notification_delivery_logs?user_id=eq.${encodeURIComponent(user.id)}&channel=eq.email&template_code=eq.apd_initial_digest&select=id&limit=1`
@@ -3569,7 +3696,8 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
     }).catch(() => null);
     return { ok: false, skipped: true, reason: "build_failed" };
   }
-  const items = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];
+  const candidates = Array.isArray(alertData?.resultados) ? alertData.resultados : Array.isArray(alertData?.alertas) ? alertData.alertas : [];
+  const items = candidates.filter(item => apdOfferDeadlineStatus(item).eligible);
   if (!items.length) {
     await supabaseInsert(env, "notification_delivery_logs", {
       user_id: user.id,
@@ -3589,7 +3717,7 @@ async function sendInitialAlertsDigestIfNeeded(env, user, preferencias, options 
   }
   const MAX_VISIBLE = 5;
   const alerts = await enrichAlertsForRichChannels(env, user, items, MAX_VISIBLE);
-  const resolvedPlanForInitialEmail = await resolverPlanUsuario(env, user.id).catch(() => null);
+  const resolvedPlanForInitialEmail = activePlanForInitialEmail;
   const initialEmailPlanCode = getPlanCodeValue(resolvedPlanForInitialEmail) || "TRIAL_7D";
   const initialEmailCanShowPid = canShowPidForPlan(initialEmailPlanCode);
   const alertsForRender = applyPidVisibilityToAlerts(
@@ -5130,6 +5258,9 @@ async function sendEmailAlertForUser(env, user, alertItem, options = {}) {
     const canonicalAlert = normalizeOfferPayload(
       alertItem?.offer_payload || alertItem || {}
     );
+    if (!apdOfferDeadlineStatus(canonicalAlert).eligible) {
+      return {ok:true,skipped:true,reason:'deadline_not_verified_or_expired',alert_key:alertKey};
+    }
     const payload = {
       alert_key: alertKey || null,
       source: options.source || "cron",
@@ -5742,7 +5873,12 @@ async function runEmailAlertsSweep(env, options = {}) {
       });
       continue;
     }
-    const sortedLatest = storedAlerts.slice().sort((a, b) => emailAlertTime(b) - emailAlertTime(a));
+    const morningUrgent = /_06$/.test(slotKey);
+    const morningDeadlineLimit = Date.now() + (5 * 60 * 60 * 1000);
+    const sortedLatest = storedAlerts.filter(item => {
+      const closing = apdOfferDeadlineStatus(item?.offer_payload || item);
+      return closing.eligible && (!morningUrgent || closing.closes_at_ms <= morningDeadlineLimit);
+    }).sort((a, b) => emailAlertTime(b) - emailAlertTime(a));
     const totalAlerts = sortedLatest.length;
     const visibleSource = sortedLatest.slice(0, MAX_VISIBLE_ALERTS_IN_EMAIL);
     const visibleAlerts = await enrichEmailVisibleAlertsWithPostulantes(
@@ -5759,7 +5895,7 @@ async function runEmailAlertsSweep(env, options = {}) {
     const visibleAlertsForRender = applyPidVisibilityToAlerts(
       visibleAlerts,
       emailPlanCode
-    );
+    ).filter(item => apdOfferDeadlineStatus(item?.offer_payload || item).eligible);
     const shownCount = visibleAlertsForRender.length;
     if (!shownCount) {
       skippedAlerts += 1;
@@ -5793,8 +5929,8 @@ async function runEmailAlertsSweep(env, options = {}) {
       return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
     })();
     const subject = `Resumen APD \xB7 ${subjectSlotLabel} \xB7 ${shownCount} de ${totalAlerts}`;
-    const visibleAlertKeys = visibleSource.map((item) => buildEmailAlertKey(userId, item?.offer_payload || item || {})).filter(Boolean);
-    const visibleOfferIds = visibleSource.map((item) => {
+    const visibleAlertKeys = visibleAlertsForRender.map((item) => buildEmailAlertKey(userId, item?.offer_payload || item || {})).filter(Boolean);
+    const visibleOfferIds = visibleAlertsForRender.map((item) => {
       const p = normalizeOfferPayload(item?.offer_payload || item || {});
       return String(
         p.source_offer_key || p.iddetalle || p.idoferta || p.offer_id || item?.offer_id || ""
@@ -6072,6 +6208,7 @@ function getMostRecentArgentinaDigestSlotInfo(input = Date.now()) {
   if (hour >= 22) slotHour = 22;
   else if (hour >= 18) slotHour = 18;
   else if (hour >= 14) slotHour = 14;
+  else if (hour >= 6) slotHour = 6;
   else {
     const previous = new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0));
     year = previous.getUTCFullYear();
@@ -6108,7 +6245,7 @@ function getArgentinaDigestSlotInfo(input = Date.now()) {
   const day = String(map.day || "");
   const hour = Number(map.hour || 0);
   const minute = Number(map.minute || 0);
-  const slotHour = [14, 18, 22].includes(hour) ? hour : null;
+  const slotHour = [6, 14, 18, 22].includes(hour) ? hour : null;
   const slotKey = slotHour != null ? `${year}-${month}-${day}_${String(slotHour).padStart(2, "0")}` : "";
   return {
     year,
@@ -7664,10 +7801,12 @@ async function construirAlertasParaUsuario(env, userId) {
       resultados: []
     };
   }
+  // PID is read-only and independent of district fetch. Start early, await later.
+  const pidPromise = obtenerUltimaPidGuardada(userId).catch(() => null);
   const catalogos = await cargarCatalogos(env);
   const prefsCanon = canonizarPreferenciasConCatalogo(prefs, catalogos);
   const { ofertas, debugDistritos } = await traerOfertasAPDPorDistritos(prefsCanon);
-  const pidData = await obtenerUltimaPidGuardada(userId).catch(() => null);
+  const pidData = await pidPromise;
   const pidRows = normalizePidRows(pidData);
   const districtIndex = buildDistrictIndex(catalogos);
   const pidMeta = pidData?.result ? {
@@ -7678,6 +7817,12 @@ async function construirAlertasParaUsuario(env, userId) {
   const descartadas = [];
   const vistos = /* @__PURE__ */ new Set();
   for (const oferta of ofertas) {
+    // ABC Publicada is not sufficient: require unexpired, precise closure.
+    const deadline = apdOfferDeadlineStatus(oferta);
+    if (!deadline.eligible) {
+      descartadas.push({iddetalle:oferta.iddetalle || oferta.id || null,motivo:'cierre_'+deadline.reason});
+      continue;
+    }
     if (!ofertaEsVisibleParaAlerta(oferta)) {
       descartadas.push({
         iddetalle: oferta.iddetalle || oferta.id || null,
@@ -7900,13 +8045,19 @@ async function obtenerUltimaPidGuardada(userId) {
     "buscar_pid_consulta",
     "buscar_pid"
   ];
-  for (const action of actions) {
-    const data = await postPidStorageFromMainWorker({
-      action,
-      docente_id: docenteId
-    }).catch(() => null);
-    const normalized = normalizePidStorageResponse(data);
-    if (normalized) return normalized;
+  // Preserve fallback priority while bounding read-only lookup concurrency.
+  for (let offset = 0; offset < actions.length; offset += 2) {
+    const batch = actions.slice(offset, offset + 2);
+    const replies = await Promise.all(batch.map((action) =>
+      postPidStorageFromMainWorker({
+        action,
+        docente_id: docenteId
+      }).catch(() => null)
+    ));
+    for (const data of replies) {
+      const normalized = normalizePidStorageResponse(data);
+      if (normalized) return normalized;
+    }
   }
   return null;
 }
@@ -10063,8 +10214,34 @@ async function traerOfertasAPDPorDistritos(prefs) {
   const todas = [];
   const vistos = /* @__PURE__ */ new Set();
   const debugDistritos = [];
-  for (const distritoAPD of distritos) {
-    const info = await traerOfertasAPDDeUnDistrito(distritoAPD);
+  // Bounded GET concurrency; result aggregation remains in original district order.
+  const districtResults = new Array(distritos.length);
+  let districtCursor = 0;
+  let districtFailed = false;
+  let districtFailure;
+  async function fetchNextDistrict() {
+    while (!districtFailed && districtCursor < distritos.length) {
+      const index = districtCursor++;
+      try {
+        districtResults[index] = await traerOfertasAPDDeUnDistrito(distritos[index]);
+      } catch (error) {
+        // Stop scheduling more ABC requests after the first observed error.
+        // Allow already-running district GETs to settle; never hide the error.
+        if (!districtFailed) {
+          districtFailure = error;
+          districtFailed = true;
+        }
+        return;
+      }
+    }
+  }
+  await Promise.all(Array.from({
+    length: Math.min(2, distritos.length)
+  }, () => fetchNextDistrict()));
+  if (districtFailed) throw districtFailure;
+  for (let index = 0; index < distritos.length; index++) {
+    const distritoAPD = distritos[index];
+    const info = districtResults[index];
     debugDistritos.push({
       distrito_apd: distritoAPD,
       estrategia: "fetch_por_distrito_completo",
@@ -10154,7 +10331,8 @@ async function traerOfertasAPDDeUnDistrito(distrito) {
       rows: String(rowsPerPage),
       start: String(start),
       wt: "json",
-      sort: "ult_movimiento desc"
+      sort: "ult_movimiento desc",
+      fq: 'estado:"Publicada"'
     });
     const res = await fetch(`${url}?${params.toString()}`, {
       method: "GET",
@@ -11004,7 +11182,7 @@ async function sendPendingEmailDigests(env, options = {}) {
       `user_offer_state?user_id=eq.${encodeURIComponent(user.id)}&is_active=eq.true&select=id,offer_id,offer_payload,first_emailed_at,last_emailed_at,last_seen_at`
     ).catch(() => []);
     if (!Array.isArray(rows) || !rows.length) continue;
-    const nuevas = rows.filter((x) => x && x.is_active !== false).sort((a, b) => {
+    const nuevas = rows.filter((x) => x && x.is_active !== false && apdOfferDeadlineStatus(x?.offer_payload || x).eligible).sort((a, b) => {
       const tb = parseFechaFlexible(b?.last_seen_at)?.getTime() || parseFechaFlexible(b?.updated_at)?.getTime() || parseFechaFlexible(b?.created_at)?.getTime() || 0;
       const ta = parseFechaFlexible(a?.last_seen_at)?.getTime() || parseFechaFlexible(a?.updated_at)?.getTime() || parseFechaFlexible(a?.created_at)?.getTime() || 0;
       return tb - ta;
@@ -11035,8 +11213,11 @@ async function sendPendingEmailDigests(env, options = {}) {
         };
       })
     );
-    const html = buildTop5NuevasHtml(alerts, user);
-    const asunto = `APDocentePBA: ${alerts.length} nueva${alerts.length === 1 ? "" : "s"} oferta${alerts.length === 1 ? "" : "s"} para vos`;
+    // Recheck after reading postulantes: offer may expire while enriching.
+    const safeAlerts = alerts.filter(item => apdOfferDeadlineStatus(item?.offer_payload || item).eligible);
+    if (!safeAlerts.length) continue;
+    const html = buildTop5NuevasHtml(safeAlerts, user);
+    const asunto = `APDocentePBA: ${safeAlerts.length} nueva${safeAlerts.length === 1 ? "" : "s"} oferta${safeAlerts.length === 1 ? "" : "s"} para vos`;
     const send = await enviarMailBrevo(
       user.email,
       user.nombre || "",
@@ -11048,7 +11229,7 @@ async function sendPendingEmailDigests(env, options = {}) {
       sentDigests++;
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
       await Promise.all(
-        nuevas.map((row) => {
+        nuevas.filter(row => safeAlerts.some(item => item.row_id === row.id)).map((row) => {
           const patch = {
             last_emailed_at: nowIso
           };
@@ -11107,6 +11288,7 @@ function buildDigestHtml(alerts, user, options = {}) {
   const title = `Resumen APD compatible con tus preferencias`;
   const intro = String(options?.intro_text || "").trim() || `Hola ${escHtml(user?.nombre || "docente")}, encontramos coincidencias con las preferencias que cargaste en APDocentePBA. Te mostramos las m\xE1s recientes para que puedas revisarlas.`;
   const items = visibleAlerts.map(renderMailOfferCard).join("");
+  const generatedLabel = apdMailGeneratedAtLabel();
   const moreNote = remainingCount > 0 ? `
       <div style="margin-top:14px;padding:12px 14px;background:#fff8e8;border:1px solid #f2d38b;border-radius:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b4e00;">
 Hay m\xE1s coincidencias disponibles. Pod\xE9s ver el listado completo desde tu panel.      </div>
@@ -11136,6 +11318,9 @@ Resumen personalizado                  </div>
 
                   <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#374151;margin:0 0 16px 0;">
                     ${intro}
+                  </div>
+                  <div style="background:#fff8e8;border:1px solid #f2d38b;padding:11px 12px;margin:0 0 14px 0;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#654321;">
+                    ${escHtml("Aviso generado: " + generatedLabel + ". Fecha y hora de cierre según la oferta consultada en ABC. Verificá el plazo y la disponibilidad en ABC y en la SAD de tu distrito antes de postularte; pueden existir cambios o diferencias de horario. Este mensaje no confirma una designación.")}
                   </div>
 
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -11823,11 +12008,8 @@ __name222(matchesNivel, "matchesNivel");
 __name2222(matchesNivel, "matchesNivel");
 __name22222(matchesNivel, "matchesNivel");
 function ofertaVigente(oferta) {
-  const estado = norm2(oferta?.estado || "");
-  if (["ANULADA", "DESIGNADA", "DESIERTA", "CERRADA", "FINALIZADA", "NO VIGENTE"].includes(estado)) return false;
-  const cierre = parseFechaFlexible2(oferta?.finoferta || oferta?.fecha_cierre || "");
-  if (cierre && cierre.getTime() < Date.now()) return false;
-  return true;
+  // Do not apply the old UTC-runtime interpretation after the ABC local gate.
+  return apdOfferDeadlineStatus(oferta).eligible;
 }
 __name(ofertaVigente, "ofertaVigente");
 __name2(ofertaVigente, "ofertaVigente");
@@ -12810,7 +12992,8 @@ async function handleTelegramWebhook(request, env) {
       last_seen_at: row?.last_seen_at || ""
     })).filter((item) => {
       const p = item.offer_payload || {};
-      return !!(p.offer_id || p.source_offer_key || p.iddetalle || p.idoferta || p.cargo || p.materia || p.title);
+      return !!(p.offer_id || p.source_offer_key || p.iddetalle || p.idoferta || p.cargo || p.materia || p.title)
+        && apdOfferDeadlineStatus(item.offer_payload || item).eligible;
     });
   }
   __name(loadTelegramStoredAlerts, "loadTelegramStoredAlerts");
@@ -13148,7 +13331,7 @@ async function handleTelegramWebhook(request, env) {
     const visibleAlertsForRender = applyPidVisibilityToAlerts(
       visibleAlerts,
       entitlement?.plan_code
-    );
+    ).filter(item => apdOfferDeadlineStatus(item?.offer_payload || item).eligible);
     const reply = buildTelegramQueryDigest(visibleAlertsForRender);
     try {
       await sendTelegramLongText(env, chatId, reply);
@@ -13649,7 +13832,8 @@ async function handleWhatsAppWebhook(request, env) {
       last_seen_at: row?.last_seen_at || ""
     })).filter((item) => {
       const p = item.offer_payload || {};
-      return !!(p.offer_id || p.source_offer_key || p.iddetalle || p.idoferta || p.codigo || p.cargo || p.materia || p.title);
+      return !!(p.offer_id || p.source_offer_key || p.iddetalle || p.idoferta || p.codigo || p.cargo || p.materia || p.title)
+        && apdOfferDeadlineStatus(item.offer_payload || item).eligible;
     });
   }
   __name(waLoadStoredAlerts, "waLoadStoredAlerts");
@@ -13854,7 +14038,7 @@ async function handleWhatsAppWebhook(request, env) {
           const visibleAlertsForRender = applyPidVisibilityToAlerts(
             visibleAlerts,
             entitlement?.plan_code
-          );
+          ).filter(item => apdOfferDeadlineStatus(item?.offer_payload || item).eligible);
           if (!visibleAlertsForRender.length) {
             await waSend(
               env,
@@ -14770,6 +14954,10 @@ var worker_hotfix_default = {
     const emailCronExpr = String(event?.cron || "").trim();
     const isContinuationCron = emailCronExpr === "1-59/2 * * * *";
     const isPrimaryEmailCron = emailCronExpr === "0 01 * * *" || emailCronExpr === "0 17 * * *" || emailCronExpr === "0 21 * * *";
+    // 06:01-06:13 Buenos Aires kickoff on existing 2-minute Cron.
+    // Never insert a new trigger into a free Cloudflare account.
+    const isMorningKickoff = isContinuationCron && slot.hour === 6
+      && slot.minute >= 1 && slot.minute <= 13;
     const isRecognizedEmailCron = isPrimaryEmailCron || isContinuationCron;
     if (!isRecognizedEmailCron) return;
     if (isPrimaryEmailCron) {
@@ -14777,7 +14965,7 @@ var worker_hotfix_default = {
         (err) => console.error("APD expiry notices cron failed", String(err?.message || err))
       ));
     }
-    if (isContinuationCron && !activeSlotKey) {
+    if (isContinuationCron && !activeSlotKey && !isMorningKickoff) {
       const backgroundTasks = [];
       if (slot.slot_key && slot.minute >= 13) {
         backgroundTasks.push(checkEmailCronSlotHealth(env, kv, slot.slot_key).catch((err) => {
