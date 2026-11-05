@@ -10,6 +10,7 @@ function cargo(doc){
  if(/MATEM|\bMTM\b/.test(s))return 'MTM';
  if(/\bELI\b/.test(s))return 'ELI';
  if(/\bPLI\b/.test(s))return 'PLI';
+ if(/\bNTI\b|NTICX|NUEVAS TECNOLOGIAS/.test(s))return 'NTI';
  return 'OTHER';
 }
 let requests=0;
@@ -40,7 +41,7 @@ for(const d of districts){
  assert.equal(docs.length,total,'ABC pagination overflow');
  all.push(...docs);summary.push({district:d,published:total});
 }
-const known=new Set(['PR','MTM','MCS','ELI','PLI']);
+const known=new Set(['PR','MTM','MCS','ELI','PLI','NTI']);
 const matches=all.filter(d=>known.has(cargo(d))&&/SECUND|PRIMAR|TECNIC/.test(normalize(d.descnivelmodalidad)));
 const extra=matches.filter(d=>!tracked.has(String(d.iddetalle||'')));
-console.log('APD_ABC_KNOWN_PREFERENCES '+JSON.stringify({timestamp:new Date().toISOString(),source:endpoint,requests,districts:summary,total_published:all.length,known_codes:[...known],selected_codes_matching_offers:matches.length,tracked_six_in_selected:matches.filter(d=>tracked.has(String(d.iddetalle||''))).length,other_matching_public_offer_ids:extra.map(d=>String(d.iddetalle)),others_count:extra.length,by_code:Object.fromEntries([...known].map(c=>[c,matches.filter(d=>cargo(d)===c).length])),unknown_sixth_preference:'not_counted',read_only:true}));
+console.log('APD_ABC_KNOWN_PREFERENCES '+JSON.stringify({timestamp:new Date().toISOString(),source:endpoint,requests,districts:summary,total_published:all.length,known_codes:[...known],selected_codes_matching_offers:matches.length,tracked_six_in_selected:matches.filter(d=>tracked.has(String(d.iddetalle||''))).length,other_matching_public_offer_ids:extra.map(d=>String(d.iddetalle)),others_count:extra.length,by_code:Object.fromEntries([...known].map(c=>[c,matches.filter(d=>cargo(d)===c).length])),all_six_preference_codes_checked:true,read_only:true}));
