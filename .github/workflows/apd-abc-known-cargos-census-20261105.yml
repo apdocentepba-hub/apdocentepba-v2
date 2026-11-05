@@ -1,0 +1,23 @@
+name: APD official ABC known preferences public census
+on:
+  push:
+    branches: [audit/apd-abc-six-20261105]
+    paths:
+      - '.github/workflows/apd-abc-known-cargos-census-20261105.yml'
+      - 'scripts/apd-abc-extra-matches-readonly-20261105.mjs'
+permissions:
+  contents: read
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check scripts/apd-abc-extra-matches-readonly-20261105.mjs
+          node scripts/apd-abc-extra-matches-readonly-20261105.mjs
