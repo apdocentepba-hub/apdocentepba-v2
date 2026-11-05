@@ -53,3 +53,15 @@ La revisión del Worker candidato identificó un riesgo en la ruta de email: el 
 Se preparó una corrección en `scripts/lib/apd-offer-close-guard.mjs`: recorre de forma acotada hasta 32 niveles del grafo `raw/offer_payload`, mantiene el rechazo ante estados cerrados o conflictivos y da prioridad al `finoferta` fuente sobre etiquetas de presentación. La salida del candidato debe regenerarse desde esta rutina antes de cualquier uso.
 
 **Estado:** código preparado en rama `fix/apd-stored-email-deep-expiry-20261104`; todavía no se reconstruyó el artefacto ni se repitieron las pruebas. No se subió nada a Cloudflare y no cambió el tráfico.
+
+
+## Verificación offline y estado Cloudflare (2026-11-05)
+
+- El bundle base local coincide con SHA-256 `dee977aea3c1370b744f4a75a910c7429a2ed7b661dfa84d4b74d231db4422db`.
+- Se regeneró offline el Worker candidato reemplazando `apdOfferDeadlineStatus` por la versión acotada que recorre wrappers `raw` y `offer_payload`. Nuevo SHA-256: `358c142b4e5f837029453294a78f1a0934912c7e417f8adef6f00fab92d6ffd1`.
+- Verificación local: `node --check` OK y 26 pruebas dirigidas aprobadas (0 fallas), incluyendo el resumen por correo y el vencimiento después del enriquecimiento.
+- Lectura de Cloudflare: 29 entradas de configuración (28 variables/secretos y 1 binding KV) y 4 cron triggers; no se modificó configuración.
+- La pantalla de Deployments mostraba la versión activa `0b289fe2` con 100 % de tráfico. No se subió este nuevo candidato ni se cambió tráfico: el panel de edición no ofrece una garantía visible de carga aislada, y el workflow de preview del repo construye desde `worker-live/worker_hotfix.js`, que no contiene esta función de cierre. No se reutilizó ese workflow para evitar desplegar una fuente distinta al bundle verificado.
+- Sin llamadas a usuarios, sin correos enviados y sin cambios en producción.
+
+El ZIP offline `APDocentePBA-worker-candidate-358c142b.zip` contiene el Worker, la atestación y esta información de verificación. La revisión con cuenta real permanece pendiente.
