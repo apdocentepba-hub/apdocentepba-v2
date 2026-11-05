@@ -96,6 +96,7 @@ jobs:
           echo "CANDIDATE_TAG=${CANDIDATE_TAG}" >> "$GITHUB_ENV"
           npx wrangler versions upload \
             --preview-alias apd-candidate \
+            --no-bundle \
             --tag "${CANDIDATE_TAG}" \
             --message "Zero-traffic preview for PR #${{ github.event.pull_request.number }} ${GITHUB_SHA}"
 
@@ -151,12 +152,17 @@ jobs:
 
           ROOT="$ROOT" node - <<'NODE'
           const fs = require('fs');
+          const crypto = require('crypto');
           const candidate = JSON.parse(fs.readFileSync(`${process.env.ROOT}/candidate.json`, 'utf8'));
           const canonical = JSON.parse(fs.readFileSync('worker-live/manifest.json', 'utf8'));
           if (!candidate.success || !candidate.result?.id) throw new Error('Candidate version detail missing');
           const live = candidate.result.bindings || [];
+          const expectedBindings = canonical.bindings || [];
+          if (expectedBindings.length !== 29 || live.length !== expectedBindings.length) {
+            throw new Error(`Candidate binding count mismatch: expected ${expectedBindings.length}, found ${live.length}`);
+          }
           const byKey = new Map(live.map(binding => [`${binding.name}:${binding.type}`, binding]));
-          for (const expected of canonical.bindings || []) {
+          for (const expected of expectedBindings) {
             const key = `${expected.name}:${expected.type}`;
             const actual = byKey.get(key);
             if (!actual) throw new Error(`Candidate binding shape missing ${key}`);
@@ -165,7 +171,12 @@ jobs:
               if (id !== expected.namespace_id) throw new Error('Candidate EMAIL_SWEEP_STATE namespace mismatch');
             }
           }
-          console.log(`Candidate binding shape OK: ${live.length} bindings; secret values not printed.`);
+          const main = (candidate.result.modules || []).find(module => module.name === canonical.main_module);
+          if (!main?.content_base64) throw new Error('Candidate main module content missing');
+          const moduleSha = crypto.createHash('sha256').update(Buffer.from(main.content_base64, 'base64')).digest('hex');
+          const expectedSha = canonical.modules.find(module => module.name === canonical.main_module)?.sha256;
+          if (!expectedSha || moduleSha !== expectedSha) throw new Error(`Candidate module SHA mismatch: expected ${expectedSha}, found ${moduleSha}`);
+          console.log(`Candidate verified: ${live.length} bindings; module SHA ${moduleSha}; secret values not printed.`);
           NODE
 
       - name: Smoke isolated preview URL
