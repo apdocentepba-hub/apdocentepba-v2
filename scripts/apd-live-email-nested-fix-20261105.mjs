@@ -80,7 +80,7 @@ function extract(source,name){
   return {from,to,body:source.slice(from,to).trimEnd()};
 }
 function tests(parser,oldFunction,newFunction){
-  const compile=body=>vm.runInNewContext(parser+'\n'+body+'\n;apdOfferDeadlineStatus;',{}, {timeout:3000});
+  const compile=body=>vm.runInNewContext('const __name=(fn)=>fn;\n'+parser+'\n'+body+'\n;apdOfferDeadlineStatus;',{}, {timeout:3000});
   const old=compile(oldFunction),fixed=compile(newFunction);
   const now=Date.parse('2026-11-05T17:00:00Z');
   const make=(fin='2026-11-06T07:30:00Z',estado='Publicada',depth=7)=>{
