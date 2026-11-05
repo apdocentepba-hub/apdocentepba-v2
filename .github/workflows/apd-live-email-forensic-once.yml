@@ -1,0 +1,52 @@
+name: APD live email forensic read-only
+on:
+  push:
+    paths:
+      - '.github/workflows/apd-live-email-forensic-once.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-active-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare active Cloudflare Worker source with the email deadline guard
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import crypto from 'node:crypto';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const account=process.env.CLOUDFLARE_ACCOUNT_ID;
+          if(!token || !account) throw new Error('Cloudflare credentials unavailable');
+          const worker='ancient-wildflower-cd37';
+          const api='https://api.cloudflare.com/client/v4/accounts/'+account;
+          async function get(path){
+            const r=await fetch(api+path,{headers:{Authorization:'Bearer '+token}});
+            const j=await r.json();
+            if(!r.ok || !j.success) throw new Error('Cloudflare read-only API failure status '+r.status);
+            return j.result;
+          }
+          const dep=await get('/workers/scripts/'+worker+'/deployments');
+          const active=(dep.deployments?.[0]?.versions||[]).filter(x=>Number(x.percentage)>0);
+          if(active.length!==1 || Number(active[0].percentage)!==100) throw new Error('Expected one full active production version');
+          const id=active[0].version_id;
+          const v=await get('/workers/workers/'+worker+'/versions/'+id+'?include=modules');
+          const module=(v.modules||[]).find(x=>x.name===v.main_module);
+          if(!module?.content_base64) throw new Error('Active module missing');
+          const s=Buffer.from(module.content_base64,'base64').toString('utf8');
+          const hash=crypto.createHash('sha256').update(s).digest('hex');
+          console.log(JSON.stringify({kind:'active_worker_meta',active_version:id,main_module:v.main_module,module_sha256:hash,bytes:Buffer.byteLength(s),bindings:(v.bindings||[]).length,cron_guard_found:s.includes('no_visible_alerts_after_normalize')}));
+          const terms=['function apdOfferDeadlineStatus(','function parseApdDeadlineInstant(','function normalizeOfferPayload(','const sortedLatest =','const visibleAlertsForRender =','reason: "no_visible_alerts_after_normalize"'];
+          for(const term of terms){
+            const at=s.indexOf(term);
+            const n=term.startsWith('function apd')?3900:term.startsWith('function parse')?2800:term.startsWith('function normalize')?1650:1750;
+            const excerpt=at<0?'NOT_FOUND':s.slice(at,at+n);
+            console.log('FORENSIC '+JSON.stringify({term,found:at>=0,excerpt:excerpt.replace(/[\r\n]+/g,' ').slice(0,n)}));
+          }
+          console.log('READ_ONLY_FINISHED');
+          NODE
