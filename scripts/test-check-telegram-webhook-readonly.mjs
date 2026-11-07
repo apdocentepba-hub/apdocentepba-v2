@@ -34,9 +34,18 @@ test('diagnostic only performs getWebhookInfo, never sends or changes webhook', 
     seen.push([url,options.method]);
     return {ok:true,json:async()=>({ok:true,result:{url:endpoint}})};
   };
-  const result=await checkTelegramWebhook({token:'synthetic-test-only',expectedUrl:endpoint,fetchFn:mockFetch});
+  const result=await checkTelegramWebhook({token:'123456:synthetic-test-only',expectedUrl:endpoint,fetchFn:mockFetch});
   assert.equal(result.correct_endpoint,true);
   assert.equal(seen.length,1);
   assert.match(seen[0][0],/\/getWebhookInfo$/);
   assert.equal(seen[0][1],'GET');
+});
+
+test('rejects malformed token before calling Telegram', async () => {
+  let called=false;
+  await assert.rejects(
+    checkTelegramWebhook({token:'bad/secret', fetchFn:async()=>{called=true;throw Error('fetch should not run');}}),
+    /token format invalid/
+  );
+  assert.equal(called,false);
 });
