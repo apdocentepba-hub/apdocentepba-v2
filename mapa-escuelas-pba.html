@@ -1,5 +1,12 @@
 <!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Mapa de Escuelas PBA | APDocentePBA</title><meta name="description" content="Mapa orientativo de establecimientos educativos de Provincia de Buenos Aires."><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"><link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"><style>body{margin:0;font-family:Arial,sans-serif;background:#f5f9ff;color:#061a37}.wrap{max-width:1200px;margin:auto;padding:16px}.hero,.panel{background:white;border:1px solid #dbe7f5;border-radius:22px;padding:18px;margin:12px 0}.hero h1{font-size:38px;margin:8px 0}.btn{display:inline-block;border:1px solid #dbe7f5;border-radius:999px;padding:10px 14px;background:white;color:#061a37;text-decoration:none;font-weight:bold;cursor:pointer}.btn.primary{background:#2454f5;color:white;border-color:#2454f5}.tag{display:inline-block;background:#eef6ff;color:#0f4fb8;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:bold}.grid{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px}.grid input,.grid select{border:1px solid #cbd8ea;border-radius:12px;padding:10px;font:inherit}#map{height:620px;border-radius:18px;border:1px solid #dbe7f5}.note{background:#fff7df;border:1px dashed #e6b54a;border-radius:16px;padding:12px;color:#604512}.stats{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#e9f8ef;color:#176b3a;border-radius:999px;padding:6px 10px;font-weight:bold;font-size:12px}.small{color:#607086;font-size:13px}.list{max-height:300px;overflow:auto}.row{border-bottom:1px solid #dbe7f5;padding:9px 0}.row b{display:block}.row span{display:block;color:#607086;font-size:13px}.error{background:#fff7df;color:#604512;border:1px dashed #e6b54a;border-radius:12px;padding:10px;margin-top:10px;display:none}@media(max-width:850px){.grid{grid-template-columns:1fr}.hero h1{font-size:30px}#map{height:480px}}</style></head><body><div class="wrap"><div class="hero"><span class="tag">Mapa de escuelas PBA</span><h1>Escuelas y distritos de PBA en un mapa</h1><p>Primero intenta padrón oficial. Si las fuentes oficiales bloquean CORS, carga escuelas desde OpenStreetMap como respaldo con coordenadas y “cómo llegar”.</p><a class="btn" href="./herramientas.html">Volver a herramientas</a> <a class="btn" href="./biblioteca-docente.html">Biblioteca</a></div><div class="panel"><div class="grid"><input id="q" placeholder="Buscar escuela, CUE, domicilio, localidad..." oninput="filtrar()"><select id="distrito" onchange="filtrar()"><option value="">Todos los distritos/localidades</option></select><select id="nivel" onchange="filtrar()"><option value="">Todos los tipos</option></select><button class="btn primary" onclick="cargarOficial()">Recargar</button><button class="btn" onclick="cargarOSMManual()">Cargar OSM</button></div><p class="small">Carga manual alternativa: <input type="file" id="file" accept=".csv,.geojson,.json,.zip,.xlsx" onchange="cargarArchivo(event)"></p><div class="stats"><span class="pill" id="stTotal">Preparando carga...</span><span class="pill" id="stVisibles">0 visibles</span><span class="pill" id="stFuente">Fuente pendiente</span></div><div class="error" id="err"></div></div><div id="map"></div><div class="panel"><h2>Resultados</h2><div class="list" id="lista"><p class="small">Cargando datos...</p></div></div><div class="note"><b>Importante:</b> si la fuente es “Padrón oficial”, usar como base orientativa y verificar vigencia con DGCyE/ABC/SAD. Si la fuente es “OpenStreetMap”, los datos son colaborativos: sirven para ubicar escuelas en mapa, pero no reemplazan el padrón oficial.</div></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script><script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Mapa de Escuelas PBA | APDocentePBA</title><meta name="description" content="Mapa orientativo de establecimientos educativos de Provincia de Buenos Aires."><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"><link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"><style>body{margin:0;font-family:Arial,sans-serif;background:#f5f9ff;color:#061a37}.wrap{max-width:1200px;margin:auto;padding:16px}.hero,.panel{background:white;border:1px solid #dbe7f5;border-radius:22px;padding:18px;margin:12px 0}.hero h1{font-size:38px;margin:8px 0}.btn{display:inline-block;border:1px solid #dbe7f5;border-radius:999px;padding:10px 14px;background:white;color:#061a37;text-decoration:none;font-weight:bold;cursor:pointer}.btn.primary{background:#2454f5;color:white;border-color:#2454f5}.tag{display:inline-block;background:#eef6ff;color:#0f4fb8;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:bold}.grid{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px}.grid input,.grid select{border:1px solid #cbd8ea;border-radius:12px;padding:10px;font:inherit}#map{height:620px;border-radius:18px;border:1px solid #dbe7f5}.note{background:#fff7df;border:1px dashed #e6b54a;border-radius:16px;padding:12px;color:#604512}.stats{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#e9f8ef;color:#176b3a;border-radius:999px;padding:6px 10px;font-weight:bold;font-size:12px}.small{color:#607086;font-size:13px}.list{max-height:300px;overflow:auto}.row{border-bottom:1px solid #dbe7f5;padding:9px 0}.row b{display:block}.row span{display:block;color:#607086;font-size:13px}.error{background:#fff7df;color:#604512;border:1px dashed #e6b54a;border-radius:12px;padding:10px;margin-top:10px;display:none}@media(max-width:850px){.grid{grid-template-columns:1fr}.hero h1{font-size:30px}#map{height:480px}}</style></head><body><div class="wrap"><div class="hero"><span class="tag">Mapa de escuelas PBA</span><h1>Escuelas y distritos de PBA en un mapa</h1><p>Primero intenta padrón oficial. Si las fuentes oficiales bloquean CORS, carga escuelas desde OpenStreetMap como respaldo con coordenadas y “cómo llegar”.</p><a class="btn" href="./herramientas.html">Volver a herramientas</a> <a class="btn" href="./biblioteca-docente.html">Biblioteca</a></div><div class="panel"><div class="grid"><input id="q" placeholder="Buscar escuela, CUE, domicilio, localidad..." oninput="filtrar()"><select id="distrito" onchange="filtrar()"><option value="">Todos los distritos/localidades</option></select><select id="nivel" onchange="filtrar()"><option value="">Todos los tipos</option></select><button class="btn primary" onclick="cargarOficial()">Recargar</button><button class="btn" onclick="cargarOSMManual()">Cargar OSM</button></div><p class="small">Carga manual alternativa: <input type="file" id="file" accept=".csv,.geojson,.json,.zip,.xlsx" onchange="cargarArchivo(event)"></p><div class="stats"><span class="pill" id="stTotal">Preparando carga...</span><span class="pill" id="stVisibles">0 visibles</span><span class="pill" id="stFuente">Fuente pendiente</span></div><div class="error" id="err"></div><div class="note" id="mapa-oferta-aviso" role="status" style="display:none"></div></div><div id="map"></div><div class="panel"><h2>Resultados</h2><div class="list" id="lista"><p class="small">Cargando datos...</p></div></div><div class="note"><b>Importante:</b> si la fuente es “Padrón oficial”, usar como base orientativa y verificar vigencia con DGCyE/ABC/SAD. Si la fuente es “OpenStreetMap”, los datos son colaborativos: sirven para ubicar escuelas en mapa, pero no reemplazan el padrón oficial.</div></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script><script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
+// Offer links are public school/district search hints, never account data.
+const ofertaParametros=new URLSearchParams(window.location.search);
+const ofertaEscuela=String(ofertaParametros.get('escuela')||'').trim().slice(0,120);
+const ofertaDistrito=String(ofertaParametros.get('distrito')||'').trim().slice(0,80);
+const escaparHtml=v=>String(v??'')
+ .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+ .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const XLSX_2026='https://www.argentina.gob.ar/sites/default/files/2026.01.12_padron_oficial_establecimientos_educativos_die.xlsx';
 const ZIP_2019='https://www.argentina.gob.ar/sites/default/files/mae_actualizado_2019-09-16_envios.zip';
 const CKAN='https://datos.gob.ar/api/3/action/datastore_search?resource_id=educacion_18.1';
@@ -17,8 +24,72 @@ async function cargarOSM(errores){let query=`[out:json][timeout:120];area["ISO31
 async function cargarOSMManual(){let errores=[];await cargarOSM(errores);if(errores.length) setInfo('No pudo cargar OSM: '+errores.join(' | '))}
 async function cargarOficial(){if(cargando)return;cargando=true;setInfo('');$('stTotal').textContent='Cargando datos...';let errores=[];let ok=await cargarXLSX(errores)||await cargarCKAN(errores)||await cargarZIPs(errores)||await cargarOSM(errores);cargando=false;if(!ok){$('stTotal').textContent='No se pudo autocargar';$('stFuente').textContent='Carga manual requerida';$('lista').innerHTML='<p class="small">No se pudo cargar automático. Queda disponible la carga manual.</p>';setInfo('Fallaron todas las cargas. Detalle: '+errores.join(' | '));}}
 async function cargarArchivo(ev){let f=ev.target.files[0];if(!f)return;setInfo('');let name=f.name.toLowerCase();if(name.endsWith('.xlsx')){convertir(rowsDesdeXLSX(await f.arrayBuffer()),'XLSX local');}else if(name.endsWith('.zip')){let zip=await JSZip.loadAsync(await f.arrayBuffer());let file=Object.values(zip.files).find(x=>/\.csv$/i.test(x.name));if(!file)return setInfo('No encontré CSV dentro del ZIP');let txt=await file.async('string');Papa.parse(txt,{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'Archivo local')});}else if(name.endsWith('.geojson')||name.endsWith('.json')){let json=JSON.parse(await f.text());let rows=(json.features||[]).map(ft=>{let o=ft.properties||{};if(ft.geometry&&ft.geometry.coordinates){o.longitud=ft.geometry.coordinates[0];o.latitud=ft.geometry.coordinates[1]}return o});convertir(rows,'GeoJSON local');}else{Papa.parse(await f.text(),{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'CSV local')});}}
-function llenarFiltros(){let ds=[...new Set(datos.map(x=>x.dist).filter(Boolean))].sort();$('distrito').innerHTML='<option value="">Todos los distritos/localidades</option>'+ds.map(x=>`<option>${x}</option>`).join('');let ns=[...new Set(datos.map(x=>x.nivel).filter(Boolean))].sort().slice(0,240);$('nivel').innerHTML='<option value="">Todos los tipos</option>'+ns.map(x=>`<option>${x}</option>`).join('')}
+function llenarFiltros(){
+ let ds=[...new Set(datos.map(x=>x.dist).filter(Boolean))].sort();
+ const distrito=$('distrito');
+ distrito.replaceChildren(new Option('Todos los distritos/localidades',''));
+ ds.forEach(x=>distrito.add(new Option(String(x),String(x))));
+ const matchingDistrict=ds.find(x=>norm(x)===norm(ofertaDistrito));
+ if(ofertaDistrito&&matchingDistrict)distrito.value=matchingDistrict;
+ let ns=[...new Set(datos.map(x=>x.nivel).filter(Boolean))].sort().slice(0,240);
+ const nivel=$('nivel');
+ nivel.replaceChildren(new Option('Todos los tipos',''));
+ ns.forEach(x=>nivel.add(new Option(String(x),String(x))));
+}
 function filtrar(){let q=norm($('q').value),d=$('distrito').value,n=$('nivel').value;visibles=datos.filter(x=>(!q||norm([x.nombre,x.dom,x.loc,x.dist,x.cue].join(' ')).includes(q))&&(!d||x.dist===d)&&(!n||x.nivel===n));render()}
-function render(){cluster.clearLayers();let conCoords=visibles.filter(x=>isFinite(x.lat)&&isFinite(x.lon)&&Math.abs(x.lat)<=90&&Math.abs(x.lon)<=180);conCoords.slice(0,8000).forEach(x=>{let dir=[x.dom,x.loc,x.dist].filter(Boolean).join(', ');let g='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(dir||x.nombre);cluster.addLayer(L.marker([x.lat,x.lon]).bindPopup(`<b>${x.nombre||'Escuela'}</b><br>${dir}<br>${x.nivel||''}<br>${x.cue?'CUE '+x.cue+'<br>':''}<a target="_blank" href="${g}">Cómo llegar</a>`))});if(conCoords.length){try{map.fitBounds(L.featureGroup(cluster.getLayers()).getBounds().pad(.1))}catch(e){}}$('stTotal').textContent=datos.length+' escuelas cargadas';$('stVisibles').textContent=visibles.length+' visibles · '+conCoords.length+' con coordenadas';$('lista').innerHTML=visibles.slice(0,180).map(x=>{let dir=[x.dom,x.loc,x.dist].filter(Boolean).join(', ');let g='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(dir||x.nombre);return `<div class="row"><b>${x.nombre||'Sin nombre'}</b><span>${dir||'Sin dirección'}</span><span>${x.nivel||''} ${x.sector||''} ${x.cue?'· CUE '+x.cue:''}</span><span><a target="_blank" href="${g}">Cómo llegar</a></span></div>`}).join('')||'<p class="small">Sin resultados.</p>'}
-document.addEventListener('DOMContentLoaded',cargarOficial);
+function render(){
+ cluster.clearLayers();
+ // Reject impossible coordinates and non-PBA points from third-party datasets.
+ const conCoords=visibles.filter(x=>
+  Number.isFinite(x.lat)&&Number.isFinite(x.lon)&&
+  x.lat>=-42&&x.lat<=-33&&x.lon>=-64&&x.lon<=-55
+ );
+ conCoords.slice(0,8000).forEach(x=>{
+  const dir=[x.dom,x.loc,x.dist].filter(Boolean).join(', ');
+  const g='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(dir||x.nombre);
+  const popup='<b>'+escaparHtml(x.nombre||'Escuela')+'</b><br>'+
+    escaparHtml(dir)+'<br>'+escaparHtml(x.nivel||'')+'<br>'+
+    (x.cue?'CUE '+escaparHtml(x.cue)+'<br>':'')+
+    '<a target="_blank" rel="noopener noreferrer" href="'+escaparHtml(g)+'">Cómo llegar</a>';
+  cluster.addLayer(L.marker([x.lat,x.lon]).bindPopup(popup));
+ });
+ if(conCoords.length){
+  try{map.fitBounds(L.featureGroup(cluster.getLayers()).getBounds().pad(.1))}catch(_){}
+ }
+ $('stTotal').textContent=datos.length+' escuelas cargadas';
+ $('stVisibles').textContent=visibles.length+' visibles · '+conCoords.length+' con coordenadas';
+ $('lista').innerHTML=visibles.slice(0,180).map(x=>{
+  const dir=[x.dom,x.loc,x.dist].filter(Boolean).join(', ');
+  const g='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(dir||x.nombre);
+  return '<div class="row"><b>'+escaparHtml(x.nombre||'Sin nombre')+'</b>'+
+   '<span>'+escaparHtml(dir||'Sin dirección')+'</span>'+
+   '<span>'+escaparHtml(x.nivel||'')+' '+escaparHtml(x.sector||'')+
+   (x.cue?' · CUE '+escaparHtml(x.cue):'')+'</span>'+
+   '<span><a target="_blank" rel="noopener noreferrer" href="'+escaparHtml(g)+'">Cómo llegar</a></span></div>';
+ }).join('')||'<p class="small">Sin resultados.</p>';
+ const aviso=$('mapa-oferta-aviso');
+ if(aviso){
+  aviso.replaceChildren();
+  if(ofertaEscuela){
+   aviso.style.display='block';
+   aviso.append(document.createTextNode(
+    visibles.length===0
+     ? 'No encontramos esa escuela con los datos cargados. No se muestra una ubicación inventada. '
+     : visibles.length===1&&conCoords.length===1
+       ? 'Se encontró una coincidencia con coordenadas en la fuente indicada. Verificá su identidad antes de usar la dirección.'
+       : 'Hay '+visibles.length+' coincidencias posibles. Verificá escuela, distrito y CUE antes de elegir una.'
+   ));
+   const external=document.createElement('a');
+   external.href='https://www.google.com/maps/search/?api=1&query='+
+     encodeURIComponent([ofertaEscuela,ofertaDistrito,'Buenos Aires Argentina'].filter(Boolean).join(', '));
+   external.target='_blank'; external.rel='noopener noreferrer';
+   external.textContent=' Buscar también en Google Maps';
+   aviso.appendChild(external);
+  }else aviso.style.display='none';
+ }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+ if(ofertaEscuela)$('q').value=ofertaEscuela;
+ void cargarOficial();
+});
 </script></body></html>
