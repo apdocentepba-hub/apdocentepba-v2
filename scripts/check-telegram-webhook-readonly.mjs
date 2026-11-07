@@ -22,12 +22,13 @@ export async function checkTelegramWebhook({
   fetchFn = fetch
 }) {
   if (!token) throw new Error('Telegram token unavailable (not printed)');
+  if (!/^\\d+:[A-Za-z0-9_-]+$/.test(token)) throw new Error('Telegram token format invalid');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     // GET is read-only: does not register a new webhook or consume bot updates.
     const response = await fetchFn(
-      'https://api.telegram.org/bot' + encodeURIComponent(token) + '/getWebhookInfo',
+      'https://api.telegram.org/bot' + token + '/getWebhookInfo',
       { method: 'GET', signal: controller.signal, redirect: 'error' }
     );
     if (!response.ok) throw new Error('Telegram getWebhookInfo HTTP ' + response.status);
