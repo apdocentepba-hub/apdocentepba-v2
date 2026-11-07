@@ -1,9 +1,11 @@
 /**
  * APDocentePBA — offline-only Expo demonstration.
- * NO AUTH, NO ABC/WORKER NETWORK, NO PUSH PERMISSION, NO PUSH DELIVERY.
+ * NO AUTH, NO ABC/WORKER NETWORK, NO REMOTE PUSH DELIVERY.
+ * Local notification demonstration ONLY on explicit tap + OS permission.
  * All offers below are explicitly fictional. No production features implied.
  */
 import React, {useMemo, useState} from "react";
+import * as Notifications from "expo-notifications";
 import {
  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
  StatusBar, Platform
@@ -11,6 +13,14 @@ import {
 const {
  DEMO_OFFERS, DISTRICTS, SHIFTS, filterDemoOffers, toggleSaved, demoCounters
 } = require("./src/demo-state.js");
+
+// Nothing is sent to FCM/APNs/Expo Push. This handler displays local demo notices.
+Notifications.setNotificationHandler({
+ handleNotification: async () => ({
+  shouldShowBanner: true, shouldShowList: true,
+  shouldPlaySound: true, shouldSetBadge: false
+ })
+});
 
 const COLORS={
  navy:"#082C43",navyDark:"#061D2E",blue:"#3178F5",teal:"#087F86",
@@ -47,8 +57,8 @@ function DemoNotice(){
   <View style={styles.demoNotice} accessibilityRole="text">
    <Text style={styles.demoNoticeTitle}>MODO DEMOSTRACIÓN · SIN DATOS REALES</Text>
    <Text style={styles.demoNoticeBody}>
-    Las ofertas que ves son ficticias. La cuenta, ABC y las notificaciones push
-    todavía no están conectadas.
+    Las ofertas que ves son ficticias. La cuenta, ABC y las notificaciones
+    remotas aún no están conectadas. Solo hay avisos locales de prueba.
    </Text>
   </View>
  );
@@ -96,6 +106,33 @@ export default function App(){
  const [shift,setShift]=useState("Todos");
  const [query,setQuery]=useState("");
  const [saved,setSaved]=useState([]);
+ const [notificationStatus,setNotificationStatus]=useState("Aún no se hizo ninguna prueba local.");
+ const tryLocalNotification=async()=>{
+  try {
+   if(Platform.OS==="android") {
+    await Notifications.setNotificationChannelAsync("apd-laboratorio",{
+     name:"Avisos de laboratorio",importance:Notifications.AndroidImportance.HIGH
+    });
+   }
+   const before=await Notifications.getPermissionsAsync();
+   const permission=before.granted?before:await Notifications.requestPermissionsAsync();
+   if(!permission.granted){
+    setNotificationStatus("El sistema no autorizó notificaciones. Podés habilitarlas desde Ajustes.");
+    return;
+   }
+   await Notifications.scheduleNotificationAsync({
+    content:{
+     title:"APDocentePBA · Prueba local",
+     body:"Este aviso es de demostración. No representa una oferta de ABC.",
+     channelId:"apd-laboratorio"
+    },
+    trigger:null
+   });
+   setNotificationStatus("Aviso local solicitado al sistema Android. No se envió un push remoto.");
+  }catch(_){
+   setNotificationStatus("No se pudo mostrar el aviso local en este dispositivo.");
+  }
+ };
  const offers=useMemo(()=>filterDemoOffers(DEMO_OFFERS,{district,shift,query}),
   [district,shift,query]);
  const counters=demoCounters(offers,saved);
@@ -210,10 +247,12 @@ export default function App(){
        <Text style={styles.help}>No guardamos usuario, contraseña ni datos de ABC.</Text>
       </View>
       <View style={styles.statusCard}>
-       <Text style={styles.statusHeading}>Notificaciones push</Text>
-       <Text style={styles.statusValue}>No disponibles en esta versión</Text>
-       <Text style={styles.help}>No solicitamos permisos ni registramos tokens de tu
-        teléfono. La próxima etapa requiere registro seguro y autorización expresa.</Text>
+       <Text style={styles.statusHeading}>Notificaciones en Android · laboratorio</Text>
+       <Text style={styles.statusValue}>Avisos locales disponibles para probar</Text>
+       <Text style={styles.help}>Solo al tocar el botón pedimos permiso y solicitamos
+        al sistema un aviso de prueba. No registramos tokens ni recibimos push remoto.</Text>
+       <PrimaryButton label="Probar notificación local" onPress={tryLocalNotification}/>
+       <Text style={styles.help} accessibilityRole="text">{notificationStatus}</Text>
       </View>
       <View style={styles.statusCard}>
        <Text style={styles.statusHeading}>Privacidad</Text>
