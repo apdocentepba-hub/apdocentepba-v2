@@ -11,7 +11,8 @@ const opts={previousComplete:true,currentComplete:true,scope:'Avellaneda',previo
 const run=(old,current,overrides={})=>detectOfferUpdates(old,current,{...opts,...overrides});
 
 test('unchanged published offer never triggers event',()=>{
- const x=run([A],[{...A,turno:' TARDE '}]);
+ const future={...A,finoferta:'30/11/2026 10:00'};
+ const x=run([future],[{...future,turno:' TARDE '}]);
  assert.equal(x.verified,true);
  assert.equal(x.events.length,0);
 });
