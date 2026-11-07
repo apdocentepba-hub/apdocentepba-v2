@@ -34,7 +34,37 @@ const patches = [
     "name": "detail_result",
     "before": "    return json2({\n      ok: true,\n      delivered: true,\n      total_alerts: alerts.length,\n      shown_alerts: visibleAlerts.length,\n      source,\n      plan_code: entitlement?.plan_code || null,\n",
     "after": "    return json2({\n      ok: true,\n      delivered: telegramDetailDelivered,\n      total_alerts: alerts.length,\n      shown_alerts: visibleAlerts.length,\n      source,\n      plan_code: entitlement?.plan_code || null,\n"
-  }
+  },
+  {
+  "name": "secure_link_token_issuance",
+  "before": "function buildTelegramBotLink(env, userId) {\n  const username = String(env.TELEGRAM_BOT_USERNAME || \"\").trim().replace(/^@+/, \"\");\n  const normalizedUserId = String(userId || \"\").trim();\n  if (!username || !normalizedUserId) return \"\";\n  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(normalizedUserId)}`;\n}",
+  "after": "// Links are issued only by authenticated endpoints, never from public user IDs.\nfunction telegramLinkKey(code) {\n  return \"telegram:link:\" + String(code || \"\").trim().toLowerCase();\n}\nasync function issueTelegramLinkCode(env, userId) {\n  const kv = getChannelStateStore(env);\n  if (!kv || !userId || !env.TELEGRAM_BOT_USERNAME) return \"\";\n  const code = \"apd_\" + crypto.randomUUID().replace(/-/g, \"\");\n  await kv.put(telegramLinkKey(code), String(userId).trim().toUpperCase(), {\n    expirationTtl: 600\n  });\n  return code;\n}\nfunction buildTelegramBotLink(env, code) {\n  const username = String(env.TELEGRAM_BOT_USERNAME || \"\").trim().replace(/^@+/, \"\");\n  const safeCode = /^apd_[0-9a-f]{32}$/.test(String(code || \"\")) ? String(code) : \"\";\n  if (!username || !safeCode) return \"\";\n  return `https://t.me/${encodeURIComponent(username)}?start=${safeCode}`;\n}"
+},
+  {
+  "name": "status_issue_authenticated_nonce",
+  "before": "    bot_link: buildTelegramBotLink(env, user.id)",
+  "after": "    bot_link: buildTelegramBotLink(env, await issueTelegramLinkCode(env, user.id))"
+},
+  {
+  "name": "preferences_do_not_issue_anonymous_link",
+  "before": "      bot_link: buildTelegramBotLink(env, userId)",
+  "after": "      bot_link: buildTelegramBotLink(env, (await getSessionUserByBearer(env, request).catch(() => null))?.id === userId ? await issueTelegramLinkCode(env, userId) : \"\")"
+},
+  {
+  "name": "start_payload_requires_nonce",
+  "before": "    const userId = String(command.payload || \"\").trim();\n    const validStartPayload = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);",
+  "after": "    const linkCode = String(command.payload || \"\").trim();\n    const validStartPayload = /^apd_[0-9a-f]{32}$/.test(linkCode);"
+},
+  {
+  "name": "start_resolve_token",
+  "before": "    const entitlement2 = await resolveTelegramEntitlement(env, userId);\n    const prev = await getTelegramState(env, userId) || {};",
+  "after": "    const kv = getChannelStateStore(env);\n    const userId = String(await kv?.get(telegramLinkKey(linkCode)) || \"\").trim().toUpperCase();\n    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {\n      await sendTelegramText(env, chatId, \"El enlace de Telegram expiró o ya fue utilizado. Volvé al panel de AlertasAPD para generar uno nuevo.\").catch(() => null);\n      return json2({ ok: true, connected: false, reason: \"telegram_link_expired_or_used\" });\n    }\n    const entitlement2 = await resolveTelegramEntitlement(env, userId);\n    const prev = await getTelegramState(env, userId) || {};"
+},
+  {
+  "name": "start_consume_token_after_success",
+  "before": "    if (updateId) {\n      await markInboundEventProcessed(\n        env,\n        telegramUpdateDedupeKey(updateId),\n        TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS\n      ).catch(() => null);\n    }\n    return json2({\n      ok: true,\n      connected: true,\n      user_id: userId,\n      state: next\n    });",
+  "after": "    await kv.delete(telegramLinkKey(linkCode));\n    if (updateId) {\n      await markInboundEventProcessed(\n        env,\n        telegramUpdateDedupeKey(updateId),\n        TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS\n      ).catch(() => null);\n    }\n    return json2({\n      ok: true,\n      connected: true,\n      user_id: userId,\n      state: next\n    });"
+}
 ];
 
 export function buildTelegramCandidate(source) {
