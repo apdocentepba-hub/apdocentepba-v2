@@ -55,4 +55,85 @@ jobs:
             echo 'APD_LIVE_DRIFT_CHECK unavailable: repo credential not configured'
           else
             node scripts/audit-apd-worker-drift.mjs
+            node --input-type=module <<'NODE'
+            import fs from 'node:fs';
+            
+            const worker='ancient-wildflower-cd37';
+            const token=process.env.CLOUDFLARE_API_TOKEN||'';
+            const request = async (path) => {
+              const response=await fetch('https://api.cloudflare.com/client/v4'+path,{
+                headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)
+              });
+              if(!response.ok)throw Error('cloudflare_http_'+response.status);
+              const obj=await response.json();
+              if(obj.success!==true)throw Error('cloudflare_api_error');
+              return obj.result;
+            };
+            const provider = async (botToken,method) => {
+              const response=await fetch('https://api.telegram.org/bot'+botToken+'/'+method,{
+                method:'GET',signal:AbortSignal.timeout(10000),redirect:'error'
+              });
+              const data=await response.json().catch(()=>({}));
+              return {status:response.status,ok:data.ok===true,value:data.result||{}};
+            };
+            const report={kind:'telegram_provider_readonly',credential_source:'cloudflare_active_binding',requested_methods:['getMe','getWebhookInfo'],messages_sent:false};
+            try{
+              let account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim();
+              if(!account){
+                const accounts=await request('/accounts?per_page=50');
+                if(!Array.isArray(accounts)||accounts.length!==1)throw Error('account_ambiguous');
+                account=String(accounts[0].id||'');
+              }
+              const root='/accounts/'+encodeURIComponent(account)+'/workers/';
+              const deployments=await request(root+'scripts/'+encodeURIComponent(worker)+'/deployments');
+              const latest=deployments?.deployments?.[0];
+              const active=(latest?.versions||[]).filter(v=>Number(v.percentage)>0);
+              if(active.length!==1||Number(active[0].percentage)!==100)throw Error('active_version_ambiguous');
+              report.deployed_at=latest?.created_on||latest?.modified_on||null;
+              const remote=await request(root+'workers/'+encodeURIComponent(worker)+'/versions/'+encodeURIComponent(active[0].version_id)+'?include=modules');
+              const bindings=remote?.bindings||[];
+              const find=(name)=>bindings.find(b=>b.name===name);
+              const bot=find('TELEGRAM_BOT_TOKEN');
+              const username=find('TELEGRAM_BOT_USERNAME');
+              const hookSecret=find('TELEGRAM_WEBHOOK_SECRET');
+              report.has_bot_token=!!bot;
+              report.bot_token_type=bot?.type||null;
+              report.webhook_secret_bound=!!hookSecret;
+              report.channel_state_kv_bound=!!find('EMAIL_SWEEP_STATE');
+              const credential=bot?.type==='plain_text' ? String(bot.text||'') : '';
+              if(!/^\d+:[A-Za-z0-9_-]+$/.test(credential)) {
+                report.provider_verified=false;
+                report.reason=credential?'bot_token_invalid_format':'bot_token_value_unavailable';
+              } else {
+                const [me,hook]=await Promise.all([provider(credential,'getMe'),provider(credential,'getWebhookInfo')]);
+                report.bot_token_accepted=me.ok;
+                report.getMe_http=me.status;
+                report.username_matches_binding=me.ok && username?.type==='plain_text'
+                  ? String(me.value.username||'').toLowerCase()===String(username.text||'').replace(/^@/,'').toLowerCase()
+                  : null;
+                report.webhook_info_http=hook.status;
+                report.provider_verified=hook.ok;
+                if(hook.ok){
+                  const info=hook.value;
+                  const address=String(info.url||'');
+                  report.webhook_registered=!!address;
+                  report.webhook_matches_worker=address==='https://'+worker+'.apdocentepba.workers.dev/api/telegram/webhook';
+                  report.webhook_updates_include_messages=!Array.isArray(info.allowed_updates)||info.allowed_updates.includes('message');
+                  report.pending_updates=Number(info.pending_update_count||0);
+                  report.last_error_at=info.last_error_date?new Date(Number(info.last_error_date)*1000).toISOString():null;
+                  const err=String(info.last_error_message||'');
+                  const http=err.match(/\b(400|401|403|404|405|408|409|429|500|502|503|504|520|522|524)\b/);
+                  report.last_error_http=http?Number(http[1]):null;
+                  report.last_error_category=http?'http_error':/ssl|certificate/i.test(err)?'tls':/timeout|timed out/i.test(err)?'timeout':/connection|dns|network/i.test(err)?'connection':err?'other':null;
+                  report.last_error_recent=info.last_error_date
+                    ? Date.now()-Number(info.last_error_date)*1000 < 24*3600000
+                    : false;
+                }
+              }
+            }catch(e){
+              report.provider_verified=false;
+              report.reason=String(e?.message||'diagnostic_error').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,64);
+            }
+            console.log('APD_TELEGRAM_PROVIDER_DIAGNOSTIC '+JSON.stringify(report));
+            NODE
           fi
