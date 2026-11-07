@@ -1,0 +1,23 @@
+name: APD school map and statistics candidate
+
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-apd-school-map-stats.mjs'
+      - '.github/workflows/apd-school-map-stats-candidate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  map-and-stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check app_v2.js
+      - run: node --test scripts/test-apd-school-map-stats.mjs
