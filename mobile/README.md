@@ -2,7 +2,7 @@
 
 **Estado: prototipo offline funcional a nivel de código y empaquetado JavaScript. NO es APK/AAB.**
 
-Este directorio contiene un proyecto React Native + Expo SDK 58 que muestra las pantallas **Inicio**, **Alertas**, **Filtros** y **Cuenta**, con ofertas de demostración. El código no consulta ABC ni APDocentePBA, no envía push, no pide permisos de notificación y no recibe credenciales.
+Este directorio contiene un proyecto React Native + Expo SDK 58 que muestra las pantallas **Inicio**, **Alertas**, **Filtros** y **Cuenta**, con ofertas de demostración. El código no consulta ABC ni APDocentePBA, no envía push, solicita permiso de notificaciones solo cuando el usuario elige probar una alerta local; no registra tokens push, no recibe notificaciones remotas ni credenciales.
 
 ## Probarlo en un equipo de desarrollo
 
@@ -47,3 +47,9 @@ Salida: `mobile/dist/android-lab`. Es un conjunto de bundles y recursos, **no un
 El código móvil de este PR es deliberadamente independiente del frontend web en producción y no utiliza la clave de Supabase en el teléfono.
 
 Referencia de versión y compatibilidad: https://docs.expo.dev/versions/latest/
+
+## 07/11/2026 — primera notificación Android local
+
+Se incorpora `expo-notifications` y permiso Android `POST_NOTIFICATIONS` para mostrar un aviso **local de prueba**, únicamente al presionar **Probar notificación local** en Cuenta. Se crea canal Android de laboratorio, se solicita permiso explícito y se agenda un aviso inmediato, sin identidad, oferta real, token ni llamadas a proveedores. El texto indica claramente que **no es una alerta APD real ni un push remoto**. Requiere una compilación nativa nueva y prueba física: `expo export` y los tests Node por sí solos no demuestran que apareció en la bandeja de Android.
+
+Para los push remotos siguen pendientes la integración segura con el Worker, registro/revocación, FCM/Expo, consentimientos, verificación de oferta vigente y entrega real en teléfono. No se envían notificaciones automáticas a usuarios.
