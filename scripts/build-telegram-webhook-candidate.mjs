@@ -64,6 +64,16 @@ const patches = [
   "name": "start_consume_token_after_success",
   "before": "    if (updateId) {\n      await markInboundEventProcessed(\n        env,\n        telegramUpdateDedupeKey(updateId),\n        TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS\n      ).catch(() => null);\n    }\n    return json2({\n      ok: true,\n      connected: true,\n      user_id: userId,\n      state: next\n    });",
   "after": "    await kv.delete(telegramLinkKey(linkCode));\n    if (updateId) {\n      await markInboundEventProcessed(\n        env,\n        telegramUpdateDedupeKey(updateId),\n        TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS\n      ).catch(() => null);\n    }\n    return json2({\n      ok: true,\n      connected: true,\n      user_id: userId,\n      state: next\n    });"
+},
+  {
+  "name": "revoke_previous_telegram_chat_mapping",
+  "before": "  await kv.put(telegramStateKey(userId), JSON.stringify(next));\n  if (next.connected && next.chat_id) {\n    await kv.put(telegramChatStateKey(next.chat_id), next.user_id);\n  }\n  return next;",
+  "after": "  await kv.put(telegramStateKey(userId), JSON.stringify(next));\n  if (next.connected && next.chat_id) {\n    await kv.put(telegramChatStateKey(next.chat_id), next.user_id);\n  }\n  // Old Telegram chats must not retain access after a user reconnects elsewhere.\n  if (current.chat_id && String(current.chat_id) !== String(next.chat_id)) {\n    await kv.delete(telegramChatStateKey(current.chat_id));\n  }\n  return next;"
+},
+  {
+  "name": "reject_stale_chat_reverse_links",
+  "before": "async function getTelegramUserIdByChat(env, chatId) {\n  const kv = getChannelStateStore(env);\n  if (!kv || !chatId) return \"\";\n  return String(await kv.get(telegramChatStateKey(chatId)) || \"\").trim().toUpperCase();\n}",
+  "after": "async function getTelegramUserIdByChat(env, chatId) {\n  const kv = getChannelStateStore(env);\n  if (!kv || !chatId) return \"\";\n  const userId = String(await kv.get(telegramChatStateKey(chatId)) || \"\").trim().toUpperCase();\n  if (!userId) return \"\";\n  const state = await getTelegramState(env, userId);\n  // Check both directions: reverse mappings can outlive a reconnect in KV.\n  return state?.connected && String(state.chat_id) === String(chatId) ? userId : \"\";\n}"
 }
 ];
 
