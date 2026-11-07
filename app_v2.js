@@ -1580,6 +1580,15 @@ function renderHistoricoCambios(cambios) {
   `;
 }
 
+function historicoCapturaEsReciente(value, now = Date.now()) {
+  const raw = String(value || "").trim();
+  // Only ISO timestamps with timezone are safe for freshness assertions.
+  if (!/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:\d{2})$/i.test(raw)) return false;
+  const instant = Date.parse(raw);
+  return Number.isFinite(instant) && instant <= now + 5 * 60000 &&
+    now - instant <= 48 * 3600000;
+}
+
 function renderHistoricoAPD(data) {
   const box = document.getElementById("panel-historico-apd");
   if (!box) return;
@@ -1598,10 +1607,7 @@ function renderHistoricoAPD(data) {
 
   // Historical snapshots are not proof of current offer status. If capture age
   // cannot be checked, suppress all 'recent' claims instead of showing zeros.
-  const ultimaCapturaMs = Date.parse(String(data.ultima_captura || ""));
-  const historicoReciente = Number.isFinite(ultimaCapturaMs) &&
-    ultimaCapturaMs <= Date.now() + 5 * 60000 &&
-    Date.now() - ultimaCapturaMs <= 48 * 3600000;
+  const historicoReciente = historicoCapturaEsReciente(data.ultima_captura);
   const recienteNumero = valor => historicoReciente && Number.isFinite(Number(valor))
     ? fmtNum(valor) : "—";
 
