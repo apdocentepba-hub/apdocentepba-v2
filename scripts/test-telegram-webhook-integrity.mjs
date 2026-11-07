@@ -28,6 +28,8 @@ test('Telegram /start deduplication happens only after confirmation succeeds', (
   const send = body.indexOf('"\\u2705 APDocentePBA conect\\xF3 este chat con tu cuenta.');
   const markAfterSend = body.indexOf('await markInboundEventProcessed(', send);
   assert.ok(start > 0 && send > start && markAfterSend > send);
+  const saved = body.indexOf('const next = await saveTelegramState(env, userId,');
+  assert.ok(saved > send && saved < markAfterSend, 'Link must be saved only after bot confirmation');
   const early = body.slice(0, body.indexOf('const command = extractTelegramCommand('));
   assert.doesNotMatch(early, /await markInboundEventProcessed\(/);
   assert.match(body, /if \(command\.kind !== "start" && updateId\)/);
