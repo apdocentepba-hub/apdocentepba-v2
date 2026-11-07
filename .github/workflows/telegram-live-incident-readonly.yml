@@ -1,0 +1,58 @@
+name: Telegram incident live audit (read only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/telegram-live-incident-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-live:
+    if: github.event.pull_request.head.repo.full_name == 'apdocentepba-hub/apdocentepba-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # NEVER execute code from a PR with production Cloudflare credentials.
+      - name: Checkout trusted main baseline, not PR source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Public GET route probes, no credentials or messages
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const host = 'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
+          for (const [path,expected] of [
+            ['/api/version',200],
+            ['/api/telegram/status',401],
+            ['/api/whatsapp/status',401]
+          ]) {
+            try {
+              const response=await fetch(host+path,{
+                method:'GET',redirect:'manual',signal:AbortSignal.timeout(9000)
+              });
+              console.log('APD_LIVE_ROUTE_CHECK '+JSON.stringify({
+                path,status:response.status,expected,pass:response.status===expected
+              }));
+            } catch {
+              console.log('APD_LIVE_ROUTE_CHECK '+JSON.stringify({path,pass:false,error:'network_or_timeout'}));
+            }
+          }
+          NODE
+      - name: Cloudflare active version and Telegram binding types — GET only
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo 'APD_LIVE_DRIFT_CHECK unavailable: repo credential not configured'
+          else
+            node scripts/audit-apd-worker-drift.mjs
+          fi
