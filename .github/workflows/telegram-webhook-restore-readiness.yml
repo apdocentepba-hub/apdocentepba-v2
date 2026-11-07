@@ -1,0 +1,36 @@
+name: Telegram webhook post-restore verification (read only)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/restore-telegram-webhook-guarded.mjs'
+      - 'scripts/test-restore-telegram-webhook-guarded.mjs'
+      - '.github/workflows/telegram-webhook-restore-readiness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    if: github.event.pull_request.head.repo.full_name == 'apdocentepba-hub/apdocentepba-v2' && github.head_ref == 'fix/restore-apd-telegram-webhook-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static syntax and isolated non-network regression suite
+        run: |
+          node --check scripts/restore-telegram-webhook-guarded.mjs
+          node --test scripts/test-restore-telegram-webhook-guarded.mjs
+      - name: Live readiness, explicitly forbid webhook mutation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_RESTORE_TELEGRAM_WEBHOOK: 'DRY_RUN_ONLY'
+        run: |
+          node scripts/restore-telegram-webhook-guarded.mjs
+
