@@ -49,7 +49,7 @@ test('special characters in school names are URL encoded, not executable code',(
 test('offer renderer includes accessible external map links',()=>{
  const body=source.slice(source.indexOf('function renderAlertaActual()'),source.indexOf('\nfunction ',source.indexOf('function renderAlertaActual()')+5));
  assert.match(body,/const schoolMap = buildSchoolMapLinks\(a\)/);
- assert.match(body,/Buscar escuela en el mapa/);
+ assert.match(body,/Ver escuela en mapa/);
  assert.match(body,/Mapa Escolar ABC/);
  assert.match(body,/target="_blank" rel="noopener noreferrer"/);
 });
