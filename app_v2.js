@@ -1354,6 +1354,8 @@ function buildSchoolMapLinks(alerta) {
     ? lat.toFixed(6) + "," + lon.toFixed(6)
     : [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
   return {
+    apdMap: "./mapa-escuelas-pba.html?escuela=" + encodeURIComponent(escuela) +
+      "&distrito=" + encodeURIComponent(distrito),
     googleMaps: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
     official: "https://mapaescolar.abc.gob.ar/mapaescolar/",
     exact
@@ -1485,7 +1487,8 @@ function renderAlertaActual() {
 
           <div class="alerta-actions">
             ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
-            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">📍 ${schoolMap.exact ? "Ubicación verificada" : "Buscar escuela en el mapa"}</a>` : ""}
+            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.apdMap)}" target="_blank" rel="noopener noreferrer">📍 Ver escuela en mapa</a>` : ""}
+            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">${schoolMap.exact ? "Ubicación verificada" : "Buscar en Google Maps"}</a>` : ""}
             ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${schoolMap.official}" target="_blank" rel="noopener noreferrer">Mapa Escolar ABC</a>` : ""}
           </div>
           ${schoolMap && !schoolMap.exact ? '<p class="prefs-hint">La búsqueda del mapa es orientativa: confirmá la escuela y su dirección en el Mapa Escolar oficial.</p>' : ""}
