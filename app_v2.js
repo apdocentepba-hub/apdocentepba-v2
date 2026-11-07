@@ -1596,6 +1596,15 @@ function renderHistoricoAPD(data) {
     return;
   }
 
+  // Historical snapshots are not proof of current offer status. If capture age
+  // cannot be checked, suppress all 'recent' claims instead of showing zeros.
+  const ultimaCapturaMs = Date.parse(String(data.ultima_captura || ""));
+  const historicoReciente = Number.isFinite(ultimaCapturaMs) &&
+    ultimaCapturaMs <= Date.now() + 5 * 60000 &&
+    Date.now() - ultimaCapturaMs <= 48 * 3600000;
+  const recienteNumero = valor => historicoReciente && Number.isFinite(Number(valor))
+    ? fmtNum(valor) : "—";
+
   const lecturaRapida = [
     data.capturas_filtradas
       ? `<span class="historico-chip">Capturas filtradas: ${fmtNum(data.capturas_filtradas)}</span>`
@@ -1606,8 +1615,8 @@ function renderHistoricoAPD(data) {
     data.promedio_puntaje_primero != null
       ? `<span class="historico-chip">Puntaje del primero: ${fmtNum(data.promedio_puntaje_primero, 2)}</span>`
       : "",
-    data.cierran_72h
-      ? `<span class="historico-chip">Cierran en 72h: ${fmtNum(data.cierran_72h)}</span>`
+    historicoReciente && data.cierran_72h
+      ? `<span class="historico-chip">Cierran en 72h al momento de capturar: ${fmtNum(data.cierran_72h)}</span>`
       : ""
   ].filter(Boolean).join("");
 
@@ -1619,6 +1628,7 @@ function renderHistoricoAPD(data) {
       <div class="historico-updated">Última captura: ${esc(fmtFecha(data.ultima_captura || "-"))}</div>
       <div class="historico-note">Ventana analizada: últimos ${fmtNum(data.ventana_dias)} días</div>
       <div class="historico-note">Estadísticas de capturas guardadas; no certifican vacantes vigentes ni adjudicaciones oficiales.</div>
+      ${!historicoReciente ? '<div class="historico-note" role="status"><strong>Histórico desactualizado o sin fecha verificable.</strong> No mostramos indicadores de vigencia, cierres próximos ni cambios recientes hasta recuperar capturas recientes.</div>' : ""}
     </div>
 
     <div class="historico-grid">
@@ -1627,7 +1637,7 @@ function renderHistoricoAPD(data) {
         <span class="historico-stat-l">Ofertas únicas</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${fmtNum(data.activas_estimadas)}</span>
+        <span class="historico-stat-n">${recienteNumero(data.activas_estimadas)}</span>
         <span class="historico-stat-l">Activas estimadas en captura</span>
       </div>
       <div class="historico-stat">
@@ -1643,11 +1653,11 @@ function renderHistoricoAPD(data) {
         <span class="historico-stat-l">Desiertas estimadas</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${fmtNum(data.nuevas_7d)}</span>
+        <span class="historico-stat-n">${recienteNumero(data.nuevas_7d)}</span>
         <span class="historico-stat-l">Nuevas detectadas (7 días)</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${fmtNum(data.cambios_estado_recientes)}</span>
+        <span class="historico-stat-n">${recienteNumero(data.cambios_estado_recientes)}</span>
         <span class="historico-stat-l">Cambios entre capturas</span>
       </div>
     </div>
