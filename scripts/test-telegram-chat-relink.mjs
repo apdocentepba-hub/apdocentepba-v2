@@ -8,9 +8,10 @@ const original = fs.readFileSync(new URL('../worker-live/worker_hotfix.js', impo
 const source = buildTelegramCandidate(original);
 
 function extract(name) {
-  const start=source.indexOf('function '+name+'(');
+  let start=source.indexOf('function '+name+'(');
   const end=source.indexOf('\n__name('+name+',',start);
   assert.ok(start>=0 && end>start, 'missing '+name);
+  if (source.slice(start-6,start)==='async ') start-=6;
   return source.slice(start,end);
 }
 const fns=['telegramStateKey','telegramChatStateKey','getTelegramState','saveTelegramState','getTelegramUserIdByChat'];
