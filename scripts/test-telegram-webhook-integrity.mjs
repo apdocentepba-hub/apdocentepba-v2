@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { buildTelegramCandidate } from './build-telegram-webhook-candidate.mjs';
 
-const source = fs.readFileSync(new URL('../worker-live/worker_hotfix.js', import.meta.url), 'utf8');
+const baseline = fs.readFileSync(new URL('../worker-live/worker_hotfix.js', import.meta.url), 'utf8');
+const source = buildTelegramCandidate(baseline);
 
 function extractFunction(name) {
   const start = source.indexOf('function ' + name + '(');
@@ -51,4 +53,10 @@ test('Existing email and WhatsApp routes remain present', () => {
   assert.match(source, /telegram\/webhook/);
   assert.match(source, /whatsapp\/webhook/);
   assert.match(source, /async scheduled\(event, env, ctx\)/);
+});
+
+test('generator keeps the source snapshot unchanged', () => {
+  assert.notEqual(source, baseline);
+  assert.match(baseline, /if \(!configured\) return;/);
+  assert.match(source, /Webhook Telegram no configurado/);
 });
