@@ -88,3 +88,22 @@ test('stale historical values cannot appear as current counts',()=>{
  assert.match(body,/Histórico desactualizado/);
  assert.match(body,/historicoReciente && data\.cierran_72h/);
 });
+
+test('APD-owned map accepts school and district deep-links safely',()=>{
+ const html=fs.readFileSync(new URL('../mapa-escuelas-pba.html',import.meta.url),'utf8');
+ const inline=html.match(/<script>([\s\S]*?)<\/script>/i);
+ assert.ok(inline?.[1],'inline map script exists');
+ assert.doesNotThrow(()=>new Function(inline[1]),'map script must parse');
+ assert.match(html,/new URLSearchParams\(window\.location\.search\)/);
+ assert.match(html,/ofertaEscuela/);
+ assert.match(html,/ofertaDistrito/);
+ assert.match(html,/if\(ofertaEscuela\)\$\('q'\)\.value=ofertaEscuela/);
+ assert.match(html,/matchingDistrict=ds\.find/);
+ assert.match(source,/apdMap: "\.\/mapa-escuelas-pba\.html\?escuela="/);
+});
+test('external school names are escaped before entering map HTML',()=>{
+ const html=fs.readFileSync(new URL('../mapa-escuelas-pba.html',import.meta.url),'utf8');
+ assert.match(html,/const escaparHtml=v=>/);
+ assert.match(html,/escaparHtml\(x\.nombre/);
+ assert.doesNotMatch(html,/ds\.map\(x=>`<option>\$\{x\}<\/option>`\)/);
+});
