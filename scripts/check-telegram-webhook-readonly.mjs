@@ -22,7 +22,7 @@ export async function checkTelegramWebhook({
   fetchFn = fetch
 }) {
   if (!token) throw new Error('Telegram token unavailable (not printed)');
-  if (!/^\\d+:[A-Za-z0-9_-]+$/.test(token)) throw new Error('Telegram token format invalid');
+  if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) throw new Error('Telegram token format invalid');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
