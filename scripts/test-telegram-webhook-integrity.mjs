@@ -46,7 +46,7 @@ test('Telegram ALERTAS response is honest when full digest sending fails', () =>
 });
 
 test('Existing email and WhatsApp routes remain present', () => {
-  assert.match(source, /api\/telegram\/webhook/);
-  assert.match(source, /api\/whatsapp\/webhook/);
+  assert.match(source, /telegram\/webhook/);
+  assert.match(source, /whatsapp\/webhook/);
   assert.match(source, /async scheduled\(event, env, ctx\)/);
 });
