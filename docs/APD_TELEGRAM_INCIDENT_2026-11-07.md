@@ -27,3 +27,19 @@
 
 ## Criterio para considerar resuelto
 `getWebhookInfo` confirma el webhook correcto y cero errores recientes, el secreto es obligatorio, una cuenta de prueba conecta y consulta sin reportar entregas falsas, los permisos de planes y el email/WhatsApp no sufren regresiones, y el deploy queda auditado y autorizado por el propietario.
+
+## Ampliación de seguridad — continuación del 07/11/2026
+
+- La PR ahora reemplaza el enlace heredado `/start <UUID de usuario>` por `/start apd_<32 hex>` (código opaco de 128 bits generado por `crypto.randomUUID`).
+- Los códigos se generan exclusivamente desde `GET /api/telegram/status` autenticado o desde la respuesta de preferencias cuando existe una sesión Bearer coincidente con el usuario. Nunca se expone el UUID en el enlace.
+- Cada código se guarda en `EMAIL_SWEEP_STATE` con caducidad de 600 segundos y se elimina después de confirmar el mensaje al chat y guardar la vinculación.
+- No se aceptan códigos antiguos construidos a partir del UUID ni códigos expirados. El usuario debe abrir un enlace nuevo desde el panel.
+- Una revinculación a un chat nuevo revoca la asociación inversa del chat anterior. Cada mensaje entrante vuelve a comprobar que el chat sigue siendo el actualmente vinculado a esa cuenta, evitando que un índice KV antiguo autorice consultas.
+- El frontend del candidato informa correctamente que Telegram actualmente funciona **por consulta manual** escribiendo `ALERTAS`; la promesa previa de alertas automáticas era incorrecta.
+- Pruebas aisladas: cinco casos de nonce, cinco de regresión del webhook y cinco controles específicos de revinculación y permisos se comprobaron en V8, con resultados positivos. Es **evidencia sintética**, no una prueba con Telegram real.
+
+### Limitación antes de desplegar
+
+Cloudflare KV no ofrece consumo transaccional atómico ni lectura global inmediatamente consistente. Borrar el código después de usarlo limita su reutilización, pero no garantiza protección absoluta ante solicitudes simultáneas desde distintas ubicaciones. Para un código de un solo uso **estricto**, migrar el consumo a una operación atómica (por ejemplo, tabla transaccional en Supabase) y comprobar el contrato en staging. También hace falta validar la entrega real de `getWebhookInfo`/webhook, el estado actual del Worker, logs de Cloudflare y que no existan regresiones.
+
+No se cambió producción, no se desplegó el frontend y no se enviaron mensajes. El código candidato se genera únicamente en `tmp/`, conservando inmutable `worker-live/worker_hotfix.js`.
