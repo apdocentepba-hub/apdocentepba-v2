@@ -63,3 +63,28 @@ test('existing official ABC postulantes link is retained',()=>{
  assert.match(source,/Abrir postulantes en ABC/);
  assert.match(source,/const abcUrl = buildPostulantesUrl\(a\)/);
 });
+
+test('historical freshness requires timezone, rejects stale and future captures',()=>{
+ const a=source.indexOf('function historicoCapturaEsReciente(');
+ const b=source.indexOf('\nfunction renderHistoricoAPD(',a);
+ assert.ok(a>0&&b>a);
+ const fn=vm.runInNewContext(source.slice(a,b)+';historicoCapturaEsReciente');
+ const now=Date.parse('2026-11-07T20:00:00Z');
+ assert.equal(fn('2026-11-07T19:00:00Z',now),true);
+ assert.equal(fn('2026-11-05T21:00:00Z',now),true);
+ assert.equal(fn('2026-11-05T19:59:00Z',now),false);
+ assert.equal(fn('2026-11-07T20:06:00Z',now),false);
+ assert.equal(fn('2026-11-07T19:00:00',now),false);
+ assert.equal(fn('07/11/2026 19:00',now),false);
+ assert.equal(fn('',now),false);
+});
+test('stale historical values cannot appear as current counts',()=>{
+ const body=source.slice(source.indexOf('function renderHistoricoAPD('),
+   source.indexOf('\nasync function cargarHistoricoPanel(',source.indexOf('function renderHistoricoAPD(')));
+ assert.match(body,/historicoCapturaEsReciente\(data\.ultima_captura\)/);
+ assert.match(body,/recienteNumero\(data\.activas_estimadas\)/);
+ assert.match(body,/recienteNumero\(data\.nuevas_7d\)/);
+ assert.match(body,/recienteNumero\(data\.cambios_estado_recientes\)/);
+ assert.match(body,/Histórico desactualizado/);
+ assert.match(body,/historicoReciente && data\.cierran_72h/);
+});
