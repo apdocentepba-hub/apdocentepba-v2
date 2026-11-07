@@ -9,7 +9,9 @@
     "backgroundColor": "#F5F9FC",
     "android": {
       "package": "ar.com.alertasapd.laboratorio",
-      "permissions": [],
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0A2840"
       }
@@ -20,7 +22,11 @@
     "extra": {
       "demoOnly": true,
       "pushEnabled": false,
-      "backendEnabled": false
-    }
+      "backendEnabled": false,
+      "localNotificationsDemo": true
+    },
+    "plugins": [
+      "expo-notifications"
+    ]
   }
 }
