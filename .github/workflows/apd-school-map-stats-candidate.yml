@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'app_v2.js'
+      - 'mapa-escuelas-pba.html'
       - 'scripts/test-apd-school-map-stats.mjs'
       - '.github/workflows/apd-school-map-stats-candidate.yml'
 
