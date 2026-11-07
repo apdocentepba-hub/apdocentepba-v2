@@ -12289,7 +12289,11 @@ __name222(sendTelegramLongText, "sendTelegramLongText");
 __name2222(sendTelegramLongText, "sendTelegramLongText");
 function requireTelegramWebhookSecret(request, env) {
   const configured = String(env.TELEGRAM_WEBHOOK_SECRET || "").trim();
-  if (!configured) return;
+  if (!configured) {
+    const err = new Error("Webhook Telegram no configurado");
+    err.status = 503;
+    throw err;
+  }
   const provided = String(request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "").trim();
   if (!provided || provided !== configured) {
     const err = new Error("Webhook Telegram no autorizado");
@@ -12930,11 +12934,6 @@ async function handleTelegramWebhook(request, env) {
         update_id: updateId
       });
     }
-    await markInboundEventProcessed(
-      env,
-      dedupeKey,
-      TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS
-    ).catch(() => null);
   }
   const message = update?.message || {};
   const chatId = String(message?.chat?.id || "").trim();
@@ -12947,6 +12946,13 @@ async function handleTelegramWebhook(request, env) {
     });
   }
   const command = extractTelegramCommand(message?.text || "");
+  if (command.kind !== "start" && updateId) {
+    await markInboundEventProcessed(
+      env,
+      telegramUpdateDedupeKey(updateId),
+      TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS
+    ).catch(() => null);
+  }
   if (command.kind === "start") {
     const userId = String(command.payload || "").trim();
     const validStartPayload = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
@@ -12994,7 +13000,14 @@ async function handleTelegramWebhook(request, env) {
       env,
       chatId,
       "\u2705 APDocentePBA conect\xF3 este chat con tu cuenta.\n\nEscrib\xED ALERTAS cuando quieras consultar tus ofertas compatibles."
-    ).catch(() => null);
+    );
+    if (updateId) {
+      await markInboundEventProcessed(
+        env,
+        telegramUpdateDedupeKey(updateId),
+        TELEGRAM_UPDATE_DEDUPE_TTL_SECONDS
+      ).catch(() => null);
+    }
     return json2({
       ok: true,
       connected: true,
@@ -13150,8 +13163,10 @@ async function handleTelegramWebhook(request, env) {
       entitlement?.plan_code
     );
     const reply = buildTelegramQueryDigest(visibleAlertsForRender);
+    let telegramDetailDelivered = false;
     try {
       await sendTelegramLongText(env, chatId, reply);
+      telegramDetailDelivered = true;
     } catch (err) {
       console.error("TELEGRAM ALERTS SEND ERROR:", err);
       await sendTelegramText(
@@ -13167,7 +13182,7 @@ Escrib\xED ALERTAS otra vez si quer\xE9s refrescar.`
     }
     return json2({
       ok: true,
-      delivered: true,
+      delivered: telegramDetailDelivered,
       total_alerts: alerts.length,
       shown_alerts: visibleAlerts.length,
       source,
