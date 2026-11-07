@@ -12986,6 +12986,12 @@ async function handleTelegramWebhook(request, env) {
     const entitlement2 = await resolveTelegramEntitlement(env, userId);
     const prev = await getTelegramState(env, userId) || {};
     const prefs2 = await obtenerPreferenciasUsuario(env, userId).catch(() => null);
+    // Confirm bot delivery before persisting a linked state.
+    await sendTelegramText(
+      env,
+      chatId,
+      "\u2705 APDocentePBA conect\xF3 este chat con tu cuenta.\n\nEscrib\xED ALERTAS cuando quieras consultar tus ofertas compatibles."
+    );
     const next = await saveTelegramState(env, userId, {
       connected: true,
       chat_id: chatId,
@@ -12996,11 +13002,6 @@ async function handleTelegramWebhook(request, env) {
       alerts_enabled: !!entitlement2?.allowed,
       last_inbound_at: (/* @__PURE__ */ new Date()).toISOString()
     });
-    await sendTelegramText(
-      env,
-      chatId,
-      "\u2705 APDocentePBA conect\xF3 este chat con tu cuenta.\n\nEscrib\xED ALERTAS cuando quieras consultar tus ofertas compatibles."
-    );
     if (updateId) {
       await markInboundEventProcessed(
         env,
