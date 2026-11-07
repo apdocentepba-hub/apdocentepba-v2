@@ -1338,6 +1338,28 @@ function renderPidMatchBlock(alerta, resumen) {
     </div>
   `;
 }
+// Opens a map search, never labels an unverified school as a verified exact point.
+// Coordinates are used only when accompanied by an explicit verified source flag.
+function buildSchoolMapLinks(alerta) {
+  const escuela = String(alerta?.escuela || alerta?.nombreestablecimiento || "").trim();
+  const distrito = String(alerta?.distrito || alerta?.descdistrito || "").trim();
+  if (escuela.length < 3 || distrito.length < 3) return null;
+  const lat = Number(alerta?.latitud ?? alerta?.latitude);
+  const lon = Number(alerta?.longitud ?? alerta?.longitude);
+  const trusted = alerta?.coordinates_verified === true &&
+    ["mapa_escolar_abc", "dgcye"].includes(String(alerta?.geo_source || "").toLowerCase());
+  const exact = trusted && Number.isFinite(lat) && Number.isFinite(lon) &&
+    lat >= -42 && lat <= -33 && lon >= -64 && lon <= -55;
+  const query = exact
+    ? lat.toFixed(6) + "," + lon.toFixed(6)
+    : [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
+  return {
+    googleMaps: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
+    official: "https://mapaescolar.abc.gob.ar/mapaescolar/",
+    exact
+  };
+}
+
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -1401,6 +1423,7 @@ function renderAlertaActual() {
       ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
       : (a.revista || "Sin fecha informada");
   const abcUrl = buildPostulantesUrl(a);
+  const schoolMap = buildSchoolMapLinks(a);
 
   const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
   const nextIndex = total > 1 ? (alertasState.index + 1) % total : -1;
@@ -1462,7 +1485,10 @@ function renderAlertaActual() {
 
           <div class="alerta-actions">
             ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
+            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">📍 ${schoolMap.exact ? "Ubicación verificada" : "Buscar escuela en el mapa"}</a>` : ""}
+            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${schoolMap.official}" target="_blank" rel="noopener noreferrer">Mapa Escolar ABC</a>` : ""}
           </div>
+          ${schoolMap && !schoolMap.exact ? '<p class="prefs-hint">La búsqueda del mapa es orientativa: confirmá la escuela y su dirección en el Mapa Escolar oficial.</p>' : ""}
         </article>
       </div>
 
@@ -1592,6 +1618,7 @@ function renderHistoricoAPD(data) {
     <div class="historico-head">
       <div class="historico-updated">Última captura: ${esc(fmtFecha(data.ultima_captura || "-"))}</div>
       <div class="historico-note">Ventana analizada: últimos ${fmtNum(data.ventana_dias)} días</div>
+      <div class="historico-note">Estadísticas de capturas guardadas; no certifican vacantes vigentes ni adjudicaciones oficiales.</div>
     </div>
 
     <div class="historico-grid">
@@ -1601,27 +1628,27 @@ function renderHistoricoAPD(data) {
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.activas_estimadas)}</span>
-        <span class="historico-stat-l">Activas ahora</span>
+        <span class="historico-stat-l">Activas estimadas en captura</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.designadas_estimadas)}</span>
-        <span class="historico-stat-l">Designadas</span>
+        <span class="historico-stat-l">Designadas estimadas</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.anuladas_estimadas)}</span>
-        <span class="historico-stat-l">Anuladas</span>
+        <span class="historico-stat-l">Anuladas estimadas</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.desiertas_estimadas)}</span>
-        <span class="historico-stat-l">Desiertas</span>
+        <span class="historico-stat-l">Desiertas estimadas</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.nuevas_7d)}</span>
-        <span class="historico-stat-l">Nuevas en 7 días</span>
+        <span class="historico-stat-l">Nuevas detectadas (7 días)</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.cambios_estado_recientes)}</span>
-        <span class="historico-stat-l">Cambios detectados</span>
+        <span class="historico-stat-l">Cambios entre capturas</span>
       </div>
     </div>
 
