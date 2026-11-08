@@ -3,6 +3,10 @@
 -- No real Supabase project, provider token, internet or delivery.
 \ir ../sql/apd_mobile_dispatch_authorization_lab_20261108.sql
 
+-- Existing production Worker already accesses public.users with server privileges.
+-- Disposable PostgreSQL fixture must grant ONLY the two required columns.
+GRANT SELECT (id,activo) ON public.users TO service_role;
+
 DO $audit$
 BEGIN
  IF has_table_privilege('anon','public.apd_mobile_dispatch_authorizations','SELECT')
