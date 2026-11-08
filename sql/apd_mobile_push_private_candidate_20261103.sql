@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS public.apd_mobile_push_outbox (
  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
  device_id uuid NOT NULL,
  offer_fingerprint text NOT NULL CHECK (offer_fingerprint ~ '^[0-9a-f]{64}$'),
+ -- Internal ABC offer key is required for authoritative relookup after claim.
+ -- Never send this value in a notification payload or to an app client.
+ source_offer_key text NOT NULL CHECK (
+  length(source_offer_key) BETWEEN 1 AND 160 AND
+  source_offer_key ~ '^[A-Za-z0-9_.:|-]+$'),
  offer_expires_at timestamptz NOT NULL,
  status text NOT NULL DEFAULT 'pending' CHECK (
   status IN ('pending','leased','sent','dead','cancelled')),
@@ -96,7 +101,8 @@ CREATE OR REPLACE FUNCTION public.apd_mobile_claim_push(
  p_limit integer DEFAULT 10,
  p_lease_seconds integer DEFAULT 60
 ) RETURNS TABLE (
- event_key text, user_id uuid, device_id uuid, lease_id uuid, attempts integer
+ event_key text, user_id uuid, device_id uuid, lease_id uuid,
+ attempts integer, source_offer_key text
 ) LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 BEGIN
  IF p_limit IS NULL OR p_limit<1 OR p_limit>100 OR
@@ -126,7 +132,8 @@ BEGIN
      updated_at=clock_timestamp()
  FROM chosen
  WHERE o.event_key=chosen.event_key
- RETURNING o.event_key,o.user_id,o.device_id,o.lease_id,o.attempts;
+ RETURNING o.event_key,o.user_id,o.device_id,o.lease_id,
+ o.attempts,o.source_offer_key;
 END; $$;
 
 -- Acknowledgement only for the current unexpired lease.
