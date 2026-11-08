@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'sql/apd_mobile_push_private_candidate_20261103.sql'
+      - 'sql/apd_mobile_dispatch_authorization_lab_20261108.sql'
+      - 'scripts/test-apd-mobile-dispatch-authorization-pg17.sql'
       - 'scripts/test-apd-mobile-push-private-pg17.sql'
       - 'scripts/mobile-push-strict-session-lab.mjs'
       - 'scripts/test-mobile-push-strict-session-lab.mjs'
@@ -50,6 +52,7 @@ jobs:
         run: |
           command -v psql
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-push-private-pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-dispatch-authorization-pg17.sql
       - name: Prove no production file changes
         run: |
           git diff --exit-code origin/main -- worker.js app_v2.js index.html auth_session_patch.js
