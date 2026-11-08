@@ -19,6 +19,8 @@ import {createMobilePushSubscriptionVerifierLab}
  from '../mobile-push-subscription-verifier-lab.mjs';
 import {matchWithCurrentPreferences}
  from './generated-apd-matcher-lab.mjs';
+import {createMobilePushProviderReplayLab}
+ from '../mobile-push-provider-response-replay-lab.mjs';
 
 const USER='11111111-1111-4111-8111-111111111111';
 const OTHER='22222222-2222-4222-8222-222222222222';
@@ -43,7 +45,10 @@ const VALID=new Set([
  'plan-history-overflow','plan-newer-pending',
  'plan-revoked-after','plan-paused-after','plan-expired-after',
  'plan-catalog-disabled-after','plan-account-down-after',
- 'dispatch-denied','dispatch-malformed','dispatch-down'
+ 'dispatch-denied','dispatch-malformed','dispatch-down',
+ 'mock-expo-ticket','mock-expo-receipt','mock-expo-timeout-late',
+ 'mock-expo-revoked-late','mock-expo-unregistered',
+ 'mock-fcm-accepted','mock-fcm-unknown','mock-fcm-unregistered'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -305,7 +310,53 @@ export default {
    repository,database,hmacSecret:HMAC,now:()=>NOW
   });
   const outcome=await run({fixtureOnly:true});
+  // Provider "simulation" is a PURE in-memory replay after SQL prepare.
+  // It has no fetch, token, recipient, server key, provider URL or ACK RPC.
+  // In particular: provider_calls stays 0 and SQL never changes to sent.
+  let replay=null;
+  if(mode.startsWith('mock-')&&outcome.prepared===1){
+   const expo=mode.startsWith('mock-expo');
+   const sim=createMobilePushProviderReplayLab({
+    dispatchId:'66666666-6666-4666-8666-666666666666',
+    transport:expo?'expo':'fcm'
+   });
+   const ticket='11111111-1111-4111-8111-111111111111';
+   const okTicket={httpStatus:200,body:{data:[{
+    status:'ok',id:ticket
+   }]}};
+   const okReceipt={httpStatus:200,body:{data:{
+    [ticket]:{status:'ok'}
+   }}};
+   const invalidReceipt={httpStatus:200,body:{data:{
+    [ticket]:{status:'error',details:{error:'DeviceNotRegistered'}}
+   }}};
+   const fcmAccepted={httpStatus:200,body:{
+    name:'projects/lab/messages/0:1234567890'
+   }};
+   const fcmInvalid={httpStatus:404,body:{
+    error:{status:'NOT_FOUND',details:[{
+     '@type':'type.googleapis.com/google.firebase.fcm.v1.FcmError',
+     errorCode:'UNREGISTERED'
+    }]}
+   }};
+   const start=expo?okTicket:mode==='mock-fcm-unknown'?
+    {httpStatus:503}:mode==='mock-fcm-unregistered'?
+    fcmInvalid:fcmAccepted;
+   sim.submit(start);
+   if(mode==='mock-expo-receipt')sim.receipt(okReceipt);
+   if(mode==='mock-expo-unregistered')sim.receipt(invalidReceipt);
+   if(mode==='mock-expo-timeout-late'){
+    sim.timeout();sim.receipt(okReceipt);
+   }
+   if(mode==='mock-expo-revoked-late'){
+    sim.revoke();sim.receipt(okReceipt);
+   }
+   // Verify a repeated replay is always denied, including after timeout.
+   if(sim.submit(start).applied!==false)
+    throw Error('mock_replay_not_idempotent');
+   replay=sim.snapshot();
+  }
   // The diagnostic never includes offer IDs, user IDs, tokens or API key.
-  return json({...outcome,counts});
+  return json({...outcome,counts,...(replay?{replay}:{})});
  }
 };
