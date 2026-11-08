@@ -99,7 +99,9 @@ test('APD-owned map accepts school and district deep-links safely',()=>{
  assert.match(html,/ofertaDistrito/);
  assert.match(html,/if\(ofertaEscuela\|\|ofertaClave\)\$\('q'\)\.value=ofertaClave\|\|ofertaEscuela/);
  assert.match(html,/matchingDistrict=ds\.find/);
- assert.match(source,/apdMap: "\.\/mapa-escuelas-pba\.html\?escuela="/);
+ assert.match(source,/apdMap: "\.\/mapa-escuelas-pba\.html\?" \+/);
+ assert.match(source,/"clave=" \+ encodeURIComponent\(clave\)/);
+ assert.match(source,/"escuela=" \+ encodeURIComponent\(escuela\)/);
 });
 test('external school names are escaped before entering map HTML',()=>{
  const html=fs.readFileSync(new URL('../mapa-escuelas-pba.html',import.meta.url),'utf8');
