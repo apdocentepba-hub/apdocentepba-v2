@@ -74,7 +74,7 @@ CREATE OR REPLACE FUNCTION public.apd_mobile_expo_retire_terminal_tickets(
 LANGUAGE plpgsql SECURITY INVOKER
 SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE v record;v_status text;v_state text;v_row record;
-        v_count integer;v_total integer:=0;
+        v_count integer;v_total integer:=0;v_ticket text;
 BEGIN
  IF p_limit IS NULL OR p_limit<1 OR p_limit>20
  OR p_min_age_days IS NULL OR p_min_age_days<90
@@ -108,11 +108,19 @@ BEGIN
   FROM public.apd_mobile_dispatch_authorizations a
   WHERE a.event_key=v.event_key AND a.dispatch_id=v.dispatch_id
   FOR UPDATE;
+  -- Read the candidate ticket without a row lock, take its advisory lock,
+  -- and only then lock the receipt row. record_ticket takes advisory before
+  -- touching receipt uniqueness; this shared ordering avoids deadlocks.
+  SELECT r.ticket_id INTO v_ticket
+  FROM public.apd_mobile_expo_receipt_correlation r
+  WHERE r.event_key=v.event_key AND r.dispatch_id=v.dispatch_id;
+  IF NOT FOUND OR v_ticket IS NULL THEN CONTINUE; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_ticket,38193));
   SELECT r.* INTO v_row
   FROM public.apd_mobile_expo_receipt_correlation r
   WHERE r.event_key=v.event_key AND r.dispatch_id=v.dispatch_id
   FOR UPDATE;
-  IF NOT FOUND OR v_row.ticket_id IS NULL OR
+  IF NOT FOUND OR v_row.ticket_id IS DISTINCT FROM v_ticket OR
     v_row.late_receipt_audit_only OR
     v_row.late_observed_outcome IS NOT NULL OR
     v_row.ticket_recorded_at>=
@@ -126,7 +134,6 @@ BEGIN
     )
   THEN CONTINUE; END IF;
 
-  PERFORM pg_advisory_xact_lock(hashtextextended(v_row.ticket_id,38193));
   INSERT INTO public.apd_mobile_expo_ticket_tombstones(
    event_key,dispatch_id,ticket_sha256,last_provider_outcome)
   VALUES(v.event_key,v.dispatch_id,
