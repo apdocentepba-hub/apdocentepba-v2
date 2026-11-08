@@ -10,6 +10,8 @@ on:
       - 'scripts/build-apd-mobile-matcher-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-worker-matcher-workerd-fixture-lab.mjs'
       - 'scripts/test-mobile-workerd-actual-matcher-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-fullchain-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-fullchain-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs'
       - 'scripts/test-mobile-workerd-abc-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs'
@@ -57,6 +59,8 @@ jobs:
           node scripts/build-apd-mobile-matcher-runtime-lab.mjs
           node --check scripts/fixtures/generated-apd-matcher-lab.mjs
           node --test scripts/test-mobile-workerd-actual-matcher-runtime-lab.mjs
+          node --check scripts/fixtures/apd-mobile-fullchain-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-fullchain-runtime-lab.mjs
       - name: Ensure no application or Worker production files changed
         run: |
           git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js
