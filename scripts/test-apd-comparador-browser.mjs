@@ -183,6 +183,8 @@ try{
     assert.equal(await js('document.querySelectorAll(".apd-comparator-table thead th").length'),3);
     assert.equal(await js('document.getElementById("apd-ver-comparacion")?.textContent'),
      'Ver comparación (2)');
+    assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1,
+     'Only one current compare-jump control should exist');
     assert.ok(await js('document.querySelectorAll(".apd-comparator-diff").length>0'),
      'Differences between districts and turns should be highlighted');
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
@@ -208,6 +210,7 @@ try{
   assert.equal(state.comparisonColumns,6);
   assert.ok(state.comparisonRows>=6);
   assert.equal(state.seeComparison,'Ver comparación (5)');
+  assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1);
   assert.equal(state.forgedImage,false);
   assert.equal(state.escapeVisible,true);
   assert.equal(await js('window.__wfsRequests.length'),0,
