@@ -12,7 +12,7 @@ let mf;
 before(async()=>{
  mf=new Miniflare({
   modules:true,
-  compatibilityDate:'2026-11-07',
+  compatibilityDate:'2026-07-30',
   scriptPath:fileURLToPath(new URL('./fixtures/apd-mobile-workerd-fixture-lab.mjs',import.meta.url)),
   modulesRules:[{type:'ESModule',include:['**/*.mjs']}],
  });
