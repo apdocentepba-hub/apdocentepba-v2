@@ -173,6 +173,59 @@ export function createMobilePushPostgrestAdapterLab({
     niveles,turnos
    });
   },
+  async readAccountActive({userId}={}){
+   if(!UUID.test(userId||''))throw Error('invalid_account_reference');
+   const rows=await request('users',{query:{
+    select:'id,activo',id:'eq.'+userId,limit:2
+   }});
+   const row=expectOne(rows);
+   if(!row)return null;
+   if(row.id!==userId||typeof row.activo!=='boolean')
+    throw Error('postgrest_invalid_account');
+   // Never query account email, sessions, password, names or phone.
+   return Object.freeze({user_id:userId,active:row.activo});
+  },
+  async readSubscriptionCandidates({userId}={}){
+   if(!UUID.test(userId||''))throw Error('invalid_subscription_reference');
+   const rows=await request('user_subscriptions',{query:{
+    select:'id,user_id,plan_code,status,created_at,trial_ends_at,current_period_ends_at',
+    user_id:'eq.'+userId,order:'created_at.desc',limit:6
+   }});
+   if(!Array.isArray(rows)||rows.length>=6)
+    throw Error('postgrest_subscription_set_ambiguous');
+   const uuids=new Set();
+   return Object.freeze(rows.map(row=>{
+    if(!row||!UUID.test(row.id||'')||uuids.has(row.id)||
+       row.user_id!==userId||typeof row.plan_code!=='string'||
+       row.plan_code.length<1||row.plan_code.length>40||
+       typeof row.status!=='string'||row.status.length<1||
+       row.status.length>40||typeof row.created_at!=='string'||
+       row.created_at.length>60||
+       ![row.trial_ends_at,row.current_period_ends_at]
+        .every(v=>v===null||typeof v==='string'&&v.length<=60))
+     throw Error('postgrest_invalid_subscription');
+    uuids.add(row.id);
+    return Object.freeze({
+     id:row.id,user_id:userId,
+     plan_code:row.plan_code,status:row.status,
+     created_at:row.created_at,trial_ends_at:row.trial_ends_at,
+     current_period_ends_at:row.current_period_ends_at
+    });
+   }));
+  },
+  async readCatalogPlan({planCode}={}){
+   if(typeof planCode!=='string'||
+      !['TRIAL_7D','PLUS','PREMIUM','INSIGNE'].includes(planCode))
+    throw Error('invalid_catalog_plan_reference');
+   const rows=await request('subscription_plans',{query:{
+    select:'code,is_active',code:'eq.'+planCode,limit:2
+   }});
+   const row=expectOne(rows);
+   if(!row)return null;
+   if(row.code!==planCode||typeof row.is_active!=='boolean')
+    throw Error('postgrest_invalid_catalog_plan');
+   return Object.freeze({code:planCode,is_active:row.is_active});
+  },
   async cancel({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
    const value=await request('rpc/apd_mobile_cancel_push',{
