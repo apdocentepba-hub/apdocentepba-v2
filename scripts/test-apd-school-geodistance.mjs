@@ -94,7 +94,7 @@ test('at most five unique provincial keys are queried on explicit call',async()=
  assert.deepEqual(result.attempted,[code,tcode]);
  assert.equal(result.unverified.length,0);
  assert.equal(Object.keys(result.verified).length,2);
- assert.throws(()=>fetchSelectedSchools(Array(6).fill(code)),/max_five/);
+ await assert.rejects(fetchSelectedSchools(Array(6).fill(code)),/max_five/);
 });
 test('partial outage yields unknown for a school, never a fake distance',async()=>{
  const result=await fetchSelectedSchools([code,tcode],{
