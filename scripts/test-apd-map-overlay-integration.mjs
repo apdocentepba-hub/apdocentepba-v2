@@ -12,7 +12,8 @@ const end=moduleSource.indexOf('function removeLinks()',start);
 assert.ok(start>=0&&end>start);
 const schoolMapHref=vm.runInNewContext(
  moduleSource.slice(start,end).replace('export function schoolMapHref','function schoolMapHref')+
- '\nschoolMapHref'
+ '\nschoolMapHref',
+ {URLSearchParams}
 );
 test('offer school key links directly to internal WFS map',()=>{
  const href=schoolMapHref({escuela:'0005MS0004',distrito:'Avellaneda'});
