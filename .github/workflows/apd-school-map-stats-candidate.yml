@@ -5,7 +5,8 @@ on:
     paths:
       - 'app_v2.js'
       - 'mapa-escuelas-pba.html'
-      - 'scripts/test-apd-school-map-stats.mjs'
+      - 'scripts/test-apd-map-overlay-integration.mjs'
+      - 'apd_offer_school_map_overlay.mjs'
       - 'scripts/test-apd-school-wfs-mapping.mjs'
       - 'scripts/check-apd-school-wfs-live-readonly.mjs'
       - 'scripts/audit-apd-wfs-layers-readonly.mjs'
@@ -26,7 +27,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --check app_v2.js
-      - run: node --test scripts/test-apd-school-map-stats.mjs scripts/test-apd-school-wfs-mapping.mjs
+      - run: node --test scripts/test-apd-map-overlay-integration.mjs scripts/test-apd-school-wfs-mapping.mjs
       - name: 'Real Chromium QA: mobile and desktop, simulated official WFS and outage'
         run: node scripts/test-apd-school-map-browser.mjs
       - name: Save browser screenshots for QA
