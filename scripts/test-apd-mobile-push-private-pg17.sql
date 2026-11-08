@@ -47,17 +47,20 @@ VALUES
   repeat('b',64),repeat('Z',64),true,true);
 
 INSERT INTO public.apd_mobile_push_outbox
-(event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+(event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
 VALUES
  (repeat('1',64),'11111111-1111-4111-8111-111111111111',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),now()+interval '1 day'),
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),'APD:LAB:A',now()+interval '1 day'),
  (repeat('2',64),'22222222-2222-4222-8222-222222222222',
-  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',repeat('b',64),now()+interval '1 day');
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',repeat('b',64),'APD:LAB:B',now()+interval '1 day');
 
 DO $test$
 DECLARE v_claim record;
 BEGIN
  SELECT * INTO v_claim FROM public.apd_mobile_claim_push(1,60);
+ IF v_claim.source_offer_key IS DISTINCT FROM 'APD:LAB:A'
+   AND v_claim.source_offer_key IS DISTINCT FROM 'APD:LAB:B' THEN
+  RAISE EXCEPTION 'Claim is missing its source offer key'; END IF;
  IF v_claim.event_key IS NULL OR v_claim.attempts<>1 THEN
   RAISE EXCEPTION 'Expected first atomic claim'; END IF;
  IF (SELECT count(*) FROM public.apd_mobile_claim_push(1,60))<>1 THEN
@@ -96,17 +99,17 @@ DO $test$
 BEGIN
  BEGIN
   INSERT INTO public.apd_mobile_push_outbox(
-   event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+   event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
   VALUES (repeat('3',64),'22222222-2222-4222-8222-222222222222',
-    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),'APD:LAB:A',
     now()+interval '1 day');
   RAISE EXCEPTION 'Cross-user enqueue accepted';
  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
  BEGIN
   INSERT INTO public.apd_mobile_push_outbox(
-   event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+   event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
   VALUES (repeat('1',64),'11111111-1111-4111-8111-111111111111',
-    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),'APD:LAB:A',
     now()+interval '1 day');
   RAISE EXCEPTION 'Duplicate event accepted';
  EXCEPTION WHEN unique_violation THEN NULL; END;
@@ -124,10 +127,10 @@ END $test$;
 -- The wrong lease, a duplicate cancel and a later 'sent' acknowledgement
 -- are all forbidden. Synthetic lease ownership only; never a provider call.
 INSERT INTO public.apd_mobile_push_outbox
-(event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+(event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
 VALUES
  (repeat('5',64),'11111111-1111-4111-8111-111111111111',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('e',64),
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('e',64),'APD:LAB:E',
   now()+interval '1 day');
 DO $test$
 DECLARE v_claim record;
@@ -152,10 +155,10 @@ END $test$;
 -- An expired worker lease cannot cancel a NEW reservation for the same event.
 -- This simulates a stalled Worker followed by a lease recovered by another.
 INSERT INTO public.apd_mobile_push_outbox
-(event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+(event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
 VALUES
  (repeat('6',64),'11111111-1111-4111-8111-111111111111',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('f',64),
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('f',64),'APD:LAB:F',
   now()+interval '1 day');
 DO $test$
 DECLARE v_old record;v_new record;
@@ -178,11 +181,33 @@ BEGIN
   RAISE EXCEPTION 'Cancelled recovered lease marked sent'; END IF;
 END $test$;
 
+-- A source identity must not be missing or malformed: the backend must
+-- be able to re-check the exact published offer after leasing the event.
+DO $test$
+BEGIN
+ BEGIN
+  INSERT INTO public.apd_mobile_push_outbox
+   (event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
+  VALUES (repeat('7',64),'11111111-1111-4111-8111-111111111111',
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('7',64),
+   'contains spaces',now()+interval '1 day');
+  RAISE EXCEPTION 'Malformed source offer key accepted';
+ EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN
+  INSERT INTO public.apd_mobile_push_outbox
+   (event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+  VALUES (repeat('8',64),'11111111-1111-4111-8111-111111111111',
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('8',64),
+   now()+interval '1 day');
+  RAISE EXCEPTION 'Missing source offer key accepted';
+ EXCEPTION WHEN not_null_violation THEN NULL; END;
+END $test$;
+
 -- Do not claim outdated/offline offers even with a consenting active device.
 INSERT INTO public.apd_mobile_push_outbox(
- event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+ event_key,user_id,device_id,offer_fingerprint,source_offer_key,offer_expires_at)
 VALUES (repeat('4',64),'11111111-1111-4111-8111-111111111111',
- 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('d',64),
+ 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('d',64),'APD:LAB:D',
  now()-interval '1 second');
 DO $test$
 BEGIN
