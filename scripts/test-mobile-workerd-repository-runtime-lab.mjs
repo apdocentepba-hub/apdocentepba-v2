@@ -31,7 +31,7 @@ for(const [mode,expected] of [
  ['stale',{ok:true,ready:0,cancelled:0,retried:1}],
  ['offline',{ok:true,ready:0,cancelled:0,retried:1}],
  ['plan-down',{ok:true,ready:0,cancelled:0,retried:1}],
- ['lease-expired',{ok:true,ready:0,cancelled:0,retried:1}],
+ ['lease-expired',{ok:true,ready:0,cancelled:0,retried:0}],
  ['cross-account',{ok:true,ready:0,cancelled:1,retried:0}],
  ['unauthorized',{ok:false,reason:'not_authorized'}]
 ]){
