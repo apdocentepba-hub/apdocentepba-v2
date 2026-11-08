@@ -132,3 +132,40 @@ test('fixture rejects any operational sender route or unsupported method',async(
  assert.equal((await state('send-real-push')).status,404);
  assert.equal((await state('ready','POST')).status,405);
 });
+
+
+// These are NOT provider requests: pure local response parsing after a SQL
+// authorization fixture. No FCM/Expo HTTP, SDK, credentials or real device.
+for(const [mode,expected,late] of [
+ ['mock-expo-ticket','awaiting_receipt',false],
+ ['mock-expo-receipt','provider_accepted',false],
+ ['mock-expo-timeout-late','uncertain',true],
+ ['mock-expo-revoked-late','revoked',true],
+ ['mock-expo-unregistered','invalid_device',false],
+ ['mock-fcm-accepted','provider_accepted',false],
+ ['mock-fcm-unknown','uncertain',false],
+ ['mock-fcm-unregistered','invalid_device',false]
+]){
+ test('workerd SQL-authorized but offline provider response replay /'+mode,
+ async()=>{
+  const {status,result:r}=await state(mode);
+  assert.equal(status,200);
+  assert.equal(r.ok,true);
+  assert.equal(r.ready,1);
+  assert.equal(r.prepared,1);
+  assert.equal(r.counts.prepare,1);
+  assert.equal(r.counts.unauthorizedRequests,0);
+  assert.equal(r.provider_calls,0);
+  assert.equal(r.replay.provider_calls,0);
+  assert.equal(r.replay.delivery_to_device_confirmed,false);
+  assert.equal(r.replay.submission_attempts,1);
+  assert.equal(r.replay.state,expected);
+  assert.equal(r.replay.late_receipt_audit_only,late);
+  for(const forbidden of [
+   '11111111-1111-4111-8111-111111111111',
+   '66666666-6666-4666-8666-666666666666',
+   'sb_secret_', 'AVELLANEDA','PRECEPTOR','D_123',
+   'projects/lab/messages/0:1234567890'
+  ])assert.ok(!JSON.stringify(r).includes(forbidden));
+ });
+}
