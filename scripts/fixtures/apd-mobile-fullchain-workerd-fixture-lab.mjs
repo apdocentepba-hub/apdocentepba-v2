@@ -378,20 +378,10 @@ export default {
      dispatchId:'66666666-6666-4666-8666-666666666666',
      providerReply:okTicket
     });
-    let observed=null;
-    if(mode!=='mock-expo-ticket'){
-     observed=await journal.recordSyntheticReceipt({
-      eventKey:claim.event_key,
-      dispatchId:'66666666-6666-4666-8666-666666666666',
-      ticketId:ticket,
-      providerReply:mode==='mock-expo-unregistered'?
-       invalidReceipt:okReceipt
-     });
-    }
     journalReport={
      ticket_stored:recorded.stored,
-     receipt_recorded:observed?.stored??false,
-     observed_status:observed?.observed_status??null
+     receipt_recorded:false,
+     observed_status:null
     };
    }
    if(mode==='mock-expo-receipt')sim.receipt(okReceipt);
@@ -401,6 +391,24 @@ export default {
    }
    if(mode==='mock-expo-revoked-late'){
     sim.revoke();sim.receipt(okReceipt);
+   }
+   // Persist observation AFTER simulating timeout or revocation, so late
+   // receipts cannot be confused with an active dispatch. The disposable
+   // PostgreSQL tests independently prove the late_audit transition.
+   if(expo&&mode!=='mock-expo-ticket'){
+    const journal=createMobileExpoReceiptJournalLab({database});
+    const observed=await journal.recordSyntheticReceipt({
+     eventKey:claim.event_key,
+     dispatchId:'66666666-6666-4666-8666-666666666666',
+     ticketId:ticket,
+     providerReply:mode==='mock-expo-unregistered'?
+      invalidReceipt:okReceipt
+    });
+    journalReport={
+     ...journalReport,
+     receipt_recorded:observed.stored,
+     observed_status:observed.observed_status
+    };
    }
    // Verify a repeated replay is always denied, including after timeout.
    if(sim.submit(start).applied!==false)
