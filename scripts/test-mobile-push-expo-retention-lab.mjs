@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMobileExpoRetentionLab}
  from './mobile-push-expo-retention-lab.mjs';
+import {createMobilePushPostgrestAdapterLab}
+ from './mobile-push-postgrest-adapter-lab.mjs';
 
 test('maintenance cannot retire without explicit fixture authorization',async()=>{
  let writes=0,authorizations=0;
@@ -63,4 +65,28 @@ test('retention requires both a database and authorization callback',()=>{
  assert.throws(()=>createMobileExpoRetentionLab({
   database:{retireResolvedExpoTickets:async()=>0}
  }),/missing_expo_retention_dependencies/);
+});
+
+
+test('PostgREST validates terminal retirement request and count',async()=>{
+ let requests=0;
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:'https://sample-lab.supabase.co',
+  secretKey:'sb_secret_SYNTHETIC_abcdefghijklmnopqrstuvwxyz012345',
+  fetchImpl:async(url,options)=>{
+   requests++;
+   assert.equal(new URL(url).pathname,
+    '/rest/v1/rpc/apd_mobile_expo_retire_terminal_tickets');
+   assert.deepEqual(JSON.parse(options.body),{
+    p_limit:3,p_min_age_days:90
+   });
+   return new Response('2',{headers:{'content-type':'application/json'}});
+  }
+ });
+ assert.equal(await db.retireResolvedExpoTickets({
+  limit:3,minAgeDays:90
+ }),2);
+ await assert.rejects(()=>db.retireResolvedExpoTickets({limit:3,minAgeDays:89}),
+  /invalid_expo_retention_bounds/);
+ assert.equal(requests,1);
 });
