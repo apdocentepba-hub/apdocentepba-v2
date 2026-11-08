@@ -25,6 +25,29 @@ function extractFunction(workerSource,name){
  return workerSource.slice(start,end);
 }
 /**
+ * Generates Worker-native ESM from the exact Worker matching functions.
+ * The output has no Node imports, VM calls or external dependencies.
+ * It is for disposable CI fixtures only, NEVER a production entrypoint.
+ */
+export function extractAPDMatcherWorkerRuntimeLab(workerSource){
+ if(typeof workerSource!=='string'||workerSource.length<1000||
+    workerSource.length>1_000_000)
+  throw Error('invalid_worker_source');
+ const pieces=REQUIRED.map(name=>extractFunction(workerSource,name));
+ return [
+  '// GENERATED from trusted worker.js by CI. NOT FOR DEPLOYMENT.',
+  ...pieces,
+  'export function matchWithCurrentPreferences({offer,preferences}={}) {',
+  ' if(!offer||!preferences)throw Error("missing_match_inputs");',
+  ' const result=coincideOfertaConPreferenciasAPD(offer,preferences);',
+  ' if(typeof result?.match!=="boolean")throw Error("matcher_result_invalid");',
+  ' return {match:result.match};',
+  '}',
+  ''
+ ].join('\\n');
+}
+
+/**
  * A test-only function wrapper delegating to the exact Worker matcher.
  * vm isolates its symbols from Node APIs (no fetch, process or secrets).
  */
