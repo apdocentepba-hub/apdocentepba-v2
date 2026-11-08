@@ -37,6 +37,8 @@ window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
 window.__geoNetworkDown=false;
+window.__holdWFS=false;
+window.__heldWFS=[];
 window.__realFetch=window.fetch.bind(window);
 window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
@@ -59,8 +61,12 @@ window.fetch=async (target,opts={})=>{
   latitud:coords[0],longitud:coords[1]
  }}]:[];
  const bytes=new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features}));
- return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
+ const reply={ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
   arrayBuffer:async()=>bytes.buffer};
+ if(window.__holdWFS){
+  return new Promise(resolve=>window.__heldWFS.push(()=>resolve(reply)));
+ }
+ return reply;
 };
 </script>
 <script>${bootstrap}</script></body></html>`;
@@ -227,6 +233,14 @@ try{
   await js('document.getElementById("apd-comparar-oferta").click();true');
   assert.equal(await js('document.querySelectorAll(".apd-comparator-item").length'),5);
   assert.match(await js('document.querySelector("#apd-comparator-status").textContent'),/hasta cinco ofertas/);
+  // Simulate a WFS provider finishing AFTER the original user is gone.
+  // The async result must never repaint the next account's data.
+  await js(`(()=>{
+   window.__holdWFS=true;
+   document.querySelector('.apd-comparator-geobutton').click();
+   return true;
+  })()`);
+  await until('window.__heldWFS.length===2');
   await js(`(()=>{
    dashboardLoadedOwner='SYNTHETIC_USER_B';
    window.__testToken='SYNTHETIC_USER_B';
@@ -237,6 +251,16 @@ try{
   await until('document.querySelector(".apd-comparator-count")?.textContent==="0 de 5 ofertas seleccionadas"');
   assert.equal(await js('!!document.querySelector(".apd-comparator-pairs")'),false,
    'Changing accounts clears all school coordinate results');
+  await js(`(()=>{
+   window.__holdWFS=false;
+   window.__heldWFS.splice(0).forEach(resolve=>resolve());
+   return true;
+  })()`);
+  await sleep(130);
+  assert.equal(await js('!!document.querySelector(".apd-comparator-pairs")'),false,
+   'A late WFS response cannot repopulate a different account');
+  assert.equal(await js('document.querySelector(".apd-comparator-count")?.textContent'),
+   '0 de 5 ofertas seleccionadas');
   await js('document.getElementById("apd-comparar-oferta").click();true');
   await js(`(()=>{
    dashboardLoadedOwner=null;
