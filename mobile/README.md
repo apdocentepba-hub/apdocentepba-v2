@@ -53,3 +53,21 @@ Referencia de versión y compatibilidad: https://docs.expo.dev/versions/latest/
 Se incorpora `expo-notifications` y permiso Android `POST_NOTIFICATIONS` para mostrar un aviso **local de prueba**, únicamente al presionar **Probar notificación local** en Cuenta. Se crea canal Android de laboratorio, se solicita permiso explícito y se agenda un aviso inmediato, sin identidad, oferta real, token ni llamadas a proveedores. El texto indica claramente que **no es una alerta APD real ni un push remoto**. Requiere una compilación nativa nueva y prueba física: `expo export` y los tests Node por sí solos no demuestran que apareció en la bandeja de Android.
 
 Para los push remotos siguen pendientes la integración segura con el Worker, registro/revocación, FCM/Expo, consentimientos, verificación de oferta vigente y entrega real en teléfono. No se envían notificaciones automáticas a usuarios.
+
+## 08/11/2026 — Bandeja ficticia persistente y sincronización local
+
+Se incorporaron `src/demo-inbox.js` y `src/demo-inbox.test.cjs`, más una bandeja en la pestaña **Alertas** que permite simular una llegada, marcarla como leída, simular cancelación y recuperar esos estados después de cerrar y volver a abrir la aplicación. Se usa `@react-native-async-storage/async-storage` versión **2.2.0** compatible con Expo SDK 58. No hay conexión con ABC, Supabase, FCM, Expo Push ni backend.
+
+Solo se persiste `{version, cursor, items[]}` con cuatro identificadores fijos `DEMO-AVISO-*`, vinculados exclusivamente a los ejemplos `DEMO-APD-*`, sus revisiones y estados de lectura/cancelación. No hay nombres, direcciones, escuelas reales, contraseñas, teléfonos, DNI, CUIL, tokens push, sesión ni cuerpo libre de mensaje.
+
+**Garantías del contrato de laboratorio:**
+
+- Únicamente mensajes ficticios estrictamente validados y cursores consecutivos; si falta una revisión, se rechaza el lote. Duplicados o lotes antiguos no borran las marcas de lectura.
+- Cancelar es terminal y deja una lápida: una revisión posterior o tardía no reactiva el aviso; cancelar antes de la llegada también evita resurrección.
+- Las escrituras locales se serializan. Un error de almacenamiento no se exhibe como guardado. Un snapshot corrupto bloquea las modificaciones hasta reinicio explícito, sin borrarlo automáticamente.
+- El estado se recupera al abrir la app. El botón **Reiniciar demostración y bandeja** elimina solo los ejemplos guardados en este dispositivo.
+- El contador `remotePushReceived` permanece siempre en **0**. Ningún botón envía un push real ni registra un token.
+
+**Privacidad:** AsyncStorage es almacenamiento local persistente **no cifrado**, por lo que se utiliza exclusivamente con identificadores y estados ficticios. Una bandeja real necesita autenticación, aislamiento por cuenta, caducidad, cifrado apropiado y sincronización autorizada del servidor; nada de eso se infiere de esta demostración.
+
+**Verificación:** Node prueba recuperación al crear una segunda instancia con el mismo almacenamiento simulado, secuenciación, corrupción, acciones concurrentes, cancelación tardía y fail-closed. El empaquetado JS y las compilaciones APK no prueban persistencia en un teléfono físico; esa prueba se hará cuando se autorice la instalación.
