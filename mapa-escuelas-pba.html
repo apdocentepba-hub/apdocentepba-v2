@@ -3,6 +3,8 @@
 // Offer links are public school/district search hints, never account data.
 const ofertaParametros=new URLSearchParams(window.location.search);
 const ofertaEscuela=String(ofertaParametros.get('escuela')||'').trim().slice(0,120);
+const claveRaw=String(ofertaParametros.get('clave')||'').trim().toUpperCase();
+const ofertaClave=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/.test(claveRaw)?claveRaw:'';
 const ofertaDistrito=String(ofertaParametros.get('distrito')||'').trim().slice(0,80);
 const escaparHtml=v=>String(v??'')
  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -14,15 +16,15 @@ const XLSX_FUENTES=[{nombre:'XLSX 2026 directo',url:XLSX_2026},{nombre:'XLSX 202
 const ZIP_FUENTES=[{nombre:'ZIP local',url:'./data/mae_actualizado_2019-09-16_envios.zip'},{nombre:'ZIP 2019 directo',url:ZIP_2019},{nombre:'ZIP 2019 allorigins',url:'https://api.allorigins.win/raw?url='+encodeURIComponent(ZIP_2019)},{nombre:'ZIP 2019 corsproxy',url:'https://corsproxy.io/?'+encodeURIComponent(ZIP_2019)}];
 let map=L.map('map').setView([-36.6,-60.5],6);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);let cluster=L.markerClusterGroup();map.addLayer(cluster);let datos=[],visibles=[],cargando=false;const $=id=>document.getElementById(id);
 function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}function key(s){return norm(s).replace(/[^a-z0-9]/g,'')}function pick(o,names){let ks=Object.keys(o||{});for(let n of names){let k=ks.find(k=>key(k)===key(n)||key(k).includes(key(n)));if(k&&o[k]!=null&&String(o[k]).trim()!=='')return o[k]}return''}function parseNum(v){let n=parseFloat(String(v||'').trim().replace(',','.'));return n}function setInfo(msg){$('err').style.display=msg?'block':'none';$('err').textContent=msg||''}
-function convertir(rows,fuente){setInfo('');datos=rows.map(r=>{let lat=parseNum(pick(r,['latitud','lat','latitude','y']));let lon=parseNum(pick(r,['longitud','lon','lng','longitude','x']));let prov=pick(r,['provincia','jurisdiccion','jurisdicción','jurisdiccion_nombre','nom_prov']);let distrito=pick(r,['departamento','partido','distrito','localidad_departamento','departamento_nombre','nom_departamento','localidad']);return{nombre:pick(r,['nombre','establecimiento','nombre_establecimiento','nom_est','nombre_unidad','unidad_servicio_nombre','nom_establecimiento']),cue:pick(r,['cue','cueanexo','cue_anexo','cueanexo','cue_anexo_educativo']),dom:pick(r,['domicilio','direccion','dirección','calle','dir_establecimiento']),loc:pick(r,['localidad','localidad_nombre','localidad_desc','nom_localidad']),dist:distrito,prov:prov,nivel:pick(r,['nivel','oferta','tipo_educacion','modalidad','sector_educativo','nivel_modalidad','amenity']),sector:pick(r,['sector','gestion','gestión','dependencia','ambito']),lat,lon,raw:r}}).filter(x=>{let p=norm(x.prov);return !p||p.includes('buenos aires')||p==='ba'});$('stFuente').textContent=fuente;llenarFiltros();filtrar()}
-function convertirOSM(elements,fuente){let rows=elements.filter(e=>e.type==='node'||e.center||('lat'in e&&'lon'in e)).map(e=>{let t=e.tags||{}, lat=e.lat||(e.center&&e.center.lat), lon=e.lon||(e.center&&e.center.lon);let calle=[t['addr:street'],t['addr:housenumber']].filter(Boolean).join(' ');return{nombre:t.name||t['official_name']||t['operator']||'Escuela sin nombre',cue:'',dom:calle||t['addr:full']||'',loc:t['addr:city']||t['addr:town']||t['addr:suburb']||t['is_in:city']||'',dist:t['addr:city']||t['addr:municipality']||t['addr:town']||t['addr:suburb']||'Sin distrito',prov:'Buenos Aires',nivel:t.amenity||t.school||t.education||t['isced:level']||'educativo',sector:t.operator||'',lat,lon,raw:e}});datos=rows;$('stFuente').textContent=fuente;setInfo('Se cargó respaldo OpenStreetMap. Es útil para ubicar escuelas en el mapa, pero no reemplaza padrón oficial.');llenarFiltros();filtrar()}
+function convertir(rows,fuente){setInfo('');datos=rows.map(r=>{let lat=parseNum(pick(r,['latitud','lat','latitude','y']));let lon=parseNum(pick(r,['longitud','lon','lng','longitude','x']));let prov=pick(r,['provincia','jurisdiccion','jurisdicción','jurisdiccion_nombre','nom_prov']);let distrito=pick(r,['departamento','partido','distrito','localidad_departamento','departamento_nombre','nom_departamento','localidad']);return{nombre:pick(r,['nombre','establecimiento','nombre_establecimiento','nom_est','nombre_unidad','unidad_servicio_nombre','nom_establecimiento']),cue:pick(r,['cue','cueanexo','cue_anexo','cueanexo','cue_anexo_educativo']),clave:String(pick(r,['clave','clave_provincial','claveprovincial','clave_establecimiento','codigo_establecimiento','codigo_provincial'])).trim().toUpperCase(),dom:pick(r,['domicilio','direccion','dirección','calle','dir_establecimiento']),loc:pick(r,['localidad','localidad_nombre','localidad_desc','nom_localidad']),dist:distrito,prov:prov,nivel:pick(r,['nivel','oferta','tipo_educacion','modalidad','sector_educativo','nivel_modalidad','amenity']),sector:pick(r,['sector','gestion','gestión','dependencia','ambito']),lat,lon,raw:r}}).filter(x=>{let p=norm(x.prov);return !p||p.includes('buenos aires')||p==='ba'});$('stFuente').textContent=fuente;llenarFiltros();filtrar()}
+function convertirOSM(elements,fuente){let rows=elements.filter(e=>e.type==='node'||e.center||('lat'in e&&'lon'in e)).map(e=>{let t=e.tags||{}, lat=e.lat||(e.center&&e.center.lat), lon=e.lon||(e.center&&e.center.lon);let calle=[t['addr:street'],t['addr:housenumber']].filter(Boolean).join(' ');return{nombre:t.name||t['official_name']||t['operator']||'Escuela sin nombre',cue:'',clave:'',dom:calle||t['addr:full']||'',loc:t['addr:city']||t['addr:town']||t['addr:suburb']||t['is_in:city']||'',dist:t['addr:city']||t['addr:municipality']||t['addr:town']||t['addr:suburb']||'Sin distrito',prov:'Buenos Aires',nivel:t.amenity||t.school||t.education||t['isced:level']||'educativo',sector:t.operator||'',lat,lon,raw:e}});datos=rows;$('stFuente').textContent=fuente;setInfo('Se cargó respaldo OpenStreetMap. Es útil para ubicar escuelas en el mapa, pero no reemplaza padrón oficial.');llenarFiltros();filtrar()}
 async function fetchBuffer(fuente){let r=await fetch(fuente.url,{cache:'force-cache'});if(!r.ok)throw new Error('HTTP '+r.status);let b=await r.arrayBuffer();if(b.byteLength<1000)throw new Error('archivo vacío');return b}function rowsDesdeXLSX(buf){let wb=XLSX.read(buf,{type:'array'}),out=[];wb.SheetNames.forEach(n=>{out=out.concat(XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:''}))});return out}
-async function cargarXLSX(errores){for(const f of XLSX_FUENTES){try{$('stFuente').textContent='Probando '+f.nombre;let rows=rowsDesdeXLSX(await fetchBuffer(f));if(!rows.length)throw new Error('XLSX sin filas');convertir(rows,'Padrón oficial 2026 vía '+f.nombre);return true}catch(e){errores.push(f.nombre+': '+e.message)}}return false}
-async function cargarCKAN(errores){try{let all=[],limit=5000,offset=0,total=null;while(total===null||offset<total){$('stFuente').textContent='API CKAN '+offset;let r=await fetch(CKAN+'&limit='+limit+'&offset='+offset,{cache:'force-cache'});if(!r.ok)throw new Error('HTTP '+r.status);let j=await r.json();if(!j.success)throw new Error('sin éxito');let rec=(j.result&&j.result.records)||[];total=(j.result&&j.result.total)||rec.length;all=all.concat(rec);offset+=rec.length;if(!rec.length||offset>90000)break;}if(!all.length)throw new Error('sin registros');convertir(all,'API CKAN Datos Argentina');return true}catch(e){errores.push('API CKAN: '+e.message);return false}}
-async function cargarZIPs(errores){for(const f of ZIP_FUENTES){try{$('stFuente').textContent='Probando '+f.nombre;let zip=await JSZip.loadAsync(await fetchBuffer(f));let file=Object.values(zip.files).find(x=>/\.csv$/i.test(x.name));if(!file)throw new Error('ZIP sin CSV');let txt=await file.async('string');Papa.parse(txt,{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'Padrón 2019 vía '+f.nombre),error:e=>setInfo(e.message)});return true}catch(e){errores.push(f.nombre+': '+e.message)}}return false}
+async function cargarXLSX(errores){for(const f of XLSX_FUENTES){try{$('stFuente').textContent='Probando '+f.nombre;let rows=rowsDesdeXLSX(await fetchBuffer(f));if(!rows.length)throw new Error('XLSX sin filas');convertir(rows,'Padrón oficial 2026 vía '+f.nombre);if(ofertaClave&&!datos.some(x=>x.clave===ofertaClave)){errores.push('La fuente no contiene la clave provincial solicitada');continue;}return true}catch(e){errores.push(f.nombre+': '+e.message)}}return false}
+async function cargarCKAN(errores){try{let all=[],limit=5000,offset=0,total=null;while(total===null||offset<total){$('stFuente').textContent='API CKAN '+offset;let r=await fetch(CKAN+'&limit='+limit+'&offset='+offset,{cache:'force-cache'});if(!r.ok)throw new Error('HTTP '+r.status);let j=await r.json();if(!j.success)throw new Error('sin éxito');let rec=(j.result&&j.result.records)||[];total=(j.result&&j.result.total)||rec.length;all=all.concat(rec);offset+=rec.length;if(!rec.length||offset>90000)break;}if(!all.length)throw new Error('sin registros');convertir(all,'API CKAN Datos Argentina');if(ofertaClave&&!datos.some(x=>x.clave===ofertaClave)){errores.push('CKAN no contiene la clave provincial solicitada');return false;}return true}catch(e){errores.push('API CKAN: '+e.message);return false}}
+async function cargarZIPs(errores){for(const f of ZIP_FUENTES){try{$('stFuente').textContent='Probando '+f.nombre;let zip=await JSZip.loadAsync(await fetchBuffer(f));let file=Object.values(zip.files).find(x=>/\.csv$/i.test(x.name));if(!file)throw new Error('ZIP sin CSV');let txt=await file.async('string');Papa.parse(txt,{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'Padrón 2019 vía '+f.nombre),error:e=>setInfo(e.message)});if(ofertaClave) {errores.push('ZIP 2019 no permite verificar clave sin esperar conversión CSV');return false;}return true}catch(e){errores.push(f.nombre+': '+e.message)}}return false}
 async function cargarOSM(errores){let query=`[out:json][timeout:120];area["ISO3166-2"="AR-B"]->.a;(nwr["amenity"~"school|kindergarten|college|university"](area.a);nwr["building"="school"](area.a););out center tags 12000;`;let endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];for(const ep of endpoints){try{$('stFuente').textContent='OpenStreetMap / Overpass';$('stTotal').textContent='Cargando escuelas desde OpenStreetMap...';let r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(query)});if(!r.ok)throw new Error('HTTP '+r.status);let j=await r.json();if(!j.elements||!j.elements.length)throw new Error('sin escuelas');convertirOSM(j.elements,'OpenStreetMap / Overpass');return true}catch(e){errores.push('OSM '+ep+': '+e.message)}}return false}
 async function cargarOSMManual(){let errores=[];await cargarOSM(errores);if(errores.length) setInfo('No pudo cargar OSM: '+errores.join(' | '))}
-async function cargarOficial(){if(cargando)return;cargando=true;setInfo('');$('stTotal').textContent='Cargando datos...';let errores=[];let ok=await cargarXLSX(errores)||await cargarCKAN(errores)||await cargarZIPs(errores)||await cargarOSM(errores);cargando=false;if(!ok){$('stTotal').textContent='No se pudo autocargar';$('stFuente').textContent='Carga manual requerida';$('lista').innerHTML='<p class="small">No se pudo cargar automático. Queda disponible la carga manual.</p>';setInfo('Fallaron todas las cargas. Detalle: '+errores.join(' | '));}}
+async function cargarOficial(){if(cargando)return;cargando=true;setInfo('');$('stTotal').textContent='Cargando datos...';let errores=[];let ok=await cargarXLSX(errores)||await cargarCKAN(errores)||(ofertaClave?false:await cargarZIPs(errores)||await cargarOSM(errores));cargando=false;if(!ok){$('stTotal').textContent='No se pudo autocargar';$('stFuente').textContent='Carga manual requerida';$('lista').innerHTML='<p class="small">No se pudo cargar automático. Queda disponible la carga manual.</p>';setInfo('Fallaron todas las cargas. Detalle: '+errores.join(' | '));}}
 async function cargarArchivo(ev){let f=ev.target.files[0];if(!f)return;setInfo('');let name=f.name.toLowerCase();if(name.endsWith('.xlsx')){convertir(rowsDesdeXLSX(await f.arrayBuffer()),'XLSX local');}else if(name.endsWith('.zip')){let zip=await JSZip.loadAsync(await f.arrayBuffer());let file=Object.values(zip.files).find(x=>/\.csv$/i.test(x.name));if(!file)return setInfo('No encontré CSV dentro del ZIP');let txt=await file.async('string');Papa.parse(txt,{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'Archivo local')});}else if(name.endsWith('.geojson')||name.endsWith('.json')){let json=JSON.parse(await f.text());let rows=(json.features||[]).map(ft=>{let o=ft.properties||{};if(ft.geometry&&ft.geometry.coordinates){o.longitud=ft.geometry.coordinates[0];o.latitud=ft.geometry.coordinates[1]}return o});convertir(rows,'GeoJSON local');}else{Papa.parse(await f.text(),{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'CSV local')});}}
 function llenarFiltros(){
  let ds=[...new Set(datos.map(x=>x.dist).filter(Boolean))].sort();
@@ -36,7 +38,17 @@ function llenarFiltros(){
  nivel.replaceChildren(new Option('Todos los tipos',''));
  ns.forEach(x=>nivel.add(new Option(String(x),String(x))));
 }
-function filtrar(){let q=norm($('q').value),d=$('distrito').value,n=$('nivel').value;visibles=datos.filter(x=>(!q||norm([x.nombre,x.dom,x.loc,x.dist,x.cue].join(' ')).includes(q))&&(!d||x.dist===d)&&(!n||x.nivel===n));render()}
+function filtrar(){
+ const q=norm($('q').value),d=$('distrito').value,n=$('nivel').value;
+ visibles=datos.filter(x=>{
+  const code=String(x.clave||'').trim().toUpperCase();
+  // Provincial key lookup must be exact. No fuzzy matches or guessed coordinates.
+  if(ofertaClave&&code!==ofertaClave)return false;
+  const matchesQuery=!q||norm([x.nombre,x.dom,x.loc,x.dist,x.cue,code].join(' ')).includes(q);
+  return matchesQuery&&(!d||x.dist===d)&&(!n||x.nivel===n);
+ });
+ render();
+}
 function render(){
  cluster.clearLayers();
  // Reject impossible coordinates and non-PBA points from third-party datasets.
@@ -70,26 +82,39 @@ function render(){
  const aviso=$('mapa-oferta-aviso');
  if(aviso){
   aviso.replaceChildren();
-  if(ofertaEscuela){
+  if(ofertaEscuela||ofertaClave){
    aviso.style.display='block';
    aviso.append(document.createTextNode(
-    visibles.length===0
-     ? 'No encontramos esa escuela con los datos cargados. No se muestra una ubicación inventada. '
-     : visibles.length===1&&conCoords.length===1
-       ? 'Se encontró una coincidencia con coordenadas en la fuente indicada. Verificá su identidad antes de usar la dirección.'
-       : 'Hay '+visibles.length+' coincidencias posibles. Verificá escuela, distrito y CUE antes de elegir una.'
+    ofertaClave
+     ? visibles.length===0
+       ? 'No encontramos la clave provincial '+ofertaClave+' en los datos disponibles. No mostramos una ubicación inventada. '
+       : visibles.length===1&&conCoords.length===1
+         ? 'Clave provincial '+ofertaClave+': se encontró una coincidencia geográfica. Confirmá que sea la sede correcta.'
+         : 'Clave provincial '+ofertaClave+': hay '+visibles.length+' coincidencias. Confirmá establecimiento, anexo y domicilio.'
+     : visibles.length===0
+       ? 'No encontramos esa escuela con los datos cargados. No se muestra una ubicación inventada. '
+       : visibles.length===1&&conCoords.length===1
+         ? 'Se encontró una coincidencia con coordenadas en la fuente indicada. Verificá su identidad antes de usar la dirección.'
+         : 'Hay '+visibles.length+' coincidencias posibles. Verificá escuela, distrito y CUE antes de elegir una.'
    ));
-   const external=document.createElement('a');
-   external.href='https://www.google.com/maps/search/?api=1&query='+
-     encodeURIComponent([ofertaEscuela,ofertaDistrito,'Buenos Aires Argentina'].filter(Boolean).join(', '));
-   external.target='_blank'; external.rel='noopener noreferrer';
-   external.textContent=' Buscar también en Google Maps';
-   aviso.appendChild(external);
+   const official=document.createElement('a');
+   official.href='https://mapaescolar.abc.gob.ar/mapaescolar/';
+   official.target='_blank'; official.rel='noopener noreferrer';
+   official.textContent=' Abrir Mapa Escolar ABC para verificar';
+   aviso.appendChild(official);
+   if(!ofertaClave){
+    const external=document.createElement('a');
+    external.href='https://www.google.com/maps/search/?api=1&query='+
+      encodeURIComponent([ofertaEscuela,ofertaDistrito,'Buenos Aires Argentina'].filter(Boolean).join(', '));
+    external.target='_blank'; external.rel='noopener noreferrer';
+    external.textContent=' · Buscar en Google Maps';
+    aviso.appendChild(external);
+   }
   }else aviso.style.display='none';
  }
 }
 document.addEventListener('DOMContentLoaded',()=>{
- if(ofertaEscuela)$('q').value=ofertaEscuela;
+ if(ofertaEscuela||ofertaClave)$('q').value=ofertaClave||ofertaEscuela;
  void cargarOficial();
 });
 </script></body></html>
