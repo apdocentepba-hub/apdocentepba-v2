@@ -15,6 +15,8 @@ import {createAbcCurrentOfferVerifierLab}
  from '../mobile-push-abc-current-offer-lab.mjs';
 import {createWorkerMobilePushDryRunLab}
  from '../mobile-push-worker-webcrypto-lab.mjs';
+import {createMobilePushSubscriptionVerifierLab}
+ from '../mobile-push-subscription-verifier-lab.mjs';
 import {matchWithCurrentPreferences}
  from './generated-apd-matcher-lab.mjs';
 
@@ -33,7 +35,12 @@ const VALID=new Set([
  'source-missing','source-duplicated','stale-before','stolen-after',
  'device-revoked','revoked-after','device-other','no-auth','wrong-hmac',
  'bad-key','database-down','outbox-duplicate','revocation-cancels-lease',
- 'prefs-unscoped','prefs-wrong-user','prefs-bad-type'
+ 'prefs-unscoped','prefs-wrong-user','prefs-bad-type',
+ 'plan-pending','plan-paused','plan-trial-valid','plan-trial-expired',
+ 'plan-no-expiry','plan-catalog-disabled','plan-expired',
+ 'plan-unknown','plan-ambiguous','plan-wrong-user',
+ 'plan-bad-type','plan-catalog-missing','plan-catalog-other',
+ 'plan-history-overflow','plan-newer-pending'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -119,6 +126,66 @@ export default {
        enabled:!revoked,revoked_at:revoked?iso(NOW):null
       }]);
      }
+     case '/rest/v1/users':{
+      if(target.searchParams.get('id')!=='eq.'+USER||
+         target.searchParams.get('select')!=='id,activo'||
+         target.searchParams.get('limit')!=='2')
+       throw Error('unscoped_account_lookup');
+      if(mode==='plan-notfound')return json([]);
+      return json([{
+       id:mode==='plan-other'?OTHER:USER,
+       activo:mode!=='plan-inactive',
+       email:'DONT_SEND_ACCOUNT_EMAIL'
+      }]);
+     }
+     case '/rest/v1/user_subscriptions':{
+      if(target.searchParams.get('user_id')!=='eq.'+USER||
+         target.searchParams.get('order')!=='created_at.desc'||
+         target.searchParams.get('limit')!=='6'||
+         target.searchParams.get('select')!==
+           'id,user_id,plan_code,status,created_at,trial_ends_at,current_period_ends_at')
+       throw Error('unscoped_subscription_lookup');
+      const trial=mode==='plan-trial-valid'||mode==='plan-trial-expired';
+      const subscription={
+       id:'99999999-9999-4999-8999-999999999999',
+       user_id:mode==='plan-wrong-user'?OTHER:USER,
+       plan_code:trial?'TRIAL_7D':mode==='plan-unknown'?'UNTRUSTED_PLAN':'PLUS',
+       status:mode==='plan-pending'||mode==='plan-newer-pending'?'PENDING':
+        mode==='plan-paused'?'PAUSED':trial?'TRIALING':'ACTIVE',
+       created_at:mode==='plan-stale'?'INVALID_TIME':
+        iso(NOW-24*3600_000),
+       trial_ends_at:trial?iso(NOW+
+        (mode==='plan-trial-expired'?-10_000:3600_000)):null,
+       current_period_ends_at:trial||mode==='plan-no-expiry'?null:
+        mode==='plan-expired'?iso(NOW-10_000):iso(NOW+3*3600_000),
+       mercadopago_payer_email:'DONT_SEND_BILLING_EMAIL'
+      };
+      if(mode==='plan-bad-type')subscription.status=12345;
+      if(mode==='plan-ambiguous')return json([subscription,{
+       ...subscription,id:'99999999-9999-4999-8999-999999999998'
+      }]);
+      if(mode==='plan-history-overflow'){
+       return json(Array.from({length:6},(_,i)=>({
+        ...subscription,id:'99999999-9999-4999-8999-'+String(i).padStart(12,'0')
+       })));
+      }
+      return json([subscription]);
+     }
+     case '/rest/v1/subscription_plans':{
+      if(target.searchParams.get('code')!=='eq.'+
+          (mode==='plan-trial-valid'?'TRIAL_7D':
+           mode==='plan-trial-expired'?'TRIAL_7D':'PLUS')||
+         target.searchParams.get('select')!=='code,is_active'||
+         target.searchParams.get('limit')!=='2')
+       throw Error('unscoped_catalog_lookup');
+      if(mode==='plan-catalog-missing')return json([]);
+      return json([{
+       code:mode==='plan-catalog-other'?'INSIGNE':
+        mode==='plan-trial-valid'?'TRIAL_7D':'PLUS',
+       is_active:mode!=='plan-catalog-disabled',
+       mercadopago_plan_id:'DONT_SEND_MERCADOPAGO_REFERENCE'
+      }]);
+     }
      case '/rest/v1/user_preferences':{
       counts.prefs++;
       if(target.searchParams.get('user_id')!=='eq.'+USER||
@@ -181,14 +248,13 @@ export default {
   const database=createMobilePushPostgrestAdapterLab({
    projectUrl:DB,secretKey:API_KEY,fetchImpl
   });
+  const authoritativeSubscriptions=createMobilePushSubscriptionVerifierLab({
+   database,now:()=>NOW
+  });
   const plans={async verify({userId}){
    counts.plan++;
    if(userId!==USER)throw Error('untrusted_plan_lookup');
-   return {
-    user_id:mode==='plan-other'?OTHER:USER,
-    access_active:mode!=='plan-inactive',
-    verified_at:iso(NOW-(mode==='plan-stale'?500000:20000))
-   };
+   return authoritativeSubscriptions.verify({userId});
   }};
   // The same private database adapter now reads and maps the legacy APD
   // preferences, instead of accepting an independently invented match flag.
