@@ -226,6 +226,35 @@ export function createMobilePushPostgrestAdapterLab({
     throw Error('postgrest_invalid_catalog_plan');
    return Object.freeze({code:planCode,is_active:row.is_active});
   },
+  async recordExpoTicket({eventKey,dispatchId,ticketId}={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
+      typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
+    throw Error('invalid_expo_receipt_identity');
+   const recorded=await request('rpc/apd_mobile_expo_record_ticket',{
+    method:'POST',body:{
+     p_event_key:eventKey,p_dispatch_id:dispatchId,p_ticket_id:ticketId
+    }
+   });
+   if(typeof recorded!=='boolean')throw Error('postgrest_invalid_expo_ticket_result');
+   return recorded;
+  },
+  async recordExpoReceiptAudit({eventKey,dispatchId,ticketId,outcome}={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
+      typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
+    throw Error('invalid_expo_receipt_identity');
+   if(!['pending','provider_accepted','provider_rejected',
+        'invalid_device','uncertain'].includes(outcome))
+    throw Error('invalid_expo_receipt_outcome');
+   // This records ONLY a service-only audit result, NEVER a delivered flag.
+   const stored=await request('rpc/apd_mobile_expo_record_receipt',{
+    method:'POST',body:{
+     p_event_key:eventKey,p_dispatch_id:dispatchId,
+     p_ticket_id:ticketId,p_outcome:outcome
+    }
+   });
+   if(typeof stored!=='boolean')throw Error('postgrest_invalid_expo_receipt_result');
+   return stored;
+  },
   async prepareDispatch({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
    const ticket=await request('rpc/apd_mobile_prepare_dispatch',{
