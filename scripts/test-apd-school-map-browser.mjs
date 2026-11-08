@@ -138,7 +138,10 @@ try{
    url:window.__requests[0]?.host,
    filter:window.__requests[0]?.filter,
    requests:window.__requests.length,
-   strayImage:!!document.querySelector('img[src="x"]')
+   strayImage:!!document.querySelector('img[src="x"]'),
+   mapTop:Math.round(document.getElementById('map').getBoundingClientRect().top),
+   offerMode:document.body.classList.contains('apd-from-offer'),
+   identity:document.querySelector('#mapa-oferta-aviso strong')?.textContent||''
   })`);
   assert.equal(state.input,'0005MS0004');
   assert.equal(state.rows,1,JSON.stringify(state));
@@ -148,6 +151,10 @@ try{
   assert.equal(state.filter,"clave='0005MS0004'");
   assert.match(state.popup,/&lt;script&gt;/);
   assert.equal(state.strayImage,false);
+  assert.equal(state.offerMode,true);
+  assert.ok(state.mapTop<620,'Map should appear above mobile fold '+JSON.stringify(state));
+  assert.match(state.identity,/Calle Prueba 100/);
+  assert.match(state.identity,/CUE 061002000/);
   assert.ok(state.docWidth<=state.width+5,'Mobile horizontal overflow '+JSON.stringify(state));
   await shot('map-'+width+'-official');
   // Check refreshed map does not retain an obsolete pin after ABC is unavailable.
