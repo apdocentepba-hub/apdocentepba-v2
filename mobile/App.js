@@ -4,7 +4,8 @@
  * Local notification demonstration ONLY on explicit tap + OS permission.
  * All offers below are explicitly fictional. No production features implied.
  */
-import React, {useMemo, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {
  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
@@ -13,6 +14,9 @@ import {
 const {
  DEMO_OFFERS, DISTRICTS, SHIFTS, filterDemoOffers, toggleSaved, demoCounters
 } = require("./src/demo-state.js");
+const {
+ createDemoInboxStore,emptyInbox,inboxCounters
+} = require("./src/demo-inbox.js");
 
 // Nothing is sent to FCM/APNs/Expo Push. This handler displays local demo notices.
 Notifications.setNotificationHandler({
@@ -93,12 +97,43 @@ function OfferCard({item,saved,onToggle}){
   </View>
  );
 }
-function PrimaryButton({label,onPress,secondary=false}){
- return <Pressable onPress={onPress}
-  accessibilityRole="button"
-  style={[styles.primaryButton,secondary&&styles.secondaryButton]}>
+function PrimaryButton({label,onPress,secondary=false,disabled=false}){
+ return <Pressable onPress={onPress} disabled={disabled}
+  accessibilityRole="button" accessibilityState={{disabled}}
+  style={[styles.primaryButton,secondary&&styles.secondaryButton,
+   disabled&&styles.disabledButton]}>
   <Text style={[styles.primaryText,secondary&&styles.secondaryText]}>{label}</Text>
  </Pressable>;
+}
+function DemoInboxCard({notice,onRead,disabled=false}){
+ const offer=DEMO_OFFERS.find(o=>o.id===notice.offerId);
+ const cancelled=notice.status==="cancelled";
+ return <View style={styles.inboxCard}>
+  <View style={styles.inboxTop}>
+   <Text style={styles.inboxTitle}>AVISO FICTICIO</Text>
+   <Text style={[styles.inboxStatus,cancelled&&styles.inboxCancelled]}>
+    {cancelled?"Cancelado":notice.read?"Leído":"Sin leer"}
+   </Text>
+  </View>
+  <Text style={styles.inboxOffer}>
+   {offer?offer.cargo:"Ejemplo no disponible"}
+  </Text>
+  <Text style={styles.help}>
+   {offer?offer.distrito+" · "+offer.escuela:"Solo demostración"} · Sin vínculo con ABC
+  </Text>
+  {cancelled?
+   <Text style={styles.inboxExplanation}>
+    El aviso cancelado se conserva como registro. No vuelve a activarse.
+   </Text>:
+  !notice.read?
+   <Pressable accessibilityRole="button" disabled={disabled}
+    accessibilityLabel="Marcar aviso ficticio como leído"
+    accessibilityState={{disabled}}
+    style={styles.inboxReadButton} onPress={()=>onRead(notice.id)}>
+    <Text style={styles.inboxReadText}>Marcar como leído</Text>
+   </Pressable>:
+   <Text style={styles.help}>Ya lo marcaste como leído en este equipo.</Text>}
+ </View>;
 }
 export default function App(){
  const [tab,setTab]=useState("inicio");
@@ -106,7 +141,53 @@ export default function App(){
  const [shift,setShift]=useState("Todos");
  const [query,setQuery]=useState("");
  const [saved,setSaved]=useState([]);
+ const inboxStore=useMemo(()=>createDemoInboxStore({storage:AsyncStorage}),[]);
+ const [inbox,setInbox]=useState(emptyInbox);
+ const [inboxReady,setInboxReady]=useState(false);
+ const [inboxLocked,setInboxLocked]=useState(false);
+ const [inboxNote,setInboxNote]=useState("Recuperando avisos ficticios de este equipo…");
  const [notificationStatus,setNotificationStatus]=useState("Aún no se hizo ninguna prueba local.");
+ useEffect(()=>{
+  let active=true;
+  inboxStore.load().then(result=>{
+   if(!active)return;
+   setInbox(result.state);
+   setInboxReady(true);
+   setInboxLocked(result.locked);
+   setInboxNote(result.locked?
+    "Los datos de la bandeja no son legibles. No se sobrescribieron: podés reiniciar la demostración manualmente.":
+    result.recovered?
+     "Bandeja ficticia recuperada del almacenamiento local.":
+     "Bandeja lista. No hay avisos simulados todavía.");
+  }).catch(()=>{
+   if(!active)return;
+   setInboxReady(true);setInboxLocked(true);
+   setInboxNote("No se puede leer la bandeja local. Reiniciá la demostración para empezar de cero.");
+  });
+  return ()=>{active=false;};
+ },[inboxStore]);
+ const runInboxAction=async(action,done,empty)=>{
+  if(!inboxReady||inboxLocked)return;
+  try{
+   const result=await action();
+   setInbox(result.state||result);
+   setInboxNote(result.applied===false?empty:done);
+  }catch{
+   setInboxNote("No se pudo guardar el cambio en este equipo. Los avisos anteriores se conservaron.");
+  }
+ };
+ const simulateInboxArrival=()=>runInboxAction(
+  ()=>inboxStore.simulate("arrival"),
+  "Se agregó un aviso ficticio. No se envió ni recibió ningún push remoto.",
+  "Ya están los cuatro avisos de ejemplo; no hay nuevos.");
+ const simulateInboxCancellation=()=>runInboxAction(
+  ()=>inboxStore.simulate("cancellation"),
+  "Se canceló un aviso ficticio. No se puede reactivar con una actualización atrasada.",
+  "No quedan avisos activos de ejemplo para cancelar.");
+ const markInboxRead=id=>runInboxAction(
+  ()=>inboxStore.markRead(id),
+  "Aviso de ejemplo marcado como leído y guardado localmente.",
+  "Ese aviso de ejemplo ya estaba leído.");
  const tryLocalNotification=async()=>{
   try {
    if(Platform.OS==="android") {
@@ -136,8 +217,16 @@ export default function App(){
  const offers=useMemo(()=>filterDemoOffers(DEMO_OFFERS,{district,shift,query}),
   [district,shift,query]);
  const counters=demoCounters(offers,saved);
- const reset=()=>{
-  setDistrict("Todos");setShift("Todos");setQuery("");setSaved([]);setTab("inicio");
+ const inboxCounts=inboxCounters(inbox);
+ const reset=async()=>{
+  try{
+   const restored=await inboxStore.reset();
+   setInbox(restored);setInboxReady(true);setInboxLocked(false);
+   setInboxNote("Se reiniciaron los avisos ficticios de este equipo.");
+   setDistrict("Todos");setShift("Todos");setQuery("");setSaved([]);setTab("inicio");
+  }catch{
+   setInboxNote("No se pudo borrar la demostración local. Los datos anteriores siguen intactos.");
+  }
  };
  return (
   <View style={styles.root}>
@@ -191,6 +280,22 @@ export default function App(){
      </>:
     tab==="alertas"?
      <>
+      <SectionHeading title="Bandeja ficticia recuperable"
+       sub="Los avisos son simulados, nunca push reales. Se conservan al cerrar y abrir la app."/>
+      <View style={styles.summaryBox}>
+       <Text style={styles.summaryTitle}>
+        {inboxCounts.demoAlerts} avisos · {inboxCounts.demoUnread} sin leer · {inboxCounts.demoCancelled} cancelados
+       </Text>
+       <Text style={styles.help} accessibilityRole="text">{inboxNote}</Text>
+       <PrimaryButton label="Simular llegada de aviso" disabled={!inboxReady||inboxLocked}
+        onPress={simulateInboxArrival}/>
+       <PrimaryButton label="Simular cancelación" secondary
+        disabled={!inboxReady||inboxLocked||!inbox.items.some(x=>x.status==="active")}
+        onPress={simulateInboxCancellation}/>
+      </View>
+      {inbox.items.map(item=><DemoInboxCard
+       key={item.id} notice={item}
+       disabled={!inboxReady||inboxLocked} onRead={markInboxRead}/>)}
       <SectionHeading title="Explorar ofertas ficticias"
        sub="Filtrá los ejemplos locales. No son vacantes de ABC."/>
       <TextInput
@@ -258,8 +363,13 @@ export default function App(){
        <Text style={styles.statusHeading}>Privacidad</Text>
        <Text style={styles.help}>Los avisos futuros mostrarán un texto genérico y
         abrirán los detalles solo después de verificar la sesión.</Text>
+       <Text style={styles.help}>
+        La bandeja ficticia conserva solo IDs de ejemplo y estados locales
+        sin cifrar. No guarda contraseñas, tokens ni ofertas reales.
+       </Text>
       </View>
-      <PrimaryButton label="Reiniciar demostración" secondary onPress={reset}/>
+      <PrimaryButton label="Reiniciar demostración y bandeja" secondary
+       disabled={!inboxReady} onPress={reset}/>
      </>}
     <Text style={styles.foot}>APDocentePBA · Prototipo Android/iOS · Sin datos reales</Text>
    </ScrollView>
@@ -337,6 +447,18 @@ const styles=StyleSheet.create({
  summaryBox:{backgroundColor:"#E7F5F5",borderRadius:15,padding:17,gap:9},
  summaryTitle:{color:COLORS.navy,fontWeight:"800",fontSize:14},
  summaryText:{fontSize:13,color:COLORS.text,lineHeight:20},
+ inboxCard:{backgroundColor:"#FFF",borderRadius:14,borderWidth:1,
+  borderColor:COLORS.line,padding:15,gap:8},
+ inboxTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
+ inboxTitle:{fontSize:10,fontWeight:"900",color:COLORS.teal,letterSpacing:0.4},
+ inboxStatus:{fontSize:11,color:COLORS.teal,fontWeight:"800"},
+ inboxCancelled:{color:COLORS.orange},
+ inboxOffer:{fontSize:16,fontWeight:"800",color:COLORS.text},
+ inboxExplanation:{fontSize:12,color:COLORS.orange,lineHeight:18},
+ inboxReadButton:{padding:11,borderRadius:9,backgroundColor:COLORS.mint,
+  alignSelf:"flex-start"},
+ inboxReadText:{fontSize:12,fontWeight:"800",color:COLORS.navy},
+ disabledButton:{opacity:0.5},
  statusCard:{backgroundColor:"#FFF",padding:18,borderRadius:15,borderWidth:1,borderColor:COLORS.line,gap:8},
  statusHeading:{fontSize:15,color:COLORS.text,fontWeight:"800"},
  statusValue:{fontSize:13,color:COLORS.orange,fontWeight:"800"},
