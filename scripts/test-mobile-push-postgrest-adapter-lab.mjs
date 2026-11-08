@@ -233,3 +233,85 @@ test('an empty or ambiguous device response fails closed',async()=>{
     /postgrest_ambiguous_result/);
  }
 });
+
+
+test('server-owned legacy user_preferences are scoped and converted to current APD matcher inputs',async()=>{
+ const records=[];
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:HOST,secretKey:SECRET,
+  fetchImpl:async(url,options)=>{
+   const u=new URL(url);
+   records.push(u);
+   assert.equal(u.pathname,'/rest/v1/user_preferences');
+   assert.equal(u.searchParams.get('user_id'),'eq.'+USER);
+   assert.equal(u.searchParams.get('limit'),'2');
+   assert.equal(u.searchParams.get('select'),
+    'user_id,distrito_principal,otros_distritos,cargos,materias,niveles,turnos,alertas_activas');
+   assert.equal(options.headers.apikey,SECRET);
+   return response([{
+    user_id:USER,distrito_principal:'Avellaneda',
+    otros_distritos:['Quilmes','Berazátegui'],
+    cargos:['Preceptor'],materias:[],
+    niveles:['Secundaria'],turnos:['Mañana'],
+    alertas_activas:true,
+    email:'DO_NOT_LEAK_EMAIL',dni:'DO_NOT_LEAK_DNI'
+   }]);
+  }
+ });
+ const row=await db.readUserPreferences({userId:USER});
+ assert.deepEqual(row,{
+  user_id:USER,alertas_activas:true,
+  distrito_principal_apd:'AVELLANEDA',
+  otros_distritos_apd:['QUILMES','BERAZATEGUI'],
+  cargos_apd:['PRECEPTOR'],materias_apd:[],
+  niveles:['SECUNDARIA'],turnos:['MANANA']
+ });
+ assert.equal(records.length,1);
+ assert.ok(!JSON.stringify(row).includes('DO_NOT_LEAK'));
+});
+for(const [name,mutator,exception] of [
+ ['other account',row=>({...row,user_id:'22222222-2222-4222-8222-222222222222'}),/postgrest_invalid_preferences/],
+ ['invalid array',row=>({...row,cargos:'preceptor'}),/postgrest_invalid_preferences/],
+ ['unscoped active alert',row=>({...row,cargos:[]}),/postgrest_preferences_not_scoped/],
+ ['no district',row=>({...row,distrito_principal:'',otros_distritos:[]}),/postgrest_preferences_not_scoped/]
+]){
+ test('private preferences: '+name+' fails closed',async()=>{
+  const base={
+   user_id:USER,distrito_principal:'Avellaneda',
+   otros_distritos:[],cargos:['Preceptor'],materias:[],
+   niveles:['Secundaria'],turnos:['Mañana'],alertas_activas:true
+  };
+  const db=createMobilePushPostgrestAdapterLab({
+   projectUrl:HOST,secretKey:SECRET,
+   fetchImpl:async()=>response([mutator(base)])
+  });
+  await assert.rejects(()=>db.readUserPreferences({userId:USER}),exception);
+ });
+}
+test('disabled preferences do not acquire fictitious enabled status',async()=>{
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:HOST,secretKey:SECRET,
+  fetchImpl:async()=>response([{
+   user_id:USER,distrito_principal:'',otros_distritos:[],
+   cargos:[],materias:[],niveles:[],turnos:[],alertas_activas:false
+  }])
+ });
+ const row=await db.readUserPreferences({userId:USER});
+ assert.equal(row.alertas_activas,false);
+});
+test('missing or duplicate user preferences cannot become an active alert',async()=>{
+ for(const data of [[],[{
+  user_id:USER,alertas_activas:true,distrito_principal:'Avellaneda',
+  otros_distritos:[],cargos:['Preceptor'],materias:[],niveles:[],turnos:[]
+ },{
+  user_id:USER,alertas_activas:true
+ }]]){
+  const db=createMobilePushPostgrestAdapterLab({
+   projectUrl:HOST,secretKey:SECRET,fetchImpl:async()=>response(data)
+  });
+  if(data.length===0)
+   assert.equal(await db.readUserPreferences({userId:USER}),null);
+  else await assert.rejects(()=>db.readUserPreferences({userId:USER}),
+   /postgrest_ambiguous_result/);
+ }
+});
