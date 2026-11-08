@@ -176,6 +176,16 @@ function createDemoInboxStore({storage}={}){
     return next===state?freezeView(state):persist(next);
    });
   },
+  async applyServerPage(page){
+   return queue(async()=>{
+    if(!loaded||locked)throw Error("demo_inbox_unavailable");
+    // No transport exists in this client: this applies an injected page
+    // which is validated atomically before the ONLY persistence write.
+    const {applyServerDemoPage}=require("./demo-inbox-sync-protocol.js");
+    const next=applyServerDemoPage(state,page);
+    return next===state?freezeView(state):persist(next);
+   });
+  },
   async simulate(type){
    return queue(async()=>{
     if(!loaded||locked)throw Error("demo_inbox_unavailable");
