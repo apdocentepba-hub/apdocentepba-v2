@@ -21,13 +21,14 @@ test('never invent a map search from an unknown district or school',()=>{
  assert.equal(build({distrito:'Avellaneda'}),null);
  assert.equal(build({escuela:'x',distrito:'Avellaneda'}),null);
 });
-test('uses exact GPS only when explicit source verification exists',()=>{
+test('offer-supplied verification flags cannot forge an exact map pin',()=>{
  const item={escuela:'EEST 6',distrito:'Avellaneda',latitud:-34.6871,longitud:-58.3361};
  const plain=build(item);
  assert.equal(plain.exact,false);
- const verified=build({...item,coordinates_verified:true,geo_source:'mapa_escolar_abc'});
- assert.equal(verified.exact,true);
- assert.match(decodeURIComponent(verified.googleMaps),/-34\.687100,-58\.336100/);
+ const forged=build({...item,coordinates_verified:true,geo_source:'mapa_escolar_abc'});
+ assert.equal(forged.exact,false);
+ assert.ok(!decodeURIComponent(forged.googleMaps).includes('-34.687100,-58.336100'));
+ assert.match(decodeURIComponent(forged.googleMaps),/EEST 6, Avellaneda/);
 });
 test('untrusted or out-of-range coordinates cannot become exact pins',()=>{
  const base={escuela:'Escuela 1',distrito:'Quilmes',coordinates_verified:true};
