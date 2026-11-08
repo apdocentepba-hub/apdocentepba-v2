@@ -16,6 +16,44 @@ const int=(s,min,max)=>typeof s==='string'&&/^(0|[1-9][0-9]{0,5})$/.test(s)&&
 const exact=(x,fields)=>x&&typeof x==='object'&&!Array.isArray(x)&&
  Object.keys(x).length===fields.length&&
  fields.every(k=>Object.prototype.hasOwnProperty.call(x,k));
+const ALLOWED=Object.freeze(Object.fromEntries(
+ Array.from({length:4},(_,i)=>[
+  'DEMO-AVISO-00'+(i+1),'DEMO-APD-00'+(i+1)
+ ])
+));
+function cleanPage(page,after,limit){
+ if(!exact(page,['version','fromCursor','nextCursor','hasMore','events'])||
+    page.version!==1||page.fromCursor!==after||
+    !Number.isSafeInteger(page.nextCursor)||page.nextCursor<after||
+    !Array.isArray(page.events)||page.events.length>limit||
+    typeof page.hasMore!=='boolean'||
+    page.nextCursor!==after+page.events.length||
+    (page.events.length===0&&page.hasMore))
+  throw Error('unsafe_inbox_page');
+ const events=page.events.map((event,index)=>{
+  if(!exact(event,[
+    'cursor','kind','id','offerId','revision','status','read'
+   ])||event.cursor!==after+index+1||
+      !['event','read'].includes(event.kind)||
+      typeof event.id!=='string'||ALLOWED[event.id]!==event.offerId||
+      !Number.isSafeInteger(event.revision)||event.revision<1||
+      event.revision>100000||
+      !['active','cancelled'].includes(event.status)||
+      typeof event.read!=='boolean'||
+      (event.status==='cancelled'&&event.read!==true)||
+      (event.kind==='read'&&
+       (event.status!=='active'||event.read!==true)))
+   throw Error('unsafe_inbox_event');
+  return {
+   cursor:event.cursor,kind:event.kind,id:event.id,
+   offerId:event.offerId,revision:event.revision,
+   status:event.status,read:event.read
+  };
+ });
+ return {version:1,fromCursor:after,
+  nextCursor:page.nextCursor,hasMore:page.hasMore,events};
+}
+
 export function createMobileInboxSyncHandlerLab({
  loadSessionByToken,loadUserById,repository
 }={}){
@@ -56,14 +94,12 @@ export function createMobileInboxSyncHandlerLab({
       return json({ok:false,error:'invalid_page'},400);
      return json({ok:false,error:'service_unavailable'},503);
     }
-    // Exact fields are deliberately synthetic (no name, token, IDs or PII).
-    if(!exact(page,['version','fromCursor','nextCursor','hasMore','events'])||
-       page.version!==1||page.fromCursor!==after||
-       !Number.isSafeInteger(page.nextCursor)||
-       !Array.isArray(page.events)||page.events.length>limit||
-       typeof page.hasMore!=='boolean')
-     return json({ok:false,error:'service_unavailable'},503);
-    return json({ok:true,...page});
+    // Whitelist every returned field. Never spread private repository rows
+    // into a client-visible response (tokens/user metadata must not escape).
+    let safePage;
+    try{safePage=cleanPage(page,after,limit);}
+    catch{return json({ok:false,error:'service_unavailable'},503);}
+    return json({ok:true,...safePage});
    }
    if(url.search)return json({ok:false,error:'invalid_request'},400);
    if(!/^application\/json(?:;|$)/i.test(
