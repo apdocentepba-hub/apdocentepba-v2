@@ -61,6 +61,9 @@ BEGIN
  IF v_claim.source_offer_key IS DISTINCT FROM 'APD:LAB:A'
    AND v_claim.source_offer_key IS DISTINCT FROM 'APD:LAB:B' THEN
   RAISE EXCEPTION 'Claim is missing its source offer key'; END IF;
+ IF (v_claim.source_offer_key='APD:LAB:A' AND v_claim.transport<>'expo')
+    OR (v_claim.source_offer_key='APD:LAB:B' AND v_claim.transport<>'apns')
+ THEN RAISE EXCEPTION 'Claim returned wrong trusted device transport'; END IF;
  IF v_claim.event_key IS NULL OR v_claim.attempts<>1 THEN
   RAISE EXCEPTION 'Expected first atomic claim'; END IF;
  IF (SELECT count(*) FROM public.apd_mobile_claim_push(1,60))<>1 THEN
@@ -138,6 +141,8 @@ BEGIN
  SELECT * INTO v_claim FROM public.apd_mobile_claim_push(1,60);
  IF v_claim.event_key IS DISTINCT FROM repeat('5',64) THEN
   RAISE EXCEPTION 'Expected synthetic cancel candidate'; END IF;
+ IF v_claim.transport IS DISTINCT FROM 'expo' THEN
+  RAISE EXCEPTION 'Cancellation claim missing Expo transport'; END IF;
  IF public.apd_mobile_cancel_push(v_claim.event_key,
     'dddddddd-dddd-4ddd-8ddd-dddddddddddd') THEN
   RAISE EXCEPTION 'Wrong lease cancelled event'; END IF;
