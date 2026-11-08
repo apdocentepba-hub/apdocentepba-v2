@@ -161,6 +161,12 @@ export default {
        mercadopago_payer_email:'DONT_SEND_BILLING_EMAIL'
       };
       if(mode==='plan-bad-type')subscription.status=12345;
+      if(mode==='plan-newer-pending')return json([
+       subscription,
+       {...subscription,
+        id:'99999999-9999-4999-8999-999999999997',
+        created_at:iso(NOW-48*3600_000),status:'ACTIVE'}
+      ]);
       if(mode==='plan-ambiguous')return json([subscription,{
        ...subscription,id:'99999999-9999-4999-8999-999999999998'
       }]);
