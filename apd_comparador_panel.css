@@ -36,3 +36,16 @@
  .apd-comparator-head h3{font-size:17px}
  .apd-comparator-item{padding:11px}
 }
+
+/* Official inter-school distances, opt-in, never the visitor's device location. */
+.apd-comparator-geobutton{display:inline-flex;align-items:center;min-height:40px;
+ margin:8px 10px 8px 0;white-space:normal}
+.apd-comparator-geobutton:disabled{opacity:.65;cursor:wait}
+.apd-comparator-geo-status{font-size:13px;color:#174a70;margin:7px 0 10px}
+.apd-comparator-distance{font-weight:700;color:#175c55}
+.apd-comparator-geo-detail{color:#435e78;font-size:12px}
+.apd-comparator-pairs{border:1px solid #d6e4f2;background:#fff;
+ padding:10px 14px;border-radius:12px;margin:12px 0}
+.apd-comparator-pairs h4{margin:0 0 8px;font-size:14px;color:#17345c}
+.apd-comparator-pairs ul{padding-left:21px;margin:0}
+.apd-comparator-pairs li{padding:3px 0;overflow-wrap:anywhere;font-size:12px;line-height:1.4}
