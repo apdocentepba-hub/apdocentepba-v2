@@ -409,8 +409,6 @@ function borrarToken() {
   localStorage.removeItem(TOKEN_KEY);
   alertasState.items = [];
   alertasState.index = 0;
-  // Comparisons are intentionally ephemeral and must never cross sessions.
-  try { window.APD_comparatorReset?.(); } catch (_) { /* optional UI */ }
   window.APD_adminAccessConfirmed = false;
   ADMIN.enabled = false;
   ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
@@ -989,25 +987,6 @@ function renderAlertasAPD(alertas) {
     : filtrarAlertasVigentes(alertas);
   alertasState.index = 0;
   renderAlertaActual();
-  // Avoid adding a new initial script tag or loading code for anonymous users.
-  // Module bootstrap is opt-in to a confirmed authenticated entitlement.
-  if (typeof window !== "undefined" &&
-      planActual?.access_active === true && !!obtenerToken() &&
-      typeof window.APD_comparatorRefresh !== "function" &&
-      !window.APD_comparatorLoading) {
-    window.APD_comparatorLoading = true;
-    import("./apd_comparador_panel.mjs?v=lab-20261107").then(() => {
-      window.APD_comparatorRefresh?.({
-        offers: alertasState.items,
-        index: alertasState.index,
-        enabled: !!obtenerToken() && planActual?.access_active === true
-      });
-    }).catch(() => {
-      // Optional candidate feature must never break the alert carousel.
-    }).finally(() => {
-      window.APD_comparatorLoading = false;
-    });
-  }
 }
 
 function moverAlerta(step) {
@@ -1399,15 +1378,6 @@ function renderAlertaActual() {
         document.getElementById("panel-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
-    // Optional independent comparator: no effect on the core alert renderer.
-    if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
-      try {
-        window.APD_comparatorRefresh({
-          offers: alertasState.items, index: alertasState.index,
-          enabled: !!obtenerToken() && planActual?.access_active === true
-        });
-      } catch (_) { /* Comparator must never interrupt APD alerts. */ }
-    }
     return;
   }
 
@@ -1418,15 +1388,6 @@ function renderAlertaActual() {
         <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
       </div>
     `;
-    // Optional independent comparator: no effect on the core alert renderer.
-    if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
-      try {
-        window.APD_comparatorRefresh({
-          offers: alertasState.items, index: alertasState.index,
-          enabled: !!obtenerToken() && planActual?.access_active === true
-        });
-      } catch (_) { /* Comparator must never interrupt APD alerts. */ }
-    }
     return;
   }
 
@@ -1525,14 +1486,6 @@ function renderAlertaActual() {
   });
 
   cargarResumenPostulantes(a);
-  if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
-    try {
-      window.APD_comparatorRefresh({
-        offers: alertasState.items, index: alertasState.index,
-        enabled: !!obtenerToken() && planActual?.access_active === true
-      });
-    } catch (_) { /* Comparator must never interrupt APD alerts. */ }
-  }
 }
 function alertaRow(label, value) {
   const v = String(value || "").trim();
@@ -1826,7 +1779,6 @@ async function cargarDashboard() {
     dashboardLoadedOwner = token;
     alertasState.items = [];
     alertasState.index = 0;
-    try { window.APD_comparatorReset?.(); } catch (_) { /* optional UI */ }
     ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
      "panel-alertas", "panel-plan", "panel-bienvenida", "panel-subtitulo"]
       .forEach(id => { const node = document.getElementById(id); if (node) node.textContent = ""; });
