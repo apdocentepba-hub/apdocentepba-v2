@@ -185,3 +185,34 @@ for(const [mode,expected,late] of [
   ])assert.ok(!JSON.stringify(r).includes(forbidden));
  });
 }
+
+
+for(const [mode,ok,reason,expectedCalls,expired] of [
+ ['reconcile-expired',true,null,1,2],
+ ['reconcile-denied',false,'not_authorized',0,0],
+ ['reconcile-db-down',false,'reconciliation_storage_unavailable',1,0]
+]){
+ test('isolated workerd 24h receipt expiry maintenance /'+mode,async()=>{
+  const {status,result:r}=await state(mode);
+  assert.equal(status,200);
+  assert.equal(r.ok,ok);
+  assert.equal(r.reconciliation.ok,ok);
+  if(reason!==null)assert.equal(r.reconciliation.reason,reason);
+  assert.equal(r.reconciliation.expired,expired);
+  assert.equal(r.reconciliation.provider_calls,0);
+  assert.equal(r.reconciliation.delivery_to_device_confirmed,false);
+  assert.equal(r.counts.expiry,expectedCalls);
+  assert.equal(r.counts.claim,0);
+  assert.equal(r.counts.abc,0);
+  assert.equal(r.counts.device,0);
+  assert.equal(r.counts.prepare,0);
+  assert.equal(r.counts.unauthorizedRequests,0);
+  assert.equal(r.provider_calls,0);
+  const payload=JSON.stringify(r);
+  for(const secret of [
+   'sb_secret_','SYNTHETIC_MAINTENANCE_DB_OFFLINE',
+   '11111111-1111-4111-8111-111111111111',
+   'D_123','PRECEPTOR','apdsynthetic123.supabase.co'
+  ])assert.ok(!payload.includes(secret),mode+': '+secret);
+ });
+}
