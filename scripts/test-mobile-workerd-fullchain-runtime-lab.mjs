@@ -216,3 +216,36 @@ for(const [mode,ok,reason,expectedCalls,expired] of [
   ])assert.ok(!payload.includes(secret),mode+': '+secret);
  });
 }
+
+
+for(const [mode,ok,reason,expectedCalls,retired] of [
+ ['retention-terminal',true,null,1,2],
+ ['retention-denied',false,'not_authorized',0,0],
+ ['retention-db-down',false,'retention_storage_unavailable',1,0]
+]){
+ test('isolated workerd Expo terminal ticket privacy retention /'+mode,async()=>{
+  const {status,result:r}=await state(mode);
+  assert.equal(status,200);
+  assert.equal(r.ok,ok);
+  assert.equal(r.retention.ok,ok);
+  if(reason!==null)assert.equal(r.retention.reason,reason);
+  assert.equal(r.retention.retired,retired);
+  assert.equal(r.retention.provider_calls,0);
+  assert.equal(r.retention.delivery_to_device_confirmed,false);
+  assert.equal(r.counts.retention,expectedCalls);
+  assert.equal(r.counts.claim,0);
+  assert.equal(r.counts.abc,0);
+  assert.equal(r.counts.device,0);
+  assert.equal(r.counts.prepare,0);
+  assert.equal(r.counts.expoTicket,0);
+  assert.equal(r.counts.expoReceipt,0);
+  assert.equal(r.counts.unauthorizedRequests,0);
+  assert.equal(r.provider_calls,0);
+  const body=JSON.stringify(r);
+  for(const marker of [
+   'sb_secret_','synthetic_retention_storage_down',
+   '11111111-1111-4111-8111-111111111111',
+   'PRECEPTOR','D_123'
+  ])assert.ok(!body.includes(marker));
+ });
+}
