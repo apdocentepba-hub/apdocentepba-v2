@@ -301,33 +301,40 @@ document.addEventListener('DOMContentLoaded',function(){
  const panel=document.getElementById('panel-alertas');
  const comparison=document.getElementById('apd-comparador-panel');
  if(!panel||!comparison||typeof MutationObserver!=='function')return;
- let previousOwner=null,loading=false;
+ let previousOwner=null,loading=false,mapLoading=false;
  const sync=function(){
   // A bearer is never forwarded to the comparison module or stored on disk.
   const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
   if(owner!==previousOwner){
    previousOwner=owner;
-   try{window.APD_comparatorReset?.();}catch(_){}
+   try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
   }
   const allowed=!!owner&&typeof obtenerToken==='function'&&!!obtenerToken()&&
    typeof planActual!=='undefined'&&planActual?.access_active===true;
   if(!allowed){
-   try{window.APD_comparatorReset?.();}catch(_){}
+   try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
    comparison.hidden=true;
    return;
   }
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
+  if(typeof window.APD_offerSchoolMapRefresh==='function'){
+   try{window.APD_offerSchoolMapRefresh({offers,index,enabled:true});}catch(_){}
+  }else if(offers.length&&!mapLoading){
+   mapLoading=true;
+   import('./apd_offer_school_map_overlay.mjs?v=lab-20261107')
+    .then(()=>{mapLoading=false;sync();})
+    .catch(()=>{mapLoading=false;});
+  }
   if(typeof window.APD_comparatorRefresh==='function'){
    try{window.APD_comparatorRefresh({offers,index,enabled:true});}
    catch(_){comparison.hidden=true;}
-   return;
+  }else if(offers.length&&!loading){
+   loading=true;
+   import('./apd_comparador_panel.mjs?v=lab-20261107')
+    .then(()=>{loading=false;sync();})
+    .catch(()=>{loading=false;comparison.hidden=true;});
   }
-  if(!offers.length||loading)return;
-  loading=true;
-  import('./apd_comparador_panel.mjs?v=lab-20261107')
-   .then(()=>{loading=false;sync();})
-   .catch(()=>{loading=false;comparison.hidden=true;});
  };
  const observer=new MutationObserver(sync);
  observer.observe(panel,{childList:true,subtree:false});
