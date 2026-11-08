@@ -5,6 +5,8 @@ on:
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
+      - 'scripts/mobile-push-subscription-verifier-lab.mjs'
+      - 'scripts/test-mobile-push-subscription-verifier-lab.mjs'
       - 'scripts/mobile-push-abc-current-offer-lab.mjs'
       - 'scripts/apd-mobile-worker-matcher-readonly-lab.mjs'
       - 'scripts/build-apd-mobile-matcher-runtime-lab.mjs'
@@ -49,6 +51,7 @@ jobs:
           node --check scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-repository-runtime-lab.mjs
           node --check scripts/mobile-push-postgrest-adapter-lab.mjs
+          node --check scripts/mobile-push-subscription-verifier-lab.mjs
           node --check scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-postgrest-runtime-lab.mjs
           node --check scripts/mobile-push-abc-current-offer-lab.mjs
