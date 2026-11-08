@@ -5,9 +5,11 @@ import {execFileSync} from "node:child_process";
 import {checkHtml} from "./check-apd-v3-public-release-readonly.mjs";
 const before=execFileSync("git",["show","origin/main:index.html"],{encoding:"utf8"});
 const after=readFileSync("index.html","utf8");
-test("anonymous source baseline has current scripts but not V3 assets",()=>{
- const result=checkHtml(before,"before");
- assert.equal(result.new_asset_links,0);
+test("anonymous source baseline recognizes whether V3 has already shipped",()=>{
+ const v3AlreadyPresent=before.includes('public-landing-v3.css?v=20261103') &&
+  before.includes('apd_panel_priority_v3.js?v=1');
+ const result=checkHtml(before,v3AlreadyPresent?"after":"before");
+ assert.equal(result.new_asset_links,v3AlreadyPresent?2:0);
  assert.equal(result.forms_preserved,true);
 });
 test("proposed V3 release is public-site ready without changing old JS ordering",()=>{

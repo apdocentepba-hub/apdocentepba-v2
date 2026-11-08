@@ -31,7 +31,9 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const proposed=scriptReferences(newHtml);
  const count=proposed.filter(tag=>tag===added).length;
  assert.ok(count<=1,"Only one approved first-alert UI script is allowed");
- assert.deepEqual(proposed.filter(tag=>tag!==added),oldScripts,
+ // The first-alert UI script is already in main. Normalize this sole
+ // approved exception on BOTH sides; keep strict equality for all other tags.
+ assert.deepEqual(proposed.filter(tag=>tag!==added),oldScripts.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
   assert.ok(newHtml.indexOf(added)>newHtml.indexOf('<script src="apd_ui_v21.js?v=20261102-clean"></script>'),

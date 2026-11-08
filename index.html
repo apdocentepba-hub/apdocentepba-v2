@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="mobile_optimizations.css?v=visual4">
   <link rel="stylesheet" href="mobile_overrides_v2.css?v=visual3">
   <link rel="stylesheet" href="visual_contrast_patch.css?v=2">
+  <link rel="stylesheet" href="apd_comparador_panel.css?v=lab-20261107">
   <style>
     #panel-docente{position:relative;}
     .apd-safe-side-ad{display:none;position:absolute;top:112px;width:min(300px,calc((100vw - 1180px)/2 - 28px));z-index:1;border-radius:22px;padding:18px 16px;box-shadow:0 18px 44px rgba(16,36,61,.13);box-sizing:border-box;line-height:1.35;}
@@ -248,7 +249,7 @@
           <div class="panel-card span-4"><div class="card-lbl-row"><span class="card-lbl">🛠️ Backfill provincial</span><div class="mini-group"><button id="btn-provincia-step" class="mini-btn" type="button">Procesar lote</button><button id="btn-provincia-reset" class="mini-btn" type="button">Reset</button></div></div><div id="panel-backfill-provincia"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-12"><div class="card-lbl-row"><span class="card-lbl">📍 Radar provincial</span><button id="btn-refresh-provincia" class="mini-btn" type="button">Refrescar radar</button></div><p class="prefs-hint">Este bloque resume movimiento provincial real para ayudarte a evaluar otros distritos, materias y estados.</p><div id="panel-radar-provincia"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-12" id="panel-listados-pid-card"><div class="card-lbl-row"><span class="card-lbl">🪪 Listados / PID</span></div><p class="prefs-hint">Consultá puntaje de ingreso a la docencia por DNI, listado y año desde una pantalla separada y estable.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><a class="btn btn-primary" href="./pid.html">Abrir consulta PID</a></div></div>
-          <div class="panel-card span-8"><div class="card-lbl-row"><span class="card-lbl">🔔 Alertas APD activas</span><span id="alertas-badge" class="badge-num hidden"></span></div><div id="panel-alertas"><p class="ph">Cargando...</p></div></div>
+          <div class="panel-card span-8"><div class="card-lbl-row"><span class="card-lbl">🔔 Alertas APD activas</span><span id="alertas-badge" class="badge-num hidden"></span></div><div id="panel-alertas"><p class="ph">Cargando...</p></div><section id="apd-comparador-panel" class="apd-comparator-panel" aria-label="Comparador de ofertas" hidden></section></div>
           <div class="panel-card span-4"><div class="card-lbl">📋 Historial</div><div id="panel-historial"><p class="ph">Cargando...</p></div></div>
         </div>
       </div>
@@ -292,6 +293,45 @@ document.addEventListener('DOMContentLoaded', function () {
       chk.focus();
     }
   },true);
+});
+// Candidate comparator loads only for a verified authenticated account.
+// The observer tracks replacement of the alert carousel's direct children;
+// comparator's own buttons cannot cause a MutationObserver refresh loop.
+document.addEventListener('DOMContentLoaded',function(){
+ const panel=document.getElementById('panel-alertas');
+ const comparison=document.getElementById('apd-comparador-panel');
+ if(!panel||!comparison||typeof MutationObserver!=='function')return;
+ let previousOwner=null,loading=false;
+ const sync=function(){
+  // A bearer is never forwarded to the comparison module or stored on disk.
+  const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
+  if(owner!==previousOwner){
+   previousOwner=owner;
+   try{window.APD_comparatorReset?.();}catch(_){}
+  }
+  const allowed=!!owner&&typeof obtenerToken==='function'&&!!obtenerToken()&&
+   typeof planActual!=='undefined'&&planActual?.access_active===true;
+  if(!allowed){
+   try{window.APD_comparatorReset?.();}catch(_){}
+   comparison.hidden=true;
+   return;
+  }
+  const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
+  const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
+  if(typeof window.APD_comparatorRefresh==='function'){
+   try{window.APD_comparatorRefresh({offers,index,enabled:true});}
+   catch(_){comparison.hidden=true;}
+   return;
+  }
+  if(!offers.length||loading)return;
+  loading=true;
+  import('./apd_comparador_panel.mjs?v=lab-20261107')
+   .then(()=>{loading=false;sync();})
+   .catch(()=>{loading=false;comparison.hidden=true;});
+ };
+ const observer=new MutationObserver(sync);
+ observer.observe(panel,{childList:true,subtree:false});
+ sync();
 });
 </script>
 <script src="expiry_access_notice_patch.js?v=20261021"></script>
