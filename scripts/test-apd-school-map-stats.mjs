@@ -97,7 +97,7 @@ test('APD-owned map accepts school and district deep-links safely',()=>{
  assert.match(html,/new URLSearchParams\(window\.location\.search\)/);
  assert.match(html,/ofertaEscuela/);
  assert.match(html,/ofertaDistrito/);
- assert.match(html,/if\(ofertaEscuela\)\$\('q'\)\.value=ofertaEscuela/);
+ assert.match(html,/if\(ofertaEscuela\|\|ofertaClave\)\$\('q'\)\.value=ofertaClave\|\|ofertaEscuela/);
  assert.match(html,/matchingDistrict=ds\.find/);
  assert.match(source,/apdMap: "\.\/mapa-escuelas-pba\.html\?escuela="/);
 });
