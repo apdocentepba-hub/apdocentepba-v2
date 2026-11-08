@@ -4,7 +4,7 @@
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs';
 
 const state={
- available:[],selected:new Set(),index:0,enabled:false,
+ available:[],selected:new Set(),index:0,current:null,enabled:false,
  sort:'cierre',district:'',turn:''
 };
 const root=document.getElementById('apd-comparador-panel');
@@ -44,7 +44,7 @@ function syncCurrentButton() {
  const existing=actions.querySelector('#apd-comparar-oferta');
  if(existing)existing.remove();
  if(!state.enabled||!state.available.length)return;
- const item=state.available[state.index];
+ const item=state.current;
  const key=offerKey(item);
  const selected=key&&state.selected.has(key);
  const btn=button(!key?'Comparación no disponible (sin ID)':
@@ -178,6 +178,7 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  }
  state.available=[...unique.values()];
  state.index=Number.isInteger(index)&&index>=0&&index<offers.length?index:0;
+ state.current=Array.isArray(offers)?offers[state.index]:null;
  // The current card may have an invalid key: preserve its physical index only
  // when identity keys were not removed. Otherwise find its matching source key.
  const current=offers?.[index];
@@ -190,7 +191,7 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  render();
 }
 function reset() {
- state.enabled=false;state.available=[];state.selected.clear();
+ state.enabled=false;state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
  const control=document.querySelector('#apd-comparar-oferta');
  control?.remove();
