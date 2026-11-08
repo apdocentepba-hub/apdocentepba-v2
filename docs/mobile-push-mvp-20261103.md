@@ -1,6 +1,6 @@
 # APDocentePBA — Android, iOS y notificaciones push (propuesta 2026-11-03)
 
-**Estado verificable:** solo diseño y un contrato de eventos push con pruebas sin red. No hay aplicación Android/iOS compilada, APK/AAB, credenciales FCM/APNs, servicio de envío ni push real enviado. Este PR no modifica producción.
+**Estado verificable actualizado:** hay prototipo Expo, contrato de alertas y una APK Android de laboratorio compilada y comprobada en CI (no probada en un teléfono físico). No hay credenciales FCM/APNs, registro real de dispositivos, backend de envío ni push real enviado. Este PR no modifica producción.
 
 ## Avance adicional comprobado: prototipo Expo offline
 
@@ -50,3 +50,24 @@ Que un docente autenticado reciba en su Android **ofertas nuevas verificadas y c
 - Android/FCM: https://firebase.google.com/docs/cloud-messaging/android/get-started
 - Expo Notifications: https://docs.expo.dev/push-notifications/overview/
 - Apple Web Push: https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers
+
+
+## 07/11/2026 — Preflight final y pruebas de seguridad del despacho
+
+Se agregó un control **previo al eventual envío**, después de reservar un evento en la outbox, mediante `scripts/mobile-push-dispatch-preflight-lab.mjs`. Sigue siendo un laboratorio offline y no es un emisor.
+
+**Problema que corrige:** el contrato existente validaba consentimiento, plan y vencimiento al encolar una oferta. Eso no es suficiente: el plan puede vencer, el usuario revocar el dispositivo o la oferta cerrar **mientras el evento espera**.
+
+**Cambios concretos:**
+- Se vuelve a verificar que la clave HMAC del evento corresponde al usuario, dispositivo y oferta cargados desde el servidor. Rechaza los vínculos cruzados entre cuentas.
+- Plan actual verificado en los últimos 5 minutos y fuente de oferta actual verificada en los últimos 15 minutos (límites de laboratorio; requieren validación operacional).
+- Se comprueba identidad del dispositivo, consentimiento vigente, transport, revocación, disponibilidad actual, coincidencia real de preferencias y vencimiento futuro.
+- Fechas con zona horaria inequívoca: no acepta fechas imposibles (por ejemplo, 31 de febrero), sólo fecha sin hora ni marcas temporales ambiguas.
+- Dispositivo revocado u oferta cerrada: se cancela **ese evento** con su lease correcto. Caída de base, estado desconocido o secreto inaccesible: se reintenta con el backoff ya probado, **no se marca como enviado**.
+- `scripts/mobile-push-outbox-contract.mjs` incorpora `cancelEvent(eventKey,{leaseId})` que impide que un lease viejo cancele el nuevo tras vencer y volver a reservarlo.
+- El despacho `dryRunMobilePushDispatchLab` no integra FCM/Expo, no expone tokens push ni hace solicitudes de red. `provider_calls:0` es una constante del ensayo, **no un reporte de entregas**.
+- Pruebas en `scripts/test-mobile-push-dispatch-preflight-lab.mjs`, incorporadas al workflow de CI existente. El dispositivo Android físico **no se probó** y la recepción remota sigue pendiente.
+
+**Límites esenciales antes de producir:** el Worker deberá obtener todos esos datos desde repositorios de servidor confiables, no aceptar banderas verificadas enviadas por el teléfono. La outbox actual es exclusivamente en memoria y no es transaccional entre Workers. Para un envío real, hacen falta registro cifrado de token, control de revocación coordinado con el proveedor, autenticación, índice único y lease atómico persistido, cuotas/quiet hours, credenciales del proveedor, reportes de errores y pruebas con teléfono autorizado. Queda una ventana de concurrencia entre preflight y proveedor que requerirá cierre transaccional/validación final al despachar.
+
+**Separación:** este trabajo NO modifica páginas ni radar, Worker, DB, correo, Telegram ni WhatsApp; no registra dispositivos reales ni envía push.
