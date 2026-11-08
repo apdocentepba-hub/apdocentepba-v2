@@ -215,6 +215,7 @@ function render(){
  if(root.hidden)return;
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
+ heading.tabIndex=-1;
  const count=node('span','apd-comparator-count',countLabel(state.selected.size));
  head.append(heading,count);
  root.appendChild(head);
