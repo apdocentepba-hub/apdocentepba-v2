@@ -12,8 +12,9 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(app,/import\("\.\/apd_comparador_panel\.mjs\?v=lab-20261107"\)/);
- assert.match(app,/planActual\?\.access_active === true && !!obtenerToken\(\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=lab-20261107'\)/);
+ assert.match(html,/new MutationObserver\(sync\)/);
+ assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
 test('comparison happens locally; no storage, network, tokens, or data exports',()=>{
  assert.doesNotMatch(ui,/\bfetch\s*\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|Authorization|navigator\.geolocation|indexedDB/i);
@@ -21,10 +22,12 @@ test('comparison happens locally; no storage, network, tokens, or data exports',
  assert.match(ui,/state\.selected\.clear\(\)/);
 });
 test('access gated by active authenticated plan and reset when session changes',()=>{
- assert.match(app,/enabled: !!obtenerToken\(\) && planActual\?\.access_active === true/);
- assert.match(app,/window\.APD_comparatorReset\?\.\(\)/);
- assert.ok(app.split('window.APD_comparatorReset?.()').length>=3);
- assert.match(app,/window\.APD_comparatorRefresh\?\.\(/);
+ assert.match(html,/typeof dashboardLoadedOwner==='string'/);
+ assert.match(html,/owner!==previousOwner/);
+ assert.match(html,/window\.APD_comparatorReset\?\.\(\)/);
+ assert.match(html,/planActual\?\.access_active===true/);
+ assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true\}\)/);
+ assert.doesNotMatch(app,/APD_comparatorRefresh|APD_comparatorReset|apd_comparador_panel/);
 });
 test('selection never uses array index or missing ID as official identity',()=>{
  assert.match(ui,/offer\?\.source_offer_key/);
