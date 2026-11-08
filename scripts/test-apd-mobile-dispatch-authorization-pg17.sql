@@ -234,6 +234,40 @@ BEGIN
  THEN RAISE EXCEPTION 'Failed prepare persisted an authorization'; END IF;
 END $test$;
 
+-- Revoking ONLY the revoked_at field (without touching enable/opt-in)
+-- must invalidate a previously authorized event. The old trigger did not
+-- observe revoked_at changes; this regression proves the new trigger does.
+INSERT INTO public.apd_mobile_push_outbox
+ (event_key,user_id,device_id,offer_fingerprint,
+  source_offer_key,offer_expires_at,status,attempts,lease_id,leased_until)
+VALUES
+ (repeat('7',64),'11111111-1111-4111-8111-111111111111',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('a',64),
+  'APD:LAB:REVOKED_AT_ONLY',now()+interval '1 day',
+  'leased',1,'88888888-8888-4888-8888-888888888888',
+  now()+interval '10 minutes');
+DO $test$
+DECLARE v_token uuid;
+BEGIN
+ v_token=public.apd_mobile_prepare_dispatch(repeat('7',64),
+  '88888888-8888-4888-8888-888888888888');
+ IF v_token IS NULL THEN RAISE EXCEPTION 'revoked_at-only setup failed'; END IF;
+ UPDATE public.apd_mobile_push_devices SET revoked_at=clock_timestamp()
+ WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ IF (SELECT status FROM public.apd_mobile_push_outbox
+     WHERE event_key=repeat('7',64))<>'cancelled'
+ OR (SELECT state FROM public.apd_mobile_dispatch_authorizations
+     WHERE event_key=repeat('7',64))<>'revoked'
+ THEN RAISE EXCEPTION 'revoked_at-only transition was ignored'; END IF;
+ IF public.apd_mobile_resolve_dispatch(repeat('7',64),v_token,'accepted')
+ THEN RAISE EXCEPTION 'revoked_at-only authorization was acknowledged'; END IF;
+ UPDATE public.apd_mobile_push_devices SET revoked_at=NULL
+ WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ IF public.apd_mobile_prepare_dispatch(repeat('7',64),
+     '88888888-8888-4888-8888-888888888888') IS NOT NULL
+ THEN RAISE EXCEPTION 'reactivated an invalidated dispatch authorization'; END IF;
+END $test$;
+
 RESET ROLE;
 DO $audit$
 BEGIN
