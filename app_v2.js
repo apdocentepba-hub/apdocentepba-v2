@@ -1348,21 +1348,16 @@ function buildSchoolMapLinks(alerta) {
   // Never send that key as if it were a geocodable name.
   const clave = /^[0-9]{4}[A-Z]{2}[0-9]{4}$/.test(escuela.toUpperCase())
     ? escuela.toUpperCase() : "";
-  const lat = Number(alerta?.latitud ?? alerta?.latitude);
-  const lon = Number(alerta?.longitud ?? alerta?.longitude);
-  const trusted = alerta?.coordinates_verified === true &&
-    ["mapa_escolar_abc", "dgcye"].includes(String(alerta?.geo_source || "").toLowerCase());
-  const exact = trusted && Number.isFinite(lat) && Number.isFinite(lon) &&
-    lat >= -42 && lat <= -33 && lon >= -64 && lon <= -55;
-  const query = exact
-    ? lat.toFixed(6) + "," + lon.toFixed(6)
-    : [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
+  // Never trust raw coordinates or a boolean flag carried by an offer.
+  // Exact geolocation is resolved only by the official WFS inside the map.
+  const exact = false;
+  const query = [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
   return {
     apdMap: "./mapa-escuelas-pba.html?" +
       (clave ? "clave=" + encodeURIComponent(clave)
              : "escuela=" + encodeURIComponent(escuela)) +
       "&distrito=" + encodeURIComponent(distrito),
-    googleMaps: clave && !exact ? null
+    googleMaps: clave ? null
       : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
     official: "https://mapaescolar.abc.gob.ar/mapaescolar/",
     clave, exact
