@@ -6,6 +6,8 @@ on:
       - 'scripts/mobile-push-authorize-only-worker-lab.mjs'
       - 'scripts/mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-expo-receipt-journal-lab.mjs'
+      - 'scripts/mobile-push-expo-expiry-reconciler-lab.mjs'
+      - 'scripts/test-mobile-push-expo-expiry-reconciler-lab.mjs'
       - 'scripts/test-mobile-push-expo-receipt-journal-lab.mjs'
       - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
@@ -53,6 +55,7 @@ jobs:
           node --check scripts/mobile-push-authorize-only-worker-lab.mjs
           node --check scripts/mobile-push-provider-response-replay-lab.mjs
           node --check scripts/mobile-push-expo-receipt-journal-lab.mjs
+          node --check scripts/mobile-push-expo-expiry-reconciler-lab.mjs
           node --check scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-runtime-lab.mjs
           node --check scripts/mobile-push-server-repository-lab.mjs
