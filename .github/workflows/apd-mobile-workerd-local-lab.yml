@@ -1,0 +1,35 @@
+name: APD mobile workerd native runtime contract (local only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-runtime-lab.mjs'
+      - '.github/workflows/apd-mobile-workerd-local-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workerd-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned stable local workerd simulator only
+        run: npm install --no-save --no-audit --no-fund --package-lock=false miniflare@4.20260730.0
+      - name: Run Cloudflare workerd HMAC and scheduled-job fixtures (no bindings)
+        env:
+          CI: '1'
+        run: |
+          node --check scripts/mobile-push-worker-webcrypto-lab.mjs
+          node --check scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-runtime-lab.mjs
+      - name: Ensure no application or Worker production files changed
+        run: |
+          git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js
