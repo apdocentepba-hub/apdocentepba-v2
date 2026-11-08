@@ -989,6 +989,25 @@ function renderAlertasAPD(alertas) {
     : filtrarAlertasVigentes(alertas);
   alertasState.index = 0;
   renderAlertaActual();
+  // Avoid adding a new initial script tag or loading code for anonymous users.
+  // Module bootstrap is opt-in to a confirmed authenticated entitlement.
+  if (typeof window !== "undefined" &&
+      planActual?.access_active === true && !!obtenerToken() &&
+      typeof window.APD_comparatorRefresh !== "function" &&
+      !window.APD_comparatorLoading) {
+    window.APD_comparatorLoading = true;
+    import("./apd_comparador_panel.mjs?v=lab-20261107").then(() => {
+      window.APD_comparatorRefresh?.({
+        offers: alertasState.items,
+        index: alertasState.index,
+        enabled: !!obtenerToken() && planActual?.access_active === true
+      });
+    }).catch(() => {
+      // Optional candidate feature must never break the alert carousel.
+    }).finally(() => {
+      window.APD_comparatorLoading = false;
+    });
+  }
 }
 
 function moverAlerta(step) {
