@@ -116,7 +116,7 @@ for(const [mode,ready,cancelled,retried,ok] of scenarios){
    assert.equal(r.counts.abc,0);
   }
   if(mode==='database-down'||mode==='outbox-duplicate')
-   assert.equal(r.reason,'repository_unavailable');
+   assert.equal(r.reason,'authorization_storage_unavailable');
   if(mode==='dispatch-down'||mode==='dispatch-malformed')
    assert.equal(r.reason,'authorization_storage_unavailable');
   const output=JSON.stringify(r);
