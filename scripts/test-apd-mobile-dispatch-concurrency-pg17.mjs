@@ -124,3 +124,77 @@ assert.equal(state,'cancelled|revoked');
 const repeat=runSync(auth(second));
 assert.equal(repeat,'DENIED');
 console.log('PG17_CONCURRENT_REVOCATION_PASS: prepared token revoked, never reauthorized');
+
+
+// Race an archive/redaction against a second event attempting to reuse the
+// SAME Expo ticket. Both operations need the same per-ticket advisory lock;
+// the original correlation or its SHA256 tombstone must always reject reuse.
+runSync([
+ 'SET ROLE service_role;',
+ 'UPDATE public.apd_mobile_push_devices',
+ 'SET enabled=true,opted_in=true,revoked_at=NULL',
+ "WHERE id='"+DEVICE+"';"
+].join('\n'));
+const retireEvent=seedEvent('8');
+const duplicateEvent=seedEvent('6');
+const retireId=runSync([
+ 'SET ROLE service_role;',
+ "SELECT public.apd_mobile_prepare_dispatch('"+retireEvent+
+  "','"+LEASE+"');"
+].join('\n'));
+const duplicateId=runSync([
+ 'SET ROLE service_role;',
+ "SELECT public.apd_mobile_prepare_dispatch('"+duplicateEvent+
+  "','"+LEASE+"');"
+].join('\n'));
+assert.match(retireId,uuid);
+assert.match(duplicateId,uuid);
+const reusedTicket='ticket_concurrent_retire_123';
+const setup=runSync([
+ 'SET ROLE service_role;',
+ "SELECT public.apd_mobile_expo_record_ticket('"+retireEvent+
+  "','"+retireId+"','"+reusedTicket+"');",
+ "SELECT public.apd_mobile_expo_record_receipt('"+retireEvent+
+  "','"+retireId+"','"+reusedTicket+"','provider_accepted');",
+ "SELECT public.apd_mobile_resolve_dispatch('"+retireEvent+
+  "','"+retireId+"','accepted');",
+ 'UPDATE public.apd_mobile_expo_receipt_correlation',
+ "SET ticket_recorded_at=clock_timestamp()-interval '101 days'",
+ "WHERE event_key='"+retireEvent+"';"
+].join('\n'));
+assert.deepEqual(setup.split('\n').slice(0,3),['t','t','t']);
+
+const redaction=launch([
+ 'BEGIN;',
+ 'SET ROLE service_role;',
+ 'SELECT event_key FROM public.apd_mobile_push_outbox',
+ "WHERE event_key='"+retireEvent+"' FOR UPDATE;",
+ "SELECT 'LOCK_HELD';",
+ 'SELECT pg_sleep(1.5);',
+ 'SELECT public.apd_mobile_expo_retire_terminal_tickets(10,90);',
+ 'COMMIT;'
+].join('\n'),{waitForLock:true});
+await redaction.locked;
+const competing=launch([
+ 'SET ROLE service_role;',
+ "SELECT public.apd_mobile_expo_record_ticket('"+duplicateEvent+
+  "','"+duplicateId+"','"+reusedTicket+"');"
+].join('\n'));
+const [redacted,attempted]=await Promise.all([
+ redaction.done,competing.done
+]);
+assert.equal(attempted,'f','a concurrent event reused an Expo ticket');
+assert.ok(redacted.split('\n').some(x=>x==='1'));
+const tombstone=runSync([
+ 'SET ROLE service_role;',
+ 'SELECT count(*)::text FROM public.apd_mobile_expo_ticket_tombstones',
+ "WHERE event_key='"+retireEvent+"';"
+].join('\n'));
+assert.equal(tombstone,'1');
+const stillBlocked=runSync([
+ 'SET ROLE service_role;',
+ "SELECT public.apd_mobile_expo_record_ticket('"+duplicateEvent+
+  "','"+duplicateId+"','"+reusedTicket+"');"
+].join('\n'));
+assert.equal(stillBlocked,'f');
+console.log('PG17_EXPO_TICKET_REDACTION_VS_REUSE_PASS: one hash, zero duplicate tickets');
