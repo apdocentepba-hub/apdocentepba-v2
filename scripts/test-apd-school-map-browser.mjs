@@ -90,6 +90,16 @@ async function until(statement){
   if(await evaluate(statement))return;
   await sleep(100);
  }
+ const diagnostics=await evaluate(`({
+  ready:document.readyState,
+  stFuente:document.getElementById('stFuente')?.textContent,
+  stTotal:document.getElementById('stTotal')?.textContent,
+  error:document.getElementById('err')?.textContent,
+  requests:window.__requests?.length,
+  keys:typeof window.L,
+  loadType:typeof cargarOficial
+ })`).catch(()=>({failedToEvaluate:true}));
+ console.log('APD_SCHOOL_MAP_BROWSER_DEBUG '+JSON.stringify(diagnostics));
  throw Error('Map did not reach required browser state: '+statement);
 }
 async function shot(name){
