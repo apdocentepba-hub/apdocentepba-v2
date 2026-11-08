@@ -359,3 +359,48 @@ test('asynchronous repository failures and invalid cursor get distinct safe HTTP
  assert.equal(invalid.status,400);
  assert.deepEqual(invalid.value,{ok:false,error:'invalid_page'});
 });
+
+
+test('repository response with extra user fields is rejected before serialization',async()=>{
+ const fixture={
+  version:1,fromCursor:0,nextCursor:1,hasMore:false,
+  events:[{
+   cursor:1,kind:'event',id:'DEMO-AVISO-001',
+   offerId:'DEMO-APD-001',revision:1,status:'active',
+   read:false,user_id:B,secret:'FAKE_PRIVATE_TOKEN'
+  }]
+ };
+ const x=setup({repository:{
+  listPage:()=>fixture,acknowledgeRead:()=>({accepted:false,reason:'not_found'})
+ }});
+ const r=await get(x.handler,x.request());
+ assert.equal(r.status,503);
+ assert.deepEqual(r.value,{ok:false,error:'service_unavailable'});
+ assert.ok(!JSON.stringify(r.value).includes(B));
+ assert.ok(!JSON.stringify(r.value).includes('FAKE_PRIVATE_TOKEN'));
+});
+test('repository malformed event shapes cannot leak fake token or skip cancellation',async()=>{
+ const base={
+  cursor:1,kind:'event',id:'DEMO-AVISO-001',
+  offerId:'DEMO-APD-001',revision:1,status:'active',read:false
+ };
+ for(const bad of [
+  {...base,id:'REAL_ABC_123',push_token:'EXPOTOKEN'},
+  {...base,cursor:2},
+  {...base,read:'false'},
+  {...base,status:'cancelled',read:false},
+  {...base,kind:'read',read:false},
+  {...base,offerId:'DEMO-APD-002'}
+ ]){
+  const x=setup({repository:{
+   listPage:()=>({
+    version:1,fromCursor:0,nextCursor:1,hasMore:false,events:[bad]
+   }),
+   acknowledgeRead:()=>({accepted:false,reason:'not_found'})
+  }});
+  const result=await get(x.handler,x.request());
+  assert.equal(result.status,503);
+  assert.deepEqual(result.value,{ok:false,error:'service_unavailable'});
+  assert.ok(!JSON.stringify(result.value).includes('EXPOTOKEN'));
+ }
+});
