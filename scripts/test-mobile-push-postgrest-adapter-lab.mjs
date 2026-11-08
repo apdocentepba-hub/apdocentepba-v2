@@ -136,8 +136,9 @@ test('expired SQL lease is not marked as retried by server or SQL',async()=>{
  assert.equal(o.ready,0);
  assert.equal(o.retried,0);
  assert.equal(o.provider_calls,0);
- assert.equal(f.requests.length,3+1);
- assert.equal(new URL(f.requests[3].url).pathname,
+ // A stale SQL lease skips the device read and cannot be marked as sent.
+ assert.equal(f.requests.length,3);
+ assert.equal(new URL(f.requests[2].url).pathname,
   '/rest/v1/rpc/apd_mobile_finish_push');
 });
 test('network failure fails closed and no secret/error is reported',async()=>{
