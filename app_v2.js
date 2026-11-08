@@ -1344,6 +1344,10 @@ function buildSchoolMapLinks(alerta) {
   const escuela = String(alerta?.escuela || alerta?.nombreestablecimiento || "").trim();
   const distrito = String(alerta?.distrito || alerta?.descdistrito || "").trim();
   if (escuela.length < 3 || distrito.length < 3) return null;
+  // ABC often identifies a school by its provincial key (not a street address).
+  // Never send that key as if it were a geocodable name.
+  const clave = /^[0-9]{4}[A-Z]{2}[0-9]{4}$/.test(escuela.toUpperCase())
+    ? escuela.toUpperCase() : "";
   const lat = Number(alerta?.latitud ?? alerta?.latitude);
   const lon = Number(alerta?.longitud ?? alerta?.longitude);
   const trusted = alerta?.coordinates_verified === true &&
@@ -1354,11 +1358,14 @@ function buildSchoolMapLinks(alerta) {
     ? lat.toFixed(6) + "," + lon.toFixed(6)
     : [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
   return {
-    apdMap: "./mapa-escuelas-pba.html?escuela=" + encodeURIComponent(escuela) +
+    apdMap: "./mapa-escuelas-pba.html?" +
+      (clave ? "clave=" + encodeURIComponent(clave)
+             : "escuela=" + encodeURIComponent(escuela)) +
       "&distrito=" + encodeURIComponent(distrito),
-    googleMaps: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
+    googleMaps: clave && !exact ? null
+      : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
     official: "https://mapaescolar.abc.gob.ar/mapaescolar/",
-    exact
+    clave, exact
   };
 }
 
@@ -1488,10 +1495,10 @@ function renderAlertaActual() {
           <div class="alerta-actions">
             ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
             ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.apdMap)}" target="_blank" rel="noopener noreferrer">📍 Ver escuela en mapa</a>` : ""}
-            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">${schoolMap.exact ? "Ubicación verificada" : "Buscar en Google Maps"}</a>` : ""}
+            ${schoolMap?.googleMaps ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">${schoolMap.exact ? "Ubicación verificada" : "Buscar en Google Maps"}</a>` : ""}
             ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${schoolMap.official}" target="_blank" rel="noopener noreferrer">Mapa Escolar ABC</a>` : ""}
           </div>
-          ${schoolMap && !schoolMap.exact ? '<p class="prefs-hint">La búsqueda del mapa es orientativa: confirmá la escuela y su dirección en el Mapa Escolar oficial.</p>' : ""}
+          ${schoolMap && !schoolMap.exact ? `<p class="prefs-hint">${schoolMap.clave ? "Se buscará la clave provincial exacta. Si no aparece, consultala en Mapa Escolar ABC." : "La búsqueda es orientativa: confirmá la escuela y su dirección en el Mapa Escolar oficial."}</p>` : ""}
         </article>
       </div>
 
