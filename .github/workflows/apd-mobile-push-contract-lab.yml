@@ -22,6 +22,8 @@ on:
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
       - 'scripts/mobile-push-abc-current-offer-lab.mjs'
+      - 'scripts/apd-mobile-worker-matcher-readonly-lab.mjs'
+      - 'scripts/test-apd-mobile-worker-matcher-readonly-lab.mjs'
       - 'scripts/test-mobile-push-abc-current-offer-lab.mjs'
       - 'scripts/test-mobile-push-postgrest-adapter-lab.mjs'
       - 'scripts/test-mobile-push-server-repository-lab.mjs'
@@ -75,6 +77,8 @@ jobs:
           node --test scripts/test-mobile-push-postgrest-adapter-lab.mjs
           node --check scripts/mobile-push-abc-current-offer-lab.mjs
           node --test scripts/test-mobile-push-abc-current-offer-lab.mjs
+          node --check scripts/apd-mobile-worker-matcher-readonly-lab.mjs
+          node --test scripts/test-apd-mobile-worker-matcher-readonly-lab.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
