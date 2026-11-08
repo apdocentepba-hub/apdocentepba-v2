@@ -331,11 +331,31 @@ test('request validation denies malformed JSON and hides DB errors from caller',
  };
  const x=setup({repository:repo});
  const r=await get(x.handler,x.request('GET'));
- assert.equal(r.status,400);
+ assert.equal(r.status,503);
+ assert.deepEqual(r.value,{ok:false,error:'service_unavailable'});
  assert.ok(!JSON.stringify(r).includes('SECRET_DB_CONNECTION'));
  const wr=await get(x.handler,x.request('POST',{
   path:URL+'/read',body:{id:'DEMO-AVISO-001',revision:1}
  }));
  assert.equal(wr.status,503);
  assert.ok(!JSON.stringify(wr).includes('SECRET_DB_CONNECTION'));
+});
+
+
+test('asynchronous repository failures and invalid cursor get distinct safe HTTP responses',async()=>{
+ const a=setup({repository:{
+  async listPage(){throw Error('SECRET_PRIVATE_DB_UNAVAILABLE');},
+  async acknowledgeRead(){return {accepted:false,reason:'not_found'};}
+ }});
+ const unavailable=await get(a.handler,a.request());
+ assert.equal(unavailable.status,503);
+ assert.deepEqual(unavailable.value,{ok:false,error:'service_unavailable'});
+ assert.ok(!JSON.stringify(unavailable.value).includes('SECRET'));
+ const b=setup({repository:{
+  async listPage(){throw Error('invalid_inbox_page');},
+  async acknowledgeRead(){return {accepted:false,reason:'not_found'};}
+ }});
+ const invalid=await get(b.handler,b.request());
+ assert.equal(invalid.status,400);
+ assert.deepEqual(invalid.value,{ok:false,error:'invalid_page'});
 });
