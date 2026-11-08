@@ -71,3 +71,13 @@ Solo se persiste `{version, cursor, items[]}` con cuatro identificadores fijos `
 **Privacidad:** AsyncStorage es almacenamiento local persistente **no cifrado**, por lo que se utiliza exclusivamente con identificadores y estados ficticios. Una bandeja real necesita autenticación, aislamiento por cuenta, caducidad, cifrado apropiado y sincronización autorizada del servidor; nada de eso se infiere de esta demostración.
 
 **Verificación:** Node prueba recuperación al crear una segunda instancia con el mismo almacenamiento simulado, secuenciación, corrupción, acciones concurrentes, cancelación tardía y fail-closed. El empaquetado JS y las compilaciones APK no prueban persistencia en un teléfono físico; esa prueba se hará cuando se autorice la instalación.
+
+## 08/11/2026 — Preparación del contrato servidor → bandeja (sin conexión activa)
+
+Se implementó un **contrato de laboratorio separado del frontend** en `scripts/mobile-inbox-sync-endpoint-lab.mjs` y `scripts/mobile-inbox-event-log-lab.mjs`, con sesiones estrictamente verificadas en el servidor, paginación por cursor propio de la cuenta, confirmación de lectura idempotente y cancelaciones irreversibles. No existe ninguna importación de esa API en `App.js`, ni endpoint desplegado.
+
+Una capa local `src/demo-inbox-sync-protocol.js` valida páginas inyectadas y las aplica mediante `createDemoInboxStore.applyServerPage()`. Se rechazan lotes con cursor faltante, campos extra, IDs ajenos, errores de lectura o cancelaciones malformadas. Toda página se valida primero y se persiste en una sola escritura. **No hay conexión de red, autenticación real, datos de usuario ni notificaciones remotas**.
+
+Las pruebas del servidor usan dos cuentas y sesiones **ficticias**, verificando aislamiento, ACK repetido, revisiones anteriores, lectura de avisos cancelados, saltos de cursor, cargas malformadas y ninguna filtración de credenciales. También se ensaya el handler HTTP en Cloudflare workerd local. Esto es un contrato de implementación para una futura versión, **no** una sincronización real ya disponible.
+
+Para habilitar sincronización real se requiere: credenciales y sesión con almacenamiento seguro nativo, repositorio persistente PostgreSQL por cuenta con permisos/RLS revisados, verificación de planes/datos de ofertas, políticas de lectura y revocación, staging autorizado y pruebas físicas. No se realizará sin aprobación.
