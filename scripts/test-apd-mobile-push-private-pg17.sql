@@ -18,10 +18,13 @@ BEGIN
  OR has_table_privilege('authenticated','public.apd_mobile_push_outbox','UPDATE')
  OR has_function_privilege('anon','public.apd_mobile_claim_push(integer,integer)','EXECUTE')
  OR has_function_privilege('authenticated','public.apd_mobile_finish_push(text,uuid,boolean)','EXECUTE')
+ OR has_function_privilege('authenticated','public.apd_mobile_cancel_push(text,uuid)','EXECUTE')
+ OR has_function_privilege('anon','public.apd_mobile_cancel_push(text,uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'UNSAFE PUBLIC ACCESS'; END IF;
  IF NOT has_table_privilege('service_role','public.apd_mobile_push_devices','INSERT')
  OR NOT has_table_privilege('service_role','public.apd_mobile_push_outbox','UPDATE')
  OR NOT has_function_privilege('service_role','public.apd_mobile_claim_push(integer,integer)','EXECUTE')
+ OR NOT has_function_privilege('service_role','public.apd_mobile_cancel_push(text,uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'Service role cannot safely operate'; END IF;
  IF (SELECT NOT relrowsecurity OR NOT relforcerowsecurity
       FROM pg_class WHERE oid='public.apd_mobile_push_devices'::regclass)
@@ -117,6 +120,64 @@ BEGIN
  EXCEPTION WHEN unique_violation THEN NULL; END;
 END $test$;
 
+-- Server-side cancellation after final preflight: revoked or closed offer.
+-- The wrong lease, a duplicate cancel and a later 'sent' acknowledgement
+-- are all forbidden. Synthetic lease ownership only; never a provider call.
+INSERT INTO public.apd_mobile_push_outbox
+(event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+VALUES
+ (repeat('5',64),'11111111-1111-4111-8111-111111111111',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('e',64),
+  now()+interval '1 day');
+DO $test$
+DECLARE v_claim record;
+BEGIN
+ SELECT * INTO v_claim FROM public.apd_mobile_claim_push(1,60);
+ IF v_claim.event_key IS DISTINCT FROM repeat('5',64) THEN
+  RAISE EXCEPTION 'Expected synthetic cancel candidate'; END IF;
+ IF public.apd_mobile_cancel_push(v_claim.event_key,
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd') THEN
+  RAISE EXCEPTION 'Wrong lease cancelled event'; END IF;
+ IF NOT public.apd_mobile_cancel_push(v_claim.event_key,v_claim.lease_id) THEN
+  RAISE EXCEPTION 'Valid current lease could not cancel event'; END IF;
+ IF public.apd_mobile_cancel_push(v_claim.event_key,v_claim.lease_id) THEN
+  RAISE EXCEPTION 'Duplicate cancellation accepted'; END IF;
+ IF public.apd_mobile_finish_push(v_claim.event_key,v_claim.lease_id,true) THEN
+  RAISE EXCEPTION 'Cancelled event acknowledged as sent'; END IF;
+ IF (SELECT status FROM public.apd_mobile_push_outbox
+      WHERE event_key=repeat('5',64))<>'cancelled' THEN
+  RAISE EXCEPTION 'Expected terminal cancelled state'; END IF;
+END $test$;
+
+-- An expired worker lease cannot cancel a NEW reservation for the same event.
+-- This simulates a stalled Worker followed by a lease recovered by another.
+INSERT INTO public.apd_mobile_push_outbox
+(event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
+VALUES
+ (repeat('6',64),'11111111-1111-4111-8111-111111111111',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',repeat('f',64),
+  now()+interval '1 day');
+DO $test$
+DECLARE v_old record;v_new record;
+BEGIN
+ SELECT * INTO v_old FROM public.apd_mobile_claim_push(1,60);
+ IF v_old.event_key IS DISTINCT FROM repeat('6',64) THEN
+  RAISE EXCEPTION 'Expected synthetic expired-lease candidate'; END IF;
+ UPDATE public.apd_mobile_push_outbox SET
+  leased_until=clock_timestamp()-interval '1 second'
+ WHERE event_key=v_old.event_key;
+ SELECT * INTO v_new FROM public.apd_mobile_claim_push(1,60);
+ IF v_new.event_key IS DISTINCT FROM v_old.event_key
+    OR v_new.lease_id IS NOT DISTINCT FROM v_old.lease_id THEN
+  RAISE EXCEPTION 'Expected recovered unique lease'; END IF;
+ IF public.apd_mobile_cancel_push(v_old.event_key,v_old.lease_id) THEN
+  RAISE EXCEPTION 'Expired old worker cancelled a new lease'; END IF;
+ IF NOT public.apd_mobile_cancel_push(v_new.event_key,v_new.lease_id) THEN
+  RAISE EXCEPTION 'Current worker could not cancel new lease'; END IF;
+ IF public.apd_mobile_finish_push(v_new.event_key,v_new.lease_id,true) THEN
+  RAISE EXCEPTION 'Cancelled recovered lease marked sent'; END IF;
+END $test$;
+
 -- Do not claim outdated/offline offers even with a consenting active device.
 INSERT INTO public.apd_mobile_push_outbox(
  event_key,user_id,device_id,offer_fingerprint,offer_expires_at)
@@ -135,7 +196,9 @@ DO $test$
 BEGIN
  IF has_function_privilege('anon','public.apd_mobile_claim_push(integer,integer)','EXECUTE')
  OR has_function_privilege('authenticated','public.apd_mobile_finish_push(text,uuid,boolean)','EXECUTE')
+ OR has_function_privilege('authenticated','public.apd_mobile_cancel_push(text,uuid)','EXECUTE')
+ OR has_function_privilege('anon','public.apd_mobile_cancel_push(text,uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'Function privilege leak'; END IF;
 END $test$;
 
-SELECT 'APD_MOBILE_PG17_RLS_OWNER_ATOMIC_CLAIM_REVOKE_DEDUP_OK' AS result;
+SELECT 'APD_MOBILE_PG17_CANCEL_LEASE_OK' AS result;
