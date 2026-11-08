@@ -40,7 +40,7 @@ window.fetch=async (url,options={})=>{
  const code=String(u.searchParams.get('CQL_FILTER')||'').match(/clave='([^']+)'/)?.[1]||'';
  const feature={
   type:'Feature',properties:{
-   clave:'0005MS0004',nombre:'Escuela <script>nunca ejecutar()</script>',
+   clave:'0005MS0004',nombre:'Escuela <script>nunca ejecutar()<' + '/script>',
    cue:'061002000',calle:'Calle Prueba',nro:'100',distrito:'Avellaneda',
    localidad:'Wilde',latitud:-34.69,longitud:-58.33
   }
