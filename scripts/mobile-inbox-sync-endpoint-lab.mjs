@@ -50,8 +50,12 @@ export function createMobileInboxSyncHandlerLab({
     if(after===null||limit===null)
      return json({ok:false,error:'invalid_page'},400);
     let page;
-    try{page=repository.listPage({actor,after,limit});}
-    catch{return json({ok:false,error:'invalid_page'},400);}
+    try{page=await repository.listPage({actor,after,limit});}
+    catch(error){
+     if(error?.message==='invalid_inbox_page')
+      return json({ok:false,error:'invalid_page'},400);
+     return json({ok:false,error:'service_unavailable'},503);
+    }
     // Exact fields are deliberately synthetic (no name, token, IDs or PII).
     if(!exact(page,['version','fromCursor','nextCursor','hasMore','events'])||
        page.version!==1||page.fromCursor!==after||
@@ -80,7 +84,7 @@ export function createMobileInboxSyncHandlerLab({
       !Number.isInteger(payload.revision)||
       payload.revision<1||payload.revision>100000)
     return json({ok:false,error:'invalid_payload'},400);
-   const result=repository.acknowledgeRead({
+   const result=await repository.acknowledgeRead({
     actor,id:payload.id,revision:payload.revision
    });
    if(!result||typeof result!=='object')
