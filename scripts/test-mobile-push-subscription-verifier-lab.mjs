@@ -11,7 +11,7 @@ const SUB='99999999-9999-4999-8999-999999999999';
 const NOW=Date.parse('2026-11-08T10:00:00Z');
 const ISO=t=>new Date(t).toISOString();
 const KEY='sb_secret_SYNTHETIC_NO_REAL_SUPABASE_CREDENTIALS_12345';
-const URL='https://apdsynthetic123.supabase.co';
+const PROJECT_URL='https://apdsynthetic123.supabase.co';
 const candidate=()=>({
  id:SUB,user_id:USER,plan_code:'PLUS',status:'ACTIVE',
  created_at:ISO(NOW-24*3600_000),trial_ends_at:null,
@@ -186,7 +186,7 @@ test('PostgREST private subscription reads expose only narrow projections and ke
   throw Error('unexpected_server_table');
  };
  const db=createMobilePushPostgrestAdapterLab({
-  projectUrl:URL,secretKey:KEY,fetchImpl
+  projectUrl:PROJECT_URL,secretKey:KEY,fetchImpl
  });
  const f=createMobilePushSubscriptionVerifierLab({database:db,now:()=>NOW});
  const result=await f.verify({userId:USER});
@@ -203,7 +203,7 @@ test('malformed and unbounded PostgREST subscription result is not trusted',asyn
  for(const data of [rows,[{...candidate(),user_id:OTHER}],
   [{...candidate(),id:'not-uuid'}],[{...candidate(),status:42}]]){
   const db=createMobilePushPostgrestAdapterLab({
-   projectUrl:URL,secretKey:KEY,fetchImpl:async()=>reply(data)
+   projectUrl:PROJECT_URL,secretKey:KEY,fetchImpl:async()=>reply(data)
   });
   await assert.rejects(()=>db.readSubscriptionCandidates({userId:USER}),
    /postgrest_subscription_set_ambiguous|postgrest_invalid_subscription/);
