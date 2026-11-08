@@ -61,7 +61,8 @@ function fixture({
    assert.equal(eventKey,EVENT);assert.equal(leaseId,LEASE);
    assert.equal(sent,false);
    if(sent)calls.sent++;
-   return true;
+   // SQL apd_mobile_finish_push returns false for an expired lease.
+   return !leaseStale;
   }
  };
  const plans={
@@ -145,7 +146,7 @@ for(const [name,options] of [
    assert.equal(r.ok,false);
    assert.equal(r.reason,'repository_unavailable');
   }else{
-   assert.equal(r.retried,1);
+   assert.equal(r.retried,options.leaseStale?0:1);
    assert.equal(f.calls.retry,1);
   }
   assert.equal(r.provider_calls,0);
