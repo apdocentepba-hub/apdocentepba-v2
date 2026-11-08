@@ -47,6 +47,9 @@ function earthKm(a,b){
 function cmpNumMissingLast(a,b){
  const av=typeof a==='number'&&Number.isFinite(a)?a:Infinity;
  const bv=typeof b==='number'&&Number.isFinite(b)?b:Infinity;
+ if(av===bv)return 0;
+ if(av===Infinity)return 1;
+ if(bv===Infinity)return -1;
  return av-bv;
 }
 export function compareOffers({
