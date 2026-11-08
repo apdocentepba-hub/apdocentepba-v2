@@ -7,6 +7,9 @@ on:
       - 'scripts/test-apd-comparador-criterios.mjs'
       - 'scripts/test-apd-comparador-ui-contract.mjs'
       - 'scripts/test-apd-comparador-browser.mjs'
+      - 'scripts/apd-school-geodistance.mjs'
+      - 'scripts/test-apd-school-geodistance.mjs'
+      - 'mapa-escuelas-pba.html'
       - 'apd_comparador_panel.mjs'
       - 'apd_comparador_panel.css'
       - 'index.html'
@@ -29,7 +32,8 @@ jobs:
         run: |
           node --check scripts/apd-comparador-criterios.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
-          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs
+          node --check scripts/apd-school-geodistance.mjs
+          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs
       - name: 'Chromium QA: private access, safe offer selection and mobile layout'
         run: node scripts/test-apd-comparador-browser.mjs
       - name: Browser QA screenshots
