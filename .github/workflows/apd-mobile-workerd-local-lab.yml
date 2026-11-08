@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
+      - 'scripts/mobile-push-server-repository-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-repository-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs'
       - 'scripts/test-mobile-workerd-runtime-lab.mjs'
       - '.github/workflows/apd-mobile-workerd-local-lab.yml'
@@ -30,6 +33,9 @@ jobs:
           node --check scripts/mobile-push-worker-webcrypto-lab.mjs
           node --check scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-runtime-lab.mjs
+          node --check scripts/mobile-push-server-repository-lab.mjs
+          node --check scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-repository-runtime-lab.mjs
       - name: Ensure no application or Worker production files changed
         run: |
           git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js
