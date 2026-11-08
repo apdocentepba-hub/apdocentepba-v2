@@ -187,3 +187,60 @@ test('PostgREST refuses fake delivery, invalid ticket and nonboolean RPC results
  }),/invalid_expo_receipt_identity/);
  assert.equal(sent,1);
 });
+
+
+test('reconciliation reads ONLY pending tickets 15m-23h old with server credentials',async()=>{
+ const NOW=Date.parse('2026-11-08T19:00:00Z'),calls=[];
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async(url,opts)=>{
+   const u=new URL(url);calls.push(u);
+   assert.equal(u.pathname,'/rest/v1/apd_mobile_expo_receipt_correlation');
+   assert.equal(u.searchParams.get('select'),
+    'event_key,dispatch_id,ticket_id,ticket_recorded_at,tracking_state');
+   assert.equal(u.searchParams.get('tracking_state'),'eq.awaiting_receipt');
+   assert.equal(u.searchParams.get('order'),'ticket_recorded_at.asc');
+   assert.equal(u.searchParams.get('limit'),'3');
+   assert.ok(u.searchParams.get('and').includes('ticket_recorded_at.gte.'));
+   assert.ok(u.searchParams.get('and').includes('ticket_recorded_at.lte.'));
+   assert.equal(opts.method,'GET');
+   assert.equal(opts.headers.apikey,SECRET);
+   assert.equal(opts.credentials,'omit');
+   assert.equal(opts.redirect,'manual');
+   return response([{
+    event_key:EVENT,dispatch_id:DISPATCH,ticket_id:TICKET,
+    ticket_recorded_at:new Date(NOW-20*60_000).toISOString(),
+    tracking_state:'awaiting_receipt',
+    device_token:'MUST_NOT_ESCAPE',email:'MUST_NOT_ESCAPE'
+   }]);
+  }
+ });
+ const rows=await db.listExpoPendingReceiptChecks({nowMs:NOW,limit:2});
+ assert.deepEqual(rows,[{eventKey:EVENT,dispatchId:DISPATCH,ticketId:TICKET}]);
+ assert.equal(calls.length,1);
+ assert.equal(JSON.stringify(rows).includes('MUST_NOT_ESCAPE'),false);
+});
+test('poll window never expands beyond 20, never trusts truncation or stale results',async()=>{
+ const NOW=Date.parse('2026-11-08T19:00:00Z');
+ const row={event_key:EVENT,dispatch_id:DISPATCH,ticket_id:TICKET,
+  ticket_recorded_at:new Date(NOW-20*60_000).toISOString(),
+  tracking_state:'awaiting_receipt'};
+ for(const result of [[row,{...row,ticket_id:'other_ticket_12345'}],
+   [{...row,ticket_recorded_at:new Date(NOW-25*3600_000).toISOString()}],
+   [{...row,tracking_state:'late_audit'}],
+   [{...row,ticket_id:'bad/id'}],
+   [{...row,event_key:'invalid'}]]){
+  const db=createMobilePushPostgrestAdapterLab({
+   projectUrl:PROJECT,secretKey:SECRET,
+   fetchImpl:async()=>response(result)
+  });
+  await assert.rejects(()=>db.listExpoPendingReceiptChecks({nowMs:NOW,limit:1}),
+   /receipt_poll_window_ambiguous|invalid_private_receipt_candidate/);
+ }
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async()=>{throw Error('should_not_call');}
+ });
+ await assert.rejects(()=>db.listExpoPendingReceiptChecks({nowMs:NOW,limit:25}),
+  /invalid_receipt_poll_window/);
+});
