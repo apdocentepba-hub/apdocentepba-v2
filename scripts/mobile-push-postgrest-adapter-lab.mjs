@@ -263,6 +263,36 @@ export function createMobilePushPostgrestAdapterLab({
     });
    }));
   },
+  async expireMissingExpoReceipts({limit=20}={}){
+   if(!Number.isInteger(limit)||limit<1||limit>20)
+    throw Error('invalid_expo_expiry_bounds');
+   const total=await request('rpc/apd_mobile_expo_expire_missing_receipts',{
+    method:'POST',body:{p_limit:limit}
+   });
+   if(!Number.isInteger(total)||total<0||total>limit)
+    throw Error('invalid_expo_expiry_result');
+   // This SQL RPC only marks unknown results as uncertain, never sent.
+   return total;
+  },
+  async recordLateExpoObservation({
+   eventKey,dispatchId,ticketId,outcome
+  }={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
+      typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
+    throw Error('invalid_expo_late_reference');
+   if(!['provider_accepted','provider_rejected',
+        'invalid_device','uncertain'].includes(outcome))
+    throw Error('invalid_expo_late_observation');
+   const stored=await request('rpc/apd_mobile_expo_record_late_observation',{
+    method:'POST',body:{
+     p_event_key:eventKey,p_dispatch_id:dispatchId,
+     p_ticket_id:ticketId,p_outcome:outcome
+    }
+   });
+   if(typeof stored!=='boolean')
+    throw Error('invalid_expo_late_observation_response');
+   return stored;
+  },
   async recordExpoTicket({eventKey,dispatchId,ticketId}={}){
    if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
       typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
