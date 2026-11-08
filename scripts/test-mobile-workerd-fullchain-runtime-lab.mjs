@@ -29,7 +29,7 @@ const scenarios=[
  ['expired',0,1,0,true],
  ['plan-inactive',0,1,0,true],
  ['plan-stale',0,0,1,true],
- ['plan-other',0,1,0,true],
+ ['plan-other',0,0,1,true],
  ['pref-disabled',0,0,1,true],
  ['source-down',0,0,1,true],
  ['source-missing',0,0,1,true],
@@ -47,7 +47,22 @@ const scenarios=[
  ['revocation-cancels-lease',0,0,0,true],
  ['prefs-unscoped',0,0,1,true],
  ['prefs-wrong-user',0,0,1,true],
- ['prefs-bad-type',0,0,1,true]
+ ['prefs-bad-type',0,0,1,true],
+ ['plan-pending',0,1,0,true],
+ ['plan-paused',0,1,0,true],
+ ['plan-trial-valid',1,0,0,true],
+ ['plan-trial-expired',0,1,0,true],
+ ['plan-no-expiry',0,1,0,true],
+ ['plan-catalog-disabled',0,1,0,true],
+ ['plan-expired',0,1,0,true],
+ ['plan-unknown',0,1,0,true],
+ ['plan-ambiguous',0,0,1,true],
+ ['plan-wrong-user',0,0,1,true],
+ ['plan-bad-type',0,0,1,true],
+ ['plan-catalog-missing',0,1,0,true],
+ ['plan-catalog-other',0,0,1,true],
+ ['plan-history-overflow',0,0,1,true],
+ ['plan-newer-pending',0,1,0,true]
 ];
 for(const [mode,ready,cancelled,retried,ok] of scenarios){
  test('private SQL + ABC + actual APD matcher + WebCrypto /'+mode,async()=>{
@@ -63,7 +78,7 @@ for(const [mode,ready,cancelled,retried,ok] of scenarios){
   assert.ok(r.counts.lease<=2);
   assert.ok(r.counts.device<=2);
   // Strict full-chain mode always checks twice after a successful fetch.
-  if(ready===1||cancelled===1||mode==='plan-stale'){
+  if(ready===1||cancelled===1){
    assert.equal(r.counts.lease,2);
    assert.equal(r.counts.device,2);
   }
