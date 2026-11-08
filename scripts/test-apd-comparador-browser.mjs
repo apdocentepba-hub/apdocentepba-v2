@@ -35,6 +35,33 @@ let planActual={access_active:false};
 window.alertasState={items:[],index:0};
 window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
+window.__wfsRequests=[];
+window.__geoNetworkDown=false;
+window.__realFetch=window.fetch.bind(window);
+window.fetch=async (target,opts={})=>{
+ const u=new URL(String(target),location.href);
+ if(u.hostname!=='mapaescolar.abc.gob.ar')return window.__realFetch(target,opts);
+ window.__wfsRequests.push({
+  origin:u.origin,filter:u.searchParams.get('CQL_FILTER'),
+  credentials:opts.credentials,method:opts.method
+ });
+ if(window.__geoNetworkDown)throw Error('WFS simulated failure');
+ const expression=u.searchParams.get('CQL_FILTER')||'';
+ const code=expression.startsWith("clave='")?expression.slice(7,-1):'';
+ const points={
+  '0005MS0004':[-34.69,-58.33],
+  '0085MS0043':[-34.72,-58.35]
+ };
+ const coords=points[code];
+ const features=coords?[{type:'Feature',properties:{
+  clave:code,nombre:'Escuela de prueba '+code,
+  cue:'060000000',calle:'Calle de prueba',nro:'100',
+  latitud:coords[0],longitud:coords[1]
+ }}]:[];
+ const bytes=new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features}));
+ return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
+  arrayBuffer:async()=>bytes.buffer};
+};
 </script>
 <script>${bootstrap}</script></body></html>`;
 const server=createServer((req,res)=>{
@@ -153,10 +180,31 @@ try{
   assert.equal(state.items,5);
   assert.equal(state.forgedImage,false);
   assert.equal(state.escapeVisible,true);
+  assert.equal(await js('window.__wfsRequests.length'),0,
+   'No WFS requests may occur before the explicit button is clicked');
   assert.equal(state.hasOfficialMap,false,'Map links must remain hidden if map implementation is absent');
   await js('window.APD_offerSchoolMapReady=true;window.APD_comparatorRefresh({offers:window.__offers,index:4,enabled:true});true');
   assert.equal(await js('!!document.querySelector(".apd-comparator-map-link")'),true,
    'Map link becomes available only when verified-key map code is present');
+  const geoAvailable=await js('!!document.querySelector(".apd-comparator-geobutton")');
+  assert.equal(geoAvailable,true,'Optional official distance action should appear');
+  await js('document.querySelector(".apd-comparator-geobutton").click();true');
+  await until('document.querySelector(".apd-comparator-geo-status")?.textContent.includes("2 de 2")');
+  const geographic=await js(`({
+   pairCount:document.querySelectorAll(".apd-comparator-pairs li").length,
+   distanceRows:document.querySelectorAll(".apd-comparator-distance").length,
+   requests:window.__wfsRequests,
+   pairText:document.querySelector(".apd-comparator-pairs")?.textContent||"",
+   origin:document.querySelectorAll(".apd-comparator-tools select")[3]?.value||""
+  })`);
+  assert.equal(geographic.pairCount,1);
+  assert.equal(geographic.distanceRows,5);
+  assert.equal(geographic.requests.length,2);
+  assert.ok(geographic.requests.every(r=>r.origin==='https://mapaescolar.abc.gob.ar' &&
+    r.credentials==='omit' && r.method==='GET'));
+  assert.match(geographic.pairText,/km en línea recta/);
+  assert.match(geographic.origin,/^[0-9]{4}MS[0-9]{4}$/);
+
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
   await js(`(()=>{
@@ -176,6 +224,8 @@ try{
    return true;
   })()`);
   await until('document.querySelector(".apd-comparator-count")?.textContent==="0 de 5 ofertas seleccionadas"');
+  assert.equal(await js('!!document.querySelector(".apd-comparator-pairs")'),false,
+   'Changing accounts clears all school coordinate results');
   await js('document.getElementById("apd-comparar-oferta").click();true');
   await js(`(()=>{
    dashboardLoadedOwner=null;
