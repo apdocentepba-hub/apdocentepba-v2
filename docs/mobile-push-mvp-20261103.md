@@ -110,3 +110,17 @@ Se agregan `scripts/mobile-push-worker-job-contract-lab.mjs` y sus pruebas. El c
 - Una reserva SQL caducada no puede declararse reintentada por `finish_push`; debe recuperarse mediante un nuevo claim. Las fixtures reproducen ese `false`, sin registrar envío o éxito ficticio.
 
 **No realizado:** llamada a Supabase real, WFS/ABC productivo, integración a Worker público, dispositivo físico, push remoto, OAuth/FCM, contacto a terceros ni migración de tablas. La siguiente implementación candidata requiere un adaptador SQL privado con lectura del lease actual y `transport` desde la tabla de dispositivos, más un servicio verificador de ABC que reevalúe la compatibilidad sin aceptar datos del cliente. Antes de deploy se necesitan rollback, política de claves y autorización expresa.
+
+## 08/11/2026 — Revalidación de oferta ABC y compatibilidad APD
+
+Implementado en LAB: scripts/mobile-push-abc-current-offer-lab.mjs. Adaptador compatible con workerd con fetchImpl inyectado y sin red por defecto. Consulta exclusivamente la API publica de encabezados ABC Solr localizada en worker.js, por clave canonica D_<iddetalle/id> u O_<idoferta>, usando filtros exactos y maximo dos filas.
+
+Seguridad: exige HTTP 200, JSON, responseHeader.status=0, ausencia de resultados parciales, cantidad total entre 0 y 1, e identidad exacta igual a la prioridad iddetalle/id/idoferta del Worker. Respuesta ambigua, origen caido, documentacion incompleta, estado desconocido o clave sin registro => fallo/reintento, nunca ready. Estados terminales explicitos, incompatibilidad demostrada y cierre confirmado => no elegible.
+
+Tiempo: fecha y hora de finoferta obligatoria. Las fechas argentinas sin zona se interpretan de forma explicita en UTC-03. Fecha-only, fecha calendario invalida, anio 9999 o expiracion sin datos => fail closed. No se presupone vigencia por estado Publicada si la fecha ya vencio.
+
+Compatibilidad: el modulo requiere preferences.getForUser y matchWithCurrentPreferences, dos servicios autorizados exclusivamente de servidor. NO calcula un segundo algoritmo y NO acepta un booleano de compatibilidad de ABC o del cliente. El entorno final debera inyectar el motor vigente de APDocentePBA y las preferencias reales verificadas del usuario.
+
+Pruebas: scripts/test-mobile-push-abc-current-offer-lab.mjs verifica la identidad frente a la funcion tomada del worker.js real, fechas, errores de Solr y coincidencia sintetica. scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs y scripts/test-mobile-workerd-abc-runtime-lab.mjs replican el contrato en workerd sin fuentes reales ni proveedores.
+
+Limitaciones: claves de texto fallback sin D_/O_ numerico permanecen no verificadas; no hay validacion en el servicio ABC en vivo, ni conexion de fuente y matcher real dentro de un Worker, ni pruebas de revocacion durante envio. Los resultados sintéticos no certifican integracion operativa ni push remoto. Produccion, SQL Supabase y canales actuales no fueron modificados.
