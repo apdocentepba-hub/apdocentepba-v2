@@ -33,7 +33,7 @@ INSERT INTO public.apd_mobile_push_outbox(
  now()+interval '1 day','leased',1,
  '88888888-8888-4888-8888-888888888888'::uuid,
  now()+interval '10 minutes'
-FROM (VALUES ('f1'),('f2'),('f3'),('f4')) AS v(e);
+FROM (VALUES ('f1'),('f2'),('f3')) AS v(e);
 
 DO $test$
 DECLARE e text:=repeat('f1',32); d uuid;
@@ -131,6 +131,21 @@ BEGIN
   '88888888-8888-4888-8888-888888888888') IS NOT NULL
  THEN RAISE EXCEPTION 'REVOKED CORRELATION REAUTHORIZED'; END IF;
 END $test$;
+
+-- Seed AFTER the revocation scenario: the revocation trigger must cancel
+-- all existing pending/leased outbox rows, even those for later tests.
+INSERT INTO public.apd_mobile_push_outbox(
+ event_key,user_id,device_id,offer_fingerprint,source_offer_key,
+ offer_expires_at,status,attempts,lease_id,leased_until
+) VALUES(
+ repeat('f4',32),
+ '11111111-1111-4111-8111-111111111111',
+ 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ repeat('e',64),'APD:LAB:RECEIPT',
+ now()+interval '1 day','leased',1,
+ '88888888-8888-4888-8888-888888888888',
+ now()+interval '10 minutes'
+);
 
 -- Ticket cannot be added once reservation has been quarantined.
 DO $test$
