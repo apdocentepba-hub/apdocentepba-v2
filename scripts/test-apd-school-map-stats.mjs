@@ -158,7 +158,10 @@ test('map refuses code search on OSM fallback without a verified provincial key'
  const html=fs.readFileSync(new URL('../mapa-escuelas-pba.html',import.meta.url),'utf8');
  assert.match(html,/const ofertaClave=\/\^\[0-9\]\{4\}\[A-Z\]\{2\}\[0-9\]\{4\}\$\//);
  assert.match(html,/if\(ofertaClave&&code!==ofertaClave\)return false/);
- assert.match(html,/ofertaClave\?false:await cargarZIPs\(errores\)\|\|await cargarOSM\(errores\)/);
+ assert.match(html,/if\(ofertaClave\)\{/);
+ assert.match(html,/ok=await consultarClaveWfs\(\)/);
+ assert.match(html,/else\{/);
+ assert.match(html,/No mostramos un marcador aproximado/);
  assert.match(html,/No encontramos la clave provincial/);
  assert.match(html,/Abrir Mapa Escolar ABC para verificar/);
  assert.match(html,/clave:String\(pick\(r,/);
