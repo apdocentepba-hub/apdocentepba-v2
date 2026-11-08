@@ -73,6 +73,17 @@ export function createPushOutboxLab({clock=()=>Date.now(),maxAttempts=3}={}){
   else{row.status="pending";row.next_attempt_ms=current+Math.min(60000,1000*(2**(row.attempts-1)));}
   return true;
  }
+ function cancelEvent(eventKey,{leaseId}={}){
+  if(typeof eventKey!=="string"||!HEX.test(eventKey))return false;
+  const row=events.get(eventKey);
+  if(!row||!["pending","leased"].includes(row.status))return false;
+  // A stale claim cannot cancel a new lease obtained after its expiry.
+  if(row.status==="leased"&&row.lease_id!==leaseId)return false;
+  if(row.status==="pending"&&leaseId!==undefined)return false;
+  row.status="cancelled";row.lease_id=null;
+  row.leased_until_ms=null;row.next_attempt_ms=null;
+  return true;
+ }
  function cancelDevice(deviceId){
   if(typeof deviceId!=="string"||!UUID.test(deviceId))throw Error("invalid_device");
   let cancelled=0;
@@ -82,7 +93,7 @@ export function createPushOutboxLab({clock=()=>Date.now(),maxAttempts=3}={}){
   }
   return cancelled;
  }
- return Object.freeze({enqueue,claim,settle,cancelDevice,
+ return Object.freeze({enqueue,claim,settle,cancelEvent,cancelDevice,
   get:key=>clone(events.get(key)),summary:()=>{
    const counts={pending:0,leased:0,sent:0,dead:0,cancelled:0};
    for(const row of events.values())counts[row.status]++;
