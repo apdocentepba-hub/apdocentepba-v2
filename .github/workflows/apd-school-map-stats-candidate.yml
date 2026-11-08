@@ -8,6 +8,7 @@ on:
       - 'scripts/test-apd-school-map-stats.mjs'
       - 'scripts/test-apd-school-wfs-mapping.mjs'
       - 'scripts/check-apd-school-wfs-live-readonly.mjs'
+      - 'scripts/audit-apd-wfs-layers-readonly.mjs'
       - '.github/workflows/apd-school-map-stats-candidate.yml'
 
 permissions:
@@ -24,6 +25,9 @@ jobs:
           node-version: '22'
       - run: node --check app_v2.js
       - run: node --test scripts/test-apd-school-map-stats.mjs scripts/test-apd-school-wfs-mapping.mjs
+      - name: Inventory other school layers (GET only)
+        continue-on-error: true
+        run: node scripts/audit-apd-wfs-layers-readonly.mjs
       - name: Public WFS live check (GET only, non-blocking external provider)
         continue-on-error: true
         run: node scripts/check-apd-school-wfs-live-readonly.mjs
