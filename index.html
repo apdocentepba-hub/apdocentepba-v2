@@ -294,6 +294,45 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   },true);
 });
+// Candidate comparator loads only for a verified authenticated account.
+// The observer tracks replacement of the alert carousel's direct children;
+// comparator's own buttons cannot cause a MutationObserver refresh loop.
+document.addEventListener('DOMContentLoaded',function(){
+ const panel=document.getElementById('panel-alertas');
+ const comparison=document.getElementById('apd-comparador-panel');
+ if(!panel||!comparison||typeof MutationObserver!=='function')return;
+ let previousOwner=null,loading=false;
+ const sync=function(){
+  // A bearer is never forwarded to the comparison module or stored on disk.
+  const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
+  if(owner!==previousOwner){
+   previousOwner=owner;
+   try{window.APD_comparatorReset?.();}catch(_){}
+  }
+  const allowed=!!owner&&typeof obtenerToken==='function'&&!!obtenerToken()&&
+   typeof planActual!=='undefined'&&planActual?.access_active===true;
+  if(!allowed){
+   try{window.APD_comparatorReset?.();}catch(_){}
+   comparison.hidden=true;
+   return;
+  }
+  const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
+  const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
+  if(typeof window.APD_comparatorRefresh==='function'){
+   try{window.APD_comparatorRefresh({offers,index,enabled:true});}
+   catch(_){comparison.hidden=true;}
+   return;
+  }
+  if(!offers.length||loading)return;
+  loading=true;
+  import('./apd_comparador_panel.mjs?v=lab-20261107')
+   .then(()=>{loading=false;sync();})
+   .catch(()=>{loading=false;comparison.hidden=true;});
+ };
+ const observer=new MutationObserver(sync);
+ observer.observe(panel,{childList:true,subtree:false});
+ sync();
+});
 </script>
 <script src="expiry_access_notice_patch.js?v=20261021"></script>
 <script src="dashboard-layout-20261025.js?v=2"></script>
