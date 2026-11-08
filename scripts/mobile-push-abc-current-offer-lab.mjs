@@ -87,7 +87,8 @@ async function fetchUniqueOffer({sourceOfferKey,fetchImpl,timeoutMs}){
   }catch{throw Error('abc_source_invalid_response');}
   const total=payload?.response?.numFound;
   const docs=payload?.response?.docs;
-  if(payload?.responseHeader?.partialResults===true||
+  if(payload?.responseHeader?.status!==0||
+     payload?.responseHeader?.partialResults===true||
      !Number.isSafeInteger(total)||total<0||total>1||
      !Array.isArray(docs)||docs.length!==total)
    throw Error('abc_source_ambiguous_or_partial');
