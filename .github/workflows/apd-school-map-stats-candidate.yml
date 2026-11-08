@@ -6,6 +6,7 @@ on:
       - 'app_v2.js'
       - 'mapa-escuelas-pba.html'
       - 'scripts/test-apd-school-map-stats.mjs'
+      - 'scripts/test-apd-school-wfs-mapping.mjs'
       - '.github/workflows/apd-school-map-stats-candidate.yml'
 
 permissions:
@@ -21,4 +22,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --check app_v2.js
-      - run: node --test scripts/test-apd-school-map-stats.mjs
+      - run: node --test scripts/test-apd-school-map-stats.mjs scripts/test-apd-school-wfs-mapping.mjs
