@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
 import {
  createAbcCurrentOfferVerifierLab,parseAbcCloseInstantLab
 } from './mobile-push-abc-current-offer-lab.mjs';
@@ -82,6 +84,30 @@ function fixture({
  });
  return {verifier,queries,counts};
 }
+
+test('real worker.js source identity function matches D_/O_ assertions',()=>{
+ const worker=readFileSync('worker.js','utf8');
+ const names=['norm','sanitizeSolrNumber','sanitizeKeyText','buildSourceOfferKeyFromOferta'];
+ const extracted=names.map(name=>{
+  const start=worker.indexOf('function '+name+'(');
+  if(start<0)throw Error('worker_source_key_missing_'+name);
+  const next=worker.indexOf('\nfunction ',start+10);
+  if(next<start)throw Error('worker_source_key_boundary_missing_'+name);
+  return worker.slice(start,next);
+ });
+ const context=vm.createContext({});
+ vm.runInContext(extracted.join('\n'),context,{timeout:1000});
+ const actual=context.buildSourceOfferKeyFromOferta;
+ const examples=[
+  [{iddetalle:123,id:'SOLR-999',idoferta:'567'},'D_123'],
+  [{id:'solr-001',idoferta:'567'},'D_001'],
+  [{idoferta:'567'},'O_567'],
+  [{iddetalle:'0042',idoferta:'567'},'D_0042']
+ ];
+ for(const [doc,key] of examples)
+  assert.equal(actual(doc),key);
+});
+
 test('strict expiry interprets Argentine local timestamps with UTC-03',()=>{
  assert.equal(parseAbcCloseInstantLab('08/11/2026 09:00'),
   Date.parse('2026-11-08T12:00:00.000Z'));
