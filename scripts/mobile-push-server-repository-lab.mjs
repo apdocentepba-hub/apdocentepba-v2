@@ -49,13 +49,14 @@ function ensureIds(eventKey,leaseId){
 
 /** Client interface is intentionally narrow: no plain tokens and no SQL text. */
 export function createMobilePushServerRepositoryLab({
- database,plans,offers,now=()=>Date.now()
+ database,plans,offers,now=()=>Date.now(),finalReservationRecheck=false
 }={}){
  for(const key of ['claim','readActiveLease','readOwnedDevice','cancel','retry'])
   requiredMethod(database,key);
  requiredMethod(plans,'verify');
  requiredMethod(offers,'verify');
- if(typeof now!=='function')throw Error('invalid_clock');
+ if(typeof now!=='function'||typeof finalReservationRecheck!=='boolean')
+  throw Error('invalid_clock_or_recheck_configuration');
 
  const outstanding=new Map();
  const nowMs=()=>{
@@ -98,14 +99,31 @@ export function createMobilePushServerRepositoryLab({
    });
    if(!device||!plan||!offer)throw Error('authoritative_lookup_unavailable');
 
+   // Optional safety gate: re-read the same durable SQL lease and its device
+   // AFTER slow ABC and plan verification. An opt-out or a superseding claim
+   // between the first read and the ABC response must never yield "ready".
+   // This narrows but does NOT eliminate the provider-send TOCTOU window:
+   // a production sender still needs an atomic send authorization protocol.
+   let finalDevice=device;
+   if(finalReservationRecheck){
+    const latestLease=await database.readActiveLease({eventKey,leaseId});
+    if(!leaseMatches(latestLease,claim,nowMs()))
+     throw Error('sql_lease_changed_during_recheck');
+    finalDevice=await database.readOwnedDevice({
+     userId:claim.user_id,deviceId:claim.device_id
+    });
+    if(!finalDevice)throw Error('device_unavailable_during_recheck');
+   }
+
    // Whitelist fields: raw provider token, SQL secrets and user PII never
    // move into the preflight context or its diagnostic response.
    const safeDevice=Object.freeze({
-    id:device.id,user_id:device.user_id,platform:device.platform,
-    transport:device.transport,
-    enabled:device.enabled===true,opted_in:device.opted_in===true,
-    token_available:device.token_available===true,
-    token_revoked:device.token_revoked===true
+    id:finalDevice.id,user_id:finalDevice.user_id,
+    platform:finalDevice.platform,transport:finalDevice.transport,
+    enabled:finalDevice.enabled===true,
+    opted_in:finalDevice.opted_in===true,
+    token_available:finalDevice.token_available===true,
+    token_revoked:finalDevice.token_revoked===true
    });
    const safePlan=Object.freeze({
     user_id:plan.user_id,access_active:plan.access_active,
