@@ -5,8 +5,8 @@
  * a trusted server explicitly injects fetchImpl and a private project key.
  * Not imported by worker.js, mobile or any production route.
  *
- * Only four server-side SQL operations are implemented: atomic claim,
- * narrow outbox/device lookup, cancel and unsent retry. The auth key remains
+ * Only the server-side SQL operations are implemented: atomic claim,
+ * narrow outbox/device/preferences lookup, cancel and unsent retry. The auth key remains
  * a server-bound secret, NEVER a browser/mobile bearer or notification.
  */
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,6 +27,26 @@ function validIds(eventKey,leaseId){
  if(!HEX.test(eventKey||'')||!UUID.test(leaseId||''))
   throw Error('invalid_lease_reference');
 }
+// Preferences are always server-owned. Translate legacy user_preferences
+// columns into the exact *_apd structure used by current Worker match rules.
+// Unknown schema/typed values fail closed rather than dropping user filters.
+function normPreference(value){
+ if(value===null||value===undefined)return '';
+ if(typeof value!=='string'||value.length>180)
+  throw Error('postgrest_invalid_preferences');
+ return value.toUpperCase().normalize('NFD')
+  .replace(/[\u0300-\u036f]/g,'')
+  .replace(/[^\p{L}\p{N}\s/().,-]/gu,' ')
+  .replace(/\s+/g,' ').trim();
+}
+function preferenceList(value){
+ if(value===null||value===undefined)return [];
+ if(!Array.isArray(value)||value.length>30)
+  throw Error('postgrest_invalid_preferences');
+ const normalized=value.map(normPreference).filter(Boolean);
+ return [...new Set(normalized)];
+}
+
 function expectOne(data){
  if(!Array.isArray(data)||data.length>1)throw Error('postgrest_ambiguous_result');
  return data[0]||null;
@@ -122,6 +142,36 @@ export function createMobilePushPostgrestAdapterLab({
     transport:row.transport,enabled:row.enabled,opted_in:row.opted_in,
     token_available:true,token_revoked:row.revoked_at!==null
    };
+  },
+  async readUserPreferences({userId}={}){
+   if(!UUID.test(userId||''))throw Error('invalid_user_preferences_reference');
+   const data=await request('user_preferences',{
+    query:{
+     select:'user_id,distrito_principal,otros_distritos,cargos,materias,niveles,turnos,alertas_activas',
+     user_id:'eq.'+userId,limit:2
+    }
+   });
+   const row=expectOne(data);
+   if(!row)return null;
+   if(row.user_id!==userId||typeof row.alertas_activas!=='boolean')
+    throw Error('postgrest_invalid_preferences');
+   const distrito=normPreference(row.distrito_principal);
+   const otros=preferenceList(row.otros_distritos);
+   const cargos=preferenceList(row.cargos);
+   const materias=preferenceList(row.materias);
+   const niveles=preferenceList(row.niveles);
+   const turnos=preferenceList(row.turnos);
+   // An active mobile alert with no district OR no subject/cargo filter may
+   // turn into province-wide broadcasts. The candidate fails closed.
+   if(row.alertas_activas===true&&
+      (!distrito&&!otros.length||!cargos.length&&!materias.length))
+    throw Error('postgrest_preferences_not_scoped');
+   return Object.freeze({
+    user_id:userId,alertas_activas:row.alertas_activas,
+    distrito_principal_apd:distrito,otros_distritos_apd:otros,
+    cargos_apd:cargos,materias_apd:materias,
+    niveles,turnos
+   });
   },
   async cancel({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
