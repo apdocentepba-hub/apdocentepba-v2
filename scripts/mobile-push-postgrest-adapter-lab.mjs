@@ -226,6 +226,43 @@ export function createMobilePushPostgrestAdapterLab({
     throw Error('postgrest_invalid_catalog_plan');
    return Object.freeze({code:planCode,is_active:row.is_active});
   },
+  async listExpoPendingReceiptChecks({nowMs=Date.now(),limit=10}={}){
+   if(!Number.isFinite(nowMs)||nowMs<0||
+      !Number.isInteger(limit)||limit<1||limit>20)
+    throw Error('invalid_receipt_poll_window');
+   // Expo receipts should be looked up after approx 15 minutes and expire
+   // around 24 hours. Search ONLY in the still-plausible age window.
+   const oldest=new Date(nowMs-23*3600_000).toISOString();
+   const newest=new Date(nowMs-15*60_000).toISOString();
+   const data=await request('apd_mobile_expo_receipt_correlation',{
+    query:{
+     select:'event_key,dispatch_id,ticket_id,ticket_recorded_at,tracking_state',
+     tracking_state:'eq.awaiting_receipt',
+     and:'(ticket_recorded_at.gte.'+oldest+
+       ',ticket_recorded_at.lte.'+newest+')',
+     order:'ticket_recorded_at.asc',limit:limit+1
+    }
+   });
+   if(!Array.isArray(data)||data.length>limit)
+    throw Error('receipt_poll_window_ambiguous');
+   const seen=new Set();
+   return Object.freeze(data.map(row=>{
+    const stamp=typeof row?.ticket_recorded_at==='string'?
+     Date.parse(row.ticket_recorded_at):NaN;
+    if(!HEX.test(row?.event_key||'')||!UUID.test(row?.dispatch_id||'')||
+       typeof row?.ticket_id!=='string'||
+       !/^[A-Za-z0-9_-]{8,200}$/.test(row.ticket_id)||
+       row.tracking_state!=='awaiting_receipt'||
+       !Number.isFinite(stamp)||stamp<nowMs-23*3600_000||
+       stamp>nowMs-15*60_000||seen.has(row.ticket_id))
+     throw Error('invalid_private_receipt_candidate');
+    seen.add(row.ticket_id);
+    return Object.freeze({
+     eventKey:row.event_key,dispatchId:row.dispatch_id,
+     ticketId:row.ticket_id
+    });
+   }));
+  },
   async recordExpoTicket({eventKey,dispatchId,ticketId}={}){
    if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
       typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
