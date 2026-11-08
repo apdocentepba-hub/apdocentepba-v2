@@ -44,12 +44,12 @@ export function extractAPDMatcherWorkerRuntimeLab(workerSource){
   ' return {match:result.match};',
   '}',
   ''
- ].join('\\n');
+ ].join('\n');
 }
 
 /**
  * A test-only function wrapper delegating to the exact Worker matcher.
- * vm isolates its symbols from Node APIs (no fetch, process or secrets).
+ * Node vm receives no host APIs, but is NOT a secure boundary for untrusted code.
  */
 export function loadAPDWorkerMatcherForLab(workerSource){
  if(typeof workerSource!=='string'||workerSource.length<1000||
