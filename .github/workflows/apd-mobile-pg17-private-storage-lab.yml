@@ -7,6 +7,8 @@ on:
       - 'scripts/test-apd-mobile-dispatch-authorization-pg17.sql'
       - 'sql/apd_mobile_expo_receipt_correlation_lab_20261108.sql'
       - 'scripts/test-apd-mobile-expo-receipt-correlation-pg17.sql'
+      - 'sql/apd_mobile_expo_missing_receipt_expiry_lab_20261108.sql'
+      - 'scripts/test-apd-mobile-expo-missing-receipt-expiry-pg17.sql'
       - 'scripts/test-apd-mobile-dispatch-concurrency-pg17.mjs'
       - 'scripts/test-apd-mobile-push-private-pg17.sql'
       - 'scripts/mobile-push-strict-session-lab.mjs'
@@ -57,6 +59,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-push-private-pg17.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-dispatch-authorization-pg17.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-expo-receipt-correlation-pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-expo-missing-receipt-expiry-pg17.sql
           node --check scripts/test-apd-mobile-dispatch-concurrency-pg17.mjs
           node scripts/test-apd-mobile-dispatch-concurrency-pg17.mjs
       - name: Prove no production file changes
