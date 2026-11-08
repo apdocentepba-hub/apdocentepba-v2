@@ -4,6 +4,8 @@ on:
     paths:
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
       - 'scripts/mobile-push-authorize-only-worker-lab.mjs'
+      - 'scripts/mobile-push-provider-response-replay-lab.mjs'
+      - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
       - 'scripts/mobile-push-subscription-verifier-lab.mjs'
@@ -47,6 +49,7 @@ jobs:
         run: |
           node --check scripts/mobile-push-worker-webcrypto-lab.mjs
           node --check scripts/mobile-push-authorize-only-worker-lab.mjs
+          node --check scripts/mobile-push-provider-response-replay-lab.mjs
           node --check scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-runtime-lab.mjs
           node --check scripts/mobile-push-server-repository-lab.mjs
