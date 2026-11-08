@@ -1340,18 +1340,6 @@ function renderPidMatchBlock(alerta, resumen) {
     </div>
   `;
 }
-function actualizarComparadorDesdeAlertas() {
-  // Graceful optional UI. Never pass authentication secrets to the comparator.
-  try {
-    window.APD_comparatorRefresh?.({
-      offers: alertasState.items,
-      index: alertasState.index,
-      enabled: !!obtenerToken() && planActual?.access_active === true
-    });
-  } catch (error) {
-    console.warn("Comparador temporalmente no disponible");
-  }
-}
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -1392,7 +1380,15 @@ function renderAlertaActual() {
         document.getElementById("panel-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
-    actualizarComparadorDesdeAlertas();
+    // Optional independent comparator: no effect on the core alert renderer.
+    if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
+      try {
+        window.APD_comparatorRefresh({
+          offers: alertasState.items, index: alertasState.index,
+          enabled: !!obtenerToken() && planActual?.access_active === true
+        });
+      } catch (_) { /* Comparator must never interrupt APD alerts. */ }
+    }
     return;
   }
 
@@ -1403,7 +1399,15 @@ function renderAlertaActual() {
         <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
       </div>
     `;
-    actualizarComparadorDesdeAlertas();
+    // Optional independent comparator: no effect on the core alert renderer.
+    if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
+      try {
+        window.APD_comparatorRefresh({
+          offers: alertasState.items, index: alertasState.index,
+          enabled: !!obtenerToken() && planActual?.access_active === true
+        });
+      } catch (_) { /* Comparator must never interrupt APD alerts. */ }
+    }
     return;
   }
 
@@ -1502,7 +1506,14 @@ function renderAlertaActual() {
   });
 
   cargarResumenPostulantes(a);
-  actualizarComparadorDesdeAlertas();
+  if (typeof window !== "undefined" && typeof window.APD_comparatorRefresh === "function") {
+    try {
+      window.APD_comparatorRefresh({
+        offers: alertasState.items, index: alertasState.index,
+        enabled: !!obtenerToken() && planActual?.access_active === true
+      });
+    } catch (_) { /* Comparator must never interrupt APD alerts. */ }
+  }
 }
 function alertaRow(label, value) {
   const v = String(value || "").trim();
