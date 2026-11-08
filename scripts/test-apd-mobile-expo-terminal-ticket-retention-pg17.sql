@@ -24,19 +24,34 @@ BEGIN
 END $security$;
 
 SET ROLE service_role;
--- f1 was provider-accepted by the prior disposable correlation suite,
--- but SQL dispatch remains prepared. Finish its *synthetic* acknowledgment.
+-- An earlier f1 receipt was provider accepted, but another fixture
+-- globally revoked the device and canceled f1. It MUST be preserved.
+-- Seed a NEW terminal event after revocation for privacy-redaction tests.
+INSERT INTO public.apd_mobile_push_outbox
+ (event_key,user_id,device_id,offer_fingerprint,source_offer_key,
+  offer_expires_at,status,attempts,lease_id,leased_until)
+VALUES(repeat('e8',32),
+ '11111111-1111-4111-8111-111111111111',
+ 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ repeat('e',64),'APD:LAB:RETENTION_ACCEPTED',
+ now()+interval '1 day','leased',1,
+ '88888888-8888-4888-8888-888888888888',
+ now()+interval '10 minutes');
 DO $case$
 DECLARE d uuid;
 BEGIN
- SELECT dispatch_id INTO d FROM public.apd_mobile_dispatch_authorizations
- WHERE event_key=repeat('f1',32);
- IF d IS NULL OR NOT public.apd_mobile_resolve_dispatch(
-  repeat('f1',32),d,'accepted')
+ d=public.apd_mobile_prepare_dispatch(
+  repeat('e8',32),'88888888-8888-4888-8888-888888888888');
+ IF d IS NULL
+ OR NOT public.apd_mobile_expo_record_ticket(
+  repeat('e8',32),d,'ticket_demo_accepted_5678')
+ OR NOT public.apd_mobile_expo_record_receipt(
+  repeat('e8',32),d,'ticket_demo_accepted_5678','provider_accepted')
+ OR NOT public.apd_mobile_resolve_dispatch(repeat('e8',32),d,'accepted')
  THEN RAISE EXCEPTION 'OLD ACCEPTED TICKET SETUP FAILED'; END IF;
  UPDATE public.apd_mobile_expo_receipt_correlation
  SET ticket_recorded_at=clock_timestamp()-interval '101 days'
- WHERE event_key=repeat('f1',32);
+ WHERE event_key=repeat('e8',32);
 END $case$;
 
 -- A terminal explicit rejection is also a valid privacy-redaction case.
@@ -91,28 +106,28 @@ BEGIN
  THEN RAISE EXCEPTION 'REDACTION NOT IDEMPOTENT'; END IF;
  SELECT count(*) INTO v_count
  FROM public.apd_mobile_expo_ticket_tombstones
- WHERE event_key IN (repeat('f1',32),repeat('f8',32));
+ WHERE event_key IN (repeat('e8',32),repeat('f8',32));
  IF v_count<>2 THEN RAISE EXCEPTION 'MISSING PRIVACY TOMBSTONES'; END IF;
  SELECT count(*) INTO v_count
  FROM public.apd_mobile_expo_receipt_correlation
- WHERE event_key IN (repeat('f1',32),repeat('f8',32));
+ WHERE event_key IN (repeat('e8',32),repeat('f8',32));
  IF v_count<>0 THEN RAISE EXCEPTION 'RAW TICKET NOT REMOVED'; END IF;
  IF EXISTS (SELECT 1 FROM public.apd_mobile_expo_ticket_tombstones
   WHERE ticket_sha256 !~ '^[0-9a-f]{64}$'
   OR last_provider_outcome NOT IN ('provider_accepted','provider_rejected'))
  THEN RAISE EXCEPTION 'INVALID TOMBSTONE'; END IF;
  IF (SELECT ticket_sha256 FROM public.apd_mobile_expo_ticket_tombstones
-  WHERE event_key=repeat('f1',32)) IS DISTINCT FROM
-    encode(sha256(convert_to('ticket_demo_one_1234','UTF8')),'hex')
+  WHERE event_key=repeat('e8',32)) IS DISTINCT FROM
+    encode(sha256(convert_to('ticket_demo_accepted_5678','UTF8')),'hex')
  THEN RAISE EXCEPTION 'WRONG TOMBSTONE HASH'; END IF;
 
  -- Unknown, late and revoked receipts are NEVER eligible for redaction.
  IF (SELECT count(*) FROM public.apd_mobile_expo_receipt_correlation
-     WHERE event_key IN (repeat('f2',32),repeat('f3',32),
-                         repeat('f5',32),repeat('f6',32),repeat('f7',32)))<>5
+     WHERE event_key IN (repeat('f1',32),repeat('f2',32),repeat('f3',32),
+                         repeat('f5',32),repeat('f6',32),repeat('f7',32)))<>6
  THEN RAISE EXCEPTION 'UNKNOWN OR REVOKED EVIDENCE LOST'; END IF;
  IF (SELECT status FROM public.apd_mobile_push_outbox
-     WHERE event_key=repeat('f1',32))<>'sent'
+     WHERE event_key=repeat('e8',32))<>'sent'
  OR (SELECT status FROM public.apd_mobile_push_outbox
      WHERE event_key=repeat('f8',32))<>'dead'
  THEN RAISE EXCEPTION 'RETENTION MUTATED OUTBOX'; END IF;
@@ -121,7 +136,7 @@ BEGIN
   repeat('f9',32),'88888888-8888-4888-8888-888888888888');
  IF d IS NULL THEN RAISE EXCEPTION 'TOMBSTONE REUSE SETUP FAILED'; END IF;
  IF public.apd_mobile_expo_record_ticket(
-  repeat('f9',32),d,'ticket_demo_one_1234')
+  repeat('f9',32),d,'ticket_demo_accepted_5678')
  THEN RAISE EXCEPTION 'RETIRED RAW TICKET WAS REUSED'; END IF;
  IF (SELECT count(*) FROM public.apd_mobile_expo_receipt_correlation
   WHERE event_key=repeat('f9',32))<>0
