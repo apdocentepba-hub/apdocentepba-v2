@@ -53,6 +53,25 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x gradlew
+          # Expo generates this wrapper only on a disposable CI runner.
+          # Gradle 9.4.1 defaults to just 10 seconds for downloads.
+          WRAPPER_PROPERTIES=gradle/wrapper/gradle-wrapper.properties
+          test -f "$WRAPPER_PROPERTIES"
+          if grep -q '^networkTimeout=' "$WRAPPER_PROPERTIES"; then
+            sed -i 's/^networkTimeout=.*/networkTimeout=60000/' "$WRAPPER_PROPERTIES"
+          else
+            printf '\nnetworkTimeout=60000\n' >> "$WRAPPER_PROPERTIES"
+          fi
+          # Download/verify only the declared Gradle version. No mirrors or
+          # dependency upgrades; bounded retry for a transient HTTP 504.
+          for attempt in 1 2; do
+            if ./gradlew --version; then break; fi
+            if [ "$attempt" -eq 2 ]; then
+              echo 'Gradle distribution remains unreachable after bounded retry'
+              exit 1
+            fi
+            sleep 5
+          done
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
           test -s app/build/outputs/apk/release/app-release.apk
           echo 'Checking offline bundled JavaScript inside APK...'
