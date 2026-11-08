@@ -102,7 +102,7 @@ CREATE OR REPLACE FUNCTION public.apd_mobile_claim_push(
  p_lease_seconds integer DEFAULT 60
 ) RETURNS TABLE (
  event_key text, user_id uuid, device_id uuid, lease_id uuid,
- attempts integer, source_offer_key text
+ attempts integer, source_offer_key text, transport text
 ) LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 BEGIN
  IF p_limit IS NULL OR p_limit<1 OR p_limit>100 OR
@@ -111,7 +111,7 @@ BEGIN
  END IF;
  RETURN QUERY
  WITH chosen AS (
-  SELECT o.event_key FROM public.apd_mobile_push_outbox o
+  SELECT o.event_key,d.transport FROM public.apd_mobile_push_outbox o
   INNER JOIN public.apd_mobile_push_devices d
    ON d.id=o.device_id AND d.user_id=o.user_id
   WHERE d.enabled=true AND d.opted_in=true
@@ -133,7 +133,7 @@ BEGIN
  FROM chosen
  WHERE o.event_key=chosen.event_key
  RETURNING o.event_key,o.user_id,o.device_id,o.lease_id,
- o.attempts,o.source_offer_key;
+ o.attempts,o.source_offer_key,chosen.transport;
 END; $$;
 
 -- Acknowledgement only for the current unexpired lease.
