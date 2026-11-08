@@ -49,7 +49,9 @@ function launch(sql,{waitForLock=false}={}){
  return {done,locked};
 }
 function seedEvent(char){
- const key=char.repeat(64);
+ if(!/^[0-9a-f]{1,8}$/.test(char)||64%char.length!==0)
+  throw Error('invalid_synthetic_event_seed');
+ const key=char.repeat(64/char.length);
  const stmt=[
   'SET ROLE service_role;',
   'INSERT INTO public.apd_mobile_push_outbox',
@@ -135,8 +137,8 @@ runSync([
  'SET enabled=true,opted_in=true,revoked_at=NULL',
  "WHERE id='"+DEVICE+"';"
 ].join('\n'));
-const retireEvent=seedEvent('8');
-const duplicateEvent=seedEvent('6');
+const retireEvent=seedEvent('abcd');
+const duplicateEvent=seedEvent('cdef');
 const retireId=runSync([
  'SET ROLE service_role;',
  "SELECT public.apd_mobile_prepare_dispatch('"+retireEvent+
