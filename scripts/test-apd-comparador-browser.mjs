@@ -13,6 +13,10 @@ const origin=process.cwd();
 const output=path.resolve('tmp/apd-comparator-browser');
 mkdirSync(output,{recursive:true});
 const profile=mkdtempSync(path.join(tmpdir(),'apd-compare-chrome-'));
+const indexSource=readFileSync('index.html','utf8');
+const bootstrap=[...indexSource.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)]
+ .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
+assert.ok(bootstrap,'actual dashboard observer bootstrap must be present');
 const html=`<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/apd_comparador_panel.css">
@@ -24,7 +28,15 @@ const html=`<!doctype html><html lang="es"><head>
 <h2>Panel de Alertas APD — laboratorio</h2>
 <div id="panel-alertas"><article class="alerta-main-card"><div class="alerta-actions"></div></article></div>
 <section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section>
-</div><script type="module" src="/apd_comparador_panel.mjs"></script></body></html>`;
+</div>
+<script>
+let dashboardLoadedOwner=null;
+let planActual={access_active:false};
+window.alertasState={items:[],index:0};
+window.__testToken=null;
+function obtenerToken(){return window.__testToken;}
+</script>
+<script>${bootstrap}</script></body></html>`;
 const server=createServer((req,res)=>{
  const pathname=new URL(req.url,'http://localhost').pathname;
  const paths={
@@ -103,23 +115,31 @@ try{
  for(const width of [390,1280]){
   await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
   await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/'});
-  await until('typeof window.APD_comparatorRefresh==="function"');
-  await js(`(function(){
-   window.__offers=${JSON.stringify(synthetic)};
-   window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:false});
-  })()`);
+  await until('document.readyState==="complete"');
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),true);
-  assert.equal(await js('document.getElementById("apd-comparar-oferta")'),null);
-  await js('window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:true});true');
+  assert.equal(await js('typeof window.APD_comparatorRefresh'),'undefined',
+   'Anonymous pages must not load comparator modules');
+  await js(`(()=>{
+   window.__offers=${JSON.stringify(synthetic)};
+   dashboardLoadedOwner='SYNTHETIC_USER_A';
+   window.__testToken='SYNTHETIC_USER_A';
+   planActual={access_active:true};
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('typeof window.APD_comparatorRefresh==="function" && !document.getElementById("apd-comparador-panel").hidden');
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),false);
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
   for(let i=0;i<5;i++){
    await js(`(()=>{
+    window.alertasState.index=${i};
     document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
-    window.APD_comparatorRefresh({offers:window.__offers,index:${i},enabled:true});
-    document.getElementById('apd-comparar-oferta').click();
     return true;
    })()`);
+   await until('!!document.getElementById("apd-comparar-oferta")');
+   await js('document.getElementById("apd-comparar-oferta").click();true');
   }
   const state=await js(`({
    total:document.querySelector('.apd-comparator-count')?.textContent,
@@ -140,20 +160,32 @@ try{
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
   await js(`(()=>{
+    window.alertasState.index=5;
     document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
-    window.APD_comparatorRefresh({offers:window.__offers,index:5,enabled:true});
-    document.getElementById('apd-comparar-oferta').click();
     return true;
    })()`);
+  await until('!!document.getElementById("apd-comparar-oferta")');
+  await js('document.getElementById("apd-comparar-oferta").click();true');
   assert.equal(await js('document.querySelectorAll(".apd-comparator-item").length'),5);
   assert.match(await js('document.querySelector("#apd-comparator-status").textContent'),/hasta cinco ofertas/);
-  await js('window.APD_comparatorReset();true');
-  assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),true);
-  await js('window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:true});true');
-  assert.equal(await js('document.querySelector(".apd-comparator-count").textContent'),'0 de 5 ofertas seleccionadas');
+  await js(`(()=>{
+   dashboardLoadedOwner='SYNTHETIC_USER_B';
+   window.__testToken='SYNTHETIC_USER_B';
+   window.alertasState={items:window.__offers.slice(0,2),index:0};
+   document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('document.querySelector(".apd-comparator-count")?.textContent==="0 de 5 ofertas seleccionadas"');
   await js('document.getElementById("apd-comparar-oferta").click();true');
-  await js('window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:false});true');
-  assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),true);
+  await js(`(()=>{
+   dashboardLoadedOwner=null;
+   window.__testToken=null;
+   window.alertasState={items:[],index:0};
+   document.getElementById('panel-alertas').textContent='';
+   return true;
+  })()`);
+  await until('document.getElementById("apd-comparador-panel").hidden');
+  assert.equal(await js('document.querySelector(".apd-comparator-item")'),null);
   results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
