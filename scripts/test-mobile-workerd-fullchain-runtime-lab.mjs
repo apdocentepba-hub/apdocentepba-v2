@@ -44,7 +44,10 @@ const scenarios=[
  ['bad-key',0,0,1,true],
  ['database-down',0,0,0,false],
  ['outbox-duplicate',0,0,0,false],
- ['revocation-cancels-lease',0,0,0,true]
+ ['revocation-cancels-lease',0,0,0,true],
+ ['prefs-unscoped',0,0,1,true],
+ ['prefs-wrong-user',0,0,1,true],
+ ['prefs-bad-type',0,0,1,true]
 ];
 for(const [mode,ready,cancelled,retried,ok] of scenarios){
  test('private SQL + ABC + actual APD matcher + WebCrypto /'+mode,async()=>{
