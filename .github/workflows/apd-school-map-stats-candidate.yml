@@ -10,6 +10,7 @@ on:
       - 'scripts/check-apd-school-wfs-live-readonly.mjs'
       - 'scripts/audit-apd-wfs-layers-readonly.mjs'
       - 'scripts/check-apd-school-modalities-readonly.mjs'
+      - 'scripts/test-apd-school-map-browser.mjs'
       - '.github/workflows/apd-school-map-stats-candidate.yml'
 
 permissions:
@@ -26,6 +27,16 @@ jobs:
           node-version: '22'
       - run: node --check app_v2.js
       - run: node --test scripts/test-apd-school-map-stats.mjs scripts/test-apd-school-wfs-mapping.mjs
+      - name: Real Chromium QA: mobile and desktop, simulated official WFS and outage
+        run: node scripts/test-apd-school-map-browser.mjs
+      - name: Save browser screenshots for QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-school-map-browser-qa
+          path: tmp/apd-school-map-browser/*.png
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Inventory other school layers (GET only)
         continue-on-error: true
         run: node scripts/audit-apd-wfs-layers-readonly.mjs
