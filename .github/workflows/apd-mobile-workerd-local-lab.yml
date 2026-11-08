@@ -15,6 +15,8 @@ on:
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-inbox-event-log-lab.mjs'
       - 'scripts/mobile-inbox-sync-endpoint-lab.mjs'
+      - 'scripts/mobile-inbox-postgrest-repository-lab.mjs'
+      - 'scripts/test-mobile-inbox-postgrest-repository-lab.mjs'
       - 'scripts/test-mobile-inbox-sync-lab.mjs'
       - 'scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs'
       - 'scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs'
@@ -85,6 +87,7 @@ jobs:
           node --test scripts/test-mobile-workerd-fullchain-runtime-lab.mjs
           node --check scripts/mobile-inbox-event-log-lab.mjs
           node --check scripts/mobile-inbox-sync-endpoint-lab.mjs
+          node --check scripts/mobile-inbox-postgrest-repository-lab.mjs
           node --check scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs
       - name: Ensure no application or Worker production files changed
