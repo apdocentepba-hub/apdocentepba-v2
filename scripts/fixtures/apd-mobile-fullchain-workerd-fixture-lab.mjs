@@ -13,8 +13,8 @@ import {createMobilePushServerRepositoryLab}
  from '../mobile-push-server-repository-lab.mjs';
 import {createAbcCurrentOfferVerifierLab}
  from '../mobile-push-abc-current-offer-lab.mjs';
-import {createWorkerMobilePushDryRunLab}
- from '../mobile-push-worker-webcrypto-lab.mjs';
+import {createWorkerMobileAuthorizeOnlyLab}
+ from '../mobile-push-authorize-only-worker-lab.mjs';
 import {createMobilePushSubscriptionVerifierLab}
  from '../mobile-push-subscription-verifier-lab.mjs';
 import {matchWithCurrentPreferences}
@@ -42,7 +42,8 @@ const VALID=new Set([
  'plan-bad-type','plan-catalog-missing','plan-catalog-other',
  'plan-history-overflow','plan-newer-pending',
  'plan-revoked-after','plan-paused-after','plan-expired-after',
- 'plan-catalog-disabled-after','plan-account-down-after'
+ 'plan-catalog-disabled-after','plan-account-down-after',
+ 'dispatch-denied','dispatch-malformed','dispatch-down'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -74,7 +75,7 @@ export default {
   if(request.method!=='GET')return json({error:'method_not_allowed'},405);
   if(!VALID.has(mode))return json({error:'not_found'},404);
   const counts={claim:0,lease:0,device:0,cancel:0,retry:0,
-   abc:0,prefs:0,match:0,plan:0,unauthorizedRequests:0};
+   abc:0,prefs:0,match:0,plan:0,prepare:0,unauthorizedRequests:0};
   const realHash=await eventHash();
   const claim={
    event_key:mode==='wrong-hmac'?'0'.repeat(64):realHash,
@@ -218,6 +219,19 @@ export default {
        dni:'SHOULD_NEVER_LEAVE_PRIVATE_DB'
       }]);
      }
+     case '/rest/v1/rpc/apd_mobile_prepare_dispatch':{
+      counts.prepare++;
+      const args=JSON.parse(opts.body);
+      if(opts.method!=='POST'||args.p_event_key!==claim.event_key||
+         args.p_lease_id!==LEASE)
+       throw Error('dispatch_not_bound_to_claim');
+      if(mode==='dispatch-down')
+       throw Error('SYNTHETIC_DISPATCH_RPC_DOWN');
+      if(mode==='dispatch-denied')return json(null);
+      if(mode==='dispatch-malformed')return json('SYNTHETIC_INVALID_TICKET');
+      if(counts.prepare>1)throw Error('double_dispatch_authorization');
+      return json('66666666-6666-4666-8666-666666666666');
+     }
      case '/rest/v1/rpc/apd_mobile_cancel_push':{
       counts.cancel++;
       if(JSON.parse(opts.body).p_lease_id!==LEASE)
@@ -286,9 +300,9 @@ export default {
    database,plans,offers,now:()=>NOW,
    finalReservationRecheck:true,finalPlanRecheck:true
   });
-  const run=createWorkerMobilePushDryRunLab({
+  const run=createWorkerMobileAuthorizeOnlyLab({
    authorizeScheduledRun:async()=>mode!=='no-auth',
-   repository,hmacSecret:HMAC,now:()=>NOW
+   repository,database,hmacSecret:HMAC,now:()=>NOW
   });
   const outcome=await run({fixtureOnly:true});
   // The diagnostic never includes offer IDs, user IDs, tokens or API key.
