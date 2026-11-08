@@ -26,8 +26,16 @@ async function cargarOSM(errores){let query=`[out:json][timeout:120];area["ISO31
 async function cargarOSMManual(){let errores=[];await cargarOSM(errores);if(errores.length) setInfo('No pudo cargar OSM: '+errores.join(' | '))}
 // Public WFS, exact provincial key only. Never fetches ABC personal data.
 const WFS_LAYERS=Object.freeze({
+ // Each of these layers was verified with a real published provincial school key.
  MS:'me:nivel_secundario_gestion_estatal',
- MT:'me:modalidad_tecnico_profesional_secundaria_gestion_estatal'
+ MT:'me:modalidad_tecnico_profesional_secundaria_gestion_estatal',
+ MA:'me:modalidad_tecnico_profesional_secundaria_gestion_estatal',
+ PP:'me:nivel_primario_gestion_estatal',
+ JI:'me:nivel_inicial_gestion_estatal',
+ IS:'me:nivel_superior_gestion_estatal',
+ // Special schools may occur in several thematic layers; use only one tested
+ // layer and the exact provincial key, never combine thematic records blindly.
+ EE:'me:modalidad_especial_primaria_gestion_estatal'
 });
 function capaWfsParaClave(clave){
  const m=String(clave||'').match(/^[0-9]{4}([A-Z]{2})[0-9]{4}$/);
@@ -81,7 +89,50 @@ async function consultarClaveWfs(){
   return false;
  }
 }
-async function cargarOficial(){if(cargando)return;cargando=true;setInfo('');$('stTotal').textContent='Cargando datos...';let errores=[];let ok=(ofertaClave&&await consultarClaveWfs())||await cargarXLSX(errores)||await cargarCKAN(errores)||(ofertaClave?false:await cargarZIPs(errores)||await cargarOSM(errores));cargando=false;if(!ok){$('stTotal').textContent='No se pudo autocargar';$('stFuente').textContent='Carga manual requerida';$('lista').innerHTML='<p class="small">No se pudo cargar automático. Queda disponible la carga manual.</p>';setInfo((ofertaClave?'No pudimos ubicar la clave '+ofertaClave+' de manera verificable. Consultá el Mapa Escolar ABC. ':'Fallaron todas las cargas. ')+ 'Detalle: '+errores.join(' | '));}}
+async function cargarOficial(){
+ if(cargando)return;
+ cargando=true;
+ // A failed refresh must never leave a previously verified marker on screen.
+ datos=[];visibles=[];cluster.clearLayers();
+ $('lista').textContent='Comprobando ubicación...';
+ $('stTotal').textContent='Consultando escuela...';
+ $('stFuente').textContent='Sin verificar';
+ setInfo('');
+ const errores=[];
+ let ok=false;
+ try{
+  if(ofertaClave){
+   // For a known ABC provincial key, use only the bounded official WFS
+   // lookup. Do not download the entire national XLSX on a phone.
+   ok=await consultarClaveWfs();
+  }else{
+   ok=await cargarXLSX(errores)||await cargarCKAN(errores)||
+      await cargarZIPs(errores)||await cargarOSM(errores);
+  }
+ }catch(_){errores.push('Fallo inesperado de consulta');}
+ finally{cargando=false;}
+ if(!ok){
+  datos=[];visibles=[];cluster.clearLayers();
+  $('stTotal').textContent='Ubicación sin verificar';
+  $('stVisibles').textContent='0 ubicaciones confirmadas';
+  $('stFuente').textContent='Sin coincidencia confirmada';
+  $('lista').textContent=ofertaClave
+   ? 'No encontramos la clave en la capa oficial consultada. Verificá la escuela en Mapa Escolar ABC.'
+   : 'No se pudo cargar el mapa automáticamente. Podés usar el archivo local.';
+  setInfo(ofertaClave
+   ? 'No se pudo confirmar la ubicación de '+ofertaClave+' en el Mapa Escolar oficial. No mostramos un marcador aproximado.'
+   : 'No se pudo consultar el padrón. '+errores.slice(0,2).join(' | '));
+  const aviso=$('mapa-oferta-aviso');
+  if(aviso&&ofertaClave){
+   aviso.replaceChildren(document.createTextNode('Consulta la clave '+ofertaClave+' en '));
+   const link=document.createElement('a');
+   link.href='https://mapaescolar.abc.gob.ar/mapaescolar/';
+   link.target='_blank';link.rel='noopener noreferrer';
+   link.textContent='Mapa Escolar ABC';
+   aviso.append(link);aviso.style.display='block';
+  }
+ }
+}
 async function cargarArchivo(ev){let f=ev.target.files[0];if(!f)return;setInfo('');let name=f.name.toLowerCase();if(name.endsWith('.xlsx')){convertir(rowsDesdeXLSX(await f.arrayBuffer()),'XLSX local');}else if(name.endsWith('.zip')){let zip=await JSZip.loadAsync(await f.arrayBuffer());let file=Object.values(zip.files).find(x=>/\.csv$/i.test(x.name));if(!file)return setInfo('No encontré CSV dentro del ZIP');let txt=await file.async('string');Papa.parse(txt,{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'Archivo local')});}else if(name.endsWith('.geojson')||name.endsWith('.json')){let json=JSON.parse(await f.text());let rows=(json.features||[]).map(ft=>{let o=ft.properties||{};if(ft.geometry&&ft.geometry.coordinates){o.longitud=ft.geometry.coordinates[0];o.latitud=ft.geometry.coordinates[1]}return o});convertir(rows,'GeoJSON local');}else{Papa.parse(await f.text(),{header:true,skipEmptyLines:true,complete:r=>convertir(r.data,'CSV local')});}}
 function llenarFiltros(){
  let ds=[...new Set(datos.map(x=>x.dist).filter(Boolean))].sort();
