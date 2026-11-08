@@ -133,7 +133,10 @@ try{
   assert.equal(state.items,5);
   assert.equal(state.forgedImage,false);
   assert.equal(state.escapeVisible,true);
-  assert.equal(state.hasOfficialMap,true);
+  assert.equal(state.hasOfficialMap,false,'Map links must remain hidden if map implementation is absent');
+  await js('window.APD_offerSchoolMapReady=true;window.APD_comparatorRefresh({offers:window.__offers,index:4,enabled:true});true');
+  assert.equal(await js('!!document.querySelector(".apd-comparator-map-link")'),true,
+   'Map link becomes available only when verified-key map code is present');
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
   await js(`(()=>{
