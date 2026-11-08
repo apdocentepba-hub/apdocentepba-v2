@@ -173,6 +173,7 @@ test('source does not invent closure when ABC returns no indexed offer',async()=
 for(const [label,replies] of [
  ['multiple records',[abcJSON(2,[plainDoc(),plainDoc()])]],
  ['partial response',[abcJSON(1,[plainDoc()],{partialResults:true})]],
+ ['non-success Solr header',[abcJSON(1,[plainDoc()],{status:503})]],
  ['truncated records',[abcJSON(1,[])]]
 ]){
  test('ABC '+label+' cannot authorize an alert',async()=>{
