@@ -20,6 +20,8 @@ on:
       - 'scripts/mobile-push-worker-job-contract-lab.mjs'
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
       - 'scripts/mobile-push-authorize-only-worker-lab.mjs'
+      - 'scripts/mobile-push-provider-response-replay-lab.mjs'
+      - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
       - 'scripts/mobile-push-subscription-verifier-lab.mjs'
@@ -74,6 +76,8 @@ jobs:
           node --test scripts/test-mobile-push-worker-job-contract-lab.mjs
           node --check scripts/mobile-push-worker-webcrypto-lab.mjs
           node --check scripts/mobile-push-authorize-only-worker-lab.mjs
+          node --check scripts/mobile-push-provider-response-replay-lab.mjs
+          node --test scripts/test-mobile-push-provider-response-replay-lab.mjs
           node --test scripts/test-mobile-push-worker-webcrypto-lab.mjs
           node --check scripts/mobile-push-server-repository-lab.mjs
           node --test scripts/test-mobile-push-server-repository-lab.mjs
