@@ -7,7 +7,7 @@ const A={source_offer_key:'D_8400',estado:'Publicada',escuela:'EEST 6',distrito:
 const previousCapturedAt='2026-11-07T10:00:00Z';
 const currentCapturedAt='2026-11-07T20:00:00Z';
 const opts={previousComplete:true,currentComplete:true,scope:'Avellaneda',previousScope:'Avellaneda',
-  previousCapturedAt,currentCapturedAt};
+  previousCapturedAt,currentCapturedAt,nowMs:Date.parse('2026-11-07T20:02:00Z')};
 const run=(old,current,overrides={})=>detectOfferUpdates(old,current,{...opts,...overrides});
 
 test('unchanged published offer never triggers event',()=>{
@@ -84,4 +84,48 @@ test('event keys stable for identical change and differ for distinct changes',()
  assert.equal(x.events[0].event_key,y.events[0].event_key);
  const z=run([A],[{...A,turno:'Noche'}]);
  assert.notEqual(x.events[0].event_key,z.events[0].event_key);
+});
+
+test('rejects impossible ISO calendar dates even when JS Date.parse would normalize them',()=>{
+ for(const invalid of [
+  '2026-02-31T10:00:00-03:00','2026-04-31T00:00:00Z',
+  '2026-11-31T08:00:00Z','2026-13-01T00:00:00Z',
+  '2026-11-07T25:00:00Z','2026-11-07T12:60:00Z',
+  '2026-11-07T12:00:60Z','2026-11-07T12:00:00+15:00',
+  '2026-11-07T12:00:00+14:30'
+ ]){
+   assert.equal(parseVerifiedClosingTime(invalid),null,invalid);
+ }
+});
+test('accepts valid leap day and ISO microsecond precision with explicit timezone',()=>{
+ assert.equal(parseVerifiedClosingTime('2028-02-29T12:00:00Z'),Date.UTC(2028,1,29,12));
+ assert.equal(parseVerifiedClosingTime('2026-11-07T20:00:00.123456+00:00'),
+   Date.UTC(2026,10,7,20,0,0,123));
+});
+test('snapshot timestamps without explicit timezone must not generate changes',()=>{
+ for(const change of [
+  {previousCapturedAt:'2026-11-07T10:00:00'},
+  {currentCapturedAt:'2026-11-07T20:00:00'},
+  {currentCapturedAt:'2026-02-31T20:00:00Z'}
+ ]){
+  const x=run([A],[{...A,turno:'Mañana'}],change);
+  assert.equal(x.verified,false);
+  assert.deepEqual(x.events,[]);
+ }
+});
+test('stale captures never generate any alerts even if both snapshots were complete',()=>{
+ for(const change of [
+  {nowMs:Date.parse('2026-11-08T09:00:01Z')},
+  {nowMs:Date.parse('2026-11-07T19:54:59Z')},
+  {nowMs:NaN}
+ ]){
+  const x=run([A],[{...A,turno:'Mañana'}],change);
+  assert.equal(x.verified,false);
+  assert.deepEqual(x.events,[]);
+ }
+});
+test('within 12 hours, complete and identity-stable snapshots still produce change',()=>{
+ const x=run([A],[{...A,turno:'Noche'}],{nowMs:Date.parse('2026-11-08T07:59:59Z')});
+ assert.equal(x.verified,true);
+ assert.ok(x.events.some(e=>e.field==='turno'&&e.after==='Noche'));
 });
