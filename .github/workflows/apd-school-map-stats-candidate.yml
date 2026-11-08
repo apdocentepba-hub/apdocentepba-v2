@@ -27,7 +27,7 @@ jobs:
           node-version: '22'
       - run: node --check app_v2.js
       - run: node --test scripts/test-apd-school-map-stats.mjs scripts/test-apd-school-wfs-mapping.mjs
-      - name: Real Chromium QA: mobile and desktop, simulated official WFS and outage
+      - name: 'Real Chromium QA: mobile and desktop, simulated official WFS and outage'
         run: node scripts/test-apd-school-map-browser.mjs
       - name: Save browser screenshots for QA
         if: always()
