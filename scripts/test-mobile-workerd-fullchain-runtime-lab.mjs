@@ -67,7 +67,10 @@ const scenarios=[
  ['plan-paused-after',0,1,0,true],
  ['plan-expired-after',0,1,0,true],
  ['plan-catalog-disabled-after',0,1,0,true],
- ['plan-account-down-after',0,0,1,true]
+ ['plan-account-down-after',0,0,1,true],
+ ['dispatch-denied',0,0,1,true],
+ ['dispatch-malformed',0,0,0,false],
+ ['dispatch-down',0,0,0,false]
 ];
 for(const [mode,ready,cancelled,retried,ok] of scenarios){
  test('private SQL + ABC + actual APD matcher + WebCrypto /'+mode,async()=>{
@@ -78,6 +81,13 @@ for(const [mode,ready,cancelled,retried,ok] of scenarios){
   assert.equal(r.cancelled||0,cancelled,mode+': cancelled');
   assert.equal(r.retried||0,retried,mode+': retried');
   assert.equal(r.provider_calls,0);
+  assert.equal(r.prepared||0,ready,mode+': prepared');
+  if(mode==='ready'||mode==='plan-trial-valid')
+   assert.equal(r.counts.prepare,1);
+  if(mode.startsWith('dispatch-'))
+   assert.equal(r.counts.prepare,1);
+  if(r.counts.prepare===0)
+   assert.equal(r.prepared||0,0);
   assert.equal(r.counts.unauthorizedRequests,0);
   assert.ok(r.counts.abc<=2);
   assert.ok(r.counts.lease<=2);
@@ -107,6 +117,8 @@ for(const [mode,ready,cancelled,retried,ok] of scenarios){
   }
   if(mode==='database-down'||mode==='outbox-duplicate')
    assert.equal(r.reason,'repository_unavailable');
+  if(mode==='dispatch-down'||mode==='dispatch-malformed')
+   assert.equal(r.reason,'authorization_storage_unavailable');
   const output=JSON.stringify(r);
   for(const word of [
    'sb_secret_','SYNTHETIC_HMAC_WORKER','SOLR-999',
