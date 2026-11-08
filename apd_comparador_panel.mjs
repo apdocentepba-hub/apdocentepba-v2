@@ -56,8 +56,8 @@ function focusComparison() {
 function syncCurrentButton() {
  const actions=document.querySelector('#panel-alertas .alerta-main-card .alerta-actions');
  if(!actions)return;
- const existing=actions.querySelector('#apd-comparar-oferta');
- if(existing)existing.remove();
+ actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+  .forEach(control=>control.remove());
  if(!state.enabled||!state.available.length)return;
  const item=state.current;
  const key=offerKey(item);
@@ -384,8 +384,8 @@ function reset() {
  invalidateGeo();
  state.enabled=false;state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
- const control=document.querySelector('#apd-comparar-oferta');
- control?.remove();
+ document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+  .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }
 window.APD_comparatorRefresh=refresh;
