@@ -315,3 +315,76 @@ test('missing or duplicate user preferences cannot become an active alert',async
    /postgrest_ambiguous_result/);
  }
 });
+
+
+test('private SQL dispatch authorization RPC returns one synthetic UUID and never invokes provider',async()=>{
+ const paths=[];
+ const TICKET='66666666-6666-4666-8666-666666666666';
+ const fetchImpl=async(url,opts)=>{
+  const u=new URL(url);paths.push(u.pathname);
+  assert.equal(opts.headers.apikey,SECRET);
+  assert.equal(opts.credentials,'omit');
+  assert.equal(opts.redirect,'manual');
+  assert.equal(opts.method,'POST');
+  if(u.pathname.endsWith('apd_mobile_prepare_dispatch')){
+   assert.deepEqual(JSON.parse(opts.body),{
+    p_event_key:EVENT,p_lease_id:LEASE
+   });
+   return response(TICKET);
+  }
+  if(u.pathname.endsWith('apd_mobile_resolve_dispatch')){
+   assert.deepEqual(JSON.parse(opts.body),{
+    p_event_key:EVENT,p_dispatch_id:TICKET,p_outcome:'uncertain'
+   });
+   return response(true);
+  }
+  if(u.pathname.endsWith('apd_mobile_quarantine_stale_dispatch')){
+   assert.deepEqual(JSON.parse(opts.body),{p_limit:4});
+   return response(1);
+  }
+  throw Error('UNKNOWN_PRIVATE_RPC');
+ };
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:HOST,secretKey:SECRET,fetchImpl
+ });
+ assert.equal(await db.prepareDispatch({eventKey:EVENT,leaseId:LEASE}),TICKET);
+ assert.equal(await db.resolveWithoutProvider({
+  eventKey:EVENT,dispatchId:TICKET,outcome:'uncertain'
+ }),true);
+ assert.equal(await db.quarantineStaleDispatch({limit:4}),1);
+ assert.deepEqual(paths,[
+  '/rest/v1/rpc/apd_mobile_prepare_dispatch',
+  '/rest/v1/rpc/apd_mobile_resolve_dispatch',
+  '/rest/v1/rpc/apd_mobile_quarantine_stale_dispatch'
+ ]);
+});
+test('authorization cannot be treated as delivery and malformed RPC results fail closed',async()=>{
+ const ticket='66666666-6666-4666-8666-666666666666';
+ const requests=[];
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:HOST,secretKey:SECRET,
+  fetchImpl:async(url)=>{requests.push(url);return response(ticket);}
+ });
+ for(const outcome of ['accepted','sent',true,null,''])
+  await assert.rejects(()=>db.resolveWithoutProvider({
+   eventKey:EVENT,dispatchId:ticket,outcome
+  }),/provider_acceptance_unsupported_in_lab/);
+ await assert.rejects(()=>db.prepareDispatch({
+  eventKey:'BAD_EVENT',leaseId:LEASE
+ }),/invalid_lease_reference/);
+ await assert.rejects(()=>db.quarantineStaleDispatch({limit:101}),
+  /invalid_quarantine_bounds/);
+ assert.equal(requests.length,0);
+ for(const value of ['not-uuid',42,{},[]]){
+  const bad=createMobilePushPostgrestAdapterLab({
+   projectUrl:HOST,secretKey:SECRET,fetchImpl:async()=>response(value)
+  });
+  await assert.rejects(()=>bad.prepareDispatch({
+   eventKey:EVENT,leaseId:LEASE
+  }),/postgrest_invalid_dispatch_authorization/);
+ }
+ const denied=createMobilePushPostgrestAdapterLab({
+  projectUrl:HOST,secretKey:SECRET,fetchImpl:async()=>response(null)
+ });
+ assert.equal(await denied.prepareDispatch({eventKey:EVENT,leaseId:LEASE}),null);
+});
