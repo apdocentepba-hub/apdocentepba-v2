@@ -137,7 +137,9 @@ function render(){
    entry.appendChild(meta);
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
    entry.appendChild(explanation);
-   if(codePattern.test(row.escuela.toUpperCase())){
+   // This link only appears after the verified-key map implementation (#255)
+   // is present. A comparator-only release must not open the old generic map.
+   if(window.APD_offerSchoolMapReady===true && codePattern.test(row.escuela.toUpperCase())){
     // Official school-key map integration is maintained separately in PR #255.
     const link=node('a','apd-comparator-map-link','Ver escuela en mapa');
     const params=new URLSearchParams({clave:row.escuela.toUpperCase(),distrito:row.distrito});
