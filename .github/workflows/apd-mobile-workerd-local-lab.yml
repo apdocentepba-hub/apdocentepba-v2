@@ -5,6 +5,9 @@ on:
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
+      - 'scripts/mobile-push-abc-current-offer-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-abc-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs'
       - 'scripts/test-mobile-workerd-postgrest-runtime-lab.mjs'
       - 'scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs'
@@ -42,6 +45,9 @@ jobs:
           node --check scripts/mobile-push-postgrest-adapter-lab.mjs
           node --check scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-postgrest-runtime-lab.mjs
+          node --check scripts/mobile-push-abc-current-offer-lab.mjs
+          node --check scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-abc-runtime-lab.mjs
       - name: Ensure no application or Worker production files changed
         run: |
           git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js
