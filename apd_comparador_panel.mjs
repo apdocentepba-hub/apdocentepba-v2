@@ -43,11 +43,21 @@ function titleFor(offer) {
  return [String(offer?.descripcioncargo||offer?.cargo||'Cargo sin descripción').trim(),
   String(offer?.distrito||'').trim()].filter(Boolean).join(' · ');
 }
+function focusComparison() {
+ if(!root||root.hidden)return;
+ const heading=root.querySelector('.apd-comparator-head h3');
+ // The user must see results instead of searching below a tall carousel.
+ root.scrollIntoView?.({
+  behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'auto':'smooth',
+  block:'start'
+ });
+ heading?.focus?.({preventScroll:true});
+}
 function syncCurrentButton() {
  const actions=document.querySelector('#panel-alertas .alerta-main-card .alerta-actions');
  if(!actions)return;
- const existing=actions.querySelector('#apd-comparar-oferta');
- if(existing)existing.remove();
+ actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+  .forEach(control=>control.remove());
  if(!state.enabled||!state.available.length)return;
  const item=state.current;
  const key=offerKey(item);
@@ -56,6 +66,7 @@ function syncCurrentButton() {
   selected?'Quitar de comparación':'Comparar esta oferta',
   ()=>{
    if(!key)return;
+   const beforeCount=state.selected.size;
    if(state.selected.has(key)){state.selected.delete(key);invalidateGeo();}
    else {
     if(state.selected.size>=max){
@@ -67,12 +78,21 @@ function syncCurrentButton() {
    }
    syncCurrentButton();
    render();
+   // Automatically reveal the first meaningful comparison (2 selected).
+   if(beforeCount===1&&state.selected.size===2)focusComparison();
   });
  btn.id='apd-comparar-oferta';
  btn.disabled=!key;
  btn.setAttribute('aria-pressed',String(!!selected));
  btn.setAttribute('aria-controls','apd-comparador-panel');
  actions.appendChild(btn);
+ if(state.selected.size){
+  const view=button('Ver comparación ('+state.selected.size+')',focusComparison,
+   'btn btn-secondary apd-compare-view');
+  view.id='apd-ver-comparacion';
+  view.setAttribute('aria-controls','apd-comparador-panel');
+  actions.appendChild(view);
+ }
 }
 function makeSelect(labelText,options,value,change){
  const container=node('label','apd-comparator-label');
@@ -133,6 +153,61 @@ async function verifySchoolDistances(){
   }
  }
 }
+function renderSideBySide(items){
+ if(!Array.isArray(items)||items.length<2)return null;
+ const region=node('section','apd-comparator-side-by-side');
+ region.appendChild(node('h4','','Comparación lado a lado'));
+ region.appendChild(node('p','apd-comparator-hint',
+  'Las diferencias se resaltan. Es orientativo: no calcula adjudicaciones ni determina si podés postularte.'));
+ const wrap=node('div','apd-comparator-table-scroll');
+ wrap.tabIndex=0;
+ wrap.setAttribute('role','region');
+ wrap.setAttribute('aria-label','Tabla de comparación; desplazable horizontalmente');
+ const table=node('table','apd-comparator-table');
+ table.style.minWidth=(148+Math.max(items.length,2)*166)+'px';
+ const caption=node('caption','','Ofertas seleccionadas y criterios comparables');
+ table.appendChild(caption);
+ const thead=document.createElement('thead');
+ const titles=document.createElement('tr');
+ const empty=node('th','','Criterio');empty.scope='col';titles.appendChild(empty);
+ items.forEach((item,i)=>{
+  const cell=node('th','', 'Oferta '+(i+1));
+  cell.scope='col';titles.appendChild(cell);
+ });
+ thead.appendChild(titles);table.appendChild(thead);
+ const tbody=document.createElement('tbody');
+ const dateText=x=>{
+  if(typeof x!=='number'||!Number.isFinite(x))return 'Sin cierre verificable';
+  return new Intl.DateTimeFormat('es-AR',{
+   timeZone:'America/Argentina/Buenos_Aires',
+   day:'2-digit',month:'2-digit',year:'numeric',
+   hour:'2-digit',minute:'2-digit'
+  }).format(new Date(x));
+ };
+ const data=[
+  ['Cargo',x=>x.cargo||'No informado'],
+  ['Distrito',x=>x.distrito||'No informado'],
+  ['Escuela',x=>x.escuela||'No informada'],
+  ['Turno',x=>x.turno||'No informado'],
+  ['Cierra',x=>dateText(x.cierre_ms)],
+  ['PID',x=>x.pid_match_verified===true?'Verificado: coincide':
+   x.pid_match_verified===false?'Verificado: no coincide':'No verificado']
+ ];
+ if(items.some(x=>x.distancia_km!==null))
+  data.push(['Distancia desde referencia',x=>x.distancia_km===null?
+   'No verificada':x.distancia_km+' km (línea recta)']);
+ for(const [label,value] of data){
+  const values=items.map(item=>String(value(item)));
+  const differs=new Set(values).size>1;
+  const row=node('tr',differs?'apd-comparator-diff':'');
+  const labelCell=node('th','',label);labelCell.scope='row';
+  row.appendChild(labelCell);
+  values.forEach(v=>row.appendChild(node('td','',v)));
+  tbody.appendChild(row);
+ }
+ table.appendChild(tbody);wrap.appendChild(table);region.appendChild(wrap);
+ return region;
+}
 function render(){
  if(!root)return;
  root.replaceChildren();
@@ -140,6 +215,7 @@ function render(){
  if(root.hidden)return;
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
+ heading.tabIndex=-1;
  const count=node('span','apd-comparator-count',countLabel(state.selected.size));
  head.append(heading,count);
  root.appendChild(head);
@@ -193,6 +269,13 @@ function render(){
    preferredTurns:state.turn?[state.turn]:[],
    referenceLocation:origin,verifiedGeoByKey:state.geoByKey
   });
+  if(selected.length>=2){
+   const comparison=renderSideBySide(result.items);
+   if(comparison)root.appendChild(comparison);
+  }else{
+   root.appendChild(node('p','apd-comparator-empty',
+    'Seleccionaste una oferta. Marcá otra y vas a ver una tabla con sus diferencias.'));
+  }
   const list=node('ol','apd-comparator-results');
   for(const row of result.items){
    const entry=node('li','apd-comparator-item');
@@ -301,8 +384,8 @@ function reset() {
  invalidateGeo();
  state.enabled=false;state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
- const control=document.querySelector('#apd-comparar-oferta');
- control?.remove();
+ document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+  .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }
 window.APD_comparatorRefresh=refresh;

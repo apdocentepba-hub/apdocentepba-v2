@@ -49,3 +49,51 @@
 .apd-comparator-pairs h4{margin:0 0 8px;font-size:14px;color:#17345c}
 .apd-comparator-pairs ul{padding-left:21px;margin:0}
 .apd-comparator-pairs li{padding:3px 0;overflow-wrap:anywhere;font-size:12px;line-height:1.4}
+
+
+/* Release fix: comparison remains discoverable below the alert carousel. */
+#apd-comparador-panel{scroll-margin-top:18px}
+.apd-compare-view{font-weight:800!important;background:#daf7ef!important;
+ border:1px solid #75c6ad!important;color:#134d44!important}
+.apd-comparator-side-by-side{margin-top:15px}
+.apd-comparator-side-by-side h4{font-size:16px;margin:0 0 5px;color:#15365c}
+.apd-comparator-table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;
+ border:1px solid #c8d8ed;border-radius:13px;background:white}
+.apd-comparator-table-scroll:focus-visible{outline:3px solid #3c79cd;outline-offset:2px}
+.apd-comparator-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;
+ color:#163552;font-size:12px}
+.apd-comparator-table caption{position:absolute;width:1px;height:1px;padding:0;
+ margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.apd-comparator-table th,.apd-comparator-table td{
+ padding:10px 9px;border-bottom:1px solid #e5edf6;
+ border-right:1px solid #edf2f8;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.apd-comparator-table thead th{background:#eaf2ff;font-weight:800}
+.apd-comparator-table tbody th{width:148px;background:#f6f9ff;font-weight:750}
+.apd-comparator-table tr:last-child th,.apd-comparator-table tr:last-child td{
+ border-bottom:0}
+.apd-comparator-table .apd-comparator-diff td{background:#fff7df}
+.apd-comparator-table .apd-comparator-diff th{background:#fff1c7}
+@media(min-width:760px){
+ /* Keep 2-3 cards worth of useful data above the fold without hiding details. */
+ #panel-alertas .alerta-stage{padding-inline:64px}
+ #panel-alertas .alerta-floating{padding:13px 14px;border-radius:17px}
+ #panel-alertas .alerta-windowbar{margin-bottom:6px}
+ #panel-alertas .alerta-topbar{margin-bottom:8px}
+ #panel-alertas .alerta-progress{margin-bottom:10px}
+ #panel-alertas .alerta-tags{margin-bottom:7px}
+ #panel-alertas .alerta-title{font-size:18px;margin:7px 0 5px}
+ #panel-alertas .alerta-subtitle{margin-bottom:8px}
+ #panel-alertas .alerta-grid{gap:7px 9px}
+ #panel-alertas .alerta-row{padding:7px 10px;border-radius:10px;gap:2px}
+ #panel-alertas .alerta-meta-card{margin-top:9px;padding:10px;border-radius:12px}
+ #panel-alertas .alerta-meta-head{margin-bottom:6px}
+ #panel-alertas .alerta-meta-grid{gap:7px}
+ #panel-alertas .alerta-meta-item{padding:7px 10px;border-radius:10px}
+ #panel-alertas .alerta-meta-k{margin-bottom:3px}
+ #panel-alertas .alerta-actions{margin-top:10px}
+ #panel-alertas .alerta-dots{margin-top:10px}
+}
+@media(max-width:600px){
+ .apd-comparator-table th,.apd-comparator-table td{padding:9px 8px}
+ .apd-compare-view{width:100%;justify-content:center}
+}

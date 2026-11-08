@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=lab-20261107'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261108-visible1'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -43,4 +43,20 @@ test('new UI is responsive and all data labels are DOM text, not raw HTML',()=>{
  assert.doesNotMatch(ui,/\.innerHTML\s*=/);
  assert.match(ui,/root\.replaceChildren\(\)/);
  assert.match(ui,/aria-pressed/);
+});
+
+
+test('comparison is findable and shows side-by-side differences without PID inference',()=>{
+ assert.match(ui,/function focusComparison\(\)/);
+ assert.match(ui,/Ver comparación \('/);
+ assert.match(ui,/beforeCount===1&&state\.selected\.size===2/);
+ assert.match(ui,/scrollIntoView/);
+ assert.match(ui,/Comparación lado a lado/);
+ assert.match(ui,/class.*apd-comparator-table-scroll|apd-comparator-table-scroll/);
+ assert.match(ui,/apd-comparator-diff/);
+ assert.match(ui,/No verificado/);
+ assert.match(css,/#apd-comparador-panel\{scroll-margin-top/);
+ assert.match(css,/\.apd-comparator-table-scroll\{/);
+ assert.match(css,/overflow-x:auto/);
+ assert.match(css,/#panel-alertas \.alerta-row\{/);
 });
