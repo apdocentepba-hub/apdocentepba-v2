@@ -1,0 +1,19 @@
+{
+  "name": "apdocentepba-mobile-lab",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "export:android": "expo export --platform android --output-dir dist/android-lab",
+    "test": "node --test src/*.test.cjs"
+  },
+  "dependencies": {
+    "expo": "~58.0.22",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "expo-notifications": "~58.1.8",
+    "@react-native-async-storage/async-storage": "2.2.0"
+  }
+}
