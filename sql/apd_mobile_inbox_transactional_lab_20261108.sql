@@ -177,8 +177,8 @@ BEGIN
   WHERE user_id=p_user_id AND cursor>p_after AND cursor<=v_cursor
   ORDER BY cursor LIMIT p_limit
  ) e;
- SELECT COALESCE(MAX((val->>'cursor')::integer),p_after)
- INTO v_next FROM jsonb_array_elements(v_events) AS val;
+ SELECT COALESCE(MAX((t.value->>'cursor')::integer),p_after)
+ INTO v_next FROM jsonb_array_elements(v_events) AS t(value);
  RETURN jsonb_build_object(
   'version',1,'fromCursor',p_after,'nextCursor',v_next,
   'hasMore',v_next<v_cursor,'events',v_events);
