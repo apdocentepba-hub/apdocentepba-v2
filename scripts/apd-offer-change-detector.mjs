@@ -20,28 +20,41 @@ function stableId(o) {
 function normValue(value) {
   return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 }
+const MAX_CAPTURE_AGE_MS=12*3600000;
+const MAX_CAPTURE_FUTURE_MS=5*60000;
+
+function validCalendarDate(year,month,day) {
+ if(!Number.isInteger(year)||year<2000||year>2100||
+    !Number.isInteger(month)||month<1||month>12||
+    !Number.isInteger(day)||day<1||day>31)return false;
+ const d=new Date(Date.UTC(year,month-1,day));
+ return d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day;
+}
 export function parseVerifiedClosingTime(value) {
-  const text=norm(value);
-  if(!text)return null;
-  const iso=/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(Z|[+-]\d\d:\d\d)$/i;
-  if(iso.test(text)) {
-    const ms=Date.parse(text);
-    return Number.isFinite(ms)?ms:null;
-  }
-  // Explicit Buenos Aires local datetime as ABC sometimes presents.
-  const ar=text.match(/^(\d{2})\/(\d{2})\/(20\d{2})\s+(\d{1,2}):(\d{2})$/);
-  if(!ar)return null; // Never guess midnight for bare dates or ambiguous strings.
-  const [,day,month,year,hour,min]=ar.map(Number);
-  if(hour>23||min>59||month<1||month>12||day<1||day>31)return null;
-  const date=new Date(Date.UTC(year,month-1,day,hour+3,min));
-  const normalized=new Date(Date.UTC(year,month-1,day));
-  if(normalized.getUTCFullYear()!==year||normalized.getUTCMonth()!==month-1||normalized.getUTCDate()!==day)return null;
-  return date.getTime(); // Argentina UTC-03, no DST in 2026.
+ const text=norm(value);
+ if(!text)return null;
+ const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-](\d{2}):(\d{2}))$/i);
+ if(iso){
+  const year=Number(iso[1]),month=Number(iso[2]),day=Number(iso[3]);
+  const hour=Number(iso[4]),minute=Number(iso[5]),second=Number(iso[6]||0);
+  const offsetHour=Number(iso[9]||0),offsetMinute=Number(iso[10]||0);
+  if(!validCalendarDate(year,month,day)||hour>23||minute>59||second>59||
+     offsetHour>14||offsetMinute>59||(offsetHour===14&&offsetMinute!==0))return null;
+  const ms=Date.parse(text);
+  return Number.isFinite(ms)?ms:null;
+ }
+ // Explicit Buenos Aires local datetime; no guessing midnight for bare dates.
+ const ar=text.match(/^(\d{2})\/(\d{2})\/(20\d{2})\s+(\d{1,2}):(\d{2})$/);
+ if(!ar)return null;
+ const day=Number(ar[1]),month=Number(ar[2]),year=Number(ar[3]);
+ const hour=Number(ar[4]),minute=Number(ar[5]);
+ if(!validCalendarDate(year,month,day)||hour>23||minute>59)return null;
+ return Date.UTC(year,month-1,day,hour+3,minute); // Argentina UTC-3 in 2026.
 }
 function scanTime(value) {
-  if(!/^\d{4}-\d{2}-\d{2}T/.test(norm(value)))return null;
-  const ms=Date.parse(value);
-  return Number.isFinite(ms)?ms:null;
+ const text=norm(value);
+ if(!/^\d{4}-\d{2}-\d{2}T/.test(text))return null;
+ return parseVerifiedClosingTime(text);
 }
 function makeIndex(rows) {
   if(!Array.isArray(rows)||rows.length>100000)return null;
@@ -72,11 +85,14 @@ function candidate(id,kind,field,before,after,seenAt) {
 export function detectOfferUpdates(previous,current,options={}) {
   const {
     previousComplete=false,currentComplete=false,
-    previousCapturedAt='',currentCapturedAt='',scope='',previousScope=''
+    previousCapturedAt='',currentCapturedAt='',scope='',previousScope='',
+    nowMs=Date.now()
   }=options;
   const oldT=scanTime(previousCapturedAt),newT=scanTime(currentCapturedAt);
   if(!previousComplete||!currentComplete||!scope||scope!==previousScope||
-     oldT===null||newT===null||newT<=oldT||newT-oldT>48*3600000)
+     !Number.isFinite(nowMs)||
+     oldT===null||newT===null||newT<=oldT||newT-oldT>48*3600000||
+     newT>nowMs+MAX_CAPTURE_FUTURE_MS||nowMs-newT>MAX_CAPTURE_AGE_MS)
     return {verified:false,events:[],reason:'incomplete_or_incomparable_snapshots'};
   const oldIndex=makeIndex(previous),newIndex=makeIndex(current);
   if(!oldIndex||!newIndex)return {verified:false,events:[],reason:'ambiguous_offer_identity'};
