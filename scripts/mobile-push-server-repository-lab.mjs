@@ -49,13 +49,15 @@ function ensureIds(eventKey,leaseId){
 
 /** Client interface is intentionally narrow: no plain tokens and no SQL text. */
 export function createMobilePushServerRepositoryLab({
- database,plans,offers,now=()=>Date.now(),finalReservationRecheck=false
+ database,plans,offers,now=()=>Date.now(),
+ finalReservationRecheck=false,finalPlanRecheck=false
 }={}){
  for(const key of ['claim','readActiveLease','readOwnedDevice','cancel','retry'])
   requiredMethod(database,key);
  requiredMethod(plans,'verify');
  requiredMethod(offers,'verify');
- if(typeof now!=='function'||typeof finalReservationRecheck!=='boolean')
+ if(typeof now!=='function'||typeof finalReservationRecheck!=='boolean'||
+    typeof finalPlanRecheck!=='boolean')
   throw Error('invalid_clock_or_recheck_configuration');
 
  const outstanding=new Map();
@@ -115,6 +117,15 @@ export function createMobilePushServerRepositoryLab({
     if(!finalDevice)throw Error('device_unavailable_during_recheck');
    }
 
+   // Re-evaluate the authoritative subscription AFTER slow ABC and lease
+   // checks. Subscription renewal, expiry or suspension during an ABC query
+   // must not be missed; this is still a dry-run, not send authorization.
+   let finalPlan=plan;
+   if(finalPlanRecheck){
+    finalPlan=await plans.verify({userId:claim.user_id});
+    if(!finalPlan)throw Error('plan_unavailable_during_recheck');
+   }
+
    // Whitelist fields: raw provider token, SQL secrets and user PII never
    // move into the preflight context or its diagnostic response.
    const safeDevice=Object.freeze({
@@ -126,8 +137,8 @@ export function createMobilePushServerRepositoryLab({
     token_revoked:finalDevice.token_revoked===true
    });
    const safePlan=Object.freeze({
-    user_id:plan.user_id,access_active:plan.access_active,
-    verified_at:plan.verified_at
+    user_id:finalPlan.user_id,access_active:finalPlan.access_active,
+    verified_at:finalPlan.verified_at
    });
    const safeOffer=Object.freeze({
     source_offer_key:offer.source_offer_key,
