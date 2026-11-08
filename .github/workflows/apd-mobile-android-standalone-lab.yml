@@ -62,16 +62,29 @@ jobs:
           else
             printf '\nnetworkTimeout=60000\n' >> "$WRAPPER_PROPERTIES"
           fi
-          # Download/verify only the declared Gradle version. No mirrors or
-          # dependency upgrades; bounded retry for a transient HTTP 504.
+          # Expo's current wrapper is 9.4.1. Pin the independent official
+          # Gradle SHA-256; fail closed if Expo changes the wrapper version.
+          grep -Fq 'gradle-9.4.1-bin.zip' "$WRAPPER_PROPERTIES"
+          EXPECTED_GRADLE_SHA=2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb
+          if grep -q '^distributionSha256Sum=' "$WRAPPER_PROPERTIES"; then
+            sed -i "s/^distributionSha256Sum=.*/distributionSha256Sum=$EXPECTED_GRADLE_SHA/" "$WRAPPER_PROPERTIES"
+          else
+            printf '\ndistributionSha256Sum=%s\n' "$EXPECTED_GRADLE_SHA" >> "$WRAPPER_PROPERTIES"
+          fi
+          # First try the exact Expo-generated Gradle release using the
+          # primary official host, then fall back to Gradle's official CDN.
+          # Both URLs retain the *same version* and mandatory checksum.
+          GRADLE_READY=0
           for attempt in 1 2; do
-            if ./gradlew --version; then break; fi
-            if [ "$attempt" -eq 2 ]; then
-              echo 'Gradle distribution remains unreachable after bounded retry'
-              exit 1
-            fi
+            if ./gradlew --version; then GRADLE_READY=1; break; fi
             sleep 5
           done
+          if [ "$GRADLE_READY" -eq 0 ]; then
+            echo 'Primary Gradle host unavailable; trying official downloads.gradle.org'
+            grep -Fq 'services.gradle.org/distributions/gradle-9.4.1-bin.zip' "$WRAPPER_PROPERTIES"
+            sed -i 's#services.gradle.org/distributions/#downloads.gradle.org/distributions/#' "$WRAPPER_PROPERTIES"
+            ./gradlew --version
+          fi
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
           test -s app/build/outputs/apk/release/app-release.apk
           echo 'Checking offline bundled JavaScript inside APK...'
