@@ -32,7 +32,8 @@ const VALID=new Set([
  'plan-inactive','plan-stale','plan-other','pref-disabled','source-down',
  'source-missing','source-duplicated','stale-before','stolen-after',
  'device-revoked','revoked-after','device-other','no-auth','wrong-hmac',
- 'bad-key','database-down','outbox-duplicate','revocation-cancels-lease'
+ 'bad-key','database-down','outbox-duplicate','revocation-cancels-lease',
+ 'prefs-unscoped','prefs-wrong-user','prefs-bad-type'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -118,6 +119,24 @@ export default {
        enabled:!revoked,revoked_at:revoked?iso(NOW):null
       }]);
      }
+     case '/rest/v1/user_preferences':{
+      counts.prefs++;
+      if(target.searchParams.get('user_id')!=='eq.'+USER||
+         target.searchParams.get('limit')!=='2'||
+         target.searchParams.get('select')!==
+          'user_id,distrito_principal,otros_distritos,cargos,materias,niveles,turnos,alertas_activas')
+       throw Error('preferences_scope_or_private_metadata_violation');
+      return json([{
+       user_id:mode==='prefs-wrong-user'?OTHER:USER,
+       distrito_principal:'Avellaneda',
+       otros_distritos:[],cargos:mode==='prefs-unscoped'?[]:['PRECEPTOR'],
+       materias:[],turnos:['MAÑANA'],
+       niveles:mode==='prefs-bad-type'?'INVALID_ARRAY':['SECUNDARIA'],
+       alertas_activas:mode!=='pref-disabled',
+       email:'SHOULD_NEVER_LEAVE_PRIVATE_DB',
+       dni:'SHOULD_NEVER_LEAVE_PRIVATE_DB'
+      }]);
+     }
      case '/rest/v1/rpc/apd_mobile_cancel_push':{
       counts.cancel++;
       if(JSON.parse(opts.body).p_lease_id!==LEASE)
@@ -171,13 +190,9 @@ export default {
     verified_at:iso(NOW-(mode==='plan-stale'?500000:20000))
    };
   }};
-  const prefs={async getForUser({userId}){
-   counts.prefs++;
-   if(userId!==USER)throw Error('wrong_preferences_identity');
-   const row=preferences();
-   if(mode==='pref-disabled')row.alertas_activas=false;
-   return row;
-  }};
+  // The same private database adapter now reads and maps the legacy APD
+  // preferences, instead of accepting an independently invented match flag.
+  const prefs={getForUser:({userId})=>database.readUserPreferences({userId})};
   const offers=createAbcCurrentOfferVerifierLab({
    fetchImpl,preferences:prefs,now:()=>NOW,
    matchWithCurrentPreferences:input=>{
