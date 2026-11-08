@@ -198,15 +198,14 @@ test('malformed API responses and duplicates are never accepted as valid leases'
   const db=createMobilePushPostgrestAdapterLab({
    projectUrl:HOST,secretKey:SECRET,fetchImpl:fakeFetch
   });
-  const task=db.claim({limit:10,leaseSeconds:60});
-  await assert.rejects(task,kind==='redirect'||kind==='unauthorized'?
-   /postgrest_unavailable/:kind==='duplicated'?/NOT_EXPECTED/:
-   /postgrest_invalid_response/).catch(err=>{
-    if(kind!=='duplicated')throw err;
-   });
   if(kind==='duplicated'){
    const two=await db.claim({limit:10,leaseSeconds:60});
    assert.equal(two.length,2);
+   // Multi-row results are rejected by the outer trusted repository.
+  }else{
+   await assert.rejects(()=>db.claim({limit:10,leaseSeconds:60}),
+    kind==='redirect'||kind==='unauthorized'?
+    /postgrest_unavailable/:/postgrest_invalid_response/);
   }
  }
 });
