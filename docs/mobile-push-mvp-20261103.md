@@ -78,3 +78,11 @@ Se agregó un control **previo al eventual envío**, después de reservar un eve
 - La operación es idempotente y restringida a `service_role`; no acepta eventos pendientes sin lease, leases vencidos, reservas posteriores ni cancelaciones duplicadas. Un evento cancelado no puede cambiarse a enviado mediante `apd_mobile_finish_push`.
 - La batería PostgreSQL 17 descartable prueba cancelación válida, lease incorrecto, recuperación de un lease vencido y aislamiento de permisos de `anon`/`authenticated`. No hay acceso a datos reales, ni se aplica esta migración a Supabase.
 - **Alcance y riesgo restante:** SQL autoriza/cancela la reserva, pero no reemplaza la verificación fresca de ABC/plan ni una implementación de Worker. La carrera entre preflight y llamada al proveedor debe tener una estrategia de despacho/revocación adicional. No habilitar FCM/Expo ni deploy a partir de estos tests.
+
+## 07/11/2026 — Contrato de ejecución programada y puerto de almacenamiento (laboratorio)
+
+El despacho de prueba ahora admite operaciones asincrónicas en su contrato `claim/cancel/retry` y reconoce `lease_id` UUID de PostgreSQL, además de los leases sintéticos anteriores. El `loadContext` recibe también la reserva vigente para que el futuro repositorio pueda cotejar `event_key`, `device_id` y `lease_id` juntos.
+
+Se agregan `scripts/mobile-push-worker-job-contract-lab.mjs` y sus pruebas. El candidato exige autorización explícita de una invocación interna programada antes de consultar la cola; solo usa repositorios **inyectados por el servidor** (no lee datos del cliente) y mapea las operaciones `claimReserved`, `cancelReserved`, `retryReserved` y `loadVerifiedContext`. Una caída de las lecturas devuelve al reintento, sin marcar una notificación como enviada. La autorización no se basa en un simple flag enviado por el solicitante.
+
+**Limitación importante:** es un contrato de orquestación ejecutado en Node, NO un endpoint HTTP ni un Worker desplegable. El evaluador actual todavía importa `node:crypto`; antes de ejecutarlo bajo Cloudflare debe comprobarse compatibilidad del runtime y conectar adaptadores SQL reales con un esquema privado. Las lecturas de plan/ABC se tienen que implementar y verificar desde servidor. No hay credenciales, contactos, cambios a `worker.js` ni envíos FCM/Expo.
