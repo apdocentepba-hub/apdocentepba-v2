@@ -263,6 +263,21 @@ export function createMobilePushPostgrestAdapterLab({
     });
    }));
   },
+  async retireResolvedExpoTickets({limit=10,minAgeDays=90}={}){
+   if(!Number.isInteger(limit)||limit<1||limit>20||
+      !Number.isInteger(minAgeDays)||minAgeDays<90||minAgeDays>3650)
+    throw Error('invalid_expo_retention_bounds');
+   // This is redaction-only. The SQL RPC preserves SHA256 tombstones and
+   // excludes unknown, revoked and late audited receipts.
+   const retired=await request('rpc/apd_mobile_expo_retire_terminal_tickets',{
+    method:'POST',body:{
+     p_limit:limit,p_min_age_days:minAgeDays
+    }
+   });
+   if(!Number.isInteger(retired)||retired<0||retired>limit)
+    throw Error('invalid_expo_retention_result');
+   return retired;
+  },
   async expireMissingExpoReceipts({limit=20}={}){
    if(!Number.isInteger(limit)||limit<1||limit>20)
     throw Error('invalid_expo_expiry_bounds');
