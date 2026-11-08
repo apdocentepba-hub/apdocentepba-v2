@@ -54,12 +54,15 @@ export function evaluateMobilePushPreflightLab({
 }={}){
  if(!claim||!HEX.test(claim.event_key)||!UUID.test(claim.device_id)||
     typeof claim.lease_id!=='string'||!/^LAB-LEASE-[0-9]+$/.test(claim.lease_id)||
-    !['expo','fcm','apns'].includes(claim.transport)||
-    typeof hmacSecret!=='string'||hmacSecret.length<32||
+    !['expo','fcm','apns'].includes(claim.transport))
+  return decision(RESULT.CANCEL,'invalid_claim');
+ // A missing/rotated server secret is an operational fault, never an excuse
+ // to permanently delete valid queued notifications.
+ if(typeof hmacSecret!=='string'||hmacSecret.length<32||
     !Number.isFinite(now)||!Number.isInteger(planMaxAgeMs)||planMaxAgeMs<1||
     planMaxAgeMs>3600000||!Number.isInteger(offerMaxAgeMs)||offerMaxAgeMs<1||
     offerMaxAgeMs>3600000)
-  return decision(RESULT.CANCEL,'invalid_claim_or_server_configuration');
+  return decision(RESULT.RETRY,'server_configuration_unavailable');
  if(!context||typeof context!=='object')return decision(RESULT.RETRY,'context_unavailable');
  const {user_id:userId,device,plan,offer}=context;
  if(!UUID.test(userId||'')||!device||!plan||!offer)
