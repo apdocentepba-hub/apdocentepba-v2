@@ -11,7 +11,9 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/<div id="panel-alertas"/);
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
- assert.match(html,/<script type="module" src="apd_comparador_panel\.mjs/);
+ assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
+ assert.match(app,/import\("\.\/apd_comparador_panel\.mjs\?v=lab-20261107"\)/);
+ assert.match(app,/planActual\?\.access_active === true && !!obtenerToken\(\)/);
 });
 test('comparison happens locally; no storage, network, tokens, or data exports',()=>{
  assert.doesNotMatch(ui,/\bfetch\s*\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|Authorization|navigator\.geolocation|indexedDB/i);
