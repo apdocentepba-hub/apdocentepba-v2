@@ -161,17 +161,27 @@ BEGIN
  RETURN v_count=1;
 END; $$;
 
--- Explicit terminal cancellation of a reserved event after authoritative preflight.
--- Only an active, unexpired, matching lease can be cancelled; never a stale
--- lease from a previous worker. No push, provider token or user data is read.
+-- Final preflight cancellation of an actively leased event. SQL candidate only.
+-- A stale worker may not cancel a subsequent worker's lease.
 CREATE OR REPLACE FUNCTION public.apd_mobile_cancel_push(
  p_event_key text,
  p_lease_id uuid
 ) RETURNS boolean LANGUAGE plpgsql SECURITY INVOKER
-SET search_path=public,pg_temp AS $
+SET search_path=public,pg_temp AS $$
 DECLARE v_count integer;
 BEGIN
- IF p_event_key IS NULL OR p_event_key !~ '^[0-9a-f]{64}
+ IF p_event_key IS NULL OR p_event_key !~ '^[0-9a-f]{64}$'
+    OR p_lease_id IS NULL THEN RETURN false; END IF;
+ UPDATE public.apd_mobile_push_outbox o
+ SET status='cancelled',lease_id=NULL,leased_until=NULL,
+     updated_at=clock_timestamp()
+ WHERE o.event_key=p_event_key AND o.lease_id=p_lease_id
+   AND o.status='leased' AND o.leased_until>clock_timestamp();
+ GET DIAGNOSTICS v_count=ROW_COUNT;
+ RETURN v_count=1;
+END; $$;
+
+REVOKE ALL ON FUNCTION public.apd_mobile_cancel_revoked_device() FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.apd_mobile_claim_push(integer,integer)
  FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.apd_mobile_finish_push(text,uuid,boolean)
@@ -181,28 +191,6 @@ GRANT EXECUTE ON FUNCTION public.apd_mobile_claim_push(integer,integer) TO servi
 REVOKE ALL ON FUNCTION public.apd_mobile_cancel_push(text,uuid)
  FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.apd_mobile_cancel_push(text,uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apd_mobile_finish_push(text,uuid,boolean) TO service_role;
-
--- Deliberately no pg_cron trigger, provider API, network, user payload or seed.
-COMMIT;
-
-    OR p_lease_id IS NULL THEN RETURN false; END IF;
- UPDATE public.apd_mobile_push_outbox o
- SET status='cancelled',lease_id=NULL,leased_until=NULL,
-     updated_at=clock_timestamp()
- WHERE o.event_key=p_event_key AND o.lease_id=p_lease_id
-   AND o.status='leased' AND o.leased_until>clock_timestamp();
- GET DIAGNOSTICS v_count=ROW_COUNT;
- RETURN v_count=1;
-END; $;
-
-REVOKE ALL ON FUNCTION public.apd_mobile_cancel_revoked_device() FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.apd_mobile_claim_push(integer,integer)
- FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.apd_mobile_finish_push(text,uuid,boolean)
- FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.apd_mobile_cancel_revoked_device() TO service_role;
-GRANT EXECUTE ON FUNCTION public.apd_mobile_claim_push(integer,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.apd_mobile_finish_push(text,uuid,boolean) TO service_role;
 
 -- Deliberately no pg_cron trigger, provider API, network, user payload or seed.
