@@ -19,6 +19,8 @@ on:
       - 'scripts/test-mobile-push-dispatch-preflight-lab.mjs'
       - 'scripts/mobile-push-worker-job-contract-lab.mjs'
       - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
+      - 'scripts/mobile-push-server-repository-lab.mjs'
+      - 'scripts/test-mobile-push-server-repository-lab.mjs'
       - 'scripts/test-mobile-push-worker-webcrypto-lab.mjs'
       - 'scripts/test-mobile-push-worker-job-contract-lab.mjs'
       - 'docs/mobile-push-mvp-20261103.md'
@@ -63,6 +65,8 @@ jobs:
           node --test scripts/test-mobile-push-worker-job-contract-lab.mjs
           node --check scripts/mobile-push-worker-webcrypto-lab.mjs
           node --test scripts/test-mobile-push-worker-webcrypto-lab.mjs
+          node --check scripts/mobile-push-server-repository-lab.mjs
+          node --test scripts/test-mobile-push-server-repository-lab.mjs
       - name: Validate native demo state without external services
         run: |
           node --test mobile/src/*.test.cjs
