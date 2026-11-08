@@ -1338,36 +1338,6 @@ function renderPidMatchBlock(alerta, resumen) {
     </div>
   `;
 }
-// Opens a map search, never labels an unverified school as a verified exact point.
-// Coordinates are used only when accompanied by an explicit verified source flag.
-function buildSchoolMapLinks(alerta) {
-  const escuela = String(alerta?.escuela || alerta?.nombreestablecimiento || "").trim();
-  const distrito = String(alerta?.distrito || alerta?.descdistrito || "").trim();
-  if (escuela.length < 3 || distrito.length < 3) return null;
-  // ABC often identifies a school by its provincial key (not a street address).
-  // Never send that key as if it were a geocodable name.
-  const clave = /^[0-9]{4}[A-Z]{2}[0-9]{4}$/.test(escuela.toUpperCase())
-    ? escuela.toUpperCase() : "";
-  // Never trust raw coordinates or a boolean flag carried by an offer.
-  // Exact geolocation is resolved only by the official WFS inside the map.
-  const exact = false;
-  const query = [escuela, distrito, "Provincia de Buenos Aires", "Argentina"].join(", ");
-  return {
-    apdMap: "./mapa-escuelas-pba.html?" +
-      (clave ? "clave=" + encodeURIComponent(clave)
-             : "escuela=" + encodeURIComponent(escuela)) +
-      "&distrito=" + encodeURIComponent(distrito),
-    googleMaps: clave ? null
-      : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query),
-    official: "https://mapaescolar.abc.gob.ar/mapaescolar/",
-    clave, exact
-  };
-}
-
-// Feature coupling: comparator's optional map links only appear when this
-// verified provincial-key lookup is bundled with the actual map page.
-if (typeof window !== "undefined") window.APD_offerSchoolMapReady = true;
-
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -1431,7 +1401,6 @@ function renderAlertaActual() {
       ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
       : (a.revista || "Sin fecha informada");
   const abcUrl = buildPostulantesUrl(a);
-  const schoolMap = buildSchoolMapLinks(a);
 
   const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
   const nextIndex = total > 1 ? (alertasState.index + 1) % total : -1;
@@ -1493,11 +1462,7 @@ function renderAlertaActual() {
 
           <div class="alerta-actions">
             ${abcUrl ? `<a class="btn btn-primary alerta-link" href="${esc(abcUrl)}" target="_blank" rel="noopener noreferrer">Abrir postulantes en ABC</a>` : ""}
-            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.apdMap)}" target="_blank" rel="noopener noreferrer">📍 Ver escuela en mapa</a>` : ""}
-            ${schoolMap?.googleMaps ? `<a class="btn btn-secondary alerta-link" href="${esc(schoolMap.googleMaps)}" target="_blank" rel="noopener noreferrer">${schoolMap.exact ? "Ubicación verificada" : "Buscar en Google Maps"}</a>` : ""}
-            ${schoolMap ? `<a class="btn btn-secondary alerta-link" href="${schoolMap.official}" target="_blank" rel="noopener noreferrer">Mapa Escolar ABC</a>` : ""}
           </div>
-          ${schoolMap && !schoolMap.exact ? `<p class="prefs-hint">${schoolMap.clave ? "Se buscará la clave provincial exacta. Si no aparece, consultala en Mapa Escolar ABC." : "La búsqueda es orientativa: confirmá la escuela y su dirección en el Mapa Escolar oficial."}</p>` : ""}
         </article>
       </div>
 
@@ -1589,15 +1554,6 @@ function renderHistoricoCambios(cambios) {
   `;
 }
 
-function historicoCapturaEsReciente(value, now = Date.now()) {
-  const raw = String(value || "").trim();
-  // Only ISO timestamps with timezone are safe for freshness assertions.
-  if (!/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:\d{2})$/i.test(raw)) return false;
-  const instant = Date.parse(raw);
-  return Number.isFinite(instant) && instant <= now + 5 * 60000 &&
-    now - instant <= 48 * 3600000;
-}
-
 function renderHistoricoAPD(data) {
   const box = document.getElementById("panel-historico-apd");
   if (!box) return;
@@ -1614,12 +1570,6 @@ function renderHistoricoAPD(data) {
     return;
   }
 
-  // Historical snapshots are not proof of current offer status. If capture age
-  // cannot be checked, suppress all 'recent' claims instead of showing zeros.
-  const historicoReciente = historicoCapturaEsReciente(data.ultima_captura);
-  const recienteNumero = valor => historicoReciente && Number.isFinite(Number(valor))
-    ? fmtNum(valor) : "—";
-
   const lecturaRapida = [
     data.capturas_filtradas
       ? `<span class="historico-chip">Capturas filtradas: ${fmtNum(data.capturas_filtradas)}</span>`
@@ -1630,8 +1580,8 @@ function renderHistoricoAPD(data) {
     data.promedio_puntaje_primero != null
       ? `<span class="historico-chip">Puntaje del primero: ${fmtNum(data.promedio_puntaje_primero, 2)}</span>`
       : "",
-    historicoReciente && data.cierran_72h
-      ? `<span class="historico-chip">Cierran en 72h al momento de capturar: ${fmtNum(data.cierran_72h)}</span>`
+    data.cierran_72h
+      ? `<span class="historico-chip">Cierran en 72h: ${fmtNum(data.cierran_72h)}</span>`
       : ""
   ].filter(Boolean).join("");
 
@@ -1642,8 +1592,6 @@ function renderHistoricoAPD(data) {
     <div class="historico-head">
       <div class="historico-updated">Última captura: ${esc(fmtFecha(data.ultima_captura || "-"))}</div>
       <div class="historico-note">Ventana analizada: últimos ${fmtNum(data.ventana_dias)} días</div>
-      <div class="historico-note">Estadísticas de capturas guardadas; no certifican vacantes vigentes ni adjudicaciones oficiales.</div>
-      ${!historicoReciente ? '<div class="historico-note" role="status"><strong>Histórico desactualizado o sin fecha verificable.</strong> No mostramos indicadores de vigencia, cierres próximos ni cambios recientes hasta recuperar capturas recientes.</div>' : ""}
     </div>
 
     <div class="historico-grid">
@@ -1652,28 +1600,28 @@ function renderHistoricoAPD(data) {
         <span class="historico-stat-l">Ofertas únicas</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${recienteNumero(data.activas_estimadas)}</span>
-        <span class="historico-stat-l">Activas estimadas en captura</span>
+        <span class="historico-stat-n">${fmtNum(data.activas_estimadas)}</span>
+        <span class="historico-stat-l">Activas ahora</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.designadas_estimadas)}</span>
-        <span class="historico-stat-l">Designadas estimadas</span>
+        <span class="historico-stat-l">Designadas</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.anuladas_estimadas)}</span>
-        <span class="historico-stat-l">Anuladas estimadas</span>
+        <span class="historico-stat-l">Anuladas</span>
       </div>
       <div class="historico-stat">
         <span class="historico-stat-n">${fmtNum(data.desiertas_estimadas)}</span>
-        <span class="historico-stat-l">Desiertas estimadas</span>
+        <span class="historico-stat-l">Desiertas</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${recienteNumero(data.nuevas_7d)}</span>
-        <span class="historico-stat-l">Nuevas detectadas (7 días)</span>
+        <span class="historico-stat-n">${fmtNum(data.nuevas_7d)}</span>
+        <span class="historico-stat-l">Nuevas en 7 días</span>
       </div>
       <div class="historico-stat">
-        <span class="historico-stat-n">${recienteNumero(data.cambios_estado_recientes)}</span>
-        <span class="historico-stat-l">Cambios entre capturas</span>
+        <span class="historico-stat-n">${fmtNum(data.cambios_estado_recientes)}</span>
+        <span class="historico-stat-l">Cambios detectados</span>
       </div>
     </div>
 
