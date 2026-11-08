@@ -70,7 +70,9 @@ export default {
    },
    async retry({eventKey,leaseId,sent}){
     counts.retry++;
-    return eventKey===claim.event_key&&leaseId===LEASE&&sent===false;
+    // A stale lease is recoverable only by a fresh SQL claim, not settle.
+    return eventKey===claim.event_key&&leaseId===LEASE&&sent===false&&
+     mode!=='lease-expired';
    }
   };
   const plans={
