@@ -1364,6 +1364,10 @@ function buildSchoolMapLinks(alerta) {
   };
 }
 
+// Feature coupling: comparator's optional map links only appear when this
+// verified provincial-key lookup is bundled with the actual map page.
+window.APD_offerSchoolMapReady = true;
+
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
