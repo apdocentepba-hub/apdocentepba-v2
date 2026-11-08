@@ -40,7 +40,9 @@ const VALID=new Set([
  'plan-no-expiry','plan-catalog-disabled','plan-expired',
  'plan-unknown','plan-ambiguous','plan-wrong-user',
  'plan-bad-type','plan-catalog-missing','plan-catalog-other',
- 'plan-history-overflow','plan-newer-pending'
+ 'plan-history-overflow','plan-newer-pending',
+ 'plan-revoked-after','plan-paused-after','plan-expired-after',
+ 'plan-catalog-disabled-after','plan-account-down-after'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -127,6 +129,8 @@ export default {
       }]);
      }
      case '/rest/v1/users':{
+      if(mode==='plan-account-down-after'&&counts.plan>1)
+       throw Error('synthetic_subscription_server_unavailable');
       if(target.searchParams.get('id')!=='eq.'+USER||
          target.searchParams.get('select')!=='id,activo'||
          target.searchParams.get('limit')!=='2')
@@ -134,7 +138,8 @@ export default {
       if(mode==='plan-notfound')return json([]);
       return json([{
        id:mode==='plan-other'?OTHER:USER,
-       activo:mode!=='plan-inactive',
+       activo:mode!=='plan-inactive'&&
+        !(mode==='plan-revoked-after'&&counts.plan>1),
        email:'DONT_SEND_ACCOUNT_EMAIL'
       }]);
      }
@@ -151,13 +156,15 @@ export default {
        user_id:mode==='plan-wrong-user'?OTHER:USER,
        plan_code:trial?'TRIAL_7D':mode==='plan-unknown'?'UNTRUSTED_PLAN':'PLUS',
        status:mode==='plan-pending'||mode==='plan-newer-pending'?'PENDING':
+        (mode==='plan-paused-after'&&counts.plan>1)?'PAUSED':
         mode==='plan-paused'?'PAUSED':trial?'TRIALING':'ACTIVE',
        created_at:mode==='plan-stale'?'INVALID_TIME':
         iso(NOW-24*3600_000),
        trial_ends_at:trial?iso(NOW+
         (mode==='plan-trial-expired'?-10_000:3600_000)):null,
        current_period_ends_at:trial||mode==='plan-no-expiry'?null:
-        mode==='plan-expired'?iso(NOW-10_000):iso(NOW+3*3600_000),
+        mode==='plan-expired'||(mode==='plan-expired-after'&&counts.plan>1)?
+         iso(NOW-10_000):iso(NOW+3*3600_000),
        mercadopago_payer_email:'DONT_SEND_BILLING_EMAIL'
       };
       if(mode==='plan-bad-type')subscription.status=12345;
@@ -188,7 +195,8 @@ export default {
       return json([{
        code:mode==='plan-catalog-other'?'INSIGNE':
         mode==='plan-trial-valid'?'TRIAL_7D':'PLUS',
-       is_active:mode!=='plan-catalog-disabled',
+       is_active:mode!=='plan-catalog-disabled'&&
+        !(mode==='plan-catalog-disabled-after'&&counts.plan>1),
        mercadopago_plan_id:'DONT_SEND_MERCADOPAGO_REFERENCE'
       }]);
      }
@@ -275,7 +283,8 @@ export default {
    }
   });
   const repository=createMobilePushServerRepositoryLab({
-   database,plans,offers,now:()=>NOW,finalReservationRecheck:true
+   database,plans,offers,now:()=>NOW,
+   finalReservationRecheck:true,finalPlanRecheck:true
   });
   const run=createWorkerMobilePushDryRunLab({
    authorizeScheduledRun:async()=>mode!=='no-auth',
