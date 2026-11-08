@@ -14,7 +14,7 @@ const output=path.resolve('tmp/apd-comparator-browser');
 mkdirSync(output,{recursive:true});
 const profile=mkdtempSync(path.join(tmpdir(),'apd-compare-chrome-'));
 const indexSource=readFileSync('index.html','utf8');
-const bootstrap=[...indexSource.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)]
+const bootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
  .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
 assert.ok(bootstrap,'actual dashboard observer bootstrap must be present');
 const html=`<!doctype html><html lang="es"><head>
