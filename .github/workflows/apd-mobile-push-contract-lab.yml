@@ -15,6 +15,8 @@ on:
       - 'scripts/mobile-inbox-event-log-lab.mjs'
       - 'scripts/mobile-inbox-sync-endpoint-lab.mjs'
       - 'scripts/test-mobile-inbox-sync-lab.mjs'
+      - 'scripts/mobile-inbox-postgrest-repository-lab.mjs'
+      - 'scripts/test-mobile-inbox-postgrest-repository-lab.mjs'
       - 'scripts/test-mobile-push-endpoint-lab.mjs'
       - 'scripts/mobile-push-token-crypto-lab.mjs'
       - 'scripts/test-mobile-push-token-crypto-lab.mjs'
@@ -80,6 +82,8 @@ jobs:
           node --check scripts/mobile-inbox-event-log-lab.mjs
           node --check scripts/mobile-inbox-sync-endpoint-lab.mjs
           node --test scripts/test-mobile-inbox-sync-lab.mjs
+          node --check scripts/mobile-inbox-postgrest-repository-lab.mjs
+          node --test scripts/test-mobile-inbox-postgrest-repository-lab.mjs
           node --check scripts/mobile-push-token-crypto-lab.mjs
           node --test scripts/test-mobile-push-token-crypto-lab.mjs
           node --check scripts/mobile-push-dispatch-preflight-lab.mjs
