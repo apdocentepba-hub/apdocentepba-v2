@@ -22,6 +22,8 @@ on:
       - 'scripts/mobile-push-authorize-only-worker-lab.mjs'
       - 'scripts/mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-expo-receipt-journal-lab.mjs'
+      - 'scripts/mobile-push-expo-expiry-reconciler-lab.mjs'
+      - 'scripts/test-mobile-push-expo-expiry-reconciler-lab.mjs'
       - 'scripts/test-mobile-push-expo-receipt-journal-lab.mjs'
       - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
@@ -82,6 +84,8 @@ jobs:
           node --test scripts/test-mobile-push-provider-response-replay-lab.mjs
           node --check scripts/mobile-push-expo-receipt-journal-lab.mjs
           node --test scripts/test-mobile-push-expo-receipt-journal-lab.mjs
+          node --check scripts/mobile-push-expo-expiry-reconciler-lab.mjs
+          node --test scripts/test-mobile-push-expo-expiry-reconciler-lab.mjs
           node --test scripts/test-mobile-push-worker-webcrypto-lab.mjs
           node --check scripts/mobile-push-server-repository-lab.mjs
           node --test scripts/test-mobile-push-server-repository-lab.mjs
