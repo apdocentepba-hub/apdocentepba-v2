@@ -2,10 +2,15 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs';
+import {
+ fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
+} from './scripts/apd-school-geodistance.mjs';
 
 const state={
  available:[],selected:new Set(),index:0,current:null,enabled:false,
- sort:'cierre',district:'',turn:''
+ sort:'cierre',district:'',turn:'',
+ geoByKey:Object.create(null),geoRequested:false,geoWorking:false,
+ geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:''
 };
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
@@ -51,14 +56,14 @@ function syncCurrentButton() {
   selected?'Quitar de comparación':'Comparar esta oferta',
   ()=>{
    if(!key)return;
-   if(state.selected.has(key))state.selected.delete(key);
+   if(state.selected.has(key)){state.selected.delete(key);invalidateGeo();}
    else {
     if(state.selected.size>=max){
      const status=root?.querySelector('#apd-comparator-status');
      if(status)status.textContent='Podés comparar hasta cinco ofertas. Quitá una para continuar.';
      return;
     }
-    state.selected.add(key);
+    state.selected.add(key);invalidateGeo();
    }
    syncCurrentButton();
    render();
@@ -84,6 +89,50 @@ function makeSelect(labelText,options,value,change){
  return container;
 }
 function countLabel(n) {return n+' de '+max+' ofertas seleccionadas';}
+function selectedSchoolKeys(){
+ return [...new Set(selectedOffers().map(x=>verifiedSchoolKey(x.escuela)).filter(Boolean))];
+}
+function invalidateGeo(){
+ state.geoRunId++;
+ state.geoAbort?.abort();
+ state.geoAbort=null;state.geoWorking=false;state.geoRequested=false;
+ state.geoStatus='';state.geoByKey=Object.create(null);state.anchor='';
+ state.geoSignature='';
+ if(state.sort==='distancia')state.sort='cierre';
+}
+async function verifySchoolDistances(){
+ if(!state.enabled||state.geoWorking)return;
+ const codes=selectedSchoolKeys();
+ if(codes.length<2){
+  state.geoStatus='Seleccioná al menos dos escuelas con claves provinciales válidas.';
+  render();return;
+ }
+ invalidateGeo();
+ const run=state.geoRunId;
+ const controller=new AbortController();
+ state.geoAbort=controller;
+ state.geoRequested=true;state.geoWorking=true;
+ state.geoStatus='Consultando el Mapa Escolar ABC...';
+ state.geoSignature=JSON.stringify(codes);
+ render();
+ try{
+  // At most five anonymous, read-only GETs, on explicit click only.
+  const response=await fetchSelectedSchools(codes,{signal:controller.signal});
+  if(run!==state.geoRunId||!state.enabled||controller.signal.aborted)return;
+  state.geoByKey=response.verified;
+  const count=Object.keys(response.verified).length;
+  state.anchor=codes.find(key=>response.verified[key])||'';
+  state.geoStatus=count+' de '+codes.length+
+   ' escuelas con ubicación exacta verificada en ABC.';
+  if(count>=2)state.sort='distancia';
+ }catch(_){
+  if(run===state.geoRunId)state.geoStatus='No se pudieron verificar las escuelas.';
+ }finally{
+  if(run===state.geoRunId){
+   state.geoWorking=false;state.geoAbort=null;render();
+  }
+ }
+}
 function render(){
  if(!root)return;
  root.replaceChildren();
@@ -98,11 +147,14 @@ function render(){
   'Elegí ofertas del carrusel. Solo se comparan datos visibles de tu sesión; no se guardan selecciones ni se calculan chances de adjudicación.');
  root.appendChild(hint);
  if(state.selected.size){
-  const tools=node('div','apd-comparator-tools');
-  tools.appendChild(makeSelect('Ordenar por',[
-   ['cierre','Próximo cierre'],['preferencias','Distrito y turno']
-  ],state.sort,value=>{state.sort=value;render()}));
   const selected=selectedOffers();
+  const codes=selectedSchoolKeys();
+  const verifiedCount=Object.keys(state.geoByKey).length;
+  const tools=node('div','apd-comparator-tools');
+  const sortOptions=[['cierre','Próximo cierre'],['preferencias','Distrito y turno']];
+  if(verifiedCount>=2)sortOptions.push(['distancia','Distancia desde escuela elegida']);
+  tools.appendChild(makeSelect('Ordenar por',sortOptions,state.sort,
+    value=>{state.sort=value;render()}));
   const districts=[...new Set(selected.map(x=>String(x.distrito||'').trim()).filter(Boolean))].sort();
   tools.appendChild(makeSelect('Distrito preferido',[
    ['','Sin preferencia'],...districts.map(d=>[d,d])
@@ -113,12 +165,33 @@ function render(){
    ['','Sin preferencia'],...turns.map(t=>[t,t])
   ],turns.includes(state.turn)?state.turn:'',
   value=>{state.turn=value;render()}));
+  if(verifiedCount>=2){
+   tools.appendChild(makeSelect('Escuela de referencia',codes
+     .filter(key=>!!state.geoByKey[key])
+     .map(key=>[key,(state.geoByKey[key].nombre||key)+' · '+key]),state.anchor,
+     value=>{state.anchor=value;render()}));
+  }
   root.appendChild(tools);
-  root.appendChild(button('Limpiar selección',()=>{state.selected.clear();syncCurrentButton();render()},'apd-comparator-clear'));
+  if(codes.length>=2){
+   const geoButton=button(state.geoWorking?'Consultando ABC...':
+     state.geoRequested?'Actualizar ubicaciones oficiales':'Consultar distancias oficiales',
+     ()=>{void verifySchoolDistances()},'btn btn-secondary apd-comparator-geobutton');
+   geoButton.disabled=state.geoWorking;
+   root.appendChild(geoButton);
+  }
+  if(state.geoStatus){
+   const hint=node('p','apd-comparator-geo-status',state.geoStatus);
+   hint.setAttribute('role','status');root.appendChild(hint);
+  }
+  root.appendChild(button('Limpiar selección',()=>{
+    state.selected.clear();invalidateGeo();syncCurrentButton();render()
+  },'apd-comparator-clear'));
+  const origin=state.geoByKey[state.anchor]||null;
   const result=compareOffers({
    offers:selected,sortBy:state.sort,
    preferredDistricts:state.district?[state.district]:[],
-   preferredTurns:state.turn?[state.turn]:[]
+   preferredTurns:state.turn?[state.turn]:[],
+   referenceLocation:origin,verifiedGeoByKey:state.geoByKey
   });
   const list=node('ol','apd-comparator-results');
   for(const row of result.items){
@@ -135,6 +208,20 @@ function render(){
      'Cierra en '+row.horas_hasta_cierre+' h':'Cierre por verificar'
    ].join(' · '));
    entry.appendChild(meta);
+   if(state.geoRequested){
+    const verified=state.geoByKey[row.escuela.toUpperCase()];
+    const distance=state.anchor && verified && origin ?
+      row.distancia_km : null;
+    const geographic=distance===null?
+     'Ubicación sin verificar o escuela sin clave válida':
+     'A '+distance+' km en línea recta de '+state.anchor;
+    entry.appendChild(node('p','apd-comparator-distance',geographic));
+    if(verified){
+     entry.appendChild(node('p','apd-comparator-geo-detail',
+      [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
+       .filter(Boolean).join(' · ')));
+    }
+   }
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
    entry.appendChild(explanation);
    // This link only appears after the verified-key map implementation (#255)
@@ -148,12 +235,24 @@ function render(){
     entry.appendChild(link);
    }
    entry.appendChild(button('Quitar',()=>{
-    state.selected.delete(row.source_offer_key);
+    state.selected.delete(row.source_offer_key);invalidateGeo();
     syncCurrentButton();render();
    },'apd-comparator-remove'));
    list.appendChild(entry);
   }
   root.appendChild(list);
+  if(verifiedCount>=2){
+   const pairs=pairSchoolDistances(state.geoByKey,codes);
+   if(pairs.length){
+    const section=node('section','apd-comparator-pairs');
+    section.appendChild(node('h4','','Distancias entre escuelas verificadas'));
+    const pairing=node('ul','');
+    for(const pair of pairs)pairing.appendChild(node('li','',
+     pair.escuela_a+' ↔ '+pair.escuela_b+
+     ': '+pair.km_linea_recta+' km en línea recta'));
+    section.appendChild(pairing);root.appendChild(section);
+   }
+  }
   if(result.excluded.length){
    root.appendChild(node('p','apd-comparator-warning',
     result.excluded.length+' oferta(s) excluida(s): vencidas, cerradas o sin identificador válido.'));
@@ -166,7 +265,7 @@ function render(){
  status.id='apd-comparator-status';status.setAttribute('role','status');
  root.appendChild(status);
  root.appendChild(node('p','apd-comparator-disclaimer',
-  'Orientativo. Verificá condiciones, horarios, fecha de cierre y postulación en ABC. La distancia se incorporará cuando haya coordenadas verificadas.'));
+  'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
 }
 function refresh({offers=[],index=0,enabled=false}={}) {
  state.enabled=enabled===true;
@@ -188,11 +287,18 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  const matched=state.available.findIndex(x=>offerKey(x)===currentKey);
  if(matched>=0)state.index=matched;
  const valid=new Set(state.available.map(offerKey));
- for(const key of state.selected)if(!valid.has(key))state.selected.delete(key);
+ let removed=false;
+ for(const key of state.selected){
+  if(!valid.has(key)){state.selected.delete(key);removed=true;}
+ }
+ if(removed)invalidateGeo();
+ if(state.geoRequested&&
+   JSON.stringify(selectedSchoolKeys())!==state.geoSignature)invalidateGeo();
  syncCurrentButton();
  render();
 }
 function reset() {
+ invalidateGeo();
  state.enabled=false;state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
  const control=document.querySelector('#apd-comparar-oferta');
