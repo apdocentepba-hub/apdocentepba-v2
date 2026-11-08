@@ -69,6 +69,7 @@ const server=createServer((req,res)=>{
  const paths={
   '/':{type:'text/html',body:html},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
+  '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
@@ -147,6 +148,8 @@ try{
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),true);
   assert.equal(await js('typeof window.APD_comparatorRefresh'),'undefined',
    'Anonymous pages must not load comparator modules');
+  assert.equal(await js('typeof window.APD_offerSchoolMapRefresh'),'undefined',
+   'Anonymous pages must not load school mapping modules');
   await js(`(()=>{
    window.__offers=${JSON.stringify(synthetic)};
    dashboardLoadedOwner='SYNTHETIC_USER_A';
@@ -158,6 +161,7 @@ try{
    return true;
   })()`);
   await until('typeof window.APD_comparatorRefresh==="function" && !document.getElementById("apd-comparador-panel").hidden');
+  await until('typeof window.APD_offerSchoolMapRefresh==="function" && !!document.getElementById("apd-map-school-link")');
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),false);
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
   for(let i=0;i<5;i++){
@@ -183,10 +187,16 @@ try{
   assert.equal(state.escapeVisible,true);
   assert.equal(await js('window.__wfsRequests.length'),0,
    'No WFS requests may occur before the explicit button is clicked');
-  assert.equal(state.hasOfficialMap,false,'Map links must remain hidden if map implementation is absent');
-  await js('window.APD_offerSchoolMapReady=true;window.APD_comparatorRefresh({offers:window.__offers,index:4,enabled:true});true');
-  assert.equal(await js('!!document.querySelector(".apd-comparator-map-link")'),true,
-   'Map link becomes available only when verified-key map code is present');
+  assert.equal(await js('window.APD_offerSchoolMapReady'),true,
+   'Verified exact-key map overlay should be loaded without touching the core app');
+  assert.equal(state.hasOfficialMap,true,
+   'Comparator map links must use the integrated verified-school map');
+  assert.equal(await js('!!document.querySelector(".apd-comparator-map-link")'),true);
+  assert.match(await js('document.querySelector(".apd-comparator-map-link").href'),
+   /mapa-escuelas-pba\.html\?clave=0005MS0004/);
+  assert.ok((await js('document.querySelector("#apd-map-school-link")?.href||""'))
+   .includes('mapa-escuelas-pba.html?clave='),
+   'The carousel itself also has the exact-school map link');
   const geoAvailable=await js('!!document.querySelector(".apd-comparator-geobutton")');
   assert.equal(geoAvailable,true,'Optional official distance action should appear');
   await js('document.querySelector(".apd-comparator-geobutton").click();true');
