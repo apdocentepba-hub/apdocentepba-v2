@@ -43,7 +43,7 @@ test('real Worker turno adapter accepts M and MT and rejects TT for mañana',()=
  assert.equal(run({...offer(),turno:'MT'},prefs()),true);
  assert.equal(run({...offer(),turno:'TT'},prefs()),false);
 });
-test('real Worker applies user's selected district and cargos_apd, not ABC flags',()=>{
+test("real Worker applies user district and cargos_apd, not ABC flags",()=>{
  const p=prefs();
  p.distrito_principal_apd='QUILMES';
  p.cargos_apd=['PROFESOR'];
