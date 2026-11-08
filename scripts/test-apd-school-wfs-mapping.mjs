@@ -30,7 +30,7 @@ function createLab({clave='0005MS0004',reply,fail=false}={}){
  };
  vm.createContext(ctx);
  vm.runInContext(fragment,ctx);
- return {...ctx,calls,errors};
+ return Object.assign(ctx,{calls,errors});
 }
 const item=(code='0005MS0004',lat=-34.68,lon=-58.34)=>({
  properties:{clave:code,nombre:'Escuela Secundaria 4',cue:'061002000',calle:'Calle Prueba',nro:'100',
