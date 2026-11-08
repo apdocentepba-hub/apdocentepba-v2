@@ -34,8 +34,7 @@ function leaseMatches(record,claim,now){
  if(!record||typeof record!=='object'||record.status!=='leased'||
     record.event_key!==claim.event_key||record.user_id!==claim.user_id||
     record.device_id!==claim.device_id||record.lease_id!==claim.lease_id||
-    record.source_offer_key!==claim.source_offer_key||
-    record.transport!==claim.transport)return false;
+    record.source_offer_key!==claim.source_offer_key)return false;
  const end=Date.parse(record.leased_until);
  return typeof record.leased_until==='string'&&
    Number.isFinite(end)&&end>now;
