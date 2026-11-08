@@ -21,6 +21,8 @@ import {matchWithCurrentPreferences}
  from './generated-apd-matcher-lab.mjs';
 import {createMobilePushProviderReplayLab}
  from '../mobile-push-provider-response-replay-lab.mjs';
+import {createMobileExpoReceiptJournalLab}
+ from '../mobile-push-expo-receipt-journal-lab.mjs';
 
 const USER='11111111-1111-4111-8111-111111111111';
 const OTHER='22222222-2222-4222-8222-222222222222';
@@ -80,7 +82,8 @@ export default {
   if(request.method!=='GET')return json({error:'method_not_allowed'},405);
   if(!VALID.has(mode))return json({error:'not_found'},404);
   const counts={claim:0,lease:0,device:0,cancel:0,retry:0,
-   abc:0,prefs:0,match:0,plan:0,prepare:0,unauthorizedRequests:0};
+   abc:0,prefs:0,match:0,plan:0,prepare:0,
+   expoTicket:0,expoReceipt:0,unauthorizedRequests:0};
   const realHash=await eventHash();
   const claim={
    event_key:mode==='wrong-hmac'?'0'.repeat(64):realHash,
@@ -237,6 +240,31 @@ export default {
       if(counts.prepare>1)throw Error('double_dispatch_authorization');
       return json('66666666-6666-4666-8666-666666666666');
      }
+     case '/rest/v1/rpc/apd_mobile_expo_record_ticket':{
+      counts.expoTicket++;
+      const body=JSON.parse(opts.body);
+      if(!mode.startsWith('mock-expo')||opts.method!=='POST'||
+         body.p_event_key!==claim.event_key||
+         body.p_dispatch_id!=='66666666-6666-4666-8666-666666666666'||
+         body.p_ticket_id!=='11111111-1111-4111-8111-111111111111'||
+         Object.keys(body).length!==3||counts.expoTicket!==1)
+       throw Error('untrusted_expo_ticket_correlation');
+      return json(true);
+     }
+     case '/rest/v1/rpc/apd_mobile_expo_record_receipt':{
+      counts.expoReceipt++;
+      const body=JSON.parse(opts.body);
+      const expected=mode==='mock-expo-unregistered'?'invalid_device':
+       'provider_accepted';
+      if(!mode.startsWith('mock-expo')||opts.method!=='POST'||
+         body.p_event_key!==claim.event_key||
+         body.p_dispatch_id!=='66666666-6666-4666-8666-666666666666'||
+         body.p_ticket_id!=='11111111-1111-4111-8111-111111111111'||
+         body.p_outcome!==expected||
+         Object.keys(body).length!==4||counts.expoReceipt!==1)
+       throw Error('untrusted_expo_receipt_correlation');
+      return json(true);
+     }
      case '/rest/v1/rpc/apd_mobile_cancel_push':{
       counts.cancel++;
       if(JSON.parse(opts.body).p_lease_id!==LEASE)
@@ -313,7 +341,7 @@ export default {
   // Provider "simulation" is a PURE in-memory replay after SQL prepare.
   // It has no fetch, token, recipient, server key, provider URL or ACK RPC.
   // In particular: provider_calls stays 0 and SQL never changes to sent.
-  let replay=null;
+  let replay=null,journalReport=null;
   if(mode.startsWith('mock-')&&outcome.prepared===1){
    const expo=mode.startsWith('mock-expo');
    const sim=createMobilePushProviderReplayLab({
@@ -343,6 +371,29 @@ export default {
     {httpStatus:503}:mode==='mock-fcm-unregistered'?
     fcmInvalid:fcmAccepted;
    sim.submit(start);
+   if(expo){
+    const journal=createMobileExpoReceiptJournalLab({database});
+    const recorded=await journal.recordSyntheticTicket({
+     eventKey:claim.event_key,
+     dispatchId:'66666666-6666-4666-8666-666666666666',
+     providerReply:okTicket
+    });
+    let observed=null;
+    if(mode!=='mock-expo-ticket'){
+     observed=await journal.recordSyntheticReceipt({
+      eventKey:claim.event_key,
+      dispatchId:'66666666-6666-4666-8666-666666666666',
+      ticketId:ticket,
+      providerReply:mode==='mock-expo-unregistered'?
+       invalidReceipt:okReceipt
+     });
+    }
+    journalReport={
+     ticket_stored:recorded.stored,
+     receipt_recorded:observed?.stored??false,
+     observed_status:observed?.observed_status??null
+    };
+   }
    if(mode==='mock-expo-receipt')sim.receipt(okReceipt);
    if(mode==='mock-expo-unregistered')sim.receipt(invalidReceipt);
    if(mode==='mock-expo-timeout-late'){
@@ -357,6 +408,7 @@ export default {
    replay=sim.snapshot();
   }
   // The diagnostic never includes offer IDs, user IDs, tokens or API key.
-  return json({...outcome,counts,...(replay?{replay}:{})});
+  return json({...outcome,counts,...(replay?{replay}:{}),
+   ...(journalReport?{journal:journalReport}:{})});
  }
 };
