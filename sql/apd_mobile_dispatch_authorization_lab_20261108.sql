@@ -113,6 +113,7 @@ DECLARE v_state text;v_count integer;
 BEGIN
  IF p_event_key IS NULL OR p_event_key !~ '^[0-9a-f]{64}$'
     OR p_dispatch_id IS NULL
+    OR p_outcome IS NULL
     OR p_outcome NOT IN ('accepted','rejected','uncertain')
  THEN RETURN false; END IF;
  PERFORM 1 FROM public.apd_mobile_push_outbox o
@@ -199,6 +200,13 @@ BEGIN
  END IF;
  RETURN NEW;
 END; $$;
+
+DROP TRIGGER IF EXISTS apd_mobile_revocation_cancels_pending
+ ON public.apd_mobile_push_devices;
+CREATE TRIGGER apd_mobile_revocation_cancels_pending
+ AFTER UPDATE OF enabled,opted_in,revoked_at
+ ON public.apd_mobile_push_devices
+ FOR EACH ROW EXECUTE FUNCTION public.apd_mobile_cancel_revoked_device();
 
 -- Crucial: legacy finish_push(p_sent=true) MUST NOT bypass the
 -- authorization table. All future provider receipts use resolve_dispatch.
