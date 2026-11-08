@@ -13,6 +13,11 @@ on:
       - 'scripts/test-mobile-push-expo-receipt-journal-lab.mjs'
       - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
       - 'scripts/mobile-push-server-repository-lab.mjs'
+      - 'scripts/mobile-inbox-event-log-lab.mjs'
+      - 'scripts/mobile-inbox-sync-endpoint-lab.mjs'
+      - 'scripts/test-mobile-inbox-sync-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs'
       - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
       - 'scripts/mobile-push-subscription-verifier-lab.mjs'
       - 'scripts/test-mobile-push-subscription-verifier-lab.mjs'
@@ -78,6 +83,10 @@ jobs:
           node --test scripts/test-mobile-workerd-actual-matcher-runtime-lab.mjs
           node --check scripts/fixtures/apd-mobile-fullchain-workerd-fixture-lab.mjs
           node --test scripts/test-mobile-workerd-fullchain-runtime-lab.mjs
+          node --check scripts/mobile-inbox-event-log-lab.mjs
+          node --check scripts/mobile-inbox-sync-endpoint-lab.mjs
+          node --check scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs
       - name: Ensure no application or Worker production files changed
         run: |
           git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js
