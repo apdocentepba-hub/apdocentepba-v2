@@ -244,3 +244,86 @@ test('poll window never expands beyond 20, never trusts truncation or stale resu
  await assert.rejects(()=>db.listExpoPendingReceiptChecks({nowMs:NOW,limit:25}),
   /invalid_receipt_poll_window/);
 });
+
+
+test('private reconciliation quarantines at most bounded expired Expo receipts',async()=>{
+ const calls=[];
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async(url,opts)=>{
+   calls.push(new URL(url).pathname);
+   assert.equal(new URL(url).pathname,
+    '/rest/v1/rpc/apd_mobile_expo_expire_missing_receipts');
+   assert.equal(opts.method,'POST');
+   assert.equal(opts.headers.apikey,SECRET);
+   assert.deepEqual(JSON.parse(opts.body),{p_limit:3});
+   assert.equal(opts.credentials,'omit');
+   return response(2);
+  }
+ });
+ const expired=await db.expireMissingExpoReceipts({limit:3});
+ assert.equal(expired,2);
+ assert.equal(calls.length,1);
+});
+test('expired ticket result cannot be fabricated, unbounded, or marked delivered',async()=>{
+ let fetches=0;
+ for(const value of [-1,4,'2',{},[],null]){
+  const db=createMobilePushPostgrestAdapterLab({
+   projectUrl:PROJECT,secretKey:SECRET,
+   fetchImpl:async()=>{fetches++;return response(value);}
+  });
+  await assert.rejects(()=>db.expireMissingExpoReceipts({limit:3}),
+   /invalid_expo_expiry_result/);
+ }
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async()=>{fetches++;return response(0);}
+ });
+ for(const limit of [0,-1,21,0.5,'10',null])
+  await assert.rejects(()=>db.expireMissingExpoReceipts({limit}),
+   /invalid_expo_expiry_bounds/);
+ assert.equal(fetches,6);
+});
+test('late Expo observation stores only status without reopening outbox or retrying',async()=>{
+ const calls=[];
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async(url,opts)=>{
+   calls.push(new URL(url).pathname);
+   assert.equal(new URL(url).pathname,
+    '/rest/v1/rpc/apd_mobile_expo_record_late_observation');
+   assert.equal(opts.method,'POST');
+   assert.equal(opts.headers.apikey,SECRET);
+   assert.deepEqual(JSON.parse(opts.body),{
+    p_event_key:EVENT,p_dispatch_id:DISPATCH,p_ticket_id:TICKET,
+    p_outcome:'provider_accepted'
+   });
+   return response(true);
+  }
+ });
+ assert.equal(await db.recordLateExpoObservation({
+  eventKey:EVENT,dispatchId:DISPATCH,ticketId:TICKET,
+  outcome:'provider_accepted'
+ }),true);
+ assert.deepEqual(calls,[
+  '/rest/v1/rpc/apd_mobile_expo_record_late_observation'
+ ]);
+});
+test('spoofed late observation and fictitious device delivery are rejected',async()=>{
+ let calls=0;
+ const db=createMobilePushPostgrestAdapterLab({
+  projectUrl:PROJECT,secretKey:SECRET,
+  fetchImpl:async()=>{calls++;return response(true);}
+ });
+ for(const v of [
+  {eventKey:'bad',dispatchId:DISPATCH,ticketId:TICKET,outcome:'provider_accepted'},
+  {eventKey:EVENT,dispatchId:'bad',ticketId:TICKET,outcome:'provider_accepted'},
+  {eventKey:EVENT,dispatchId:DISPATCH,ticketId:'bad/id',outcome:'provider_accepted'},
+  {eventKey:EVENT,dispatchId:DISPATCH,ticketId:TICKET,outcome:'delivered'},
+  {eventKey:EVENT,dispatchId:DISPATCH,ticketId:TICKET,outcome:'pending'}
+ ]){
+  await assert.rejects(()=>db.recordLateExpoObservation(v),
+   /invalid_expo_late_reference|invalid_expo_late_observation/);
+ }
+ assert.equal(calls,0);
+});
