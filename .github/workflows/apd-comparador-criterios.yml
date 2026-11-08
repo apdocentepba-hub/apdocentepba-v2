@@ -5,6 +5,12 @@ on:
     paths:
       - 'scripts/apd-comparador-criterios.mjs'
       - 'scripts/test-apd-comparador-criterios.mjs'
+      - 'scripts/test-apd-comparador-ui-contract.mjs'
+      - 'scripts/test-apd-comparador-browser.mjs'
+      - 'apd_comparador_panel.mjs'
+      - 'apd_comparador_panel.css'
+      - 'index.html'
+      - 'app_v2.js'
       - '.github/workflows/apd-comparador-criterios.yml'
 
 permissions:
@@ -13,7 +19,7 @@ permissions:
 jobs:
   comparator:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,4 +29,14 @@ jobs:
         run: |
           node --check scripts/apd-comparador-criterios.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
-          node --test scripts/test-apd-comparador-criterios.mjs
+          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs
+      - name: 'Chromium QA: private access, safe offer selection and mobile layout'
+        run: node scripts/test-apd-comparador-browser.mjs
+      - name: Browser QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-comparador-browser-qa
+          path: tmp/apd-comparator-browser/*.png
+          retention-days: 7
+          if-no-files-found: ignore
