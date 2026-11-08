@@ -21,7 +21,7 @@ const encode=new TextEncoder();
 const CASES=new Set([
  'ready','expired','closed','revoked','stale-plan',
  'forged-hmac','mismatch-user','missing-context','missing-secret',
- 'mismatch-transport','unavailable'
+ 'mismatch-transport','unavailable','unauthorized'
 ]);
 async function createClaim(){
  const key=await crypto.subtle.importKey('raw',encode.encode(SECRET),
@@ -102,8 +102,7 @@ export default {
    }
   };
   const job=createWorkerMobilePushDryRunLab({
-   authorizeScheduledRun:async()=>mode!=='unavailable'&&mode!=='missing-context'
-     ?mode!=='missing-secret':true,
+   authorizeScheduledRun:async()=>mode!=='unauthorized',
    repository,
    hmacSecret:mode==='missing-secret'?null:SECRET,
    now:()=>NOW
