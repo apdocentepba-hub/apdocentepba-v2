@@ -86,7 +86,7 @@ test('at most five unique provincial keys are queried on explicit call',async()=
  const result=await fetchSelectedSchools([code,code,tcode,'0005AP0004'],{
   fetchImpl:async (url,opts)=>{
    observed.push(new URL(url).searchParams.get('CQL_FILTER'));
-   const key=String(new URL(url).searchParams.get('CQL_FILTER')).slice(6,-1);
+   const key=String(new URL(url).searchParams.get('CQL_FILTER')).slice(7,-1);
    return response([feature(key)]);
   }
  });
