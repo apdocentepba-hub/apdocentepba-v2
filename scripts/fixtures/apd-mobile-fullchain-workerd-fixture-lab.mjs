@@ -23,6 +23,8 @@ import {createMobilePushProviderReplayLab}
  from '../mobile-push-provider-response-replay-lab.mjs';
 import {createMobileExpoReceiptJournalLab}
  from '../mobile-push-expo-receipt-journal-lab.mjs';
+import {createMobileExpoExpiryReconcilerLab}
+ from '../mobile-push-expo-expiry-reconciler-lab.mjs';
 
 const USER='11111111-1111-4111-8111-111111111111';
 const OTHER='22222222-2222-4222-8222-222222222222';
@@ -50,7 +52,8 @@ const VALID=new Set([
  'dispatch-denied','dispatch-malformed','dispatch-down',
  'mock-expo-ticket','mock-expo-receipt','mock-expo-timeout-late',
  'mock-expo-revoked-late','mock-expo-unregistered',
- 'mock-fcm-accepted','mock-fcm-unknown','mock-fcm-unregistered'
+ 'mock-fcm-accepted','mock-fcm-unknown','mock-fcm-unregistered',
+ 'reconcile-expired','reconcile-denied','reconcile-db-down'
 ]);
 const iso=t=>new Date(t).toISOString();
 const json=(value,status=200)=>Response.json(value,{
@@ -83,7 +86,7 @@ export default {
   if(!VALID.has(mode))return json({error:'not_found'},404);
   const counts={claim:0,lease:0,device:0,cancel:0,retry:0,
    abc:0,prefs:0,match:0,plan:0,prepare:0,
-   expoTicket:0,expoReceipt:0,unauthorizedRequests:0};
+   expoTicket:0,expoReceipt:0,expiry:0,unauthorizedRequests:0};
   const realHash=await eventHash();
   const claim={
    event_key:mode==='wrong-hmac'?'0'.repeat(64):realHash,
@@ -240,6 +243,17 @@ export default {
       if(counts.prepare>1)throw Error('double_dispatch_authorization');
       return json('66666666-6666-4666-8666-666666666666');
      }
+     case '/rest/v1/rpc/apd_mobile_expo_expire_missing_receipts':{
+      counts.expiry++;
+      const a=JSON.parse(opts.body);
+      if(!mode.startsWith('reconcile-')||
+         opts.method!=='POST'||a.p_limit!==5||
+         Object.keys(a).length!==1||counts.expiry>1)
+       throw Error('unbounded_expo_receipt_maintenance');
+      if(mode==='reconcile-db-down')
+       throw Error('SYNTHETIC_MAINTENANCE_DB_OFFLINE');
+      return json(2);
+     }
      case '/rest/v1/rpc/apd_mobile_expo_record_ticket':{
       counts.expoTicket++;
       const body=JSON.parse(opts.body);
@@ -309,6 +323,18 @@ export default {
   const database=createMobilePushPostgrestAdapterLab({
    projectUrl:DB,secretKey:API_KEY,fetchImpl
   });
+  if(mode.startsWith('reconcile-')){
+   const job=createMobileExpoExpiryReconcilerLab({
+    database,
+    authorizeMaintenanceRun:async()=>mode!=='reconcile-denied'
+   });
+   const reconciliation=await job({fixtureOnly:true,limit:5});
+   // Pure private DB maintenance; no ABC, HMAC, provider or device token.
+   return json({
+    ok:reconciliation.ok,reconciliation,counts,
+    provider_calls:0
+   });
+  }
   const authoritativeSubscriptions=createMobilePushSubscriptionVerifierLab({
    database,now:()=>NOW
   });
