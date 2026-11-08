@@ -12,6 +12,9 @@ on:
       - 'scripts/mobile-push-strict-session-lab.mjs'
       - 'scripts/test-mobile-push-strict-session-lab.mjs'
       - 'scripts/mobile-push-endpoint-lab.mjs'
+      - 'scripts/mobile-inbox-event-log-lab.mjs'
+      - 'scripts/mobile-inbox-sync-endpoint-lab.mjs'
+      - 'scripts/test-mobile-inbox-sync-lab.mjs'
       - 'scripts/test-mobile-push-endpoint-lab.mjs'
       - 'scripts/mobile-push-token-crypto-lab.mjs'
       - 'scripts/test-mobile-push-token-crypto-lab.mjs'
@@ -74,6 +77,9 @@ jobs:
           node --test scripts/test-mobile-push-strict-session-lab.mjs
           node --check scripts/mobile-push-endpoint-lab.mjs
           node --test scripts/test-mobile-push-endpoint-lab.mjs
+          node --check scripts/mobile-inbox-event-log-lab.mjs
+          node --check scripts/mobile-inbox-sync-endpoint-lab.mjs
+          node --test scripts/test-mobile-inbox-sync-lab.mjs
           node --check scripts/mobile-push-token-crypto-lab.mjs
           node --test scripts/test-mobile-push-token-crypto-lab.mjs
           node --check scripts/mobile-push-dispatch-preflight-lab.mjs
