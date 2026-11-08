@@ -409,6 +409,8 @@ function borrarToken() {
   localStorage.removeItem(TOKEN_KEY);
   alertasState.items = [];
   alertasState.index = 0;
+  // Comparisons are intentionally ephemeral and must never cross sessions.
+  try { window.APD_comparatorReset?.(); } catch (_) { /* optional UI */ }
   window.APD_adminAccessConfirmed = false;
   ADMIN.enabled = false;
   ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
@@ -1338,6 +1340,18 @@ function renderPidMatchBlock(alerta, resumen) {
     </div>
   `;
 }
+function actualizarComparadorDesdeAlertas() {
+  // Graceful optional UI. Never pass authentication secrets to the comparator.
+  try {
+    window.APD_comparatorRefresh?.({
+      offers: alertasState.items,
+      index: alertasState.index,
+      enabled: !!obtenerToken() && planActual?.access_active === true
+    });
+  } catch (error) {
+    console.warn("Comparador temporalmente no disponible");
+  }
+}
 function renderAlertaActual() {
   const box = document.getElementById("panel-alertas");
   const badge = document.getElementById("alertas-badge");
@@ -1378,6 +1392,7 @@ function renderAlertaActual() {
         document.getElementById("panel-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
+    actualizarComparadorDesdeAlertas();
     return;
   }
 
@@ -1388,6 +1403,7 @@ function renderAlertaActual() {
         <p class="empty-hint">Podés dejar distritos o cargos vacíos para no filtrar por esos campos.</p>
       </div>
     `;
+    actualizarComparadorDesdeAlertas();
     return;
   }
 
@@ -1486,6 +1502,7 @@ function renderAlertaActual() {
   });
 
   cargarResumenPostulantes(a);
+  actualizarComparadorDesdeAlertas();
 }
 function alertaRow(label, value) {
   const v = String(value || "").trim();
@@ -1779,6 +1796,7 @@ async function cargarDashboard() {
     dashboardLoadedOwner = token;
     alertasState.items = [];
     alertasState.index = 0;
+    try { window.APD_comparatorReset?.(); } catch (_) { /* optional UI */ }
     ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
      "panel-alertas", "panel-plan", "panel-bienvenida", "panel-subtitulo"]
       .forEach(id => { const node = document.getElementById(id); if (node) node.textContent = ""; });
