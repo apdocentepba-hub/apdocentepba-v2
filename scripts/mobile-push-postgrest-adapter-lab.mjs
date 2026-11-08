@@ -226,6 +226,43 @@ export function createMobilePushPostgrestAdapterLab({
     throw Error('postgrest_invalid_catalog_plan');
    return Object.freeze({code:planCode,is_active:row.is_active});
   },
+  async prepareDispatch({eventKey,leaseId}={}){
+   validIds(eventKey,leaseId);
+   const ticket=await request('rpc/apd_mobile_prepare_dispatch',{
+    method:'POST',body:{p_event_key:eventKey,p_lease_id:leaseId}
+   });
+   if(ticket===null)return null;
+   if(typeof ticket!=='string'||!UUID.test(ticket))
+    throw Error('postgrest_invalid_dispatch_authorization');
+   return ticket;
+  },
+  async resolveWithoutProvider({eventKey,dispatchId,outcome}={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||''))
+    throw Error('invalid_dispatch_reference');
+   // This LAB has NO provider; a simulated success cannot mark delivery.
+   // The SQL function's 'accepted' outcome is reserved for a future
+   // server-side provider adapter with verified receipt.
+   if(outcome!=='uncertain'&&outcome!=='rejected')
+    throw Error('provider_acceptance_unsupported_in_lab');
+   const result=await request('rpc/apd_mobile_resolve_dispatch',{
+    method:'POST',body:{
+     p_event_key:eventKey,p_dispatch_id:dispatchId,p_outcome:outcome
+    }
+   });
+   if(typeof result!=='boolean')
+    throw Error('postgrest_invalid_dispatch_response');
+   return result;
+  },
+  async quarantineStaleDispatch({limit=20}={}){
+   if(!Number.isInteger(limit)||limit<1||limit>100)
+    throw Error('invalid_quarantine_bounds');
+   const n=await request('rpc/apd_mobile_quarantine_stale_dispatch',{
+    method:'POST',body:{p_limit:limit}
+   });
+   if(!Number.isInteger(n)||n<0||n>limit)
+    throw Error('postgrest_invalid_quarantine_result');
+   return n;
+  },
   async cancel({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
    const value=await request('rpc/apd_mobile_cancel_push',{
