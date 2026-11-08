@@ -25,7 +25,7 @@ export function parseClosure(value){
  }
  const iso=x.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-](\d{2}):(\d{2}))$/i);
  if(!iso)return null;
- const [,y,m,d,h,minute,second,,tz,oh,om]=iso;
+ const [,y,m,d,h,minute,second,offset,oh,om]=iso;
  if(!validDate(+y,+m,+d)||+h>23||+minute>59||+(second||0)>59||
     +(oh||0)>14||+(om||0)>59||(+oh===14&&+om>0))return null;
  const result=Date.parse(x);
