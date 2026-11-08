@@ -53,7 +53,7 @@ export function evaluateMobilePushPreflightLab({
  planMaxAgeMs=5*60_000,offerMaxAgeMs=15*60_000
 }={}){
  if(!claim||!HEX.test(claim.event_key)||!UUID.test(claim.device_id)||
-    typeof claim.lease_id!=='string'||!/^LAB-LEASE-[0-9]+$/.test(claim.lease_id)||
+    typeof claim.lease_id!=='string'||!(/^(?:LAB-LEASE-[0-9]+|[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i.test(claim.lease_id))||
     !['expo','fcm','apns'].includes(claim.transport))
   return decision(RESULT.CANCEL,'invalid_claim');
  // A missing/rotated server secret is an operational fault, never an excuse
@@ -107,11 +107,13 @@ export async function dryRunMobilePushDispatchLab({
     typeof outbox.cancelEvent!=='function'||typeof outbox.settle!=='function'||
     typeof loadContext!=='function'||typeof now!=='function')
   throw Error('missing_lab_dependencies');
- const claims=outbox.claim({limit});
+ const claims=await outbox.claim({limit});
+ if(!Array.isArray(claims)||claims.length>limit)
+  throw Error('invalid_lab_claim_batch');
  const ready=[],cancelled=[],retried=[];
  for(const claim of claims){
   let context;
-  try{context=await loadContext(claim.event_key,claim.device_id);}
+  try{context=await loadContext(claim.event_key,claim.device_id,claim);}
   catch{context=null;}
   const result=evaluateMobilePushPreflightLab({
    claim,context,hmacSecret,now:Number(now())
@@ -121,10 +123,10 @@ export async function dryRunMobilePushDispatchLab({
    ready.push(Object.freeze({event_key:claim.event_key,lease_id:claim.lease_id,
     device_id:claim.device_id,transport:claim.transport}));
   }else if(result.action===RESULT.CANCEL){
-   const applied=outbox.cancelEvent(claim.event_key,{leaseId:claim.lease_id});
+   const applied=await outbox.cancelEvent(claim.event_key,{leaseId:claim.lease_id});
    if(applied)cancelled.push(result.reason);
   }else{
-   const applied=outbox.settle({eventKey:claim.event_key,
+   const applied=await outbox.settle({eventKey:claim.event_key,
     leaseId:claim.lease_id,sent:false});
    if(applied)retried.push(result.reason);
   }
