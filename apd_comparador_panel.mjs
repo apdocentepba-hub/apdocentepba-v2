@@ -190,19 +190,9 @@ function renderSideBySide(items){
   ['Escuela',x=>x.escuela||'No informada'],
   ['Turno',x=>x.turno||'No informado'],
   ['Cierra',x=>dateText(x.cierre_ms)],
-  ['PID',x=>x.pid_match_verified===true?
-   x.pid_match_verified===true&&x.pid_match_verified!==null&&x.pid_match_verified!==undefined&&
-   x.pid_match_verified!==false&&x.pid_match_verified!==''?
-    (x.pid_match_verified&&x.pid_match_verified===true?
-     (x.pid_match_verified && x.pid_match_verified ? 'Consultar compatibilidad en ficha':'Sin verificar'):
-    'Sin verificar')
-   :'Sin verificar']
+  ['PID',x=>x.pid_match_verified===true?'Verificado: coincide':
+   x.pid_match_verified===false?'Verificado: no coincide':'No verificado']
  ];
- // Eligibility is not calculated by this comparison. A verified negative
- // should never be guessed from missing optional fields in a live offer.
- data[data.length-1]=['PID',x=>x.pid_match_verified===true?
-  'Verificado: coincide':x.pid_match_verified===false?
-  'Verificado: no coincide':'No verificado'];
  if(items.some(x=>x.distancia_km!==null))
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
    'No verificada':x.distancia_km+' km (línea recta)']);
