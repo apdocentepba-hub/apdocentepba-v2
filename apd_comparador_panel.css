@@ -1,0 +1,51 @@
+/* Candidate comparator — isolated from legacy dashboard styles. */
+#apd-comparador-panel[hidden]{display:none!important}
+.apd-comparator-panel{margin-top:18px;border:1px solid #cbd8ee;background:#f8fbff;
+ border-radius:16px;padding:16px;min-width:0;color:#15324f}
+.apd-comparator-panel *{box-sizing:border-box}
+.apd-comparator-head{display:flex;align-items:center;justify-content:space-between;
+ gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.apd-comparator-head h3{font-size:19px;margin:0;color:#122b52;line-height:1.2}
+.apd-comparator-count{font-size:13px;font-weight:700;background:#eef4ff;color:#193f7d;
+ padding:5px 10px;border-radius:10px}
+.apd-comparator-hint,.apd-comparator-disclaimer,.apd-comparator-empty{
+ margin:9px 0;font-size:13px;line-height:1.45;color:#425c78}
+.apd-comparator-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:10px;margin:14px 0}
+.apd-comparator-label{min-width:0;display:flex;flex-direction:column;gap:6px;
+ font-size:12px;font-weight:650;color:#253e62}
+.apd-comparator-select{background:#fff;width:100%;min-height:39px;border:1px solid #b7c9e1;
+ border-radius:10px;padding:8px;font:inherit;color:#17365b}
+.apd-comparator-results{list-style:decimal;margin:12px 0;padding:0 0 0 26px}
+.apd-comparator-item{padding:13px;margin:0 0 9px;border:1px solid #d6e2f2;
+ background:#fff;border-radius:12px;overflow-wrap:anywhere}
+.apd-comparator-item strong{color:#112e58;font-size:15px}
+.apd-comparator-item p{margin:5px 0;font-size:13px;line-height:1.4}
+.apd-comparator-reasons{color:#426180}
+.apd-comparator-map-link{display:inline-block;margin:8px 12px 4px 0;color:#174da2;
+ text-underline-offset:3px;font-weight:650;font-size:13px}
+.apd-comparator-clear,.apd-comparator-remove{
+ border:1px solid #b6c9e3;border-radius:9px;padding:8px 12px;background:#fff;
+ color:#214571;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.apd-comparator-remove{margin:5px 0 0}
+.apd-comparator-status,.apd-comparator-warning{font-size:13px;color:#7c4121;
+ margin:8px 0}
+@media(max-width:680px){
+ .apd-comparator-panel{padding:12px}
+ .apd-comparator-tools{grid-template-columns:minmax(0,1fr)}
+ .apd-comparator-head h3{font-size:17px}
+ .apd-comparator-item{padding:11px}
+}
+
+/* Official inter-school distances, opt-in, never the visitor's device location. */
+.apd-comparator-geobutton{display:inline-flex;align-items:center;min-height:40px;
+ margin:8px 10px 8px 0;white-space:normal}
+.apd-comparator-geobutton:disabled{opacity:.65;cursor:wait}
+.apd-comparator-geo-status{font-size:13px;color:#174a70;margin:7px 0 10px}
+.apd-comparator-distance{font-weight:700;color:#175c55}
+.apd-comparator-geo-detail{color:#435e78;font-size:12px}
+.apd-comparator-pairs{border:1px solid #d6e4f2;background:#fff;
+ padding:10px 14px;border-radius:12px;margin:12px 0}
+.apd-comparator-pairs h4{margin:0 0 8px;font-size:14px;color:#17345c}
+.apd-comparator-pairs ul{padding-left:21px;margin:0}
+.apd-comparator-pairs li{padding:3px 0;overflow-wrap:anywhere;font-size:12px;line-height:1.4}
