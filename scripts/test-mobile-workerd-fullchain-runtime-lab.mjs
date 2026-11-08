@@ -161,6 +161,22 @@ for(const [mode,expected,late] of [
   assert.equal(r.replay.submission_attempts,1);
   assert.equal(r.replay.state,expected);
   assert.equal(r.replay.late_receipt_audit_only,late);
+  if(mode.startsWith('mock-expo')){
+   assert.equal(r.counts.expoTicket,1);
+   assert.equal(r.counts.expoReceipt,
+    mode==='mock-expo-ticket'?0:1);
+   assert.equal(r.journal.ticket_stored,true);
+   assert.equal(r.journal.receipt_recorded,
+    mode!=='mock-expo-ticket');
+   assert.equal(r.journal.observed_status,
+    mode==='mock-expo-ticket'?null:
+     mode==='mock-expo-unregistered'?'invalid_device':
+      'provider_accepted');
+  }else{
+   assert.equal(r.counts.expoTicket,0);
+   assert.equal(r.counts.expoReceipt,0);
+   assert.equal(r.journal,undefined);
+  }
   for(const forbidden of [
    '11111111-1111-4111-8111-111111111111',
    '66666666-6666-4666-8666-666666666666',
