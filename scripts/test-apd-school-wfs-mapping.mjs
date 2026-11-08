@@ -41,7 +41,12 @@ test('MS and MT choose known official layers; unknown prefixes have no guessed l
  const c=createLab();
  assert.equal(c.capaWfsParaClave('0005MS0004'),'me:nivel_secundario_gestion_estatal');
  assert.equal(c.capaWfsParaClave('0005MT0006'),'me:modalidad_tecnico_profesional_secundaria_gestion_estatal');
- assert.equal(c.capaWfsParaClave('0005PP0060'),null);
+ assert.equal(c.capaWfsParaClave('0005PP0060'),'me:nivel_primario_gestion_estatal');
+ assert.equal(c.capaWfsParaClave('0005JI0917'),'me:nivel_inicial_gestion_estatal');
+ assert.equal(c.capaWfsParaClave('0005EE0503'),'me:modalidad_especial_primaria_gestion_estatal');
+ assert.equal(c.capaWfsParaClave('0085IS0024'),'me:nivel_superior_gestion_estatal');
+ assert.equal(c.capaWfsParaClave('0085MA0001'),'me:modalidad_tecnico_profesional_secundaria_gestion_estatal');
+ assert.equal(c.capaWfsParaClave('0005AP0001'),null);
  assert.equal(c.capaWfsParaClave('x0005MS0004'),null);
 });
 test('strict key join keeps official school name CUE address and exact coordinates',()=>{
