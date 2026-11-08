@@ -62,7 +62,12 @@ const scenarios=[
  ['plan-catalog-missing',0,1,0,true],
  ['plan-catalog-other',0,0,1,true],
  ['plan-history-overflow',0,0,1,true],
- ['plan-newer-pending',0,1,0,true]
+ ['plan-newer-pending',0,1,0,true],
+ ['plan-revoked-after',0,1,0,true],
+ ['plan-paused-after',0,1,0,true],
+ ['plan-expired-after',0,1,0,true],
+ ['plan-catalog-disabled-after',0,1,0,true],
+ ['plan-account-down-after',0,0,1,true]
 ];
 for(const [mode,ready,cancelled,retried,ok] of scenarios){
  test('private SQL + ABC + actual APD matcher + WebCrypto /'+mode,async()=>{
@@ -91,6 +96,10 @@ for(const [mode,ready,cancelled,retried,ok] of scenarios){
    assert.equal(r.counts.device,2);
    assert.equal(r.counts.cancel,1);
   }
+  if(mode==='plan-revoked-after'||mode==='plan-paused-after'||
+     mode==='plan-expired-after'||mode==='plan-catalog-disabled-after'||
+     mode==='plan-account-down-after')
+   assert.equal(r.counts.plan,2);
   if(mode==='no-auth'){
    assert.equal(r.reason,'not_authorized');
    assert.equal(r.counts.claim,0);
