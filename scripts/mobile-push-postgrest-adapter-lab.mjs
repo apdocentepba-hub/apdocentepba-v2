@@ -96,6 +96,53 @@ export function createMobilePushPostgrestAdapterLab({
  }
 
  return Object.freeze({
+  async inboxPageLab({userId,after=0,limit=5}={}){
+   if(typeof userId!=='string'||!UUID.test(userId)||
+      !Number.isSafeInteger(after)||after<0||after>100000||
+      !Number.isInteger(limit)||limit<1||limit>20)
+    throw Error('invalid_private_inbox_page');
+   const result=await request('rpc/apd_mobile_inbox_page_lab',{
+    method:'POST',body:{
+     p_user_id:userId,p_after:after,p_limit:limit
+    }
+   });
+   if(!result||typeof result!=='object'||Array.isArray(result))
+    throw Error('invalid_private_inbox_result');
+   return result; // HTTP handler separately whitelists ALL output fields.
+  },
+  async inboxAckReadLab({userId,id,revision}={}){
+   if(typeof userId!=='string'||!UUID.test(userId)||
+      typeof id!=='string'||!/^DEMO-AVISO-00[1-4]$/.test(id)||
+      !Number.isInteger(revision)||revision<1||revision>100000)
+    throw Error('invalid_private_inbox_ack');
+   const result=await request('rpc/apd_mobile_inbox_ack_read_lab',{
+    method:'POST',body:{
+     p_user_id:userId,p_notice_id:id,p_revision:revision
+    }
+   });
+   if(!result||typeof result!=='object'||Array.isArray(result))
+    throw Error('invalid_private_inbox_result');
+   return result;
+  },
+  async inboxAppendTrustedDemoLab({userId,id,offerId,revision,status}={}){
+   if(typeof userId!=='string'||!UUID.test(userId)||
+      typeof id!=='string'||!/^DEMO-AVISO-00[1-4]$/.test(id)||
+      typeof offerId!=='string'||!/^DEMO-APD-00[1-4]$/.test(offerId)||
+      id.slice(-3)!==offerId.slice(-3)||
+      !Number.isInteger(revision)||revision<1||revision>100000||
+      !['active','cancelled'].includes(status))
+    throw Error('invalid_private_inbox_event');
+   // Trusted server fixture only. NEVER accessible via mobile HTTP routes.
+   const result=await request('rpc/apd_mobile_inbox_append_event_lab',{
+    method:'POST',body:{
+     p_user_id:userId,p_notice_id:id,p_offer_id:offerId,
+     p_revision:revision,p_status:status
+    }
+   });
+   if(typeof result!=='boolean')
+    throw Error('invalid_private_inbox_result');
+   return result;
+  },
   async claim({limit,leaseSeconds}={}){
    if(!Number.isInteger(limit)||limit<1||limit>10||
       !Number.isInteger(leaseSeconds)||leaseSeconds<10||leaseSeconds>120)
