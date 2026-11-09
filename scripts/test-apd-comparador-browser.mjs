@@ -132,6 +132,13 @@ const synthetic=Array.from({length:6},(_,i)=>({
  distrito:i%2?'QUILMES':'AVELLANEDA',turno:i%2?'Tarde':'Mañana',
  descripcioncargo:i===1?'<img src=x onerror=alert(1)>':'MATEMÁTICA '+i,
  finoferta:i===0?'2035-12-10T10:00:00Z':`2035-12-${String(10+i).padStart(2,'0')}T10:00:00-03:00`,
+ pid_compatible:i<2?true:undefined,
+ pid_puntaje_total_final:i===0?'38,10':i===1?'45,00':undefined,
+ pid_listado:i<2?'oficial':undefined,
+ dias_horarios:i===0?'Lunes a Viernes: 7:20 a 11:50':i===1?'Lunes a Viernes: 14:00 a 18:30':'',
+ hsmodulos:i<2?'4':'',revista:i===0?'Suplencia':i===1?'Provisional':'',
+ supl_desde:i<2?'2035-11-10T00:00:00Z':'',
+ supl_hasta:i===0?'2036-01-01T00:00:00Z':i===1?'2036-02-01T00:00:00Z':'',
  estado:'PUBLICADA'
 }));
 const results=[];
@@ -177,6 +184,27 @@ try{
     return true;
    })()`);
    await until('!!document.getElementById("apd-comparar-oferta")');
+   // Simulate the already-rendered summary from the existing card, no GET.
+   if(i<2)await js(`(()=>{
+    const count=${i===0?25:16};
+    const first=${JSON.stringify(i===0?'42,60':'39,00')};
+    const holder=document.createElement('div');
+    holder.id='alerta-postulantes-meta';
+    holder.className='alerta-meta-card';
+    const fields=[['Postulantes',String(count)],['Puntaje del primero',first],['Listado del primero','oficial']];
+    const grid=document.createElement('div');
+    grid.className='alerta-meta-grid';
+    for(const [label,value] of fields){
+     const item=document.createElement('div');
+     item.className='alerta-meta-item';
+     const k=document.createElement('span');k.className='alerta-meta-k';k.textContent=label;
+     const v=document.createElement('strong');v.className='alerta-meta-v';v.textContent=value;
+     item.append(k,v);grid.appendChild(item);
+    }
+    holder.appendChild(grid);
+    document.querySelector('.alerta-main-card').appendChild(holder);
+    return true;
+   })()`);
    await js('document.getElementById("apd-comparar-oferta").click();true');
    if(i===1){
     await until('!!document.querySelector(".apd-comparator-side-by-side")');
@@ -190,13 +218,25 @@ try{
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
      /Comparación lado a lado/);
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
-     /No verificado/);
+     /Coincide según el panel/);
     assert.equal(await js('document.querySelector(".apd-comparator-head h3")?.tabIndex'),-1);
     // A real user must see a modal, even if the original panel is clipped.
     await until('document.getElementById("apd-comparison-dialog")?.open===true');
     assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table thead th").length'),3);
     assert.ok(await js('document.getElementById("apd-comparison-dialog").getBoundingClientRect().width<=innerWidth'));
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
+    const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
+    assert.match(bodyText,/Diferencias detectadas/);
+    assert.match(bodyText,/Días y horarios/);
+    assert.match(bodyText,/Postulantes visibles/);
+    assert.match(bodyText,/42,60/);
+    assert.match(bodyText,/38,10/);
+    assert.match(bodyText,/-4,50/);
+    assert.match(bodyText,/25/);
+    assert.match(bodyText,/16/);
+    assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-focus.apd-comparator-show-all")'),null);
+    await js('document.querySelector("#apd-comparison-dialog .apd-comparator-expand").click();true');
+    assert.equal(await js('!!document.querySelector("#apd-comparison-dialog .apd-comparator-show-all")'),true);
     const firstDeadline=await js('document.querySelector("#apd-comparison-dialog .apd-comparator-table tbody tr:nth-child(5) td")?.textContent||""');
     assert.match(firstDeadline,/10:00/,'ABC finoferta Z must remain 10:00 local, not 07:00');
     await js('document.getElementById("apd-comparison-close").click();true');
@@ -204,7 +244,7 @@ try{
     // Emulate production CSS hiding the underlying results card.
     await js('document.getElementById("apd-comparador-panel").style.display="none";document.getElementById("apd-ver-comparacion").click();true');
     await until('document.getElementById("apd-comparison-dialog")?.open===true');
-    assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table tbody tr").length'),6);
+    assert.ok(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table tbody tr").length>=16'));
     await js('document.getElementById("apd-comparador-panel").style.display="";document.getElementById("apd-comparison-close").click();true');
     await until('!document.getElementById("apd-comparison-dialog")');
    }

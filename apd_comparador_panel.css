@@ -125,3 +125,17 @@
  .apd-comparator-modal-head h2{font-size:16px}
  .apd-comparator-modal-body{padding:11px}
 }
+
+/* Decision-focused comparator: show relevant facts and actual differences first. */
+.apd-comparator-difference-summary{background:#e8f5f4;color:#174a46;
+ border:1px solid #c9e9e5;padding:11px 13px;border-radius:11px;
+ font-size:13px;font-weight:750;line-height:1.55;margin:10px 0}
+.apd-comparator-view-tools{display:flex;align-items:center;gap:12px;
+ flex-wrap:wrap;margin:10px 0}
+.apd-comparator-view-tools .apd-comparator-hint{margin:0}
+.apd-comparator-expand{border:1px solid #aac6da;border-radius:9px;
+ background:#fff;padding:8px 12px;color:#174667;font-weight:800;cursor:pointer}
+.apd-comparator-focus .apd-comparator-same{display:none}
+.apd-comparator-focus.apd-comparator-show-all .apd-comparator-same{display:table-row}
+.apd-comparator-table .apd-comparator-priority th{background:#f3f8ff}
+.apd-comparator-table .apd-comparator-priority td{background:#fbfdff}

@@ -12,13 +12,13 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-abcwall1'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-decision1'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
 test('comparison happens locally; no storage, network, tokens, or data exports',()=>{
  assert.doesNotMatch(ui,/\bfetch\s*\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|Authorization|navigator\.geolocation|indexedDB/i);
- assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs\?v=20261109-abcwall1'/);
+ assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs\?v=20261109-decision1'/);
  assert.match(ui,/state\.selected\.clear\(\)/);
 });
 test('access gated by active authenticated plan and reset when session changes',()=>{
@@ -56,9 +56,27 @@ test('comparison is findable and shows side-by-side differences without PID infe
  assert.match(ui,/Comparación lado a lado/);
  assert.match(ui,/class.*apd-comparator-table-scroll|apd-comparator-table-scroll/);
  assert.match(ui,/apd-comparator-diff/);
- assert.match(ui,/No verificado/);
+ assert.match(ui,/Sin información PID/);
  assert.match(css,/#apd-comparador-panel\{scroll-margin-top/);
  assert.match(css,/\.apd-comparator-table-scroll\{/);
  assert.match(css,/overflow-x:auto/);
  assert.match(css,/#panel-alertas \.alerta-row\{/);
+});
+
+test('decision table reads only already visible applicant summaries with strict isolation',()=>{
+ assert.match(ui,/function captureVisibleApplicants\(\)/);
+ assert.match(ui,/function readApplicantSummaries\(offers\)/);
+ assert.match(ui,/document\.querySelector\('#panel-alertas \.alerta-main-card #alerta-postulantes-meta'\)/);
+ assert.match(ui,/observedApplicants\.clear\(\)/);
+ assert.match(ui,/applicantObserver\?\.disconnect\(\)/);
+ assert.match(ui,/Postulantes visibles/);
+ assert.match(ui,/Días y horarios/);
+ assert.match(ui,/Diferencia de puntos/);
+ assert.match(ui,/Mostrar todos los datos/);
+ assert.match(ui,/Consultá la ficha para cargar/);
+ const read=ui.split('function captureVisibleApplicants() {')[1]
+  ?.split('function refresh(')[0];
+ assert.ok(read);
+ assert.doesNotMatch(read,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|Authorization/);
+ assert.doesNotMatch(app,/APD_readCachedApplicantsForComparison/);
 });
