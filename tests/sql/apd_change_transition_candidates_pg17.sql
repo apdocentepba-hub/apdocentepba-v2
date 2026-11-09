@@ -115,8 +115,9 @@ BEGIN
 
  -- This is a SERVER-created fingerprint, independent of the untrusted
  -- caller-provided evidenceHash. Not an ABC signature.
+ -- Exclude later read instant so a repeated double check stays idempotent.
  v_fingerprint:=md5(jsonb_build_array(v_scope,v_claim_hash,
-  p_source_offer_key,v_prev,v_later,v_stored.fingerprint,
+  p_source_offer_key,v_prev,v_stored.fingerprint,
   'PUBLICADA','ANULADA')::text);
  DELETE FROM apd_change_lab.transition_candidates
  WHERE scope=v_scope AND expires_at<=v_later;
