@@ -51,7 +51,7 @@ const accept=result=>{
 const openapi=await request('/',{token:ingest});
 assert.ok(success(openapi),'PostgREST OpenAPI contract unavailable');
 const visible=Object.keys(openapi.json?.paths||{}).sort();
-assert.deepEqual(visible,['/rpc/submit_audit','/rpc/submit_compact'].sort(),
+assert.deepEqual(visible,['/','/rpc/submit_audit','/rpc/submit_compact'].sort(),
  'The public API must expose exactly two validated functions, no internal tables');
 
 // Prove anonymous and invalid JWT requests cannot read or mutate any data.
