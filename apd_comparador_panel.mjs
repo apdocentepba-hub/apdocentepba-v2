@@ -3,9 +3,9 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
-import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs';
+import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-gap1';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261109-gap1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -339,9 +339,14 @@ function renderSideBySide(items){
    return o.status==='overlap'?
     'Superposición de horarios: '+o.conflicts.map(c=>
      c.school+' ('+c.days.join(', ')+', '+c.from+' a '+c.to+')').join('; '):
+    o.status==='tight-transition'?
+    'Sin cruce, pero traslado a revisar: '+o.transitions.map(t=>
+     t.school+' ('+t.days.join(', ')+', '+t.gapMinutes+' min entre horarios)').join('; ')+
+     '. Margen elegido: '+o.travelGapMinutes+
+     ' min. No es un tiempo de viaje calculado ni una incompatibilidad legal.':
     o.status==='no-overlap'?
-    'Sin superposición exacta (traslados y normativa no evaluados)':
-    'No evaluable: horario de oferta incompleto';
+    'Sin superposición exacta (viaje real y normativa no evaluados)':
+    'No evaluable: horario de oferta o jornadas incompletas';
   }]);
  }
  // The most useful fields stay visible even when they match.
