@@ -1,0 +1,121 @@
+name: APD offer change and closing event detector
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-offer-change-detector.mjs'
+      - 'scripts/test-apd-offer-change-detector.mjs'
+      - 'scripts/apd-offer-compact-capture.mjs'
+      - 'scripts/test-apd-offer-compact-capture.mjs'
+      - 'scripts/apd-offer-audit-batch.mjs'
+      - 'scripts/test-apd-offer-audit-batch.mjs'
+      - 'scripts/apd-scanner-compact-adapter.mjs'
+      - 'scripts/test-apd-scanner-compact-adapter.mjs'
+      - 'scripts/apd-abc-public-reader.mjs'
+      - 'scripts/apd-abc-public-probe.mjs'
+      - 'scripts/test-apd-abc-public-reader.mjs'
+      - 'scripts/apd-abc-official-status-verifier.mjs'
+      - 'scripts/test-apd-abc-official-status-verifier.mjs'
+      - 'scripts/apd-abc-transition-correlator.mjs'
+      - 'scripts/test-apd-abc-transition-correlator.mjs'
+      - 'tests/sql/apd_change_compact_pg17.sql'
+      - 'tests/sql/test_apd_change_compact_pg17.sh'
+      - 'tests/sql/apd_change_audit_events_pg17.sql'
+      - 'tests/sql/test_apd_change_audit_events_pg17.sh'
+      - 'tests/sql/test_apd_change_audit_concurrency_pg17.sh'
+      - 'tests/sql/test_apd_change_backup_restore_pg17.sh'
+      - 'tests/sql/apd_change_least_privilege_pg17.sql'
+      - 'tests/sql/test_apd_change_least_privilege_pg17.sh'
+      - 'tests/sql/test_apd_change_tcp_roles_pg17.sh'
+      - 'tests/sql/test_apd_change_postgrest_http_pg17.sh'
+      - 'tests/sql/apd_change_transition_candidates_pg17.sql'
+      - 'tests/sql/test_apd_change_transition_candidates_pg17.sh'
+      - 'tests/sql/test_apd_change_transition_load_pg17.sql'
+      - 'scripts/test-apd-postgrest-http.mjs'
+      - 'docs/APD_CAMBIOS_CANCELACIONES_LAB_20261109.md'
+      - 'docs/APD_ESTADO_DESDE_COMPARADOR_20261109.md'
+      - '.github/workflows/apd-offer-change-lab.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diff-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: No network, no user data, no notifications
+        run: |
+          node --check scripts/apd-offer-change-detector.mjs
+          node --check scripts/apd-offer-compact-capture.mjs
+          node --check scripts/apd-offer-audit-batch.mjs
+          node --check scripts/apd-scanner-compact-adapter.mjs
+          node --check scripts/apd-abc-public-reader.mjs
+          node --check scripts/apd-abc-public-probe.mjs
+          node --check scripts/apd-abc-official-status-verifier.mjs
+          node --check scripts/apd-abc-transition-correlator.mjs
+          node --check scripts/test-apd-postgrest-http.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs scripts/test-apd-scanner-compact-adapter.mjs scripts/test-apd-abc-public-reader.mjs scripts/test-apd-abc-official-status-verifier.mjs scripts/test-apd-abc-transition-correlator.mjs
+  pg17-compact-transactions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: apd_only_disposable_test
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGPASSWORD: apd_only_disposable_test
+      PGDATABASE: apd_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PostgreSQL client available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+      - name: Real PG17 transaction, two-capture retention and rollback tests
+        run: |
+          bash tests/sql/test_apd_change_compact_pg17.sh
+          bash tests/sql/test_apd_change_audit_events_pg17.sh
+          bash tests/sql/test_apd_change_audit_concurrency_pg17.sh
+          bash tests/sql/test_apd_change_least_privilege_pg17.sh
+      - name: Test real TCP logins with ephemeral roles and least privileges
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_tcp_roles_pg17.sh
+      - name: Private transition candidate ledger, no delivery, TTL and rollback
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_transition_candidates_pg17.sh
+      - name: Stress 501 distinct synthetic review candidates, enforce 500 cap
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/test_apd_change_transition_load_pg17.sql
+      - name: PostgREST v14 local-only HTTP API with real JWT, restricted RPC and no table access
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_postgrest_http_pg17.sh
+      - name: Verify actual backup and recovery in disposable PostgreSQL 17
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_backup_restore_pg17.sh
+      - name: Protect production Worker and personal data
+        run: |
+          git diff --exit-code origin/main -- worker.js worker-live index.html app_v2.js sql supabase
