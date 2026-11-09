@@ -7,8 +7,12 @@ on:
       - 'scripts/test-apd-offer-change-detector.mjs'
       - 'scripts/apd-offer-compact-capture.mjs'
       - 'scripts/test-apd-offer-compact-capture.mjs'
+      - 'scripts/apd-offer-audit-batch.mjs'
+      - 'scripts/test-apd-offer-audit-batch.mjs'
       - 'tests/sql/apd_change_compact_pg17.sql'
       - 'tests/sql/test_apd_change_compact_pg17.sh'
+      - 'tests/sql/apd_change_audit_events_pg17.sql'
+      - 'tests/sql/test_apd_change_audit_events_pg17.sh'
       - 'docs/APD_CAMBIOS_CANCELACIONES_LAB_20261109.md'
       - '.github/workflows/apd-offer-change-lab.yml'
 
@@ -28,7 +32,8 @@ jobs:
         run: |
           node --check scripts/apd-offer-change-detector.mjs
           node --check scripts/apd-offer-compact-capture.mjs
-          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs
+          node --check scripts/apd-offer-audit-batch.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs
   pg17-compact-transactions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -62,7 +67,9 @@ jobs:
             sudo apt-get update -qq && sudo apt-get install -y postgresql-client
           fi
       - name: Real PG17 transaction, two-capture retention and rollback tests
-        run: bash tests/sql/test_apd_change_compact_pg17.sh
+        run: |
+          bash tests/sql/test_apd_change_compact_pg17.sh
+          bash tests/sql/test_apd_change_audit_events_pg17.sh
       - name: Protect production Worker and personal data
         run: |
           git diff --exit-code origin/main -- worker.js worker-live index.html app_v2.js sql supabase
