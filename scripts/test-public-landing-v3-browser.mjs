@@ -76,7 +76,7 @@ try{
   socket.addEventListener("error",reject,{once:true});
  });
  await cdp("Page.enable");await cdp("Runtime.enable");
- for(const width of [1440,390]){
+ for(const width of [1920,1440,390]){
   await cdp("Emulation.setDeviceMetricsOverride",{
    width,height:900,deviceScaleFactor:1,mobile:width<600
   });
@@ -122,7 +122,7 @@ try{
   assert.match(first.background,/gradient/);
   assert.match(first.headline,/Menos tiempo buscando/);
   assert.ok(first.titleBreakVisible,"Headline line break overridden by legacy CSS");
-  if(width===1440){
+  if(width>=1440){
    assert.ok(first.previewX>first.copyRight-8,
     "Desktop preview must appear in right column: "+JSON.stringify(first));
    assert.equal(first.mobileMenuVisible,false);
@@ -238,7 +238,32 @@ try{
   assert.ok(panel.scrollWidth<=panel.viewport+12,
     "Prioritized alert pane overflows viewport: "+JSON.stringify(panel));
   await screenshot("panel-alerts-first-"+width);
-  seen.push({width,home:true,login:true,registration:true,layout:true,dark:true,alertFirst:true});
+  // The left/right reference cards must be confined to Repositorio, even if
+  // a delayed layout mover leaves them directly beneath #panel-docente.
+  const sides=await evaluate(`(()=>{
+   const panel=document.getElementById('panel-docente');
+   const cards=[...panel.querySelectorAll('.apd-safe-side-ad')];
+   const repo=document.querySelector('#panel-tab-pane-repo .panel-tab-grid');
+   if(cards.length!==2||!repo)return {ready:false};
+   const original=cards.map(el=>({el,parent:el.parentNode,next:el.nextSibling}));
+   cards.forEach(el=>panel.appendChild(el));
+   const failsafeHidden=cards.every(el=>getComputedStyle(el).display==='none');
+   const alwaysStatic=cards.every(el=>getComputedStyle(el).position==='static');
+   original.forEach(({el,parent,next})=>parent.insertBefore(el,next));
+   window.APD_activatePanelTab('repo',false);
+   const inRepo=cards.every(el=>el.parentElement===repo&&
+    getComputedStyle(el).display==='block'&&getComputedStyle(el).position==='static'&&
+    el.getBoundingClientRect().width>100);
+   window.APD_activatePanelTab('alertas',false);
+   const hiddenInAlerts=cards.every(el=>el.getClientRects().length===0);
+   const card=document.getElementById('panel-alertas').closest('.panel-card');
+   return {ready:true,failsafeHidden,alwaysStatic,inRepo,hiddenInAlerts,
+    alertsWidth:card.getBoundingClientRect().width};
+  })()`);
+  assert.ok(sides.ready&&sides.failsafeHidden&&sides.alwaysStatic&&sides.inRepo&&
+   sides.hiddenInAlerts&&sides.alertsWidth>100,
+   'Side resources overlap or escaped Repositorio at '+width+': '+JSON.stringify(sides));
+  seen.push({width,home:true,login:true,registration:true,layout:true,dark:true,alertFirst:true,sideCardsSafe:true});
   await evaluate('document.body.classList.remove("apd-dark")');
  }
  console.log("APD_PUBLIC_V3_BROWSER_PASSED "+JSON.stringify(seen));

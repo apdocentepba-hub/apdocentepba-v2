@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="apd_comparador_panel.css?v=20261109-decision1">
   <style>
     #panel-docente{position:relative;}
-    .apd-safe-side-ad{display:none;position:absolute;top:112px;width:min(300px,calc((100vw - 1180px)/2 - 28px));z-index:1;border-radius:22px;padding:18px 16px;box-shadow:0 18px 44px rgba(16,36,61,.13);box-sizing:border-box;line-height:1.35;}
+    .apd-safe-side-ad{display:none;position:static;width:auto;max-width:100%;min-width:0;border-radius:18px;padding:16px;box-sizing:border-box;line-height:1.35;}
     .apd-safe-side-ad *{box-sizing:border-box;}
     .apd-safe-side-ad h3{margin:0 0 9px;font-size:21px;line-height:1.08;letter-spacing:-.03em;}
     .apd-safe-side-ad p{margin:0 0 12px;font-size:13px;line-height:1.45;}
@@ -22,20 +22,25 @@
     .apd-safe-side-price{display:block;margin:6px 0 10px;font-size:22px;font-weight:900;}
     .apd-safe-side-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:38px;padding:9px 10px;border-radius:12px;text-decoration:none;font-size:12px;font-weight:900;}
     .apd-safe-side-note{margin-top:11px;padding-top:11px;border-top:1px solid rgba(95,113,139,.22);font-size:11px;line-height:1.4;}
-    .apd-safe-side-left{left:max(14px,calc((100vw - 1180px)/2 - min(300px,calc((100vw - 1180px)/2 - 28px)) - 18px));background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%);border:1px solid #dbe7f5;color:#061a37;}
+    .apd-safe-side-left{background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%);border:1px solid #dbe7f5;color:#061a37;}
     .apd-safe-side-left .apd-safe-side-kicker{background:#edf4ff;color:#0f4fb8;border:1px solid #cfe1fa;}
     .apd-safe-side-left .apd-safe-side-box{background:#fff;border:1px solid #dbe7f5;box-shadow:0 8px 22px rgba(16,36,61,.05);}
     .apd-safe-side-left h3,.apd-safe-side-left strong,.apd-safe-side-left .apd-safe-side-price{color:#0f3460;}
     .apd-safe-side-left p,.apd-safe-side-left .apd-safe-side-note{color:#5f718b;}
     .apd-safe-side-left .apd-safe-side-btn{background:#2454f5;color:#fff!important;}
-    .apd-safe-side-right{right:max(14px,calc((100vw - 1180px)/2 - min(300px,calc((100vw - 1180px)/2 - 28px)) - 18px));background:linear-gradient(135deg,#061a37,#0b2d5f 58%,#153d78 100%);border:1px solid rgba(255,255,255,.16);color:#fff;}
+    .apd-safe-side-right{background:linear-gradient(135deg,#061a37,#0b2d5f 58%,#153d78 100%);border:1px solid rgba(255,255,255,.16);color:#fff;}
     .apd-safe-side-right .apd-safe-side-kicker{background:rgba(255,255,255,.12);color:#dbeafe;border:1px solid rgba(255,255,255,.16);}
     .apd-safe-side-right .apd-safe-side-box{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);}
     .apd-safe-side-right h3,.apd-safe-side-right strong{color:#fff;}
     .apd-safe-side-right p,.apd-safe-side-right .apd-safe-side-note{color:#cfe0ff;}
     .apd-safe-side-right .apd-safe-side-btn{background:#fff;color:#0f3460!important;}
-    @media(min-width:1720px){#panel-docente:not(.hidden) .apd-safe-side-ad{display:block;}}
-    @media(max-width:1719px){#panel-docente:not(.hidden) .apd-safe-side-ad{display:block!important;position:static!important;width:auto!important;margin:0 14px 14px!important;top:auto!important;left:auto!important;right:auto!important;z-index:1!important;border-radius:18px!important;padding:16px!important;box-shadow:0 12px 28px rgba(16,36,61,.10);}#panel-docente:not(.hidden) .apd-safe-side-left{margin-top:10px!important;}#panel-docente:not(.hidden) .apd-safe-side-right{margin-bottom:18px!important;}}
+    /* Only show resources inside the Repositorio tab. Never let side cards
+       overlay the live APD feed, including wide viewports, zoomed browsers,
+       or delayed panel reordering. */
+    #panel-docente:not(.hidden) .apd-safe-side-ad{display:none!important;position:static!important;inset:auto!important;z-index:auto!important;width:auto!important;max-width:100%!important;min-width:0!important;margin:0!important;box-shadow:none!important;}
+    #panel-docente:not(.hidden) .panel-tab-grid > .apd-safe-side-ad{display:none!important;}
+    #panel-docente:not(.hidden) #panel-tab-pane-repo .panel-tab-grid > .apd-safe-side-ad{display:block!important;grid-column:span 6!important;padding:17px!important;border-radius:14px!important;}
+    @media(max-width:900px){#panel-docente:not(.hidden) #panel-tab-pane-repo .panel-tab-grid > .apd-safe-side-ad{grid-column:1/-1!important;}}
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
