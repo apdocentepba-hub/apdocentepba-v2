@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-(?:decision1|mi-jornada1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-(?:decision1|mi-jornada1|mi-jornada2)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
