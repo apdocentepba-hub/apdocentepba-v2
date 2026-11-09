@@ -74,9 +74,10 @@ const stamp=s=>JSON.stringify([
 ]);
 
 export function createAPDScannerCompactAdapter({
- enabled=false,readPage,readScanState,pageSize=150
+ enabled=false,readPage,readScanState,pageSize=150,clock=()=>Date.now()
 }={}){
  if(enabled!==true)throw Error('APD compact scanner candidate is disabled');
+ if(typeof clock!=='function')throw Error('Missing trusted test clock');
  if(typeof readPage!=='function'||typeof readScanState!=='function')
   throw Error('Read-only source and scan-state callbacks are required');
  if(!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>150)
@@ -124,8 +125,11 @@ export function createAPDScannerCompactAdapter({
       !explicitTime(capturedAt))throw Error('Invalid canonical district or UTC capture time');
    const firstScan=await readScanState();
    if(!verifiedScan(firstScan))throw Error('Scanner state is not complete');
-   if(Date.parse(capturedAt)<Date.parse(firstScan.finished_at))
-    throw Error('Capture predates finished scan');
+   const when=Date.parse(capturedAt),finished=Date.parse(firstScan.finished_at);
+   const now=clock();
+   if(!Number.isFinite(now)||when<finished||when-finished>15*60000||
+      when>now+5*60000||now-when>12*3600000)
+    throw Error('Capture is stale, future, or detached from finished scan');
    const first=await fetchPass(district,1);
    const second=await fetchPass(district,2);
    const lastScan=await readScanState();
