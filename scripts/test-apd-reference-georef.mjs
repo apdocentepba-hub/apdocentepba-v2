@@ -9,7 +9,7 @@ const response=obj=>{
 };
 const safe={direcciones:[{
  nomenclatura:'MITRE 200, Avellaneda, Buenos Aires',
- ubicacion:{lat:-34.66,lon:-58.36},provincia:{nombre:'Buenos Aires'}
+ ubicacion:{lat:-34.66,lon:-58.36},provincia:{nombre:'Buenos Aires'},departamento:{nombre:'Avellaneda'}
 }]};
 
 test('address lookup only on explicit call, no GPS or state storage',async()=>{
@@ -22,7 +22,8 @@ test('address lookup only on explicit call, no GPS or state storage',async()=>{
  assert.equal(u.hostname,'apis.datos.gob.ar');
  assert.equal(u.pathname,'/georef/api/direcciones');
  assert.equal(u.searchParams.get('provincia'),'Buenos Aires');
- assert.equal(u.searchParams.get('direccion'),'Mitre 200, Avellaneda');
+ assert.equal(u.searchParams.get('direccion'),'Mitre 200');
+ assert.equal(u.searchParams.get('departamento'),'Avellaneda');
  assert.equal(calls[0].opts.credentials,'omit');
  assert.equal(calls[0].opts.method,'GET');
  assert.equal(found.length,1);
@@ -35,7 +36,7 @@ test('address lookup only on explicit call, no GPS or state storage',async()=>{
 test('rejects vague queries before any external lookup',async()=>{
  let fetches=0;
  const fetchImpl=async()=>{fetches++;return response(safe)};
- for(const value of ['Avellaneda','Wilde','', 'sin calle']){
+ for(const value of ['Avellaneda','Wilde','', 'sin calle','Mitre 200']){
   assert.equal(validateReferenceQuery(value),false);
   await assert.rejects(findAddressReference(value,{fetchImpl}),/reference_needs_street/);
  }
@@ -53,6 +54,8 @@ test('discard georef points out of PBA or with unknown geometry, and duplicates'
  ]});
  assert.equal(list.length,1);
  assert.deepEqual(list.map(x=>x.label),['MITRE 200, Avellaneda, Buenos Aires']);
+ assert.equal(parseGeorefReferences({direcciones:safe.direcciones},
+  {department:'Quilmes'}).length,0);
 });
 
 test('network and oversized provider responses fail without persisting address',async()=>{
