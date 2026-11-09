@@ -22,6 +22,7 @@ on:
       - 'tests/sql/test_apd_change_backup_restore_pg17.sh'
       - 'tests/sql/apd_change_least_privilege_pg17.sql'
       - 'tests/sql/test_apd_change_least_privilege_pg17.sh'
+      - 'tests/sql/test_apd_change_tcp_roles_pg17.sh'
       - 'docs/APD_CAMBIOS_CANCELACIONES_LAB_20261109.md'
       - 'docs/APD_ESTADO_DESDE_COMPARADOR_20261109.md'
       - '.github/workflows/apd-offer-change-lab.yml'
@@ -85,6 +86,10 @@ jobs:
           bash tests/sql/test_apd_change_audit_events_pg17.sh
           bash tests/sql/test_apd_change_audit_concurrency_pg17.sh
           bash tests/sql/test_apd_change_least_privilege_pg17.sh
+      - name: Test real TCP logins with ephemeral roles and least privileges
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_tcp_roles_pg17.sh
       - name: Verify actual backup and recovery in disposable PostgreSQL 17
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
