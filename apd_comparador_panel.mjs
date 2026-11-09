@@ -324,6 +324,22 @@ function renderSideBySide(items){
  region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
   'Compará condiciones de trabajo y competencia visible. La compatibilidad PID indicada por el panel no garantiza adjudicación. Los postulantes provienen solo de fichas ya consultadas; no se actualizan al abrir esta tabla.'));
+ if(state.refPoint){
+  const ranked=items.map((item,index)=>({
+   escuela:item.escuela,index,km:item.distancia_km
+  })).filter(x=>typeof x.km==='number'&&Number.isFinite(x.km))
+   .sort((x,y)=>x.km-y.km);
+  const finding=ranked.length>=2?
+   (ranked[1].km-ranked[0].km>=0.1?
+    'Más cercana en línea recta: Oferta '+(ranked[0].index+1)+
+    ' ('+ranked[0].escuela+'), a '+ranked[0].km+
+    ' km, frente a '+ranked[1].km+' km de la siguiente escuela verificada.':
+    'Las dos escuelas verificadas más cercanas tienen distancia similar en línea recta.'):
+   'Faltan coordenadas oficiales de al menos dos escuelas para comparar cercanía.';
+  region.appendChild(node('p','apd-comparator-proximity-summary',
+   finding+' No representa tiempo, ruta ni gasto de viaje.'));
+ }
+
  const wrap=node('div','apd-comparator-table-scroll');
  wrap.tabIndex=0;
  wrap.setAttribute('role','region');
