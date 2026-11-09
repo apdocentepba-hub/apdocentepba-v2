@@ -408,6 +408,9 @@ try{
   assert.equal(state.comparisonColumns,6);
   assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-comparator-schedule-item").length'),10,
    'All five offers must be evaluated in ten pairs');
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-comparator-schedule-list li")?.textContent||""'),
+   /Cruce de días, horas y vigencias informadas/,
+   'Highest priority collisions must appear first, above insufficient-data pairs');
   assert.ok(state.comparisonRows>=6);
   assert.equal(state.seeComparison,'Ver comparación (5)');
   assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1);
