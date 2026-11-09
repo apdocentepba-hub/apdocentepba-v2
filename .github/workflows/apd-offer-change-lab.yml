@@ -1,0 +1,25 @@
+name: APD offer change and closing event detector
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-offer-change-detector.mjs'
+      - 'scripts/test-apd-offer-change-detector.mjs'
+      - '.github/workflows/apd-offer-change-lab.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diff-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: No network, no user data, no notifications
+        run: |
+          node --check scripts/apd-offer-change-detector.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs
