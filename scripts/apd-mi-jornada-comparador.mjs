@@ -68,7 +68,7 @@ export function formatWeeklySchedule(raw){
  if(!p)return String(raw??'').trim()||'No informado';
  const days=p.days;
  const label=days.length>=2&&days.every((d,i)=>d===days[0]+i)
-  ?WEEKDAYS[days[0]-1].name+' a '+WEEKDAYS[days.at(-1)-1].name
+  ?WEEKDAYS[days[0]-1].name+' a '+WEEKDAYS[days.at(-1)-1].name.toLowerCase()
   :days.map(d=>WEEKDAYS[d-1].name).join(', ');
  return label+': '+hhmm(p.start)+' a '+hhmm(p.end);
 }
