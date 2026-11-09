@@ -323,10 +323,17 @@
   }
 
   function buildPlanFeatureList(plan) {
-    const features = Array.isArray(plan?.features) ? plan.features : [];
+    const features = Array.isArray(plan?.features) ? [...plan.features] : [];
+    // These are presentation labels; actual access is based on the verified
+    // /api/mi-plan subscription, never on the text of the plan catalogue.
+    const code = String(plan?.code || plan?.canonical_code || '').trim().toUpperCase();
+    if (['INSIGNE', 'INSIGNE_ANUAL', 'SIGNATURE', 'SIGNATURE_ANUAL'].includes(code)) {
+      const label = 'Comparación con domicilio y jornadas actuales (orientativa, sin GPS)';
+      if (!features.includes(label)) features.push(label);
+    }
     if (!features.length) return '';
     return `<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;">
-      ${features.slice(0, 5).map(item => `<li>${window.esc ? window.esc(item) : String(item)}</li>`).join('')}
+      ${features.slice(0, 6).map(item => `<li>${window.esc ? window.esc(item) : String(item)}</li>`).join('')}
     </ul>`;
   }
 

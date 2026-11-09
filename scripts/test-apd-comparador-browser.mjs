@@ -78,6 +78,9 @@ const server=createServer((req,res)=>{
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
+  '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
+  '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
+  '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
@@ -136,7 +139,7 @@ const synthetic=Array.from({length:6},(_,i)=>({
  pid_compatible:i<2?true:undefined,
  pid_puntaje_total_final:i===0?'38,10':i===1?'45,00':undefined,
  pid_listado:i<2?'oficial':undefined,
- dias_horarios:i===0?'Lunes a Viernes: 7:20HSA 11:50HS':i===1?'Lunes a Viernes: 7:20 a 11:50':'',
+ dias_horarios:i===0?'Lunes a Viernes: 7:20HSA 11:50HS':i===1?'Lunes a Viernes: 7:20 a 11:50\u200b':'',
  cursodivision:i===0?'0':i===1?'A':'2 B',
  hsmodulos:i<2?'4':'',revista:i===0?'Suplencia':i===1?'Provisional':'',
  supl_desde:i<2?'2035-11-10T00:00:00Z':'',
@@ -169,7 +172,8 @@ try{
    window.__offers=${JSON.stringify(synthetic)};
    dashboardLoadedOwner='SYNTHETIC_USER_A';
    window.__testToken='SYNTHETIC_USER_A';
-   planActual={access_active:true};
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+    subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
    window.alertasState={items:window.__offers,index:0};
    document.getElementById('panel-alertas').innerHTML=
     '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
@@ -179,6 +183,32 @@ try{
   await until('typeof window.APD_offerSchoolMapRefresh==="function" && !!document.getElementById("apd-map-school-link")');
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),false);
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
+  assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),true,
+   'Active Insigne must see private work planner');
+  // Simulated downgrade of SAME account; basic comparator remains available.
+  await js(`(()=>{
+   sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
+    JSON.stringify({domicile:'DATO PRIVADO FICTICIO',jobs:[]}));
+   planActual={ok:true,access_active:true,plan:{code:'PLUS'},
+    subscription:{plan_code:'PLUS',status:'active',source:'mercadopago_checkout'}};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-comparador-panel .apd-comparator-insigne-locked")');
+  assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),false,
+   'Plus may compare offers but cannot open private work planner');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
+   'Downgrade must wipe domicile from the same browser tab');
+  assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
+  await js(`(()=>{
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+    subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-comparador-panel .apd-work-planner")');
   for(let i=0;i<5;i++){
    await js(`(()=>{
     window.alertasState.index=${i};
@@ -254,6 +284,41 @@ try{
     assert.match(facts.summary,/Datos incompletos o no comparables: Curso \/ división/);
     assert.doesNotMatch(facts.summary,/Diferencias detectadas:[^.]*Días y horarios/,
      'Equivalent schedules must be removed from the differences list');
+    assert.equal(await js('!!document.querySelector("#apd-comparison-dialog .apd-work-planner")'),true,
+     'Optional domicile and current job editor must be available');
+    await js(`(()=>{
+     const dialog=document.getElementById('apd-comparison-dialog');
+     const details=dialog.querySelector('.apd-work-planner');details.open=true;
+     [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Agregar escuela')).click();
+     const form=details.querySelector('form');
+     form.querySelector('input[type="text"]').value='Wilde, Avellaneda';
+     const job=details.querySelector('.apd-work-shift');
+     job.querySelector('input[type="text"]').value='Escuela actual';
+     for(const c of job.querySelectorAll('input[type="checkbox"]'))c.checked=Number(c.value)<=5;
+     job.querySelectorAll('input[type="time"]')[0].value='07:20';
+     job.querySelectorAll('input[type="time"]')[1].value='11:50';
+     form.requestSubmit();
+     return true;
+    })()`);
+    await until(`(()=>{
+     const rows=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')];
+     return rows.find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')
+      ?.textContent.includes('Superposición de horarios')??false;
+    })()`);
+    assert.equal(await js(`(()=>{
+     const saved=sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1');
+     return !!saved&&saved.includes('Escuela actual')&&saved.includes('Wilde, Avellaneda');
+    })()`),true,'Optional profile stored only in current tab');
+    await js(`(()=>{
+      const dialog=document.getElementById('apd-comparison-dialog');
+      const details=dialog.querySelector('.apd-work-planner');details.open=true;
+      [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar mis datos')).click();
+      return true;
+    })()`);
+    await until('!sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")');
+    assert.equal(await js(`!![...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+      .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')`),false,
+     'Clearing profile must remove evaluation row');
     assert.match(bodyText,/Días y horarios/);
     assert.match(bodyText,/Postulantes visibles/);
     assert.match(bodyText,/42,60/);
@@ -345,6 +410,7 @@ try{
    return true;
   })()`);
   await until('window.__heldWFS.length===2');
+  await js(`sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',JSON.stringify({domicile:'Domicilio ficticio',jobs:[]}));true`);
   await js(`(()=>{
    dashboardLoadedOwner='SYNTHETIC_USER_B';
    window.__testToken='SYNTHETIC_USER_B';
@@ -353,6 +419,8 @@ try{
    return true;
   })()`);
   await until('document.querySelector(".apd-comparator-count")?.textContent==="0 de 5 ofertas seleccionadas"');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
+   'Switching account must erase locally stored domicile and timetable');
   assert.equal(await js('!!document.querySelector(".apd-comparator-pairs")'),false,
    'Changing accounts clears all school coordinate results');
   await js(`(()=>{

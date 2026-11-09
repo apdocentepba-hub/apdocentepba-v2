@@ -3,12 +3,16 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
+import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs';
+import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
 
 const state={
  available:[],selected:new Set(),index:0,current:null,enabled:false,
+ privatePlannerAllowed:false,
  sort:'cierre',district:'',turn:'',
  geoByKey:Object.create(null),geoRequested:false,geoWorking:false,
  geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:''
@@ -123,6 +127,12 @@ function focusComparison() {
  header.appendChild(close);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
+ if(state.privatePlannerAllowed)body.appendChild(
+  createPrivatePlannerForm({onChanged:()=>{render();focusComparison()}})
+ );
+ else body.appendChild(node('p','apd-comparator-insigne-locked',
+  'Domicilio y compatibilidad de jornadas: exclusivo del Plan Insigne vigente. '+
+  'La comparación básica de ofertas sigue disponible.'));
  try {
   const origin=state.geoByKey[state.anchor]||null;
   const result=compareOffers({
@@ -322,10 +332,23 @@ function renderSideBySide(items){
  if(items.some(x=>x.distancia_km!==null))
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
    'No verificada':x.distancia_km+' km en línea recta']);
+ const privateProfile=state.privatePlannerAllowed?loadPrivatePlanner():null;
+ if(privateProfile?.jobs.length){
+  data.push(['Cruce con mi jornada actual',x=>{
+   const o=checkScheduleOverlap(x.horario,privateProfile);
+   return o.status==='overlap'?
+    'Superposición de horarios: '+o.conflicts.map(c=>
+     c.school+' ('+c.days.join(', ')+', '+c.from+' a '+c.to+')').join('; '):
+    o.status==='no-overlap'?
+    'Sin superposición exacta (traslados y normativa no evaluados)':
+    'No evaluable: horario de oferta incompleto';
+  }]);
+ }
  // The most useful fields stay visible even when they match.
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
-  'Postulantes visibles','Puntaje del primero','Diferencia de puntos']);
+  'Postulantes visibles','Puntaje del primero','Diferencia de puntos',
+  'Cruce con mi jornada actual']);
  const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
@@ -379,6 +402,11 @@ function render(){
  const hint=node('p','apd-comparator-hint',
   'Elegí ofertas del carrusel. Solo se comparan datos visibles de tu sesión; no se guardan selecciones ni se calculan chances de adjudicación.');
  root.appendChild(hint);
+ if(state.privatePlannerAllowed)
+  root.appendChild(createPrivatePlannerForm({onChanged:render}));
+ else root.appendChild(node('p','apd-comparator-insigne-locked',
+  'Comparación con domicilio y jornadas actuales: exclusiva del Plan Insigne. '+
+  'Revisá Mi plan si querés acceder a esta función.'));
  if(state.selected.size){
   const selected=selectedOffers();
   const codes=selectedSchoolKeys();
@@ -476,6 +504,15 @@ function render(){
      entry.appendChild(node('p','apd-comparator-geo-detail',
       [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
        .filter(Boolean).join(' · ')));
+     const home=state.privatePlannerAllowed?loadPrivatePlanner().domicile:'';
+     if(home&&Number.isFinite(verified.lat)&&Number.isFinite(verified.lon)){
+      entry.appendChild(button('Ver trayecto desde domicilio en Maps',()=>{
+       const url='https://www.google.com/maps/dir/?'+new URLSearchParams({
+        api:'1',origin:home,destination:verified.lat+','+verified.lon
+       });
+       window.open(url,'_blank','noopener,noreferrer');
+      },'btn btn-secondary apd-comparator-home-map'));
+     }
     }
    }
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
@@ -524,7 +561,12 @@ function render(){
  root.appendChild(node('p','apd-comparator-disclaimer',
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
 }
-function refresh({offers=[],index=0,enabled=false}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
+ const entitled=hasInsignePlannerAccess(planInfo);
+ // A downgrade, expiration or unverified subscription wipes previous personal
+ // information from this browser tab before any new DOM can read it.
+ if(!entitled)clearPrivatePlanner();
+ state.privatePlannerAllowed=entitled;
  state.enabled=enabled===true;
  if(!state.enabled){
   reset();return;
@@ -556,16 +598,21 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  render();
 }
 function reset() {
+ // Auth/session ownership changes must not expose a former account's local
+ // home address or work timetable to the next account in the same tab.
+ clearPrivatePlanner();
  applicantObserver?.disconnect();
  observedApplicants.clear();
  closeComparisonDialog();
  invalidateGeo();
- state.enabled=false;state.available=[];state.current=null;state.selected.clear();
+ state.enabled=false;state.privatePlannerAllowed=false;
+ state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
  document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }
+document.getElementById('btn-logout')?.addEventListener('click',clearPrivatePlanner,true);
 window.APD_comparatorRefresh=refresh;
 window.APD_comparatorReset=reset;
 // Core app may have rendered before module import was completed.
