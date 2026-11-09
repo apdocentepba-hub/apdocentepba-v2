@@ -47,16 +47,21 @@ async function readBounded(response){
 }
 
 export function createABCOfficialStatusVerifier({
- enabled=false,fetchImpl=globalThis.fetch,timeoutMs=10000
+ enabled=false,fetchImpl=globalThis.fetch,timeoutMs=10000,maxChecks=10
 }={}){
  if(enabled!==true)throw Error('ABC official status verifier disabled');
  if(typeof fetchImpl!=='function'||!Number.isSafeInteger(timeoutMs)||
-    timeoutMs<1000||timeoutMs>15000)
+    timeoutMs<1000||timeoutMs>15000||
+    !Number.isSafeInteger(maxChecks)||maxChecks<1||maxChecks>20)
   throw Error('Invalid ABC status transport');
+ // This is only a per-instance guard; staging still needs server-side quotas.
+ let remaining=maxChecks;
  return Object.freeze({
   async inspect({district,sourceOfferKey}={}){
    if(!validDistrict(district)||!validKey(sourceOfferKey))
     throw Error('Unapproved district or unstable offer identity');
+   if(remaining<=0)throw Error('ABC targeted status lookup budget exceeded');
+   remaining--;
    const detail=sourceOfferKey.slice(2);
    // O_ identifiers are NOT yet proven unique by ABC, so unsupported.
    const q='descdistrito:"'+district+'" AND iddetalle:'+detail;
