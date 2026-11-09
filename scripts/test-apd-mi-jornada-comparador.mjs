@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
- parseOfferWeeklySchedule,formatWeeklySchedule,schedulesEquivalent,
+ parseOfferWeeklySchedule,parseOfferWeeklySegments,formatWeeklySchedule,schedulesEquivalent,
  sanitizeWorkProfile,checkScheduleOverlap,compareSelectedOfferSchedules
 } from './apd-mi-jornada-comparador.mjs';
 import {assessComparatorCriterion} from './apd-comparador-datos-evaluacion.mjs';
@@ -194,4 +194,94 @@ test('selected offers: one shared weekly day inside overlapping dates is enough'
  ]);
  assert.equal(r[0].status,'overlap');
  assert.deepEqual(r[0].days,['Martes']);
+});
+
+
+test('ABC explicit multi-block schedules parse with weekday and hours preserved',()=>{
+ const input='Lunes: 07:20 a 11:50; Miércoles: 14:00 a 17:30';
+ const blocks=parseOfferWeeklySegments(input);
+ assert.deepEqual(blocks,[
+  {days:[1],start:440,end:710},{days:[3],start:840,end:1050}
+ ]);
+ assert.equal(parseOfferWeeklySchedule(input),null,
+  'Legacy single-range parser must not partially accept multi-block input');
+ assert.equal(formatWeeklySchedule(input),input);
+ const newline='Miércoles: 14:00 a 17:30\nLunes: 07:20 a 11:50';
+ assert.equal(schedulesEquivalent(input,newline),true,
+  'Block ordering must not fabricate a schedule difference');
+ assert.equal(formatWeeklySchedule(newline),input,
+  'Comparison labels must be displayed in canonical chronological order');
+ assert.deepEqual(parseOfferWeeklySegments('Lunes: 07:20 a 11:50 | Miércoles: 14:00 a 17:30'),blocks);
+});
+test('incomplete multi-block schedules fail closed rather than inventing missing days',()=>{
+ for(const raw of [
+  'Lunes: 07:20 a 11:50; 14:00 a 17:30',
+  'Lunes: 07:20 a 11:50 y 14:00 a 17:30',
+  'Lunes: 07:20 a 11:50; Miércoles sin horario',
+  'Lunes: 07:20 a 11:50; Miércoles: 17:30 a 14:00',
+  'Lunes: 07:20 a 11:50;',
+  'Lunes: 07:20 a 11:50; Miércoles: 07:20 a 11:50; Jueves: sin datos'
+ ]){
+  assert.equal(parseOfferWeeklySegments(raw),null,raw);
+  assert.equal(checkScheduleOverlap(raw,{jobs}).status,'unverified',raw);
+  assert.equal(assessComparatorCriterion('Días y horarios',[first,raw]).status,'unverified',raw);
+ }
+});
+test('multiple blocks: compare each day/time against work profile; prioritize actual overlap',()=>{
+ const schedule='Lunes: 07:20 a 11:50; Miércoles: 14:00 a 17:30';
+ const jobs=[
+  {school:'Escuela lunes',days:[1],start:'12:10',end:'13:10'},
+  {school:'Escuela miércoles',days:[3],start:'15:00',end:'18:00'}
+ ];
+ const r=checkScheduleOverlap(schedule,{jobs,travelGapMinutes:30});
+ assert.equal(r.status,'overlap');
+ assert.equal(r.conflicts.length,1);
+ assert.deepEqual(r.conflicts[0].days,['Miércoles']);
+ assert.equal(r.conflicts[0].from,'15:00');
+ assert.equal(r.conflicts[0].to,'17:30');
+ assert.equal(r.transitions.length,1);
+ assert.equal(r.transitions[0].gapMinutes,20);
+});
+test('multiple blocks: equivalence checks all blocks, ignores order and reports actual changes',()=>{
+ const first='Lunes: 07:20 a 11:50; Miércoles: 14:00 a 17:30';
+ const reverse='Miércoles: 14:00 a 17:30; Lunes: 07:20 a 11:50';
+ const changed='Miércoles: 14:30 a 17:30; Lunes: 07:20 a 11:50';
+ assert.equal(schedulesEquivalent(first,reverse),true);
+ assert.equal(schedulesEquivalent(first,changed),false);
+ const same=assessComparatorCriterion('Días y horarios',[first,reverse]);
+ assert.equal(same.status,'same');
+ assert.deepEqual(same.values,[first,first]);
+ assert.equal(assessComparatorCriterion('Días y horarios',[first,changed]).status,'different');
+});
+test('selected offers: one crossing among multiple blocks is not missed',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Lunes: 07:20 a 11:50; Miércoles: 14:00 a 17:30',
+   supl_desde:'01/11/2035',supl_hasta:'30/11/2035'},
+  {horario:'Martes: 07:20 a 11:50; Miércoles: 16:30 a 18:00',
+   supl_desde:'01/11/2035',supl_hasta:'30/11/2035'}
+ ]);
+ assert.equal(r.length,1);
+ assert.equal(r[0].status,'overlap');
+ assert.equal(r[0].matches.length,1);
+ assert.deepEqual(r[0].matches[0].days,['Miércoles']);
+ assert.equal(r[0].matches[0].from,'16:30');
+ assert.equal(r[0].matches[0].to,'17:30');
+});
+test('selected offers: two distinct overlapping blocks are both surfaced',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Lunes: 08:00 a 10:00; Miércoles: 14:00 a 17:00',
+   supl_desde:'01/11/2035',supl_hasta:'30/11/2035'},
+  {horario:'Lunes: 09:00 a 11:00; Miércoles: 15:00 a 18:00',
+   supl_desde:'01/11/2035',supl_hasta:'30/11/2035'}
+ ]);
+ assert.equal(r[0].status,'overlap');
+ assert.deepEqual(r[0].matches.map(x=>x.from+'-'+x.to),['09:00-10:00','15:00-17:00']);
+ assert.deepEqual(r[0].matches.map(x=>x.days),[['Lunes'],['Miércoles']]);
+});
+test('selected offers: mixed complete/partial blocks cannot be declared non-overlapping',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Lunes: 08:00 a 10:00; Miércoles: 14:00 a 17:00'},
+  {horario:'Martes: 08:00 a 10:00; Miércoles: SIN DATOS'}
+ ]);
+ assert.equal(r[0].status,'unverified');
 });
