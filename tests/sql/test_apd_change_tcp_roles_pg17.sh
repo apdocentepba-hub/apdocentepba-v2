@@ -42,28 +42,30 @@ if [[ "$first" != "$testuser|$testuser" || "$second" != "$observer|$observer" ]]
  exit 1
 fi
 
+# Check catalog permissions as disposable CI administrator; the authenticated
+# role has no USAGE of the internal schema, and must not be able to inspect it.
 # No direct table access, no original procedures, no test-only constructors,
 # no schema ownership and no ability to elevate by SET ROLE.
-privs="$(app -c "SELECT CASE WHEN
- NOT has_table_privilege(current_user,'apd_change_lab.captures','SELECT,INSERT,UPDATE,DELETE')
- AND NOT has_table_privilege(current_user,'apd_change_lab.audit_events','SELECT,INSERT,UPDATE,DELETE')
- AND NOT has_schema_privilege(current_user,'apd_change_lab','CREATE')
- AND NOT has_schema_privilege(current_user,'apd_change_lab','USAGE')
- AND has_schema_privilege(current_user,'apd_change_api','USAGE')
- AND NOT has_schema_privilege(current_user,'apd_change_api','CREATE')
- AND NOT pg_has_role(current_user,'apd_lab_ingest','SET')
- AND pg_has_role(current_user,'apd_lab_ingest','USAGE')
- AND NOT has_function_privilege(current_user,
+privs="$(psql -X -qAt -v ON_ERROR_STOP=1 -c "SELECT CASE WHEN
+ NOT has_table_privilege('apd_lab_tcp_ingest','apd_change_lab.captures','SELECT,INSERT,UPDATE,DELETE')
+ AND NOT has_table_privilege('apd_lab_tcp_ingest','apd_change_lab.audit_events','SELECT,INSERT,UPDATE,DELETE')
+ AND NOT has_schema_privilege('apd_lab_tcp_ingest','apd_change_lab','CREATE')
+ AND NOT has_schema_privilege('apd_lab_tcp_ingest','apd_change_lab','USAGE')
+ AND has_schema_privilege('apd_lab_tcp_ingest','apd_change_api','USAGE')
+ AND NOT has_schema_privilege('apd_lab_tcp_ingest','apd_change_api','CREATE')
+ AND NOT pg_has_role('apd_lab_tcp_ingest','apd_lab_ingest','SET')
+ AND pg_has_role('apd_lab_tcp_ingest','apd_lab_ingest','USAGE')
+ AND NOT has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_lab.save_compact(jsonb,boolean)','EXECUTE')
- AND NOT has_function_privilege(current_user,
+ AND NOT has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_lab.record_audit_batch(jsonb,boolean)','EXECUTE')
- AND NOT has_function_privilege(current_user,
+ AND NOT has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_lab.fixture(text,text,jsonb)','EXECUTE')
- AND NOT has_function_privilege(current_user,
+ AND NOT has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_lab.fixture_row(text,text,text)','EXECUTE')
- AND has_function_privilege(current_user,
+ AND has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_api.submit_compact(jsonb)','EXECUTE')
- AND has_function_privilege(current_user,
+ AND has_function_privilege('apd_lab_tcp_ingest',
   'apd_change_api.submit_audit(jsonb)','EXECUTE')
  THEN 'PASS' ELSE 'FAIL' END;")"
 if [[ "$privs" != "PASS" ]]; then
