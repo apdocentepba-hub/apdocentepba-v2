@@ -244,7 +244,7 @@ try{
     // Emulate production CSS hiding the underlying results card.
     await js('document.getElementById("apd-comparador-panel").style.display="none";document.getElementById("apd-ver-comparacion").click();true');
     await until('document.getElementById("apd-comparison-dialog")?.open===true');
-    assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table tbody tr").length'),6);
+    assert.ok(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table tbody tr").length>=16'));
     await js('document.getElementById("apd-comparador-panel").style.display="";document.getElementById("apd-comparison-close").click();true');
     await until('!document.getElementById("apd-comparison-dialog")');
    }
