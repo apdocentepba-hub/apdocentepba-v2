@@ -22,7 +22,7 @@ const sign=(role,{expiresIn=120,key=secret}={})=>{
 const ingest=sign('apd_lab_ingest');
 let count=0;
 async function request(path,{method='GET',token=null,body}={}){
- assert.ok(/^\/(rpc\/[a-z_]+|captures|audit_events)(?:\?select=\*)?$/.test(path));
+ assert.ok(path==='/'||/^\/(rpc\/[a-z_]+|captures|audit_events)(?:\?select=\*)?$/.test(path));
  const headers={Accept:'application/json'};
  if(token)headers.Authorization='Bearer '+token;
  if(body!==undefined)headers['Content-Type']='application/json';
@@ -44,6 +44,15 @@ const accept=result=>{
   'RPC must return exactly one row');
  return result.json[0];
 };
+
+// Verify the actual exposed API surface, not merely 403/404 responses.
+// Internal tables, privileged functions, and test-only fixtures must not be
+// present in PostgREST's generated OpenAPI contract at all.
+const openapi=await request('/',{token:ingest});
+assert.ok(success(openapi),'PostgREST OpenAPI contract unavailable');
+const visible=Object.keys(openapi.json?.paths||{}).sort();
+assert.deepEqual(visible,['/rpc/submit_audit','/rpc/submit_compact'].sort(),
+ 'The public API must expose exactly two validated functions, no internal tables');
 
 // Prove anonymous and invalid JWT requests cannot read or mutate any data.
 const anonymous=await request('/rpc/submit_compact',{method:'POST',
