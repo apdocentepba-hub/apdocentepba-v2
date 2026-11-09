@@ -26,7 +26,10 @@ test('access gated by active authenticated plan and reset when session changes',
  assert.match(html,/owner!==previousOwner/);
  assert.match(html,/window\.APD_comparatorReset\?\.\(\)/);
  assert.match(html,/planActual\?\.access_active===true/);
- assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true\}\)/);
+ assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true,planInfo:planActual\}\)/);
+ assert.match(ui,/hasInsignePlannerAccess\(planInfo\)/);
+ assert.match(ui,/if\(!entitled\)clearPrivatePlanner\(\)/);
+ assert.match(ui,/state\.privatePlannerAllowed\?loadPrivatePlanner\(\)/);
  assert.doesNotMatch(app,/APD_comparatorRefresh|APD_comparatorReset|apd_comparador_panel/);
 });
 test('selection never uses array index or missing ID as official identity',()=>{
