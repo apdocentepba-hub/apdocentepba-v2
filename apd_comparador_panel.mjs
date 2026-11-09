@@ -107,14 +107,19 @@ function readApplicantSummaries(offers) {
  return result;
 }
 
+function refreshReferenceUI(){
+ const wasOpen=document.getElementById('apd-comparison-dialog')?.open===true;
+ render();
+ if(wasOpen)focusComparison();
+}
 async function searchRef(address){
  if(state.refPending||!state.enabled)return;
  if(!validateReferenceQuery(address)){
-  state.refStatus='Escribí calle y altura o una esquina con partido.';render();return;
+  state.refStatus='Escribí calle y altura o una esquina con partido.';refreshReferenceUI();return;
  }
  const controller=new AbortController(),run=++state.refRun;
  state.refAbort=controller;state.refPending=true;state.refOptions=[];
- state.refStatus='Buscando en Georef Argentina...';render();
+ state.refStatus='Buscando en Georef Argentina...';refreshReferenceUI();
  try{
   const found=await findAddressReference(address,{signal:controller.signal});
   if(run!==state.refRun||!state.enabled||controller.signal.aborted)return;
@@ -123,7 +128,7 @@ async function searchRef(address){
  }catch(_){
   if(run===state.refRun)state.refStatus='No se pudo consultar Georef. No se calcularon distancias.';
  }finally{
-  if(run===state.refRun){state.refPending=false;state.refAbort=null;render();}
+  if(run===state.refRun){state.refPending=false;state.refAbort=null;refreshReferenceUI();}
  }
 }
 function referenceEditor(parent){
@@ -147,14 +152,14 @@ function referenceEditor(parent){
    state.refPoint={lat:candidate.lat,lon:candidate.lon};state.refOptions=[];
    state.refStatus='Punto de referencia seleccionado para esta sesión.';
    if(Object.keys(state.geoByKey).length>=2)state.sort='distancia';
-   render();
+   refreshReferenceUI();
   },'apd-reference-choice'));
  }
  if(state.refPoint){
   box.appendChild(node('p','apd-comparator-hint',
    'La distancia se estima en línea recta. No representa ruta, tiempo ni gasto de transporte.'));
   box.appendChild(button('Olvidar ubicación',()=>{
-   state.refPoint=null;state.refOptions=[];state.refStatus='';render();
+   state.refPoint=null;state.refOptions=[];state.refStatus='';refreshReferenceUI();
   },'btn btn-secondary apd-reference-clear'));
  }
  parent.appendChild(box);
@@ -177,6 +182,7 @@ function focusComparison() {
  header.appendChild(close);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
+ referenceEditor(body);
  try {
   const origin=state.refPoint||state.geoByKey[state.anchor]||null;
   const result=compareOffers({
@@ -454,7 +460,6 @@ function render(){
      value=>{state.anchor=value;render()}));
   }
   root.appendChild(tools);
-  if(selected.length>=2)referenceEditor(root);
   if(codes.length>=2){
    const geoButton=button(state.geoWorking?'Consultando ABC...':
      state.geoRequested?'Actualizar ubicaciones oficiales':'Consultar distancias oficiales',
