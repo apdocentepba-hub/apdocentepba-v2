@@ -64,20 +64,34 @@ function parseFromString(raw){
  return {days,start,end};
 }
 export function parseOfferWeeklySchedule(raw){return parseFromString(raw)}
+// ABC may declare separate time blocks for different weekdays. Each block
+// must state its own days and both times; implicit repeats are NOT inferred.
+export function parseOfferWeeklySegments(raw){
+ const single=parseFromString(raw);
+ if(single)return [single];
+ const source=String(raw??'');
+ if(source.length>900||!/[;|\r\n]/.test(source))return null;
+ const parts=source.split(/\s*(?:[;|]|\r?\n)\s*/);
+ if(parts.length<2||parts.length>8||parts.some(part=>!part.trim()))return null;
+ const segments=parts.map(parseFromString);
+ return segments.every(Boolean)?segments:null;
+}
 export function formatWeeklySchedule(raw){
- const p=parseFromString(raw);
- if(!p)return String(raw??'').trim()||'No informado';
- const days=p.days;
- const label=days.length>=2&&days.every((d,i)=>d===days[0]+i)
-  ?WEEKDAYS[days[0]-1].name+' a '+WEEKDAYS[days.at(-1)-1].name.toLowerCase()
-  :days.map(d=>WEEKDAYS[d-1].name).join(', ');
- return label+': '+hhmm(p.start)+' a '+hhmm(p.end);
+ const blocks=parseOfferWeeklySegments(raw);
+ if(!blocks)return String(raw??'').trim()||'No informado';
+ return blocks.map(p=>{
+  const days=p.days;
+  const label=days.length>=2&&days.every((d,i)=>d===days[0]+i)
+   ?WEEKDAYS[days[0]-1].name+' a '+WEEKDAYS[days.at(-1)-1].name.toLowerCase()
+   :days.map(d=>WEEKDAYS[d-1].name).join(', ');
+  return label+': '+hhmm(p.start)+' a '+hhmm(p.end);
+ }).join('; ');
 }
 export function schedulesEquivalent(a,b){
- const x=parseFromString(a),y=parseFromString(b);
+ const x=parseOfferWeeklySegments(a),y=parseOfferWeeklySegments(b);
  if(!x||!y)return null;
- return x.start===y.start&&x.end===y.end&&
-  x.days.length===y.days.length&&x.days.every((d,i)=>d===y.days[i]);
+ const key=v=>v.days.join(',')+'|'+v.start+'|'+v.end;
+ return x.map(key).sort().join(';')===y.map(key).sort().join(';');
 }
 export function sanitizeWorkProfile(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Perfil inválido');
@@ -104,15 +118,15 @@ export function sanitizeWorkProfile(data){
  return {domicile,jobs:clean,travelGapMinutes};
 }
 export function checkScheduleOverlap(rawOffer,profile){
- const parsed=parseFromString(rawOffer);
- if(!parsed)return {status:'unverified',label:'Horario de oferta incompleto'};
+ const blocks=parseOfferWeeklySegments(rawOffer);
+ if(!blocks)return {status:'unverified',label:'Horario de oferta incompleto'};
  let clean;
  try{clean=sanitizeWorkProfile(profile??{jobs:[]})}
  catch{return {status:'unverified',label:'Jornada declarada inválida'}}
  if(!clean.jobs.length)return {status:'unverified',label:'Cargá tu jornada actual para comparar'};
  const conflicts=[],transitions=[];
  const minimum=clean.travelGapMinutes;
- for(const job of clean.jobs){
+ for(const job of clean.jobs)for(const parsed of blocks){
   const sharedDays=parsed.days.filter(d=>job.days.includes(d));
   if(!sharedDays.length)continue;
   const start=minute(job.start),end=minute(job.end);
@@ -170,49 +184,63 @@ export function compareSelectedOfferSchedules(offers){
  const comparisons=[];
  for(let i=0;i<offers.length;i++)for(let j=i+1;j<offers.length;j++){
   const a=offers[i],b=offers[j];
-  const first=parseOfferWeeklySchedule(a?.horario);
-  const second=parseOfferWeeklySchedule(b?.horario);
+  const blocksA=parseOfferWeeklySegments(a?.horario);
+  const blocksB=parseOfferWeeklySegments(b?.horario);
   const base={firstOffer:i+1,secondOffer:j+1};
-  if(!first||!second){
+  if(!blocksA||!blocksB){
    comparisons.push({...base,status:'unverified',
     label:'Horarios insuficientes para evaluar'});
    continue;
   }
-  const days=first.days.filter(d=>second.days.includes(d));
-  const from=Math.max(first.start,second.start);
-  const to=Math.min(first.end,second.end);
-  if(!days.length||from>=to){
+  const periodA=offerPeriod(a),periodB=offerPeriod(b);
+  const candidates=[];
+  for(const first of blocksA)for(const second of blocksB){
+   const days=first.days.filter(d=>second.days.includes(d));
+   const from=Math.max(first.start,second.start);
+   const to=Math.min(first.end,second.end);
+   if(!days.length||from>=to)continue;
+   const common={...base,days:days.map(d=>WEEKDAYS[d-1].name),
+    from:hhmm(from),to:hhmm(to)};
+   if(periodA&&periodB&&
+     (periodA.end<periodB.start||periodB.end<periodA.start)){
+    candidates.push({...common,status:'separate-periods',
+     label:'Horarios coincidentes, pero las vigencias informadas no se cruzan'});
+   }else if(periodA&&periodB){
+    const start=Math.max(periodA.start,periodB.start);
+    const end=Math.min(periodA.end,periodB.end);
+    const weekday=new Date(start).getUTCDay()||7;
+    const dayMilliseconds=86400000;
+    const matchingDates=days.filter(day=>
+     start+((day-weekday+7)%7)*dayMilliseconds<=end);
+    if(matchingDates.length){
+     candidates.push({...common,days:matchingDates.map(d=>WEEKDAYS[d-1].name),
+      status:'overlap',label:'Cruce de días, horas y vigencias informadas'});
+    }else{
+     candidates.push({...common,status:'no-shared-date',
+      label:'Los períodos coinciden, pero no incluyen un día semanal común'});
+    }
+   }else{
+    candidates.push({...common,status:'possible-overlap',
+     label:'Cruce horario potencial; fechas de vigencia incompletas'});
+   }
+  }
+  if(!candidates.length){
    comparisons.push({...base,status:'no-time-overlap',
     label:'Sin cruces de días y horas declarados'});
    continue;
   }
-  const periodA=offerPeriod(a),periodB=offerPeriod(b);
-  const common={...base,days:days.map(d=>WEEKDAYS[d-1].name),
-   from:hhmm(from),to:hhmm(to)};
-  if(periodA&&periodB&&
-    (periodA.end<periodB.start||periodB.end<periodA.start)){
-   comparisons.push({...common,status:'separate-periods',
-    label:'Horarios coincidentes, pero las vigencias informadas no se cruzan'});
-  }else if(periodA&&periodB){
-   // An intersection of date ranges alone is insufficient: a one-day
-   // appointment on Monday cannot collide with a Friday-only timetable.
-   const start=Math.max(periodA.start,periodB.start);
-   const end=Math.min(periodA.end,periodB.end);
-   const weekday=new Date(start).getUTCDay()||7;
-   const dayMilliseconds=86400000;
-   const matchingDates=days.filter(day=>
-    start+((day-weekday+7)%7)*dayMilliseconds<=end);
-   if(matchingDates.length){
-    comparisons.push({...common,days:matchingDates.map(d=>WEEKDAYS[d-1].name),
-     status:'overlap',label:'Cruce de días, horas y vigencias informadas'});
-   }else{
-    comparisons.push({...common,status:'no-shared-date',
-     label:'Los períodos coinciden, pero no incluyen un día semanal común'});
-   }
-  }else{
-   comparisons.push({...common,status:'possible-overlap',
-    label:'Cruce horario potencial; fechas de vigencia incompletas'});
-  }
+  const severity={overlap:0,'possible-overlap':1,'no-shared-date':2,
+   'separate-periods':3};
+  candidates.sort((x,y)=>
+   severity[x.status]-severity[y.status]||x.from.localeCompare(y.from));
+  const winner=candidates[0];
+  // Preserve all intersections, not only the first one in a multi-block
+  // timetable. The UI shows each interval and any unverified-period warning.
+  const matches=candidates.filter(x=>
+   x.status==='overlap'||x.status==='possible-overlap').map(x=>({
+    days:x.days,from:x.from,to:x.to,status:x.status
+   }));
+  comparisons.push({...winner,matches});
  }
  return comparisons;
 }
