@@ -135,3 +135,23 @@ Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura 
 **Evidencia verificada:** ejecución GitHub Actions [42622944134](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42622944134): 68/68 pruebas Node PASS; compactación PG17, auditoría y carrera de concurrencia PASS; APD_RESTORE_PG17_PASSED (7 capturas, 4 eventos auditables, respaldo de 20.179 bytes); control de protección del Worker PASS.
 
 **Límite:** esta prueba valida restauración de un esquema de laboratorio con datos sintéticos y roles locales. No garantiza que un respaldo productivo completo de Supabase pueda restaurarse, ni demuestra consistencia de dos capturas ABC oficiales. Antes de una migración real se necesita un ensayo independiente en staging con permisos equivalentes, presupuesto de almacenamiento, rollback documentado y autorización expresa.
+
+
+## Octava etapa — permisos mínimos y entrada controlada (09/11/2026)
+
+**Hallazgo previo:** las pruebas de captura, auditoría, concurrencia y backup habían utilizado principalmente el administrador del contenedor. Eso demostraba integridad transaccional y revocaciones a roles invitados, pero **no** que una identidad de aplicación sin permisos administrativos pudiera almacenar datos sin acceder a tablas directamente.
+
+### Cambios en laboratorio PG17 descartable
+- `tests/sql/apd_change_least_privilege_pg17.sql`: roles NOLOGIN/NOSUPERUSER/NOBYPASSRLS separados (`apd_lab_function_owner`, `apd_lab_ingest`, `apd_lab_observer`). Solo el propietario interno tiene privilegios de tabla y políticas RLS para ejecutar las validaciones; el rol de ingesta no tiene `SELECT`, `INSERT`, `UPDATE` ni `DELETE` sobre las tablas, ni permiso `CREATE` sobre el esquema.
+- Funciones de entrada `submit_compact(jsonb)` y `submit_audit(jsonb)` con propietario interno NOLOGIN, `SECURITY DEFINER`, `search_path` fijo con `pg_temp` al final y permiso `EXECUTE` concedido exclusivamente al rol de ingesta. Ambas funciones fuerzan `false` en el argumento de error inyectado de las funciones internas: el rol de aplicación no puede acceder a ese control de test.
+- `tests/sql/test_apd_change_least_privilege_pg17.sh`: ensayo con `SET ROLE` sobre una instancia PostgreSQL 17 real descartable. Comprueba rechazos de lectura, borrado y ejecución de funciones internas; ingreso de dos capturas del distrito sintético BERISSO por la interfaz limitada; creación de un evento `audit_only` contrastado con ambas capturas; rechazo de valores de evento falsificados; ausencia de privilegios de un rol observador.
+- La creación de funciones y la revocación `PUBLIC` ocurren dentro de una misma transacción para evitar una ventana de exposición. La función propietaria no es superusuario ni tiene BYPASSRLS. Diseño alineado con las recomendaciones de seguridad de funciones y RLS de PostgreSQL 17.
+
+### Evidencia
+- [GitHub Actions #42625469079](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42625469079): `APD_LEAST_PRIVILEGE_PG17_PASSED`, `APD_RESTORE_PG17_PASSED` (**9 capturas, 5 eventos, backup 23.821 bytes**), `APD_AUDIT_CONCURRENT_PG17_PASSED`, **68/68 pruebas Node** y control del Worker aprobado.
+- Se verificaron simultáneamente rechazo de privilegios y escritura legítima: no alcanza con afirmar RLS activo si el rol no puede realizar su trabajo.
+
+### Límites antes de staging real
+- Los roles de ensayo son NOLOGIN y se usó `SET ROLE`: todavía falta simular conexiones independientes con credenciales y políticas equivalentes a los roles reales de una instancia Supabase separada.
+- `SECURITY DEFINER` aumenta la superficie de riesgo: exige auditoría del propietario, todas las funciones invocadas, el `search_path`, la revocación de `PUBLIC`, permisos explícitos, parámetros y cambios de schema. Se mantiene fuera del proyecto real.
+- No hay evidencia de dos escaneos provinciales completos y atómicos ni fuente de anulaciones explícitas. No activar Worker, triggers, jobs ni mensajes.
