@@ -3,6 +3,8 @@ name: APD comparador de ofertas candidate
 on:
   pull_request:
     paths:
+      - 'scripts/apd-reference-georef.mjs'
+      - 'scripts/test-apd-reference-georef.mjs'
       - 'scripts/apd-comparador-criterios.mjs'
       - 'scripts/test-apd-comparador-criterios.mjs'
       - 'scripts/test-apd-comparador-ui-contract.mjs'
@@ -30,10 +32,11 @@ jobs:
           node-version: '22'
       - name: Static syntax and deterministic local comparisons only
         run: |
+          node --check scripts/apd-reference-georef.mjs
           node --check scripts/apd-comparador-criterios.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
           node --check scripts/apd-school-geodistance.mjs
-          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs
+          node --test scripts/test-apd-reference-georef.mjs scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs
       - name: 'Chromium QA: private access, safe offer selection and mobile layout'
         run: node scripts/test-apd-comparador-browser.mjs
       - name: Browser QA screenshots
