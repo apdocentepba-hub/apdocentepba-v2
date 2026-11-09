@@ -89,9 +89,9 @@ BEGIN
        status<>'review_only' OR delivery_allowed OR
        source_attested OR historic_transition_proven OR
        expires_at<=later_verified_at)) OR
-    EXISTS(SELECT 1 FROM apd_change_lab.transition_candidates
-      WHERE scope=v_scope AND evidence_hash=lpad(to_hex(1),64,'0')) OR
     NOT EXISTS(SELECT 1 FROM apd_change_lab.transition_candidates
+      WHERE scope=v_scope AND evidence_hash=lpad(to_hex(1),64,'0')) OR
+    EXISTS(SELECT 1 FROM apd_change_lab.transition_candidates
       WHERE scope=v_scope AND evidence_hash=lpad(to_hex(501),64,'0'))
  THEN RAISE EXCEPTION '501->500 deterministic retention or status failed'; END IF;
  IF (SELECT count(*) FROM apd_change_lab.transition_candidates
@@ -103,13 +103,13 @@ BEGIN
   RAISE EXCEPTION 'Unexpected offer identities at retention boundary';
  END IF;
 
- -- Different hash for an already recorded offer and previous capture must
- -- NOT create a second candidate for the same observed transition.
+ -- Different hash for an already retained offer and previous capture must
+ -- NOT create a second candidate (D_500 remains, D_501 was evicted).
  v_candidate:=jsonb_set(v_candidate,'{evidenceHash}',
    to_jsonb(repeat('f',64)));
  BEGIN
   PERFORM * FROM apd_change_lab.record_transition_candidate(
-    v_candidate,'D_501');
+    v_candidate,'D_500');
   RAISE EXCEPTION 'EXPECTED_REJECTION_NOT_RAISED';
  EXCEPTION WHEN unique_violation THEN NULL;
    WHEN OTHERS THEN
