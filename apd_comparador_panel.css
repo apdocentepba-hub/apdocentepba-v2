@@ -197,3 +197,23 @@
  .apd-work-weekdays{grid-template-columns:repeat(4,minmax(0,1fr))}
  .apd-work-actions{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Comparison of selected offers: visible warnings, compact on phone. */
+.apd-comparator-schedule-pairs{margin:10px 0 13px;border:1px solid #cbd9e9;
+ border-radius:10px;background:#f7fbff;padding:9px 11px;max-width:100%;min-width:0}
+.apd-comparator-schedule-summary{min-height:40px;cursor:pointer;font-size:13px;
+ font-weight:800;line-height:1.45;display:list-item;overflow-wrap:anywhere}
+.apd-comparator-schedule-summary:focus-visible{outline:2px solid #2e6aaa;outline-offset:3px}
+.apd-comparator-schedule-list{margin:7px 0;padding:0 0 0 19px;max-height:200px;
+ overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+.apd-comparator-schedule-item{padding:5px 0;font-size:12px;line-height:1.5;
+ overflow-wrap:anywhere}
+.apd-comparator-schedule-overlap,
+.apd-comparator-schedule-possible-overlap{color:#8b4017;font-weight:750}
+.apd-comparator-schedule-separate-periods,
+.apd-comparator-schedule-no-time-overlap{color:#31576f}
+.apd-comparator-schedule-unverified{color:#735f3e}
+@media(max-width:600px){
+ .apd-comparator-schedule-pairs{padding:8px 10px;margin:9px 0}
+ .apd-comparator-schedule-list{max-height:160px}
+}
