@@ -482,7 +482,7 @@ try{
    const parser=await import('/scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1');
    return {raw:window.__offers.slice(0,2).map(x=>x.dias_horarios),
     display,parsed:display.map(x=>parser.parseOfferWeeklySegments(x)),
-    pair:multiBlockText};
+    pair:document.querySelector('#apd-comparison-dialog .apd-comparator-schedule-list')?.textContent};
   })()`);
   assert.match(multiBlockText,/Lunes, 09:00 a 10:00/,
    'Browser multi-block debug: '+JSON.stringify(multiBlockDiagnostic));
