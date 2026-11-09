@@ -122,6 +122,18 @@ test('650 offers match real 150-row scanner pagination, twice',async()=>{
   [2,0],[2,150],[2,300],[2,450],[2,600]]);
  assert.equal(new Set(result.capture.rows.map(x=>x.source_offer_key)).size,650);
 });
+test('published district contract from live ABC: 16 offers in 10+6 pages',async()=>{
+ const f=fixture(Array.from({length:16},(_,i)=>raw(i)));
+ const result=await run(f,{pageSize:10});
+ assert.equal(result.capture.sourceTotal,16);
+ assert.equal(result.capture.complete,true);
+ assert.equal(result.evidence.stableAcrossTwoPasses,true);
+ assert.equal(result.evidence.queryVerified,true);
+ assert.equal(result.evidence.stableTieBreaker,true);
+ assert.deepEqual(f.calls.map(x=>[x.pass,x.start]),[
+  [1,0],[1,10],[2,0],[2,10]]);
+ assert.ok(f.calls.every(x=>x.query.includes(' AND estado:"Publicada"')));
+});
 test('projection is actually consistent with Worker buildGlobalSnapshotRow on fixture',()=>{
  const worker=readFileSync(new URL('../worker.js',import.meta.url),'utf8');
  const start=worker.indexOf('function buildGlobalSnapshotRow(oferta, capturedAt) {');
