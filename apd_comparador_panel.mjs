@@ -3,6 +3,8 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
+import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -123,6 +125,7 @@ function focusComparison() {
  header.appendChild(close);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
+ body.appendChild(createPrivatePlannerForm({onChanged:focusComparison}));
  try {
   const origin=state.geoByKey[state.anchor]||null;
   const result=compareOffers({
@@ -322,10 +325,23 @@ function renderSideBySide(items){
  if(items.some(x=>x.distancia_km!==null))
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
    'No verificada':x.distancia_km+' km en línea recta']);
+ const privateProfile=loadPrivatePlanner();
+ if(privateProfile.jobs.length){
+  data.push(['Cruce con mi jornada actual',x=>{
+   const o=checkScheduleOverlap(x.horario,privateProfile);
+   return o.status==='overlap'?
+    'Superposición de horarios: '+o.conflicts.map(c=>
+     c.school+' ('+c.days.join(', ')+', '+c.from+' a '+c.to+')').join('; '):
+    o.status==='no-overlap'?
+    'Sin superposición exacta (traslados y normativa no evaluados)':
+    'No evaluable: horario de oferta incompleto';
+  }]);
+ }
  // The most useful fields stay visible even when they match.
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
-  'Postulantes visibles','Puntaje del primero','Diferencia de puntos']);
+  'Postulantes visibles','Puntaje del primero','Diferencia de puntos',
+  'Cruce con mi jornada actual']);
  const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
@@ -379,6 +395,7 @@ function render(){
  const hint=node('p','apd-comparator-hint',
   'Elegí ofertas del carrusel. Solo se comparan datos visibles de tu sesión; no se guardan selecciones ni se calculan chances de adjudicación.');
  root.appendChild(hint);
+ root.appendChild(createPrivatePlannerForm({onChanged:render}));
  if(state.selected.size){
   const selected=selectedOffers();
   const codes=selectedSchoolKeys();
@@ -476,6 +493,15 @@ function render(){
      entry.appendChild(node('p','apd-comparator-geo-detail',
       [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
        .filter(Boolean).join(' · ')));
+     const home=loadPrivatePlanner().domicile;
+     if(home&&Number.isFinite(verified.lat)&&Number.isFinite(verified.lon)){
+      entry.appendChild(button('Ver trayecto desde domicilio en Maps',()=>{
+       const url='https://www.google.com/maps/dir/?'+new URLSearchParams({
+        api:'1',origin:home,destination:verified.lat+','+verified.lon
+       });
+       window.open(url,'_blank','noopener,noreferrer');
+      },'btn btn-secondary apd-comparator-home-map'));
+     }
     }
    }
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
@@ -566,6 +592,7 @@ function reset() {
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }
+document.getElementById('btn-logout')?.addEventListener('click',clearPrivatePlanner,true);
 window.APD_comparatorRefresh=refresh;
 window.APD_comparatorReset=reset;
 // Core app may have rendered before module import was completed.
