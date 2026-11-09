@@ -119,3 +119,19 @@ Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura 
 **Evidencia del CI antes de actualizar esta documentación:** 68/68 tests Node aprobados; PostgreSQL 17 descartable para capturas/auditoría/concurrencia aprobado; control del Worker aprobado (ejecución de GitHub Actions `42616329224`).
 
 **Pendientes y límites:** comparar periódicamente resultados de consultas oficiales sin sobrecargar ABC; validación formal de integridad/atomicidad del índice, escenarios con varios distritos, límites físicos y credenciales de staging, recuperación sobre copia y autorización para cualquier conexión real con el escáner. Ninguna escritura a Supabase ni emisión se autorizó o realizó.
+
+
+## Séptima etapa — respaldo y restauración real en PostgreSQL 17 (09/11/2026)
+
+**Objetivo:** comprobar que los registros privados del detector pueden recuperarse ante una alteración sin perder las políticas de seguridad. Este ensayo es exclusivo del servicio PostgreSQL 17 descartable de GitHub Actions, no de Supabase productivo.
+
+- Nuevo script tests/sql/test_apd_change_backup_restore_pg17.sh, ejecutado **después** de las pruebas de transacciones, auditoría y concurrencia. Requiere PGHOST=localhost, PGDATABASE=apd_ci, PGUSER=apd_ci y el identificador real del servicio Docker postgres:17; aborta sin ese entorno.
+- Realiza pg_dump --format=custom con el cliente PostgreSQL **17 del propio contenedor**, preservando el esquema privado apd_change_lab. No usa credenciales de producción ni servicio externo de almacenamiento.
+- Restaura con pg_restore --exit-on-error en una **segunda base descartable** apd_restore_lab. Compara conteos y huellas del contenido completo de ambas tablas (captures, audit_events) contra la base original.
+- Verifica que sigan activas las políticas RLS, sin permisos de acceso para los roles invitados, el estado obligatorio audit_only y el límite de dos capturas por distrito.
+- Altera deliberadamente **solo la base restaurada de prueba**, detecta la divergencia, la descarta y vuelve a restaurar desde el respaldo original. Comprueba que recupera exactamente el estado inicial y que nunca cambió la base fuente del laboratorio.
+- El archivo temporal de respaldo y la base secundaria se eliminan al finalizar. No se produce, restaura ni borra ningún respaldo real de Supabase.
+
+**Evidencia verificada:** ejecución GitHub Actions [42622944134](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42622944134): 68/68 pruebas Node PASS; compactación PG17, auditoría y carrera de concurrencia PASS; APD_RESTORE_PG17_PASSED (7 capturas, 4 eventos auditables, respaldo de 20.179 bytes); control de protección del Worker PASS.
+
+**Límite:** esta prueba valida restauración de un esquema de laboratorio con datos sintéticos y roles locales. No garantiza que un respaldo productivo completo de Supabase pueda restaurarse, ni demuestra consistencia de dos capturas ABC oficiales. Antes de una migración real se necesita un ensayo independiente en staging con permisos equivalentes, presupuesto de almacenamiento, rollback documentado y autorización expresa.
