@@ -315,6 +315,8 @@ try{
     r.credentials==='omit' && r.method==='GET'));
   assert.match(geographic.pairText,/km en línea recta/);
   assert.match(geographic.origin,/^[0-9]{4}MS[0-9]{4}$/);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
   await js(`(()=>{
     document.getElementById('apd-reference-input').value='Mitre 200, Avellaneda';
     document.getElementById('apd-reference-search').click();
@@ -333,6 +335,9 @@ try{
    'No original address stays in the input after choosing the point');
   await js('document.querySelector(".apd-reference-clear").click();true');
   assert.equal(await js('!!document.querySelector(".apd-reference-clear")'),false);
+  assert.equal(await js('document.getElementById("apd-comparison-dialog")?.open'),true);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
