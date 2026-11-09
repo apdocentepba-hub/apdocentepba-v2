@@ -84,3 +84,45 @@ test('privacy/safety: reject wrong working times and malformed days',()=>{
  assert.throws(()=>sanitizeWorkProfile({domicile:'x\nsecret',jobs:[]}));
  assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:Array(6).fill(jobs[0])}));
 });
+
+test('margen de traslado: horarios contiguos sin cruce quedan marcados para revisar',()=>{
+ const offer='Lunes a Viernes: 11:50 a 13:00';
+ const result=checkScheduleOverlap(offer,{jobs});
+ assert.equal(result.status,'tight-transition');
+ assert.equal(result.conflicts.length,0);
+ assert.equal(result.transitions[0].gapMinutes,0);
+ assert.equal(result.transitions[0].direction,'jornada-antes');
+ assert.deepEqual(result.transitions[0].days,['Lunes','Martes','Miércoles','Jueves','Viernes']);
+ assert.equal(result.travelGapMinutes,30,'Perfil anterior usa margen de 30 min por defecto');
+});
+test('margen configurable: menos que umbral advierte, igual o mayor no advierte',()=>{
+ const offer='Lunes a Viernes: 12:10 a 13:30';
+ assert.equal(checkScheduleOverlap(offer,{jobs,travelGapMinutes:30}).status,'tight-transition');
+ assert.equal(checkScheduleOverlap(offer,{jobs,travelGapMinutes:15}).status,'no-overlap');
+ assert.equal(checkScheduleOverlap(offer,{jobs,travelGapMinutes:0}).status,'no-overlap');
+ assert.equal(checkScheduleOverlap('Lunes a Viernes: 12:20 a 13:30',
+  {jobs,travelGapMinutes:30}).status,'no-overlap');
+});
+test('transición también se detecta cuando la oferta es antes del trabajo',()=>{
+ const current=[{school:'Escuela turno tarde',days:[1,3,5],start:'13:00',end:'17:30'}];
+ const result=checkScheduleOverlap('Lunes a Viernes: 08:00 a 12:45',
+  {jobs:current,travelGapMinutes:30});
+ assert.equal(result.status,'tight-transition');
+ assert.equal(result.transitions[0].gapMinutes,15);
+ assert.equal(result.transitions[0].direction,'oferta-antes');
+ assert.deepEqual(result.transitions[0].days,['Lunes','Miércoles','Viernes']);
+});
+test('aviso de traslado no suplanta conflicto ni fabrica compatibilidad',()=>{
+ const offer='Lunes a Viernes: 11:20 a 12:30';
+ assert.equal(checkScheduleOverlap(offer,{jobs,travelGapMinutes:120}).status,'overlap');
+ assert.equal(checkScheduleOverlap('Turno mañana',{jobs}).status,'unverified');
+ assert.equal(checkScheduleOverlap('Lunes a Viernes: 12:00 a 13:00',
+  {jobs:[{...jobs[0],days:[6]}]}).status,'no-overlap');
+ assert.equal(checkScheduleOverlap(first,{jobs:[{...jobs[0],start:'XX',end:'12:00'}]}).status,'unverified');
+});
+test('solo se aceptan los margenes declarados y el perfil antiguo migra sin perder jornadas',()=>{
+ assert.equal(sanitizeWorkProfile({jobs}).travelGapMinutes,30);
+ assert.equal(sanitizeWorkProfile({jobs,travelGapMinutes:60}).travelGapMinutes,60);
+ for(const travelGapMinutes of [-1,25,1200,'30',null])
+  assert.throws(()=>sanitizeWorkProfile({jobs,travelGapMinutes}));
+});
