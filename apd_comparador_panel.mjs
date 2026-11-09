@@ -1,7 +1,7 @@
 /* APDocentePBA — comparador opt-in; isolated browser-only UI.
  * No credentials, user data storage, outbound fetches or mutations.
  */
-import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-abcwall1';
+import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -49,6 +49,11 @@ function closeComparisonDialog() {
  if(previous.open&&typeof previous.close==='function')previous.close();
  previous.remove();
 }
+function readApplicantSummaries(offers) {
+ try {
+  return window.APD_readCachedApplicantsForComparison?.(offers)||{};
+ } catch(_) {return {};}
+}
 function focusComparison() {
  // The alert carousel may be in a fixed-height/rearranged card. Open the
  // actual comparison in the browser top layer, not under a clipped ancestor.
@@ -73,7 +78,7 @@ function focusComparison() {
    offers:selected,sortBy:state.sort,
    preferredDistricts:state.district?[state.district]:[],
    preferredTurns:state.turn?[state.turn]:[],
-   referenceLocation:origin,verifiedGeoByKey:state.geoByKey
+   referenceLocation:origin,verifiedGeoByKey:state.geoByKey,applicantSummaries:readApplicantSummaries(selected)
   });
   const comparison=renderSideBySide(result.items);
   if(comparison)body.appendChild(comparison);
@@ -207,7 +212,7 @@ function renderSideBySide(items){
  heading.tabIndex=-1;
  region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
-  'Las diferencias se resaltan. Es orientativo: no calcula adjudicaciones ni determina si podés postularte.'));
+  'Compará condiciones de trabajo y competencia visible. La compatibilidad PID indicada por el panel no garantiza adjudicación. Los postulantes provienen solo de fichas ya consultadas; no se actualizan al abrir esta tabla.'));
  const wrap=node('div','apd-comparator-table-scroll');
  wrap.tabIndex=0;
  wrap.setAttribute('role','region');
@@ -233,27 +238,71 @@ function renderSideBySide(items){
    hour:'2-digit',minute:'2-digit'
   }).format(new Date(x));
  };
+ const score=x=>typeof x==='number'&&Number.isFinite(x)?
+  new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):null;
+ const value=x=>String(x??'').trim()||'No informado';
+ // Decision criteria shown by the primary card, not a guess about adjudication.
  const data=[
-  ['Cargo',x=>x.cargo||'No informado'],
-  ['Distrito',x=>x.distrito||'No informado'],
-  ['Escuela',x=>x.escuela||'No informada'],
-  ['Turno',x=>x.turno||'No informado'],
+  ['Cargo',x=>value(x.cargo)],
+  ['Distrito',x=>value(x.distrito)],
+  ['Escuela',x=>value(x.escuela)],
+  ['Turno',x=>value(x.turno)],
   ['Cierra',x=>dateText(x.cierre_ms)],
-  ['PID',x=>x.pid_match_verified===true?'Verificado: coincide':
-   x.pid_match_verified===false?'Verificado: no coincide':'No verificado']
+  ['Tiempo hasta el cierre',x=>x.horas_hasta_cierre===null?'Sin hora verificable':x.horas_hasta_cierre+' h'],
+  ['Días y horarios',x=>value(x.horario)],
+  ['Módulos',x=>value(x.modulos)],
+  ['Vigencia desde',x=>value(x.supl_desde)],
+  ['Vigencia hasta',x=>value(x.supl_hasta)],
+  ['Revista / suplencia',x=>value(x.revista)],
+  ['Jornada',x=>value(x.jornada)],
+  ['Curso / división',x=>value(x.curso_division)],
+  ['PID según ficha',x=>x.pid_compatible_panel===true?'Coincide según el panel':
+   x.pid_compatible_panel===false?'No coincide según el panel':'Sin información PID'],
+  ['Tu puntaje PID',x=>score(x.pid_puntaje_panel)||'Sin puntaje confirmado'],
+  ['Postulantes visibles',x=>x.postulantes_observados!==null?
+   String(x.postulantes_observados)+' (consulta de la ficha)':'Consultá la ficha para cargar'],
+  ['Puntaje del primero',x=>x.puntaje_primero_observado!==null&&x.postulantes_observados>0?
+   score(x.puntaje_primero_observado):'Sin dato comparable'],
+  ['Diferencia de puntos',x=>x.diferencia_puntaje_comparable!==null?
+   (x.diferencia_puntaje_comparable>0?'+':'')+score(x.diferencia_puntaje_comparable)+
+   ' (mismo listado indicado)':'No comparable'],
+  ['Listado PID',x=>value(x.pid_listado)]
  ];
  if(items.some(x=>x.distancia_km!==null))
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
-   'No verificada':x.distancia_km+' km (línea recta)']);
- for(const [label,value] of data){
-  const values=items.map(item=>String(value(item)));
+   'No verificada':x.distancia_km+' km en línea recta']);
+ // The most useful fields stay visible even when they match.
+ const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
+  'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
+  'Postulantes visibles','Puntaje del primero','Diferencia de puntos']);
+ const differences=[];
+ let matching=0;
+ for(const [label,fieldValue] of data){
+  const values=items.map(item=>String(fieldValue(item)));
   const differs=new Set(values).size>1;
-  const row=node('tr',differs?'apd-comparator-diff':'');
+  if(differs)differences.push(label);else matching++;
+  const row=node('tr',differs?'apd-comparator-diff':
+   priority.has(label)?'apd-comparator-priority':'apd-comparator-same');
   const labelCell=node('th','',label);labelCell.scope='row';
   row.appendChild(labelCell);
   values.forEach(v=>row.appendChild(node('td','',v)));
   tbody.appendChild(row);
  }
+ const summary=node('p','apd-comparator-difference-summary',
+  differences.length?
+  'Diferencias detectadas: '+differences.join(' · '):
+  'No se detectaron diferencias en los datos disponibles.');
+ region.appendChild(summary);
+ const toolbar=node('div','apd-comparator-view-tools');
+ const toggle=button('Mostrar todos los datos',()=>{
+  const expanded=table.classList.toggle('apd-comparator-show-all');
+  toggle.textContent=expanded?'Ocultar datos iguales':'Mostrar todos los datos';
+ },'apd-comparator-expand');
+ toolbar.appendChild(toggle);
+ toolbar.appendChild(node('span','apd-comparator-hint',
+  matching+' criterios coinciden; se destacan los relevantes.'));
+ region.appendChild(toolbar);
+ table.classList.add('apd-comparator-focus');
  table.appendChild(tbody);wrap.appendChild(table);region.appendChild(wrap);
  return region;
 }
@@ -317,7 +366,7 @@ function render(){
    offers:selected,sortBy:state.sort,
    preferredDistricts:state.district?[state.district]:[],
    preferredTurns:state.turn?[state.turn]:[],
-   referenceLocation:origin,verifiedGeoByKey:state.geoByKey
+   referenceLocation:origin,verifiedGeoByKey:state.geoByKey,applicantSummaries:readApplicantSummaries(selected)
   });
   const excludedReasons=result.excluded.map(x=>({
    official_status_closed:'estado oficial cerrado o anulado',
