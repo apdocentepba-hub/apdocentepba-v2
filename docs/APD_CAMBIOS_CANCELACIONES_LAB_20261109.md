@@ -266,3 +266,22 @@ Esos números describen **todos los registros del distrito encontrados por la co
 **Limitación decisiva:** se correlacionó en pruebas una **captura sintética** con una **respuesta sintética** que pasa por el verificador de ABC. No se observó en producción una transición cronológica auténtica `Publicada→Anulada`. Tampoco se implementaron cuotas globales, atestación criptográfica de capturas, esquema de evidencia persistente ni vínculo con el Worker. El módulo deliberadamente no produce un evento en la cola `audit_only`.
 
 **Próximo criterio de aceptación:** usar un staging identificado y autorizado para almacenar únicamente evidencias compactas de una oferta previamente publicada, volver a consultar ABC por `iddetalle` ante un cambio comprobable y auditar la secuencia sin datos personales ni alertas. No usar un proyecto Supabase existente como staging por inferencia, no publicar ni enviar mensajes.
+
+
+## Decimocuarta etapa — registro privado de candidatos de anulación (09/11/2026)
+
+**Motivo:** la correlación `Publicada→Anulada` ya producía un candidato en memoria, pero todavía no había una estructura para conservarlo y restaurarlo sin enviarlo. Se agregó un esquema de prueba **solo dentro de PostgreSQL 17 descartable**; no hay migración a Supabase productivo.
+
+### Persistencia y límites
+- `tests/sql/apd_change_transition_candidates_pg17.sql`: tabla privada `apd_change_lab.transition_candidates` con estado obligatorio `review_only`, `delivery_allowed=false`, `source_attested=false` y `historic_transition_proven=false` bajo restricciones de base. No hay destinatarios, correos, teléfono, CUIL, PID ni capacidades de entrega.
+- Identificación interna: distrito, identificador de oferta `D_<iddetalle>` (solo dentro del esquema privado), huella del caso, fecha de captura anterior, fecha de verificación posterior, huella de la captura almacenada y huella calculada por el servidor. El cliente del sistema no recibe el identificador de oferta desde este registro.
+- La función `record_transition_candidate` es `SECURITY INVOKER`, **sin permisos para el rol API de ingesta ni anónimo/observador**. Contrasta el candidato con una **captura anterior ya almacenada**, exige que la misma oferta esté en estado `Publicada`, que las fechas sean coherentes y recientes, que el candidato prohíba las notificaciones y que no contenga campos adicionales.
+- Deduplicación por `scope/evidence_hash`; si se repite la doble lectura con la misma huella y otra fecha posterior, conserva la primera observación. Si se intenta reutilizar una huella para otra identidad o captura, rechaza el conflicto. Mantiene un TTL de siete días y un tope programado de 500 candidatos por distrito. **El tope máximo de 500 todavía no se sometió a una prueba de carga completa; sí se probó la poda por vencimiento.**
+- Se rechazan campos sensibles extra y afirmaciones indebidas de autenticidad de origen. La huella del servidor y SHA-256 aportan integridad/deduplicación, **no una firma oficial de ABC**.
+
+### Ensayos y recuperación
+- `tests/sql/test_apd_change_transition_candidates_pg17.sh`: genera en Node una captura sintética y dos respuestas de `Anulada` simuladas mediante el verificador y correlador reales. Ejecuta pruebas PostgreSQL de inserción, repetición idempotente, intento de identidad cruzada, campos personales no autorizados, marcado falso de `notificationAllowed`, estado `Desierta`, fallo inyectado después de insertar, poda por vencimiento y restricciones RLS.
+- El ensayo de respaldo `test_apd_change_backup_restore_pg17.sh` verifica también el conteo y las huellas de la tabla de candidatos, RLS, permisos y `review_only`. Se altera una copia descartable del laboratorio, se restaura desde `pg_dump` y se comprueba que la fuente no cambió.
+- PostgREST se levanta **después de crear la tabla privada**, comprueba que OpenAPI solo exponga `/` y dos RPC existentes y agrega intentos HTTP de lectura y ejecución de la función privada con JWT de ingesta, que deben ser rechazados.
+
+**Límites decisivos:** solo son datos **sintéticos**. La tabla privada NO está creada en Supabase real, las capturas anteriores siguen sin atestación oficial y la consulta dirigida de ABC no revela el momento exacto de transición. El registro permanece exclusivamente para **revisión manual futura** y no convierte candidatos en eventos de notificación. La integración productiva exige staging identificado, validación de fuente, límites de consultas y autorización explícita.
