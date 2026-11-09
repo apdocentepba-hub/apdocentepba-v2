@@ -175,3 +175,23 @@ Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura 
 **68/68 Node PASS**, concurrencia/retención/auditoría y restauración PostgreSQL PASS. El control independiente de protección del Worker también aprobó. Los errores de permisos en logs son *esperados y comprobados por las pruebas negativas*, no fallas del trabajo.
 
 **Limitación restante:** se verificaron contraseñas de dos clientes en una instancia PostgreSQL 17 efímera, **no** una conexión a Supabase staging con roles y API efectivos de PostgREST, ni un origen ABC atómico. Mantener la PR en borrador y prohibidos los envíos hasta validar esos límites y obtener aprobación para infraestructura productiva.
+
+
+## Décima etapa — PostgREST HTTP/JWT aislado y permisos de API (09/11/2026)
+
+**Propósito:** validar la capa HTTP real entre la aplicación y la base, no solo conexiones TCP/PostgreSQL. No se creó un proyecto de Supabase ni se utilizó la cuenta o base del usuario. El servicio se ejecutó únicamente dentro del runner descartable de GitHub.
+
+- Nuevo archivo tests/sql/test_apd_change_postgrest_http_pg17.sh: comprueba que se ejecuta contra PostgreSQL 17 efímero del CI; crea un autenticador PostgreSQL LOGIN, NOINHERIT, sin privilegios de superusuario ni BYPASSRLS, con capacidad de cambiar únicamente a los roles aislados de ingesta y observación. La contraseña del autenticador y la clave HMAC para JWT se generan aleatoriamente en cada ejecución, no se guardan en Git ni se imprimen.
+- Se levanta la imagen oficial fijada postgrest/postgrest:v14.18, en red local del runner y escuchando únicamente en 127.0.0.1:3000. API privada de prueba; no se expone a Internet, Cloudflare ni usuarios.
+- Nuevo archivo scripts/test-apd-postgrest-http.mjs: utiliza fetch real contra la API y JWT HS256 firmados localmente, con caducidad. Son **17 solicitudes HTTP**, sin datos de docentes ni destinatarios.
+- Pruebas negativas: cliente anónimo, JWT falsificado, JWT vencido, rol observador o propietario no habilitado; acceso directo a capturas/eventos, inserción directa, función interna de inyección y funciones auxiliares de test. Las solicitudes no autorizadas reciben respuesta de error.
+- Pruebas positivas: JWT de ingesta válido permite ejecutar exclusivamente las dos funciones controladas para almacenar 2 capturas sintéticas de SAN VICENTE y 1 evento audit_only, con segundo envío idempotente. Se rechazan el evento con campo anterior falsificado y una captura con clave de CUIL no autorizada.
+- Después de la prueba HTTP se repite el respaldo con pg_dump y la restauración real en una base secundaria aislada para comprobar que los nuevos registros no vulneran la recuperación.
+
+**Evidencia CI:** [GitHub Actions #42628138195](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42628138195) — los dos jobs de laboratorio aprobaron. Marcadores:
+APD_POSTGREST_HTTP_NODE_PASSED requests=17 captures=2 audit_events=1 unapproved_access_denied=1
+APD_POSTGREST_HTTP_PG17_PASSED isolated_http=1 real_jwt=1 no_production=1
+APD_RESTORE_PG17_PASSED captures=13 audit_events=7 backup_bytes=24731
+Además se ejecutaron exitosamente las 68 pruebas Node del detector, los ensayos previos de roles TCP y PostgreSQL y la protección independiente del Worker.
+
+**Limitación de seguridad:** un contenedor PostgREST en CI representa la interfaz HTTP/JWT y el cambio de rol PostgreSQL, pero **no equivale a Supabase staging**: no se validaron todavía API Gateway, JWT/roles exactos de Supabase Auth, configuración efectiva de PostgREST de ese proveedor, conexiones SSL remotas, políticas reales de producción ni rollback de un proyecto externo. No usar estos secretos ni contenedores en producción. La PR continúa en borrador.
