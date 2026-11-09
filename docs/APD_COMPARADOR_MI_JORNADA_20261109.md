@@ -51,3 +51,13 @@ Se agrega una advertencia **orientativa** cuando la oferta y la jornada declarad
 - Todo sigue local en `sessionStorage` y sin envío de domicilio. No modifica Worker, Supabase, planes, cobranzas, escáner ni notificaciones.
 - Validaciones: casos límite de 0, 15, 20 y 30 minutos, conflicto prioritario, oferta anterior a jornada, diferentes días, horario incompleto, margen inválido; QA de la tabla en Chromium.
 - **Estado:** implementado en rama de laboratorio, sin publicación y sujeto a controles de CI. Validar sesión real Insigne y normativa PBA antes de ofrecer conclusiones adicionales.
+
+## QA visual y privacidad del editor (continuación en PR #270)
+
+- En escritorio y celular el editor privado Insigne **arranca cerrado**; solo ocupa el resumen «Configurar mis jornadas y domicilio» hasta que la persona decide abrirlo. No interrumpe la tabla de comparación.
+- Días como controles táctiles de al menos 44 px, botones Guardar/Borrar distribuidos en dos columnas cuando entran, con versión de una sola columna para pantallas muy pequeñas.
+- Al borrar, se limpian la información persistida en pestaña, los `input` del formulario visible y los renglones de jornadas **antes** de notificar a la interfaz principal para repintarla. Evita que datos privados queden a la vista si una actualización de pantalla falla.
+- Menos texto repetitivo junto a los controles, conservando aviso de privacidad, geocodificación solo a pedido y carácter no normativo del margen.
+- Versión renovada de HTML/CSS/JS para evitar interfaz obsoleta por caché. Los módulos, cobros, alertas y Worker productivos quedan intactos.
+- Casos Chromium agregados: editor cerrado al ingresar al panel y al abrir la comparación; días táctiles, ancho sin desborde; eliminación de los valores visibles y de `sessionStorage`.
+- **Pruebas CI:** consultar el resultado del último commit de la PR #270. La cuenta Insigne real todavía no fue utilizada.
