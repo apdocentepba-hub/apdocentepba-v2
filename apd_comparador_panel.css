@@ -139,3 +139,21 @@
 .apd-comparator-focus.apd-comparator-show-all .apd-comparator-same{display:table-row}
 .apd-comparator-table .apd-comparator-priority th{background:#f3f8ff}
 .apd-comparator-table .apd-comparator-priority td{background:#fbfdff}
+
+/* Optional proximity reference: no GPS, account storage, or address retention. */
+.apd-comparator-reference{margin:12px 0;border:1px solid #c3d8e8;background:#f6fbff;padding:13px;border-radius:12px}
+.apd-comparator-reference h4{font-size:15px;margin:0 0 6px}
+.apd-comparator-reference-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.apd-comparator-reference-input{box-sizing:border-box;min-height:40px;min-width:220px;flex:1;
+ border:1px solid #a4bbd3;border-radius:9px;padding:8px;font:inherit}
+.apd-comparator-reference-status{font-size:13px;line-height:1.5;color:#254b6e}
+.apd-reference-choice{display:block;width:100%;text-align:left;background:#fff;color:#143b61;
+ border:1px solid #b4cadf;border-radius:9px;padding:9px 12px;margin:6px 0;
+ font:inherit;cursor:pointer;white-space:normal}
+.apd-comparator-salary-note{padding:10px;background:#fff8e5;border-radius:9px;
+ font-size:13px;color:#5d4828;line-height:1.5}
+@media(max-width:680px){.apd-comparator-reference-input{min-width:100%}}
+
+.apd-comparator-proximity-summary{border-left:3px solid #137b83;
+ background:#ebf8f9;color:#164f54;padding:11px 13px;
+ border-radius:9px;font-size:13px;line-height:1.5;font-weight:750}

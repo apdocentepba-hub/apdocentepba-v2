@@ -1,7 +1,8 @@
 /* APDocentePBA — comparador opt-in; isolated browser-only UI.
  * No credentials, user data storage, outbound fetches or mutations.
  */
-import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
+import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-nearby1';
+import {findAddressReference,validateReferenceQuery} from './scripts/apd-reference-georef.mjs?v=20261109-nearby1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -10,7 +11,8 @@ const state={
  available:[],selected:new Set(),index:0,current:null,enabled:false,
  sort:'cierre',district:'',turn:'',
  geoByKey:Object.create(null),geoRequested:false,geoWorking:false,
- geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:''
+ geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:'',
+ refPoint:null,refOptions:[],refStatus:'',refPending:false,refRun:0,refAbort:null
 };
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
@@ -104,6 +106,64 @@ function readApplicantSummaries(offers) {
  }
  return result;
 }
+
+function refreshReferenceUI(){
+ const wasOpen=document.getElementById('apd-comparison-dialog')?.open===true;
+ render();
+ if(wasOpen)focusComparison();
+}
+async function searchRef(address){
+ if(state.refPending||!state.enabled)return;
+ if(!validateReferenceQuery(address)){
+  state.refStatus='Escribí calle y altura o una esquina con partido.';refreshReferenceUI();return;
+ }
+ const controller=new AbortController(),run=++state.refRun;
+ state.refAbort=controller;state.refPending=true;state.refOptions=[];
+ state.refStatus='Buscando en Georef Argentina...';refreshReferenceUI();
+ try{
+  const found=await findAddressReference(address,{signal:controller.signal});
+  if(run!==state.refRun||!state.enabled||controller.signal.aborted)return;
+  state.refOptions=found;
+  state.refStatus=found.length?'Elegí el lugar correcto:':'No se encontraron coordenadas; probá con otra referencia.';
+ }catch(_){
+  if(run===state.refRun)state.refStatus='No se pudo consultar Georef. No se calcularon distancias.';
+ }finally{
+  if(run===state.refRun){state.refPending=false;state.refAbort=null;refreshReferenceUI();}
+ }
+}
+function referenceEditor(parent){
+ const box=node('section','apd-comparator-reference');
+ box.appendChild(node('h4','','¿Cuál te queda más cerca de donde viajás?'));
+ box.appendChild(node('p','apd-comparator-hint',
+ 'Ingresá una dirección aproximada o esquina y partido. Solo al pulsar Buscar se envía al servicio oficial Georef Argentina; no se guarda en tu cuenta ni navegador.'));
+ const group=node('div','apd-comparator-reference-controls');
+ const input=node('input','apd-comparator-reference-input');
+ input.id='apd-reference-input';input.type='text';input.autocomplete='off';input.maxLength=140;
+ input.placeholder='Mitre 200, Avellaneda';input.setAttribute('aria-label','Dirección o esquina de salida');
+ const search=button(state.refPending?'Buscando...':'Buscar ubicación',
+  ()=>{void searchRef(input.value)},'btn btn-secondary apd-reference-search');
+ search.id='apd-reference-search';search.disabled=state.refPending;
+ input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search.click();}});
+ group.append(input,search);box.appendChild(group);
+ if(state.refStatus){const p=node('p','apd-comparator-reference-status',state.refStatus);
+  p.setAttribute('role','status');box.appendChild(p);}
+ for(const candidate of state.refOptions){
+  box.appendChild(button(candidate.label,()=>{
+   state.refPoint={lat:candidate.lat,lon:candidate.lon};state.refOptions=[];
+   state.refStatus='Punto de referencia seleccionado para esta sesión.';
+   if(Object.keys(state.geoByKey).length>=2)state.sort='distancia';
+   refreshReferenceUI();
+  },'apd-reference-choice'));
+ }
+ if(state.refPoint){
+  box.appendChild(node('p','apd-comparator-hint',
+   'La distancia se estima en línea recta. No representa ruta, tiempo ni gasto de transporte.'));
+  box.appendChild(button('Olvidar ubicación',()=>{
+   state.refPoint=null;state.refOptions=[];state.refStatus='';refreshReferenceUI();
+  },'btn btn-secondary apd-reference-clear'));
+ }
+ parent.appendChild(box);
+}
 function focusComparison() {
  // The alert carousel may be in a fixed-height/rearranged card. Open the
  // actual comparison in the browser top layer, not under a clipped ancestor.
@@ -122,8 +182,9 @@ function focusComparison() {
  header.appendChild(close);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
+ referenceEditor(body);
  try {
-  const origin=state.geoByKey[state.anchor]||null;
+  const origin=state.refPoint||state.geoByKey[state.anchor]||null;
   const result=compareOffers({
    offers:selected,sortBy:state.sort,
    preferredDistricts:state.district?[state.district]:[],
@@ -263,6 +324,22 @@ function renderSideBySide(items){
  region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
   'Compará condiciones de trabajo y competencia visible. La compatibilidad PID indicada por el panel no garantiza adjudicación. Los postulantes provienen solo de fichas ya consultadas; no se actualizan al abrir esta tabla.'));
+ if(state.refPoint){
+  const ranked=items.map((item,index)=>({
+   escuela:item.escuela,index,km:item.distancia_km
+  })).filter(x=>typeof x.km==='number'&&Number.isFinite(x.km))
+   .sort((x,y)=>x.km-y.km);
+  const finding=ranked.length>=2?
+   (ranked[1].km-ranked[0].km>=0.1?
+    'Más cercana en línea recta: Oferta '+(ranked[0].index+1)+
+    ' ('+ranked[0].escuela+'), a '+ranked[0].km+
+    ' km, frente a '+ranked[1].km+' km de la siguiente escuela verificada.':
+    'Las dos escuelas verificadas más cercanas tienen distancia similar en línea recta.'):
+   'Faltan coordenadas oficiales de al menos dos escuelas para comparar cercanía.';
+  region.appendChild(node('p','apd-comparator-proximity-summary',
+   finding+' No representa tiempo, ruta ni gasto de viaje.'));
+ }
+
  const wrap=node('div','apd-comparator-table-scroll');
  wrap.tabIndex=0;
  wrap.setAttribute('role','region');
@@ -343,6 +420,8 @@ function renderSideBySide(items){
   'Diferencias detectadas: '+differences.join(' · '):
   'No se detectaron diferencias en los datos disponibles.');
  region.appendChild(summary);
+ region.appendChild(node('p','apd-comparator-salary-note',
+ 'Zona desfavorable y sueldo: no verificados por escuela. No estimar adicionales ni haberes sin clasificación oficial.'));
  const toolbar=node('div','apd-comparator-view-tools');
  const toggle=button('Mostrar todos los datos',()=>{
   const expanded=table.classList.toggle('apd-comparator-show-all');
@@ -377,7 +456,7 @@ function render(){
   const verifiedCount=Object.keys(state.geoByKey).length;
   const tools=node('div','apd-comparator-tools');
   const sortOptions=[['cierre','Próximo cierre'],['preferencias','Distrito y turno']];
-  if(verifiedCount>=2)sortOptions.push(['distancia','Distancia desde escuela elegida']);
+  if(verifiedCount>=2)sortOptions.push(['distancia',state.refPoint?'Cercanía desde punto indicado':'Distancia desde escuela elegida']);
   tools.appendChild(makeSelect('Ordenar por',sortOptions,state.sort,
     value=>{state.sort=value;render()}));
   const districts=[...new Set(selected.map(x=>String(x.distrito||'').trim()).filter(Boolean))].sort();
@@ -390,7 +469,7 @@ function render(){
    ['','Sin preferencia'],...turns.map(t=>[t,t])
   ],turns.includes(state.turn)?state.turn:'',
   value=>{state.turn=value;render()}));
-  if(verifiedCount>=2){
+  if(verifiedCount>=2&&!state.refPoint){
    tools.appendChild(makeSelect('Escuela de referencia',codes
      .filter(key=>!!state.geoByKey[key])
      .map(key=>[key,(state.geoByKey[key].nombre||key)+' · '+key]),state.anchor,
@@ -411,7 +490,7 @@ function render(){
   root.appendChild(button('Limpiar selección',()=>{
     state.selected.clear();invalidateGeo();syncCurrentButton();render()
   },'apd-comparator-clear'));
-  const origin=state.geoByKey[state.anchor]||null;
+  const origin=state.refPoint||state.geoByKey[state.anchor]||null;
   const result=compareOffers({
    offers:selected,sortBy:state.sort,
    preferredDistricts:state.district?[state.district]:[],
@@ -514,7 +593,7 @@ function render(){
  status.id='apd-comparator-status';status.setAttribute('role','status');
  root.appendChild(status);
  root.appendChild(node('p','apd-comparator-disclaimer',
-  'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
+  'Orientativo: ubicación escolar oficial ABC y punto de salida optativo Georef. Distancias en línea recta, no trayectos ni costos de viaje. No se usa GPS; revisá condiciones y remuneración en ABC.'));
 }
 function refresh({offers=[],index=0,enabled=false}={}) {
  state.enabled=enabled===true;
@@ -548,6 +627,8 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  render();
 }
 function reset() {
+ state.refRun++;state.refAbort?.abort();state.refAbort=null;
+ state.refPoint=null;state.refOptions=[];state.refStatus='';state.refPending=false;
  applicantObserver?.disconnect();
  observedApplicants.clear();
  closeComparisonDialog();

@@ -36,12 +36,26 @@ window.alertasState={items:[],index:0};
 window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
+window.__georefRequests=[];
 window.__geoNetworkDown=false;
 window.__holdWFS=false;
 window.__heldWFS=[];
 window.__realFetch=window.fetch.bind(window);
 window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
+ if(u.hostname==='apis.datos.gob.ar'){
+  window.__georefRequests.push({method:opts.method,credentials:opts.credentials,
+   provincia:u.searchParams.get('provincia'),query:u.searchParams.get('direccion'),
+   partido:u.searchParams.get('departamento')});
+  const data={direcciones:[{
+   nomenclatura:'MITRE 200, Avellaneda, Buenos Aires',
+   ubicacion:{lat:-34.680,lon:-58.310},provincia:{nombre:'Buenos Aires'},
+   departamento:{nombre:'Avellaneda'}
+  }]};
+  const bytes=new TextEncoder().encode(JSON.stringify(data));
+  return {ok:true,headers:{get:()=>String(bytes.length)},
+   arrayBuffer:async()=>bytes.buffer};
+ }
  if(u.hostname!=='mapaescolar.abc.gob.ar')return window.__realFetch(target,opts);
  window.__wfsRequests.push({
   origin:u.origin,filter:u.searchParams.get('CQL_FILTER'),
@@ -77,6 +91,7 @@ const server=createServer((req,res)=>{
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
+  '/scripts/apd-reference-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-reference-georef.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
@@ -270,6 +285,8 @@ try{
   assert.equal(state.escapeVisible,true);
   assert.equal(await js('window.__wfsRequests.length'),0,
    'No WFS requests may occur before the explicit button is clicked');
+  assert.equal(await js('window.__georefRequests.length'),0,
+   'No address may be sent before an explicit search');
   assert.equal(await js('window.APD_offerSchoolMapReady'),true,
    'Verified exact-key map overlay should be loaded without touching the core app');
   assert.equal(state.hasOfficialMap,true,
@@ -298,6 +315,31 @@ try{
     r.credentials==='omit' && r.method==='GET'));
   assert.match(geographic.pairText,/km en línea recta/);
   assert.match(geographic.origin,/^[0-9]{4}MS[0-9]{4}$/);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  await js(`(()=>{
+    document.getElementById('apd-reference-input').value='Mitre 200, Avellaneda';
+    document.getElementById('apd-reference-search').click();
+    return true;
+  })()`);
+  await until('!!document.querySelector(".apd-reference-choice")');
+  assert.equal(await js('window.__georefRequests.length'),1);
+  assert.equal(await js('window.__georefRequests[0].credentials'),'omit');
+  assert.equal(await js('window.__georefRequests[0].provincia'),'Buenos Aires');
+  assert.equal(await js('window.__georefRequests[0].partido'),'Avellaneda');
+  assert.equal(await js('window.__georefRequests[0].query'),'Mitre 200');
+  await js('document.querySelector(".apd-reference-choice").click();true');
+  await until('!!document.querySelector(".apd-reference-clear")');
+  assert.match(await js('document.getElementById("apd-comparison-dialog").textContent'),
+   /Más cercana en línea recta|distancia similar en línea recta/);
+  assert.match(await js('document.getElementById("apd-comparador-panel").textContent'),/línea recta/);
+  assert.equal(await js('document.getElementById("apd-reference-input").value'),'',
+   'No original address stays in the input after choosing the point');
+  await js('document.querySelector(".apd-reference-clear").click();true');
+  assert.equal(await js('!!document.querySelector(".apd-reference-clear")'),false);
+  assert.equal(await js('document.getElementById("apd-comparison-dialog")?.open'),true);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
