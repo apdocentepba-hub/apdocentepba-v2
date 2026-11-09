@@ -2,7 +2,7 @@
  * APD optional home/work schedule form. User chooses to save to sessionStorage
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
-import {WEEKDAYS,sanitizeWorkProfile} from './apd-mi-jornada-comparador.mjs';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-gap1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
 const element=(tag,cls='',value)=>{
@@ -100,6 +100,17 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.appendChild(element('p','apd-comparator-hint',
   'El domicilio no se geolocaliza ni calcula viajes automáticamente. '+
   'Un enlace de mapas externo solo se abrirá si vos lo elegís.'));
+ const travelGap=element('select','apd-work-input');
+ for(const minutes of TRAVEL_GAP_OPTIONS){
+  const option=element('option','',minutes?minutes+' minutos':'Desactivado');
+  option.value=String(minutes);
+  travelGap.appendChild(option);
+ }
+ travelGap.value=String(saved.travelGapMinutes??30);
+ form.appendChild(line('Avisarme cuando queden menos de...',travelGap));
+ form.appendChild(element('p','apd-comparator-hint',
+  'Es el margen entre horarios que vos elegís. No es el tiempo real de traslado '+
+  'ni demuestra compatibilidad legal. Con Desactivado solo se detectan cruces exactos.'));
  const rows=element('div','apd-work-shifts');
  const status=element('p','apd-work-status');
  status.setAttribute('role','status');
@@ -128,7 +139,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
     return {school:school.value,days:selected,start:start.value,end:end.value};
    });
-   savePrivatePlanner({domicile:domicile.value,jobs});
+   savePrivatePlanner({domicile:domicile.value,jobs,travelGapMinutes:Number(travelGap.value)});
    onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
  });
