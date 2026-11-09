@@ -330,6 +330,8 @@ try{
   assert.equal(await js('window.__georefRequests[0].query'),'Mitre 200');
   await js('document.querySelector(".apd-reference-choice").click();true');
   await until('!!document.querySelector(".apd-reference-clear")');
+  assert.match(await js('document.getElementById("apd-comparison-dialog").textContent'),
+   /Más cercana en línea recta|distancia similar en línea recta/);
   assert.match(await js('document.getElementById("apd-comparador-panel").textContent'),/línea recta/);
   assert.equal(await js('document.getElementById("apd-reference-input").value'),'',
    'No original address stays in the input after choosing the point');
