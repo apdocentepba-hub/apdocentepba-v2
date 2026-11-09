@@ -194,8 +194,21 @@ export function compareSelectedOfferSchedules(offers){
    comparisons.push({...common,status:'separate-periods',
     label:'Horarios coincidentes, pero las vigencias informadas no se cruzan'});
   }else if(periodA&&periodB){
-   comparisons.push({...common,status:'overlap',
-    label:'Cruce de días, horas y vigencias informadas'});
+   // An intersection of date ranges alone is insufficient: a one-day
+   // appointment on Monday cannot collide with a Friday-only timetable.
+   const start=Math.max(periodA.start,periodB.start);
+   const end=Math.min(periodA.end,periodB.end);
+   const weekday=new Date(start).getUTCDay()||7;
+   const dayMilliseconds=86400000;
+   const matchingDates=days.filter(day=>
+    start+((day-weekday+7)%7)*dayMilliseconds<=end);
+   if(matchingDates.length){
+    comparisons.push({...common,days:matchingDates.map(d=>WEEKDAYS[d-1].name),
+     status:'overlap',label:'Cruce de días, horas y vigencias informadas'});
+   }else{
+    comparisons.push({...common,status:'no-shared-date',
+     label:'Los períodos coinciden, pero no incluyen un día semanal común'});
+   }
   }else{
    comparisons.push({...common,status:'possible-overlap',
     label:'Cruce horario potencial; fechas de vigencia incompletas'});
