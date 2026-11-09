@@ -55,6 +55,8 @@ function makeWorkRow(initial={},remove){
  school.required=true;
  row.appendChild(line('Escuela donde trabajás',school));
  const days=element('div','apd-work-weekdays');
+ days.setAttribute('role','group');
+ days.setAttribute('aria-label','Días de trabajo');
  for(const day of WEEKDAYS){
   const label=element('label','apd-work-day');
   const check=input('checkbox');
@@ -81,25 +83,25 @@ function makeWorkRow(initial={},remove){
 export function createPrivatePlannerForm({onChanged}={}){
  const saved=loadPrivatePlanner();
  const details=element('details','apd-work-planner');
- details.open=!saved.jobs.length&&!saved.domicile;
+ // The public comparison remains compact; users open this optional editor explicitly.
+ details.open=false;
  const summary=element('summary','apd-work-summary',
-  saved.jobs.length?'Mi domicilio y jornadas · '+saved.jobs.length+' cargadas':
-   'Mi domicilio y jornadas actuales (opcional)');
+  saved.jobs.length?'Mis jornadas · '+saved.jobs.length+' guardadas (Insigne)':
+   'Configurar mis jornadas y domicilio (Insigne)');
  details.appendChild(summary);
  const form=element('form','apd-work-form');
  form.noValidate=true;
  const help=element('p','apd-comparator-hint',
-  'Ingresá tu domicilio de referencia y tus horarios actuales para comparar superposiciones. '+
-  'Se guarda solo en esta pestaña, no en tu cuenta ni en nuestros servidores. '+
-  'Borrá los datos antes de compartir el equipo.');
+  'Cargá tus horarios para detectar cruces y poco margen entre clases. '+
+  'Los datos se guardan solo en esta pestaña, nunca en nuestros servidores.');
  form.appendChild(help);
  const domicile=input('text',saved.domicile,180);
  domicile.placeholder='Calle, altura y localidad (opcional)';
  domicile.autocomplete='off';
  form.appendChild(line('Domicilio de referencia (opcional)',domicile));
  form.appendChild(element('p','apd-comparator-hint',
-  'El domicilio no se geolocaliza ni calcula viajes automáticamente. '+
-  'Un enlace de mapas externo solo se abrirá si vos lo elegís.'));
+  'El domicilio es opcional. No se geolocaliza; solo se comparte con Maps '+
+  'si elegís abrir un trayecto.'));
  const travelGap=element('select','apd-work-input');
  for(const minutes of TRAVEL_GAP_OPTIONS){
   const option=element('option','',minutes?minutes+' minutos':'Desactivado');
@@ -109,8 +111,8 @@ export function createPrivatePlannerForm({onChanged}={}){
  travelGap.value=String(saved.travelGapMinutes??30);
  form.appendChild(line('Avisarme cuando queden menos de...',travelGap));
  form.appendChild(element('p','apd-comparator-hint',
-  'Es el margen entre horarios que vos elegís. No es el tiempo real de traslado '+
-  'ni demuestra compatibilidad legal. Con Desactivado solo se detectan cruces exactos.'));
+  'Advertencia según los minutos libres entre clases; no calcula viajes reales '+
+  'ni determina compatibilidad legal.'));
  const rows=element('div','apd-work-shifts');
  const status=element('p','apd-work-status');
  status.setAttribute('role','status');
@@ -126,9 +128,20 @@ export function createPrivatePlannerForm({onChanged}={}){
  const buttons=element('div','apd-work-actions');
  const save=element('button','btn btn-primary','Guardar en esta pestaña');
  save.type='submit';
- const erase=element('button','btn btn-secondary','Borrar mis datos de esta pestaña');
+ const erase=element('button','btn btn-secondary','Borrar mis datos');
  erase.type='button';
- erase.addEventListener('click',()=>{clearPrivatePlanner();onChanged?.()});
+ erase.addEventListener('click',()=>{
+  // Clear values from *this rendered form* before repainting. If the host
+  // callback fails, sensitive text must not remain on screen.
+  clearPrivatePlanner();
+  domicile.value='';
+  travelGap.value='30';
+  rows.replaceChildren();
+  status.textContent='';
+  details.open=false;
+  summary.textContent='Configurar mis jornadas y domicilio (Insigne)';
+  onChanged?.();
+ });
  buttons.append(save,erase);
  form.append(buttons,status);
  form.addEventListener('submit',event=>{
