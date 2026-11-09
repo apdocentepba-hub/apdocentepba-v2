@@ -9,6 +9,8 @@ on:
       - 'scripts/test-apd-offer-compact-capture.mjs'
       - 'scripts/apd-offer-audit-batch.mjs'
       - 'scripts/test-apd-offer-audit-batch.mjs'
+      - 'scripts/apd-scanner-compact-adapter.mjs'
+      - 'scripts/test-apd-scanner-compact-adapter.mjs'
       - 'tests/sql/apd_change_compact_pg17.sql'
       - 'tests/sql/test_apd_change_compact_pg17.sh'
       - 'tests/sql/apd_change_audit_events_pg17.sql'
@@ -34,7 +36,8 @@ jobs:
           node --check scripts/apd-offer-change-detector.mjs
           node --check scripts/apd-offer-compact-capture.mjs
           node --check scripts/apd-offer-audit-batch.mjs
-          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs
+          node --check scripts/apd-scanner-compact-adapter.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs scripts/test-apd-scanner-compact-adapter.mjs
   pg17-compact-transactions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
