@@ -153,3 +153,7 @@
 .apd-comparator-salary-note{padding:10px;background:#fff8e5;border-radius:9px;
  font-size:13px;color:#5d4828;line-height:1.5}
 @media(max-width:680px){.apd-comparator-reference-input{min-width:100%}}
+
+.apd-comparator-proximity-summary{border-left:3px solid #137b83;
+ background:#ebf8f9;color:#164f54;padding:11px 13px;
+ border-radius:9px;font-size:13px;line-height:1.5;font-weight:750}
