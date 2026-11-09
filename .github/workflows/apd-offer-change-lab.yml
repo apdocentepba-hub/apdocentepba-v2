@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/apd-offer-change-detector.mjs'
       - 'scripts/test-apd-offer-change-detector.mjs'
+      - 'scripts/apd-offer-compact-capture.mjs'
+      - 'scripts/test-apd-offer-compact-capture.mjs'
       - '.github/workflows/apd-offer-change-lab.yml'
 
 permissions:
@@ -22,4 +24,5 @@ jobs:
       - name: No network, no user data, no notifications
         run: |
           node --check scripts/apd-offer-change-detector.mjs
-          node --test scripts/test-apd-offer-change-detector.mjs
+          node --check scripts/apd-offer-compact-capture.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs
