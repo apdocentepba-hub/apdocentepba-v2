@@ -27,3 +27,20 @@ Esta evidencia confirma que no existen dos capturas oficiales recientes, complet
 
 ## Límites
 El laboratorio demuestra comportamiento determinista sobre datos **sintéticos**. No certifica dos capturas recientes, la existencia de cancelaciones reales ni entrega de mensajes. La PR #256, creada antes de los cambios recientes en `main`, quedó desactualizada; esta PR v2 está basada en el `main` actualizado.
+
+## Segunda etapa — persistencia compacta transaccional (09/11/2026)
+Implementación aislada y **exclusivamente para PostgreSQL 17 descartable**:
+- `tests/sql/apd_change_compact_pg17.sql`: esquema privado `apd_change_lab`, tabla con RLS habilitado y función `SECURITY INVOKER`; función valida identidad y 14 campos por oferta, huella recalculada del lado SQL, límites de 1 MiB/captura y 1.500 ofertas por distrito, sello horario explícito, orden temporal e idempotencia; conserva **máximo dos capturas por distrito** y usa bloqueo transaccional por ámbito.
+- `tests/sql/test_apd_change_compact_pg17.sh`: pruebas contra PostgreSQL 17 REAL en contenedor de GitHub Actions; verifica inserción, replay idempotente, rollback de error forzado después del INSERT, rechazo de datos incompletos/duplicados/cruzados/privados, retención de dos rondas, aislamiento de distritos, permisos y RLS. Incluye recorrido de `compactCaptureFromPages` de Node a PostgreSQL.
+- `.github/workflows/apd-offer-change-lab.yml`: laboratorio `diff-lab` de Node + trabajo `pg17-compact-transactions` usando PostgreSQL 17 efímero. No contiene credenciales de producción, ni crea tablas de Supabase, ni publica archivos web.
+- **Verificado en GitHub Actions:** 33/33 pruebas Node, trabajo PG17 PASS y control del Worker aprobado (ejecución 42605804873, commit `af39b29aa2b46b3e7d0562b76602eaf6871b75ba`).
+
+### Medición agregada de capacidad (Supabase productivo, SELECT únicamente)
+Al observar la tabla `current` (1.865 ofertas, 119 distritos con ofertas, máximo de 81 ofertas por distrito), las 14 claves serializadas en formato JSON/texto suman **788.289 bytes por ronda**; dos rondas equivalen a **~1,58 MB de contenido serializado**. Este cálculo **no incluye índices, metadatos, TOAST, bloat, retención, transacciones, ni variación futura de ofertas** y NO certifica consumo real en PostgreSQL/Supabase. Tamaño de la base observado al consultar: 137.243.795 bytes.
+Todas las 1.865 ofertas de `current` presentan estado `PUBLICADA`: esta tabla filtrada **no permite confirmar cancelaciones explícitas**. Sin una fuente autorizada que muestre estados finales, **no emitir cancelaciones** ni inferirlas de ausencias.
+
+### Límites pendientes
+- La función prueba atomicidad de la operación en una base aislada, pero aún no se validaron **concurrencia entre procesos reales del scanner, conexión a PostgREST/Supabase, costo físico en la DB productiva, RLS con roles reales, snapshot atómico del backend ABC, ni recuperación sobre un respaldo de producción**.
+- El parámetro de error inyectado existe **solo para el laboratorio**; un diseño final necesitaría eliminarlo antes de cualquier activación.
+- El SHA-256 del Node se conserva como identificador orientativo; SQL recalcula su propia huella de contenido y no concede autoridad al digest del cliente.
+- No hay outbox, cron, Worker conectado, interfaz ni avisos activados. Cualquier despliegue exige autorización expresa y respaldo restaurable.
