@@ -166,3 +166,34 @@
  .apd-work-weekdays{gap:7px}
  .apd-work-actions button{width:100%;white-space:normal}
 }
+
+/* Insigne R270 QA: compact editor, accessible day chips and mobile actions. */
+.apd-work-planner{overflow:clip}
+.apd-work-summary{min-height:44px;line-height:1.35;outline-offset:3px}
+.apd-work-summary:focus-visible{outline:3px solid #356bb6}
+.apd-work-form{gap:10px}
+.apd-work-input{min-height:42px}
+.apd-work-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.apd-work-day{min-width:0;min-height:44px;padding:5px 2px;
+ border:1px solid #cedcee;border-radius:8px;background:#fff;
+ display:flex;flex-direction:column;align-items:center;justify-content:center;
+ gap:3px;text-align:center;cursor:pointer;font-size:11px;font-weight:750}
+.apd-work-day:has(input:checked){background:#e8f5ff;border-color:#4784c3;color:#123b73}
+.apd-work-day:focus-within{outline:2px solid #356bb6;outline-offset:2px}
+.apd-work-day input{width:16px;height:16px;margin:0;accent-color:#225fae}
+.apd-work-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.apd-work-actions button{min-width:0;min-height:44px;padding:8px 9px;
+ margin:0;white-space:normal;line-height:1.25}
+.apd-work-shift>button{min-height:40px;justify-self:start}
+.apd-work-status:empty{display:none}
+@media(max-width:600px){
+ .apd-work-form{padding:0 10px 12px;gap:10px}
+ .apd-work-summary{padding:11px 12px}
+ .apd-work-weekdays{gap:4px}
+ .apd-work-actions button{width:auto}
+ .apd-comparator-dialog .apd-comparator-modal-body{overflow-x:hidden}
+}
+@media(max-width:360px){
+ .apd-work-weekdays{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .apd-work-actions{grid-template-columns:minmax(0,1fr)}
+}
