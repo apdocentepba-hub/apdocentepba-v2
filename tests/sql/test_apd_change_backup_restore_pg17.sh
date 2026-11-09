@@ -50,7 +50,7 @@ fi
 
 # Dump within the PostgreSQL 17 container (no old pg_dump client mismatch).
 docker exec "$cid" pg_dump -U apd_ci -d apd_ci --format=custom \
-  --schema=apd_change_lab > "$backup"
+  --schema=apd_change_lab --schema=apd_change_api > "$backup"
 backup_bytes="$(wc -c < "$backup" | tr -d '[:space:]')"
 if ((backup_bytes<1024)); then
   echo 'APD_RESTORE_FAIL: suspiciously empty backup' >&2
@@ -75,6 +75,12 @@ posture_sql="$(cat <<'SQL'
 SELECT CASE WHEN
   (SELECT relrowsecurity FROM pg_class WHERE oid='apd_change_lab.captures'::regclass)
   AND (SELECT relrowsecurity FROM pg_class WHERE oid='apd_change_lab.audit_events'::regclass)
+  AND NOT has_schema_privilege('apd_lab_ingest','apd_change_lab','USAGE')
+  AND has_schema_privilege('apd_lab_ingest','apd_change_api','USAGE')
+  AND NOT has_table_privilege('apd_lab_ingest','apd_change_lab.captures','SELECT,INSERT,DELETE')
+  AND has_function_privilege('apd_lab_ingest','apd_change_api.submit_compact(jsonb)','EXECUTE')
+  AND has_function_privilege('apd_lab_ingest','apd_change_api.submit_audit(jsonb)','EXECUTE')
+  AND NOT has_function_privilege('apd_lab_observer','apd_change_api.submit_compact(jsonb)','EXECUTE')
   AND NOT has_schema_privilege('apd_change_lab_guest','apd_change_lab','USAGE')
   AND NOT has_table_privilege('apd_change_lab_guest','apd_change_lab.captures','SELECT')
   AND NOT has_table_privilege('apd_change_audit_guest','apd_change_lab.audit_events','SELECT')
