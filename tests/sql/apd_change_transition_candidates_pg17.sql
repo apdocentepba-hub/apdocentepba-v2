@@ -16,6 +16,9 @@ CREATE TABLE apd_change_lab.transition_candidates (
  delivery_allowed boolean NOT NULL DEFAULT false CHECK(delivery_allowed=false),
  expires_at timestamptz NOT NULL,
  PRIMARY KEY(scope,evidence_hash),
+ -- Never let two different hashes masquerade as independent transitions
+ -- of the SAME offer from the SAME published observation.
+ UNIQUE(scope,source_offer_key,previous_observed_at),
  CHECK(later_verified_at>previous_observed_at),
  CHECK(later_verified_at-previous_observed_at<=interval '48 hours'),
  CHECK(expires_at>later_verified_at)
