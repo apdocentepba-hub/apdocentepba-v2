@@ -12,13 +12,13 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-decision1'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-nearby1'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
 test('comparison happens locally; no storage, network, tokens, or data exports',()=>{
  assert.doesNotMatch(ui,/\bfetch\s*\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|Authorization|navigator\.geolocation|indexedDB/i);
- assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs\?v=20261109-decision1'/);
+ assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs\?v=20261109-nearby1'/);
  assert.match(ui,/state\.selected\.clear\(\)/);
 });
 test('access gated by active authenticated plan and reset when session changes',()=>{
@@ -79,4 +79,17 @@ test('decision table reads only already visible applicant summaries with strict 
  assert.ok(read);
  assert.doesNotMatch(read,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|Authorization/);
  assert.doesNotMatch(app,/APD_readCachedApplicantsForComparison/);
+});
+
+test('private optional commute reference uses an official isolated service with explicit consent',()=>{
+ assert.match(ui,/findAddressReference/);
+ assert.match(ui,/function referenceEditor\(parent\)/);
+ assert.match(ui,/function searchRef\(address\)/);
+ assert.match(ui,/state\.refRun\+\+/);
+ assert.match(ui,/state\.refAbort\?\.abort\(\)/);
+ assert.match(ui,/no se guarda en tu cuenta ni navegador/i);
+ assert.match(ui,/state\.refPoint\|\|state\.geoByKey\[state\.anchor\]/);
+ assert.doesNotMatch(ui,/navigator\.geolocation/);
+ assert.doesNotMatch(ui,/localStorage|sessionStorage/);
+ assert.match(css,/\.apd-comparator-reference\{/);
 });
