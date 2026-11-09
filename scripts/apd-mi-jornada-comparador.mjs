@@ -8,6 +8,7 @@ export const WEEKDAYS=Object.freeze([
  {id:4,name:'Jueves'}, {id:5,name:'Viernes'}, {id:6,name:'Sábado'},
  {id:7,name:'Domingo'}
 ]);
+export const TRAVEL_GAP_OPTIONS=Object.freeze([0,15,30,45,60,90,120]);
 const names=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
 const normalize=value=>String(value??'').normalize('NFKC')
  .replace(/[\u200B-\u200D\u2060\uFEFF]/g,'')
@@ -82,6 +83,8 @@ export function sanitizeWorkProfile(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Perfil inválido');
  const domicile=String(data.domicile??'').trim();
  if(domicile.length>180||/[\r\n<>]/.test(domicile))throw Error('Domicilio inválido');
+ const travelGapMinutes=data.travelGapMinutes??30;
+ if(!TRAVEL_GAP_OPTIONS.includes(travelGapMinutes))throw Error('Margen entre clases inválido');
  const jobs=data.jobs??[];
  if(!Array.isArray(jobs)||jobs.length>5)throw Error('Máximo cinco jornadas');
  const clean=jobs.map((job,index)=>{
@@ -98,23 +101,43 @@ export function sanitizeWorkProfile(data){
    throw Error('Revisá el horario de '+school);
   return {school,days:[...days].sort((a,b)=>a-b),start,end};
  });
- return {domicile,jobs:clean};
+ return {domicile,jobs:clean,travelGapMinutes};
 }
 export function checkScheduleOverlap(rawOffer,profile){
  const parsed=parseFromString(rawOffer);
  if(!parsed)return {status:'unverified',label:'Horario de oferta incompleto'};
- const jobs=profile?.jobs||[];
- if(!jobs.length)return {status:'unverified',label:'Cargá tu jornada actual para comparar'};
- const conflicts=[];
- for(const job of jobs){
-  const overlap=parsed.days.filter(d=>job.days.includes(d));
-  const beginning=Math.max(parsed.start,minute(job.start));
-  const ending=Math.min(parsed.end,minute(job.end));
-  if(overlap.length&&beginning<ending){
-   conflicts.push({school:job.school,days:overlap.map(x=>WEEKDAYS[x-1].name),
+ let clean;
+ try{clean=sanitizeWorkProfile(profile??{jobs:[]})}
+ catch{return {status:'unverified',label:'Jornada declarada inválida'}}
+ if(!clean.jobs.length)return {status:'unverified',label:'Cargá tu jornada actual para comparar'};
+ const conflicts=[],transitions=[];
+ const minimum=clean.travelGapMinutes;
+ for(const job of clean.jobs){
+  const sharedDays=parsed.days.filter(d=>job.days.includes(d));
+  if(!sharedDays.length)continue;
+  const start=minute(job.start),end=minute(job.end);
+  const beginning=Math.max(parsed.start,start);
+  const ending=Math.min(parsed.end,end);
+  if(beginning<ending){
+   conflicts.push({school:job.school,days:sharedDays.map(x=>WEEKDAYS[x-1].name),
     from:hhmm(beginning),to:hhmm(ending)});
+   continue;
+  }
+  // Gap is a clock difference, not an actual route or travel estimate.
+  if(minimum===0)continue;
+  const jobBeforeOffer=end<=parsed.start;
+  const offerBeforeJob=parsed.end<=start;
+  const gap=jobBeforeOffer?parsed.start-end:offerBeforeJob?start-parsed.end:null;
+  if(gap!==null&&gap<minimum){
+   transitions.push({school:job.school,days:sharedDays.map(x=>WEEKDAYS[x-1].name),
+    gapMinutes:gap,direction:jobBeforeOffer?'jornada-antes':'oferta-antes'});
   }
  }
- if(conflicts.length)return {status:'overlap',label:'Superposición horaria',conflicts};
- return {status:'no-overlap',label:'Sin superposición horaria declarada',conflicts:[]};
+ if(conflicts.length)return {status:'overlap',label:'Superposición horaria',
+  conflicts,transitions,travelGapMinutes:minimum};
+ if(transitions.length)return {status:'tight-transition',
+  label:'Poco margen entre horarios: traslado a revisar',
+  conflicts:[],transitions,travelGapMinutes:minimum};
+ return {status:'no-overlap',label:'Sin superposición horaria declarada',
+  conflicts:[],transitions:[],travelGapMinutes:minimum};
 }
