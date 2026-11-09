@@ -48,6 +48,9 @@ privs="$(app -c "SELECT CASE WHEN
  NOT has_table_privilege(current_user,'apd_change_lab.captures','SELECT,INSERT,UPDATE,DELETE')
  AND NOT has_table_privilege(current_user,'apd_change_lab.audit_events','SELECT,INSERT,UPDATE,DELETE')
  AND NOT has_schema_privilege(current_user,'apd_change_lab','CREATE')
+ AND NOT has_schema_privilege(current_user,'apd_change_lab','USAGE')
+ AND has_schema_privilege(current_user,'apd_change_api','USAGE')
+ AND NOT has_schema_privilege(current_user,'apd_change_api','CREATE')
  AND NOT pg_has_role(current_user,'apd_lab_ingest','SET')
  AND pg_has_role(current_user,'apd_lab_ingest','USAGE')
  AND NOT has_function_privilege(current_user,
@@ -59,9 +62,9 @@ privs="$(app -c "SELECT CASE WHEN
  AND NOT has_function_privilege(current_user,
   'apd_change_lab.fixture_row(text,text,text)','EXECUTE')
  AND has_function_privilege(current_user,
-  'apd_change_lab.submit_compact(jsonb)','EXECUTE')
+  'apd_change_api.submit_compact(jsonb)','EXECUTE')
  AND has_function_privilege(current_user,
-  'apd_change_lab.submit_audit(jsonb)','EXECUTE')
+  'apd_change_api.submit_audit(jsonb)','EXECUTE')
  THEN 'PASS' ELSE 'FAIL' END;")"
 if [[ "$privs" != "PASS" ]]; then
  echo 'APD_TCP_ROLE_FAIL: permission contract invalid' >&2
@@ -90,7 +93,7 @@ assert_permission_denied 'escalation by SET ROLE' 'SET ROLE apd_lab_ingest;'
 # A separately authenticated reader cannot access ingest functions.
 obs=0
 obs_err="$(mktemp /tmp/apd-tcp-observer.XXXXXXXX)"
-observe -c "SELECT * FROM apd_change_lab.submit_compact('{}'::jsonb);" \
+observe -c "SELECT * FROM apd_change_api.submit_compact('{}'::jsonb);" \
  >/dev/null 2>"$obs_err" || obs=$?
 if ((obs==0)) || ! grep -Eq 'permission denied|42501' "$obs_err"; then
  echo 'APD_TCP_ROLE_FAIL: observer can execute private ingest functions' >&2
@@ -121,22 +124,22 @@ JS
 # Each call runs over a different AUTHENTICATED CLIENT CONNECTION (never SET ROLE).
 s1="$(app -v obj="$payload" <<'SQL'
 SELECT applied::text||chr(124)||retained::text
- FROM apd_change_lab.submit_compact(:'obj'::jsonb->'previous');
+ FROM apd_change_api.submit_compact(:'obj'::jsonb->'previous');
 SQL
 )"
 s2="$(app -v obj="$payload" <<'SQL'
 SELECT applied::text||chr(124)||retained::text
- FROM apd_change_lab.submit_compact(:'obj'::jsonb->'current');
+ FROM apd_change_api.submit_compact(:'obj'::jsonb->'current');
 SQL
 )"
 a1="$(app -v obj="$payload" <<'SQL'
 SELECT added::text||chr(124)||retained::text
- FROM apd_change_lab.submit_audit(:'obj'::jsonb->'batch');
+ FROM apd_change_api.submit_audit(:'obj'::jsonb->'batch');
 SQL
 )"
 a2="$(app -v obj="$payload" <<'SQL'
 SELECT added::text||chr(124)||retained::text
- FROM apd_change_lab.submit_audit(:'obj'::jsonb->'batch');
+ FROM apd_change_api.submit_audit(:'obj'::jsonb->'batch');
 SQL
 )"
 if [[ "$s1" != 'true|1' || "$s2" != 'true|2' ||
@@ -149,7 +152,7 @@ fi
 fake=0
 fake_err="$(mktemp /tmp/apd-tcp-fake.XXXXXXXX)"
 app -v obj="$payload" <<'SQL' >/dev/null 2>"$fake_err" || fake=$?
-SELECT * FROM apd_change_lab.submit_audit(jsonb_set(
+SELECT * FROM apd_change_api.submit_audit(jsonb_set(
  :'obj'::jsonb->'batch',
  '{events,0,before}',
  '"FORGED"'::jsonb
