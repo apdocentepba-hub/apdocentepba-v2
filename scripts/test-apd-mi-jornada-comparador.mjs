@@ -53,7 +53,8 @@ test('overlap boundary uses strict time intersection',()=>{
  assert.equal(overlap.conflicts[0].from,'11:20');
  assert.equal(overlap.conflicts[0].to,'11:50');
  const adjacent=checkScheduleOverlap(first,{jobs:[{...jobs[0],start:'11:50',end:'14:00'}]});
- assert.equal(adjacent.status,'no-overlap');
+ assert.equal(adjacent.status,'tight-transition');
+ assert.equal(adjacent.transitions[0].gapMinutes,0);
 });
 test('different weekdays do not conflict and commute is not certified',()=>{
  const x=checkScheduleOverlap(first,{jobs:[{...jobs[0],days:[6,7]}]});
