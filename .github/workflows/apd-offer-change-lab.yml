@@ -7,6 +7,8 @@ on:
       - 'scripts/test-apd-offer-change-detector.mjs'
       - 'scripts/apd-offer-compact-capture.mjs'
       - 'scripts/test-apd-offer-compact-capture.mjs'
+      - 'tests/sql/apd_change_compact_pg17.sql'
+      - 'tests/sql/test_apd_change_compact_pg17.sh'
       - '.github/workflows/apd-offer-change-lab.yml'
 
 permissions:
@@ -26,3 +28,40 @@ jobs:
           node --check scripts/apd-offer-change-detector.mjs
           node --check scripts/apd-offer-compact-capture.mjs
           node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs
+  pg17-compact-transactions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: apd_only_disposable_test
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGPASSWORD: apd_only_disposable_test
+      PGDATABASE: apd_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PostgreSQL client available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+      - name: Real PG17 transaction, two-capture retention and rollback tests
+        run: bash tests/sql/test_apd_change_compact_pg17.sh
+      - name: Protect production Worker and personal data
+        run: |
+          git diff --exit-code origin/main -- worker.js worker-live index.html app_v2.js sql supabase
