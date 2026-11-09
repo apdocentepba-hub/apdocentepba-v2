@@ -3,7 +3,7 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-pairs1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261109-gap1';
 import {
@@ -295,9 +295,13 @@ function renderSideBySide(items){
   a.firstOffer-b.firstOffer||a.secondOffer-b.secondOffer);
  for(const pair of displayPairs){
   const item=node('li','apd-comparator-schedule-item apd-comparator-schedule-'+pair.status);
-  const match=pair.days?.length?
-   ' · '+pair.days.join(', ')+', '+pair.from+' a '+pair.to:'';
-  item.textContent='Ofertas '+pair.firstOffer+' y '+pair.secondOffer+': '+pair.label+match;
+  const blocks=pair.matches?.length?pair.matches:[pair];
+  const match=blocks.filter(x=>x.days?.length).map(x=>
+   x.days.join(', ')+', '+x.from+' a '+x.to+
+   (x.status==='possible-overlap'?' (vigencia sin confirmar)':'')
+  ).join('; ');
+  item.textContent='Ofertas '+pair.firstOffer+' y '+pair.secondOffer+': '+pair.label+
+   (match?' · '+match:'');
   pairsList.appendChild(item);
  }
  pairsBox.appendChild(pairsList);
