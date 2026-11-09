@@ -462,7 +462,14 @@ try{
     '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
    return true;
   })()`);
-  await until('!!document.getElementById("apd-ver-comparacion") && document.querySelector(".apd-comparator-count")?.textContent==="5 de 5 ofertas seleccionadas"');
+  // Wait for the real dashboard MutationObserver to propagate the new ABC
+  // records. A pre-existing count of five is NOT evidence of refreshed rows.
+  await until(`(()=>{
+   const table=document.querySelector('#apd-comparador-panel .apd-comparator-table');
+   const row=[...(table?.querySelectorAll('tbody tr')||[])]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return row?.textContent.includes('Miércoles: 14:00 a 17:00')??false;
+  })()`);
   await js('document.getElementById("apd-ver-comparacion").click();true');
   await until('document.getElementById("apd-comparison-dialog")?.open===true');
   const multiBlockText=await js(`[...document.querySelectorAll(
