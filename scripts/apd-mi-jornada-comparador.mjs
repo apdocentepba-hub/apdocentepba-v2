@@ -83,7 +83,7 @@ export function sanitizeWorkProfile(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Perfil inválido');
  const domicile=String(data.domicile??'').trim();
  if(domicile.length>180||/[\r\n<>]/.test(domicile))throw Error('Domicilio inválido');
- const travelGapMinutes=data.travelGapMinutes??30;
+ const travelGapMinutes=data.travelGapMinutes===undefined?30:data.travelGapMinutes;
  if(!TRAVEL_GAP_OPTIONS.includes(travelGapMinutes))throw Error('Margen entre clases inválido');
  const jobs=data.jobs??[];
  if(!Array.isArray(jobs)||jobs.length>5)throw Error('Máximo cinco jornadas');
