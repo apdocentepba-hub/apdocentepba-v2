@@ -45,9 +45,13 @@ function titleFor(offer) {
 }
 function focusComparison() {
  if(!root||root.hidden)return;
- const heading=root.querySelector('.apd-comparator-head h3');
- // The user must see results instead of searching below a tall carousel.
- root.scrollIntoView?.({
+ // Jump to the actual result: controls above it can take a full mobile screen.
+ const target=root.querySelector('.apd-comparator-side-by-side')||
+  root.querySelector('.apd-comparator-unavailable')||root;
+ const heading=target.querySelector('h4')||
+  (target.classList.contains('apd-comparator-unavailable')?target:
+   root.querySelector('.apd-comparator-head h3'));
+ target.scrollIntoView?.({
   behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'auto':'smooth',
   block:'start'
  });
@@ -156,7 +160,9 @@ async function verifySchoolDistances(){
 function renderSideBySide(items){
  if(!Array.isArray(items)||items.length<2)return null;
  const region=node('section','apd-comparator-side-by-side');
- region.appendChild(node('h4','','Comparación lado a lado'));
+ const heading=node('h4','','Comparación lado a lado');
+ heading.tabIndex=-1;
+ region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
   'Las diferencias se resaltan. Es orientativo: no calcula adjudicaciones ni determina si podés postularte.'));
  const wrap=node('div','apd-comparator-table-scroll');
@@ -269,9 +275,25 @@ function render(){
    preferredTurns:state.turn?[state.turn]:[],
    referenceLocation:origin,verifiedGeoByKey:state.geoByKey
   });
+  const excludedReasons=result.excluded.map(x=>({
+   official_status_closed:'estado oficial cerrado o anulado',
+   confirmed_deadline_passed:'plazo de cierre vencido',
+   duplicate_key:'identificador duplicado',
+   missing_or_invalid_key:'identificador ausente o inválido'
+  }[x.reason]||'información no comparable')).join('; ');
   if(selected.length>=2){
    const comparison=renderSideBySide(result.items);
    if(comparison)root.appendChild(comparison);
+   else {
+    const notice=node('p','apd-comparator-unavailable',
+     'No se puede mostrar una comparación lado a lado: solo '+result.items.length+
+     ' de '+selected.length+' ofertas seleccionadas son comparables. '+
+     (excludedReasons?'Motivos: '+excludedReasons+'. ':'')+
+     'Verificá la vigencia en ABC o elegí otras ofertas.');
+    notice.tabIndex=-1;
+    notice.setAttribute('role','status');
+    root.appendChild(notice);
+   }
   }else{
    root.appendChild(node('p','apd-comparator-empty',
     'Seleccionaste una oferta. Marcá otra y vas a ver una tabla con sus diferencias.'));
@@ -338,7 +360,8 @@ function render(){
   }
   if(result.excluded.length){
    root.appendChild(node('p','apd-comparator-warning',
-    result.excluded.length+' oferta(s) excluida(s): vencidas, cerradas o sin identificador válido.'));
+    result.excluded.length+' oferta(s) excluida(s) de la comparación: '+
+    excludedReasons+'. Confirmá estado y cierre en ABC.'));
   }
  }else{
   root.appendChild(node('p','apd-comparator-empty',
