@@ -26,15 +26,26 @@ const fixture=(items=[raw(0),raw(1),raw(2),raw(3)],changes={})=>{
  const calls=[];
  let states=0;
  const readScanState=async()=>{states++;return states===2&&changes.stateAfter?changes.stateAfter:scan()};
- const readPage=async ({district,start,rows,pass})=>{
-  calls.push({district,start,rows,pass});
+ const readPage=async ({district,query,sort,mode,start,rows,pass})=>{
+  calls.push({district,query,sort,mode,start,rows,pass});
   if(changes.failAt===pass+':'+start)throw Error('FAKE_ABC_IO_FAILURE');
   const docs=(pass===2&&changes.secondRows?changes.secondRows:items).slice(start,start+rows);
   if(changes.replace&&changes.replace.pass===pass&&changes.replace.start===start)
    docs.splice(0,docs.length,...changes.replace.docs);
   const total=changes.totalAt?.[pass+':'+start]??items.length;
-  if(changes.omitNumFound) return {response:{start,docs}};
-  return {response:{numFound:total,start:changes.wrongStart??start,docs}};
+  const responseHeader=changes.omitResponseHeader?undefined:{
+   status:changes.headerStatus??0,
+   params:{
+    q:changes.echoQuery??query,
+    sort:changes.echoSort??sort,
+    start:String(changes.echoStart??start),
+    rows:String(changes.echoRows??rows),
+    wt:changes.echoWt??'json'
+   }
+  };
+  if(changes.omitNumFound)
+   return {responseHeader,response:{start,docs}};
+  return {responseHeader,response:{numFound:total,start:changes.wrongStart??start,docs}};
  };
  return {calls,readScanState,readPage,states:()=>states};
 };
@@ -61,6 +72,11 @@ test('two complete source passes produce only a candidate, never delivery',async
  assert.equal(result.capture.fieldCount,14);
  assert.equal(result.capture.rows.length,4);
  assert.equal(result.evidence.pagesPerPass,2);
+ assert.equal(result.evidence.queryVerified,true);
+ assert.equal(result.evidence.stableTieBreaker,true);
+ assert.ok(f.calls.every(x=>x.mode==='current_published'&&
+  x.query==='descdistrito:"AVELLANEDA" AND estado:"Publicada"'&&
+  x.sort==='ult_movimiento desc,iddetalle asc'));
  assert.deepEqual(f.calls.map(x=>[x.pass,x.start]),[[1,0],[1,2],[2,0],[2,2]]);
  assert.equal(f.states(),2);
  assert.equal(result.capture.rows[0].source_offer_key,'D_8000');
@@ -128,6 +144,33 @@ test('projection is actually consistent with Worker buildGlobalSnapshotRow on fi
  const adapterResult=projectCurrentAPDHeader(example,'AVELLANEDA');
  for(const [field,value] of Object.entries(adapterResult))
   assert.equal(value,workerResult[field],field+' differs from Worker field projection');
+});
+test('real ABC behavior: district-only query is historical and MUST fail',async()=>{
+ const f=fixture([raw(0)],{echoQuery:'descdistrito:"AVELLANEDA"'});
+ await assert.rejects(()=>run(f),/query not verified/);
+ assert.equal(f.calls.length,1);
+});
+test('real ABC published filter and tiebreak sort are explicitly enforced',async()=>{
+ const originalSort='ult_movimiento desc';
+ await assert.rejects(()=>run(fixture([raw(0)],{echoSort:originalSort})),
+  /query not verified/);
+ await assert.rejects(()=>run(fixture([raw(0)],{echoQuery:'estado:"Publicada"'})),
+  /query not verified/);
+ await assert.rejects(()=>run(fixture([raw(0)],{echoQuery:'descdistrito:"QUILMES" AND estado:"Publicada"'})),
+  /query not verified/);
+});
+test('response header absent, mismatched rows/start or non-JSON is rejected',async()=>{
+ const variants=[
+  {omitResponseHeader:true},{echoRows:5},{echoStart:100},{echoWt:'xml'},
+  {headerStatus:400}
+ ];
+ for(const changes of variants)
+  await assert.rejects(()=>run(fixture([raw(0)],changes)),/query not verified/);
+});
+test('district total beyond compact 1500-offer upper bound fails safely',async()=>{
+ const f=fixture([raw(0)],{totalAt:{'1:0':9355}});
+ await assert.rejects(()=>run(f),/numFound/);
+ assert.equal(f.calls.length,1);
 });
 test('source count drift across pages must fail closed',async()=>{
  const f=fixture(undefined,{totalAt:{'1:2':5}});
