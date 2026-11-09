@@ -21,6 +21,7 @@ on:
       - 'tests/sql/test_apd_change_audit_concurrency_pg17.sh'
       - 'tests/sql/test_apd_change_backup_restore_pg17.sh'
       - 'docs/APD_CAMBIOS_CANCELACIONES_LAB_20261109.md'
+      - 'docs/APD_ESTADO_DESDE_COMPARADOR_20261109.md'
       - '.github/workflows/apd-offer-change-lab.yml'
 
 permissions:
