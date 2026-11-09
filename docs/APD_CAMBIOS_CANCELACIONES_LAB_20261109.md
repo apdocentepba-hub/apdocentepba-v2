@@ -44,3 +44,23 @@ Todas las 1.865 ofertas de `current` presentan estado `PUBLICADA`: esta tabla fi
 - El parámetro de error inyectado existe **solo para el laboratorio**; un diseño final necesitaría eliminarlo antes de cualquier activación.
 - El SHA-256 del Node se conserva como identificador orientativo; SQL recalcula su propia huella de contenido y no concede autoridad al digest del cliente.
 - No hay outbox, cron, Worker conectado, interfaz ni avisos activados. Cualquier despliegue exige autorización expresa y respaldo restaurable.
+
+## Tercera etapa — eventos privados sin envío (09/11/2026)
+**Alcance:** laboratorio local de PostgreSQL 17 dentro de GitHub Actions. No se modificó ninguna tabla, permiso, función, Worker ni configuración del proyecto Supabase real.
+
+### Implementación
+- `scripts/apd-offer-audit-batch.mjs`: genera una proyección mínima desde el comparador de dos capturas compactas. Solo conserva tipo, clave, campo, valor anterior y nuevo; **no incluye destinatarios, texto de notificaciones ni recordatorios de 72/24 horas**. Ante captura incompleta o vencida no prepara eventos.
+- `tests/sql/apd_change_audit_events_pg17.sql`: nueva tabla privada `apd_change_lab.audit_events`, con RLS, privilegios `PUBLIC` revocados, clave única por `scope,event_key`, estado fijo `audit_only`, TTL de siete días y tope de 1.000 eventos por distrito. La función `SECURITY INVOKER` exige dos capturas verificadas y correlaciona cada valor del candidato con **ambas** capturas; rechaza campos arbitrarios, suplantaciones, bajas inferidas por desaparición y estados finales sin comprobación explícita. No existe función de entrega.
+- `tests/sql/test_apd_change_audit_events_pg17.sh`: integración Node → dos capturas PG17 → bandeja audit-only. Demuestra deduplicación, rechazo de valores falsificados, recuperación de fallo inyectado después del INSERT, estado no entregable, permisos cerrados y ausencia de eventos ante un solo barrido.
+- `tests/sql/test_apd_change_audit_concurrency_pg17.sh`: dos clientes PostgreSQL reales insertan al mismo tiempo el mismo evento; se confirma **exactamente un INSERT y un reintento idempotente**, sin duplicación ni cambio de estado.
+- CI: `diff-lab` + `pg17-compact-transactions` + protección del Worker, sin credenciales externas.
+
+### Verificación independiente de fuente actual (consultas SQL SELECT solamente)
+- `public.apd_ofertas_global_current`: **1.865 registros** y **1.865 claves diferentes**. Cero claves, distritos o `finoferta` faltantes. Máximo de 81 ofertas por distrito, clave más larga de 9 caracteres y cierre más largo de 20 caracteres.
+- **Todas siguen figurando `PUBLICADA`**; no se atribuyen cancelaciones reales a esta tabla. Tampoco hay dos capturas recientes completas guardadas en la fuente histórica como para certificar diferencias reales.
+- Estos conteos comprueban la forma de los datos actuales, **no** la atomicidad, paginación íntegra ni fidelidad del origen ABC.
+
+### Evidencia y límites
+- GitHub Actions 09/11/2026: **37/37 pruebas de Node**; PostgreSQL 17 real descartable PASS para inserción, TTL, RLS, rollback, duplicados, contraste con capturas y carrera de dos procesos. Marcadores de log `APD_AUDIT_PG17_PASSED` y `APD_AUDIT_CONCURRENT_PG17_PASSED`. Trabajo ejecutado sin acceso a cuentas ni mensajería.
+- No hay conexión aún al escáner oficial ni acceso de roles de una instancia Supabase staging; tampoco entrega, opt-in, preferencias, correlación docente ni cron. La incorporación productiva requiere medir el costo real, respaldo restaurable, permisos/roles auditados y dos escaneos oficiales íntegros, además de autorización separada para cambios a infraestructura.
+- El campo de estado **no puede pasar a `pending_send` o `sent`**: la propia tabla lo prohíbe. Los eventos permanecen como evidencia candidata, nunca como notificaciones.
