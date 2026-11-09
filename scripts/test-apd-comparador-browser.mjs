@@ -472,20 +472,11 @@ try{
   })()`);
   await js('document.getElementById("apd-ver-comparacion").click();true');
   await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  // Column numbers follow the visible expiry sort, not original source indexes.
   const multiBlockText=await js(`[...document.querySelectorAll(
    '#apd-comparison-dialog .apd-comparator-schedule-item')]
-   .find(x=>x.textContent.startsWith('Ofertas 1 y 2:'))?.textContent||''`);
-  const multiBlockDiagnostic=await js(`(async()=>{
-   const rows=[...document.querySelectorAll('#apd-comparison-dialog .apd-comparator-table tbody tr')];
-   const times=rows.find(x=>x.querySelector('th')?.textContent==='Días y horarios');
-   const display=[...(times?.querySelectorAll('td')||[])].map(x=>x.textContent);
-   const parser=await import('/scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1');
-   return {raw:window.__offers.slice(0,2).map(x=>x.dias_horarios),
-    display,parsed:display.map(x=>parser.parseOfferWeeklySegments(x)),
-    pair:document.querySelector('#apd-comparison-dialog .apd-comparator-schedule-list')?.textContent};
-  })()`);
-  assert.match(multiBlockText,/Lunes, 09:00 a 10:00/,
-   'Browser multi-block debug: '+JSON.stringify(multiBlockDiagnostic));
+   .find(x=>x.textContent.includes('Lunes, 09:00 a 10:00'))?.textContent||''`);
+  assert.match(multiBlockText,/Lunes, 09:00 a 10:00/);
   assert.match(multiBlockText,/Miércoles, 15:00 a 17:00/);
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
