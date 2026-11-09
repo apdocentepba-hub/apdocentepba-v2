@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {createAPDScannerCompactAdapter,projectCurrentAPDHeader}
  from './apd-scanner-compact-adapter.mjs';
 
@@ -92,6 +93,41 @@ test('identity and 14-field projection matches scanner snapshot schema',()=>{
  }
  assert.match(worker,/const pageDocs = Array\.isArray\(data\?\.response\?\.docs\)/);
  assert.ok(worker.includes('async function fetchAPDDistrictBatch('));
+});
+test('650 offers match real 150-row scanner pagination, twice',async()=>{
+ const data=Array.from({length:650},(_,i)=>raw(i));
+ const f=fixture(data);
+ const result=await run(f,{pageSize:150});
+ assert.equal(result.capture.complete,true);
+ assert.equal(result.capture.sourceTotal,650);
+ assert.equal(result.evidence.pagesPerPass,5);
+ assert.deepEqual(f.calls.map(x=>[x.pass,x.start]),[
+  [1,0],[1,150],[1,300],[1,450],[1,600],
+  [2,0],[2,150],[2,300],[2,450],[2,600]]);
+ assert.equal(new Set(result.capture.rows.map(x=>x.source_offer_key)).size,650);
+});
+test('projection is actually consistent with Worker buildGlobalSnapshotRow on fixture',()=>{
+ const worker=readFileSync(new URL('../worker.js',import.meta.url),'utf8');
+ const start=worker.indexOf('function buildGlobalSnapshotRow(oferta, capturedAt) {');
+ const end=worker.indexOf('async function loadCurrentRowsMap(',start);
+ assert.ok(start>0&&end>start);
+ const code=worker.slice(start,end);
+ const sandbox={
+  buildSourceOfferKeyFromOferta:oferta=>'D_'+String(oferta.iddetalle),
+  norm:v=>String(v||'').toUpperCase().normalize('NFD')
+   .replace(/[\u0300-\u036f]/g,'')
+   .replace(/[^\p{L}\p{N}\s/().,-]/gu,' ')
+   .replace(/\s+/g,' ').trim(),
+  mapTurnoAPD:v=>v==='M'?'MANANA':v==='T'?'TARDE':v,
+  normalizarCursoDivisionServidor:v=>String(v||'').trim()
+ };
+ vm.createContext(sandbox);
+ vm.runInContext(code,sandbox,{timeout:1000});
+ const example=raw(11);
+ const workerResult=sandbox.buildGlobalSnapshotRow(example,stamp);
+ const adapterResult=projectCurrentAPDHeader(example,'AVELLANEDA');
+ for(const [field,value] of Object.entries(adapterResult))
+  assert.equal(value,workerResult[field],field+' differs from Worker field projection');
 });
 test('source count drift across pages must fail closed',async()=>{
  const f=fixture(undefined,{totalAt:{'1:2':5}});
