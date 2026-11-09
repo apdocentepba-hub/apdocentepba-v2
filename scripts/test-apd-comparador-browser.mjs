@@ -449,6 +449,27 @@ try{
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
+  // E2E: the real comparison UI must surface BOTH separate weekly collisions,
+  // not just unit-test the parser or silently keep the first interval.
+  await js(`(()=>{
+   window.__offers=window.__offers.map((offer,i)=>{
+    if(i===0)return {...offer,dias_horarios:'Lunes: 08:00 a 10:00; Miércoles: 14:00 a 17:00'};
+    if(i===1)return {...offer,dias_horarios:'Lunes: 09:00 a 11:00; Miércoles: 15:00 a 18:00'};
+    return offer;
+   });
+   window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:true,planInfo:planActual});
+   return true;
+  })()`);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  const multiBlockText=await js(`[...document.querySelectorAll(
+   '#apd-comparison-dialog .apd-comparator-schedule-item')]
+   .find(x=>x.textContent.startsWith('Ofertas 1 y 2:'))?.textContent||''`);
+  assert.match(multiBlockText,/Lunes, 09:00 a 10:00/);
+  assert.match(multiBlockText,/Miércoles, 15:00 a 17:00/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
+
   await js(`(()=>{
     window.alertasState.index=5;
     document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
