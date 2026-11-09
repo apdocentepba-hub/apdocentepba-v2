@@ -49,10 +49,60 @@ function closeComparisonDialog() {
  if(previous.open&&typeof previous.close==='function')previous.close();
  previous.remove();
 }
+// Read-only comparison snapshot of numbers ALREADY displayed by the authorized
+// card. Never calls the API, accesses credentials or stores data beyond this tab.
+const observedApplicants=new Map();
+let applicantObserver=null;
+function offerIdentity(offer) {
+ return [offerKey(offer),String(offer?.idoferta??''),String(offer?.iddetalle??'')].join('|');
+}
+function captureVisibleApplicants() {
+ if(!state.enabled||!state.current)return;
+ const box=document.querySelector('#panel-alertas .alerta-main-card #alerta-postulantes-meta');
+ if(!box)return;
+ const field=label=>{
+  const item=[...box.querySelectorAll('.alerta-meta-item')].find(el=>
+   el.querySelector('.alerta-meta-k')?.textContent?.trim()===label);
+  return item?.querySelector('.alerta-meta-v')?.textContent?.trim()||'';
+ };
+ const countText=field('Postulantes');
+ let count=Number(countText);
+ const empty=box.querySelector('.alerta-meta-empty')?.textContent?.trim()||'';
+ if(!countText) {
+  if(!empty.includes('Todavía no hay postulantes visibles'))return;
+  count=0;
+ }
+ if(!Number.isSafeInteger(count)||count<0)return;
+ const id=offerIdentity(state.current);
+ observedApplicants.set(offerKey(state.current),{
+  identity:id,verified_from_current_card:true,total_postulantes:count,
+  puntaje_primero:field('Puntaje del primero'),
+  listado_origen_primero:field('Listado del primero')
+ });
+}
+function watchVisibleApplicants(){
+ if(!applicantObserver)
+  applicantObserver=new MutationObserver(captureVisibleApplicants);
+ applicantObserver.disconnect();
+ const panel=document.getElementById('panel-alertas');
+ if(panel&&state.enabled)applicantObserver.observe(panel,{childList:true,subtree:true});
+ captureVisibleApplicants();
+}
 function readApplicantSummaries(offers) {
- try {
-  return window.APD_readCachedApplicantsForComparison?.(offers)||{};
- } catch(_) {return {};}
+ captureVisibleApplicants();
+ const result=Object.create(null);
+ for(const offer of offers) {
+  const key=offerKey(offer);
+  const cached=observedApplicants.get(key);
+  if(cached?.identity===offerIdentity(offer))
+   result[key]={
+    verified_from_current_card:true,
+    total_postulantes:cached.total_postulantes,
+    puntaje_primero:cached.puntaje_primero,
+    listado_origen_primero:cached.listado_origen_primero
+   };
+ }
+ return result;
 }
 function focusComparison() {
  // The alert carousel may be in a fixed-height/rearranged card. Open the
@@ -494,9 +544,12 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  if(state.geoRequested&&
    JSON.stringify(selectedSchoolKeys())!==state.geoSignature)invalidateGeo();
  syncCurrentButton();
+ watchVisibleApplicants();
  render();
 }
 function reset() {
+ applicantObserver?.disconnect();
+ observedApplicants.clear();
  closeComparisonDialog();
  invalidateGeo();
  state.enabled=false;state.available=[];state.current=null;state.selected.clear();
