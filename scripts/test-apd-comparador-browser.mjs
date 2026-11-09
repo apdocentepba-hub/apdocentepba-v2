@@ -171,7 +171,8 @@ try{
    window.__offers=${JSON.stringify(synthetic)};
    dashboardLoadedOwner='SYNTHETIC_USER_A';
    window.__testToken='SYNTHETIC_USER_A';
-   planActual={access_active:true};
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+    subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
    window.alertasState={items:window.__offers,index:0};
    document.getElementById('panel-alertas').innerHTML=
     '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
@@ -181,6 +182,32 @@ try{
   await until('typeof window.APD_offerSchoolMapRefresh==="function" && !!document.getElementById("apd-map-school-link")');
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),false);
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
+  assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),true,
+   'Active Insigne must see private work planner');
+  // Simulated downgrade of SAME account; basic comparator remains available.
+  await js(`(()=>{
+   sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
+    JSON.stringify({domicile:'DATO PRIVADO FICTICIO',jobs:[]}));
+   planActual={ok:true,access_active:true,plan:{code:'PLUS'},
+    subscription:{plan_code:'PLUS',status:'active',source:'mercadopago_checkout'}};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-comparador-panel .apd-comparator-insigne-locked")');
+  assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),false,
+   'Plus may compare offers but cannot open private work planner');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
+   'Downgrade must wipe domicile from the same browser tab');
+  assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
+  await js(`(()=>{
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+    subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-comparador-panel .apd-work-planner")');
   for(let i=0;i<5;i++){
    await js(`(()=>{
     window.alertasState.index=${i};
