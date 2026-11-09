@@ -131,7 +131,7 @@ const synthetic=Array.from({length:6},(_,i)=>({
  iddetalle:8000+i,idoferta:5000+i,escuela:i%2?'0085MS0043':'0005MS0004',
  distrito:i%2?'QUILMES':'AVELLANEDA',turno:i%2?'Tarde':'Mañana',
  descripcioncargo:i===1?'<img src=x onerror=alert(1)>':'MATEMÁTICA '+i,
- finoferta:`2035-12-${String(10+i).padStart(2,'0')}T10:00:00-03:00`,
+ finoferta:i===0?'2035-12-10T10:00:00Z':`2035-12-${String(10+i).padStart(2,'0')}T10:00:00-03:00`,
  estado:'PUBLICADA'
 }));
 const results=[];
@@ -197,6 +197,8 @@ try{
     assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table thead th").length'),3);
     assert.ok(await js('document.getElementById("apd-comparison-dialog").getBoundingClientRect().width<=innerWidth'));
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
+    const firstDeadline=await js('document.querySelector("#apd-comparison-dialog .apd-comparator-table tbody tr:nth-child(5) td")?.textContent||""');
+    assert.match(firstDeadline,/10:00/,'ABC finoferta Z must remain 10:00 local, not 07:00');
     await js('document.getElementById("apd-comparison-close").click();true');
     await until('!document.getElementById("apd-comparison-dialog")');
     // Emulate production CSS hiding the underlying results card.
