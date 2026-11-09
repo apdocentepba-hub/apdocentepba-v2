@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-exclusion1'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-modal1'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -50,7 +50,9 @@ test('comparison is findable and shows side-by-side differences without PID infe
  assert.match(ui,/function focusComparison\(\)/);
  assert.match(ui,/Ver comparación \('/);
  assert.match(ui,/beforeCount===1&&state\.selected\.size===2/);
- assert.match(ui,/scrollIntoView/);
+ assert.match(ui,/dialog\.showModal/);
+ assert.match(ui,/document\.body\.appendChild\(dialog\)/);
+ assert.match(ui,/closeComparisonDialog\(\)/);
  assert.match(ui,/Comparación lado a lado/);
  assert.match(ui,/class.*apd-comparator-table-scroll|apd-comparator-table-scroll/);
  assert.match(ui,/apd-comparator-diff/);

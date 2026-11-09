@@ -103,3 +103,25 @@
 .apd-comparator-unavailable{border-left:3px solid #ad642b;background:#fff8eb;
  padding:11px 13px;border-radius:6px;font-size:13px;line-height:1.5;color:#683917}
 .apd-comparator-unavailable:focus{outline:2px solid #416fa8;outline-offset:2px}
+
+/* Always-visible result independent of the rearranged carousel card. */
+.apd-comparator-dialog{width:min(900px,calc(100vw - 28px));max-width:none;
+ max-height:calc(100dvh - 28px);margin:auto;padding:0;background:#fff;
+ border:1px solid #b8cfe5;border-radius:17px;color:#17365b;
+ box-shadow:0 24px 80px rgba(5,28,54,.38)}
+.apd-comparator-dialog::backdrop{background:rgba(6,23,45,.7)}
+.apd-comparator-modal-head{display:flex;justify-content:space-between;
+ align-items:center;gap:12px;flex-wrap:wrap;padding:17px 19px;
+ background:#edf5ff;border-bottom:1px solid #d8e5f5}
+.apd-comparator-modal-head h2{margin:0;font-size:19px;line-height:1.3;color:#133656}
+.apd-comparator-modal-close{border:1px solid #b1c5df;background:#fff;
+ color:#133656;border-radius:9px;min-height:39px;padding:8px 12px;
+ font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.apd-comparator-modal-body{padding:16px 18px 22px;
+ max-height:calc(100dvh - 130px);overflow-y:auto;overscroll-behavior:contain}
+.apd-comparator-dialog .apd-comparator-side-by-side{margin-top:0}
+@media(max-width:600px){
+ .apd-comparator-modal-head{padding:12px}
+ .apd-comparator-modal-head h2{font-size:16px}
+ .apd-comparator-modal-body{padding:11px}
+}
