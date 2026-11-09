@@ -1,0 +1,34 @@
+name: APD plan unverified - fail closed regression (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-apd-plan-unverified-alert-guard.mjs'
+      - '.github/workflows/apd-plan-unverified-alert-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile actual app and assert unknown plans never display alert data
+        run: |
+          node --check app_v2.js
+          node --check scripts/test-apd-plan-unverified-alert-guard.mjs
+          node --test scripts/test-apd-plan-unverified-alert-guard.mjs
+      - name: Ensure auth and payment route contracts are unchanged
+        run: |
+          node scripts/test-auth-session-regression.mjs
+          node --test scripts/test-ui-v21-release.mjs
+      - name: No Worker, Supabase, SQL, or page template modifications
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js supabase sql index.html
