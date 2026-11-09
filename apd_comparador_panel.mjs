@@ -286,7 +286,14 @@ function renderSideBySide(items){
   'Compara días, horas y vigencias declaradas. No determina compatibilidad '+
   'normativa, adjudicación ni posibilidad de traslado.'));
  const pairsList=node('ul','apd-comparator-schedule-list');
- for(const pair of pairs){
+ // Priority sorting keeps actionable collisions visible without requiring
+ // scrolling through ten pairs when five offers are selected.
+ const severity={overlap:0,'possible-overlap':1,unverified:2,
+  'no-shared-date':3,'separate-periods':4,'no-time-overlap':5};
+ const displayPairs=[...pairs].sort((a,b)=>
+  (severity[a.status]??6)-(severity[b.status]??6)||
+  a.firstOffer-b.firstOffer||a.secondOffer-b.secondOffer);
+ for(const pair of displayPairs){
   const item=node('li','apd-comparator-schedule-item apd-comparator-schedule-'+pair.status);
   const match=pair.days?.length?
    ' · '+pair.days.join(', ')+', '+pair.from+' a '+pair.to:'';
