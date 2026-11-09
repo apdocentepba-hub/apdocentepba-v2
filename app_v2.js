@@ -146,6 +146,34 @@ function bindAdminEvents() {
 
 
 const postulantesResumenCache = new Map();
+// The comparator can READ only previously shown APD applicant summaries.
+// It never fetches additional data, persists state, or exposes a bearer.
+window.APD_readCachedApplicantsForComparison = function(offers) {
+ const token=obtenerToken();
+ if(!token||dashboardLoadedOwner!==token||planActual?.access_active!==true||
+    !Array.isArray(offers)||offers.length>5)return Object.create(null);
+ const authorized=new Map(alertasState.items.map(o=>[
+  String(o?.source_offer_key||'D_'+String(o?.iddetalle||'')).trim(),
+  String(o?.idoferta||'').trim()+'|'+String(o?.iddetalle||'').trim()
+ ]));
+ const result=Object.create(null);
+ for(const offer of offers) {
+  const sourceKey=String(offer?.source_offer_key||'').trim();
+  const ids=String(offer?.idoferta||'').trim()+'|'+String(offer?.iddetalle||'').trim();
+  if(!sourceKey||!ids||ids==='|'||authorized.get(sourceKey)!==ids)continue;
+  const cached=postulantesResumenCache.get(ids);
+  if(cached?.ok!==true)continue;
+  const total=Number(cached.total_postulantes);
+  if(!Number.isSafeInteger(total)||total<0)continue;
+  const first=String(cached.puntaje_primero??'').trim();
+  const listing=String(cached.listado_origen_primero??'').trim();
+  result[sourceKey]={
+   verified_from_current_card:true,total_postulantes:total,
+   puntaje_primero:first.slice(0,40),listado_origen_primero:listing.slice(0,100)
+  };
+ }
+ return result;
+};
 const suggestionCache = new Map();
 const autocompleteStates = new Map();
 
@@ -1083,6 +1111,7 @@ async function cargarResumenPostulantes(alerta) {
   }
 
   const key = `${oferta}|${detalle}`;
+  const requestOwner=dashboardLoadedOwner;
 
   if (postulantesResumenCache.has(key)) {
     const cached = postulantesResumenCache.get(key);
@@ -1110,6 +1139,8 @@ async function cargarResumenPostulantes(alerta) {
       throw new Error(data?.message || data?.error || "No se pudo consultar la lista");
     }
 
+    // An older asynchronous request must not populate a different session.
+    if(dashboardLoadedOwner!==requestOwner||obtenerToken()!==requestOwner)return;
     postulantesResumenCache.set(key, data);
 
     const actual = alertasState.items[alertasState.index];
@@ -1776,6 +1807,7 @@ async function cargarDashboard() {
     return;
   }
   if (dashboardLoadedOwner !== token) {
+    postulantesResumenCache.clear();
     dashboardLoadedOwner = token;
     alertasState.items = [];
     alertasState.index = 0;
