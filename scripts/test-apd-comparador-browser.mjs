@@ -78,6 +78,8 @@ const server=createServer((req,res)=>{
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
+  '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
+  '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
@@ -136,7 +138,7 @@ const synthetic=Array.from({length:6},(_,i)=>({
  pid_compatible:i<2?true:undefined,
  pid_puntaje_total_final:i===0?'38,10':i===1?'45,00':undefined,
  pid_listado:i<2?'oficial':undefined,
- dias_horarios:i===0?'Lunes a Viernes: 7:20HSA 11:50HS':i===1?'Lunes a Viernes: 7:20 a 11:50':'',
+ dias_horarios:i===0?'Lunes a Viernes: 7:20HSA 11:50HS':i===1?'Lunes a Viernes: 7:20 a 11:50\u200b':'',
  cursodivision:i===0?'0':i===1?'A':'2 B',
  hsmodulos:i<2?'4':'',revista:i===0?'Suplencia':i===1?'Provisional':'',
  supl_desde:i<2?'2035-11-10T00:00:00Z':'',
@@ -254,6 +256,41 @@ try{
     assert.match(facts.summary,/Datos incompletos o no comparables: Curso \/ división/);
     assert.doesNotMatch(facts.summary,/Diferencias detectadas:[^.]*Días y horarios/,
      'Equivalent schedules must be removed from the differences list');
+    assert.equal(await js('!!document.querySelector("#apd-comparison-dialog .apd-work-planner")'),true,
+     'Optional domicile and current job editor must be available');
+    await js(`(()=>{
+     const dialog=document.getElementById('apd-comparison-dialog');
+     const details=dialog.querySelector('.apd-work-planner');details.open=true;
+     [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Agregar escuela')).click();
+     const form=details.querySelector('form');
+     form.querySelector('input[type="text"]').value='Wilde, Avellaneda';
+     const job=details.querySelector('.apd-work-shift');
+     job.querySelector('input[type="text"]').value='Escuela actual';
+     for(const c of job.querySelectorAll('input[type="checkbox"]'))c.checked=Number(c.value)<=5;
+     job.querySelectorAll('input[type="time"]')[0].value='07:20';
+     job.querySelectorAll('input[type="time"]')[1].value='11:50';
+     form.requestSubmit();
+     return true;
+    })()`);
+    await until(`(()=>{
+     const rows=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')];
+     return rows.find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')
+      ?.textContent.includes('Superposición de horarios')??false;
+    })()`);
+    assert.equal(await js(`(()=>{
+     const saved=sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1');
+     return !!saved&&saved.includes('Escuela actual')&&saved.includes('Wilde, Avellaneda');
+    })()`),true,'Optional profile stored only in current tab');
+    await js(`(()=>{
+      const dialog=document.getElementById('apd-comparison-dialog');
+      const details=dialog.querySelector('.apd-work-planner');details.open=true;
+      [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar mis datos')).click();
+      return true;
+    })()`);
+    await until('!sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")');
+    assert.equal(await js(`!![...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+      .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')`),false,
+     'Clearing profile must remove evaluation row');
     assert.match(bodyText,/Días y horarios/);
     assert.match(bodyText,/Postulantes visibles/);
     assert.match(bodyText,/42,60/);
