@@ -43,19 +43,62 @@ function titleFor(offer) {
  return [String(offer?.descripcioncargo||offer?.cargo||'Cargo sin descripción').trim(),
   String(offer?.distrito||'').trim()].filter(Boolean).join(' · ');
 }
+function closeComparisonDialog() {
+ const previous=document.getElementById('apd-comparison-dialog');
+ if(!previous)return;
+ if(previous.open&&typeof previous.close==='function')previous.close();
+ previous.remove();
+}
 function focusComparison() {
- if(!root||root.hidden)return;
- // Jump to the actual result: controls above it can take a full mobile screen.
- const target=root.querySelector('.apd-comparator-side-by-side')||
-  root.querySelector('.apd-comparator-unavailable')||root;
- const heading=target.querySelector('h4')||
-  (target.classList.contains('apd-comparator-unavailable')?target:
-   root.querySelector('.apd-comparator-head h3'));
- target.scrollIntoView?.({
-  behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'auto':'smooth',
-  block:'start'
- });
- heading?.focus?.({preventScroll:true});
+ // The alert carousel may be in a fixed-height/rearranged card. Open the
+ // actual comparison in the browser top layer, not under a clipped ancestor.
+ if(!state.enabled||state.selected.size<2)return;
+ const selected=selectedOffers();
+ if(selected.length<2)return;
+ closeComparisonDialog();
+ const dialog=node('dialog','apd-comparator-dialog');
+ dialog.id='apd-comparison-dialog';
+ dialog.setAttribute('aria-label','Comparación de ofertas seleccionadas');
+ const header=node('div','apd-comparator-modal-head');
+ header.appendChild(node('h2','','Comparación de '+selected.length+' ofertas'));
+ const close=button('Cerrar comparación',closeComparisonDialog,
+  'apd-comparator-modal-close');
+ close.id='apd-comparison-close';
+ header.appendChild(close);
+ dialog.appendChild(header);
+ const body=node('div','apd-comparator-modal-body');
+ try {
+  const origin=state.geoByKey[state.anchor]||null;
+  const result=compareOffers({
+   offers:selected,sortBy:state.sort,
+   preferredDistricts:state.district?[state.district]:[],
+   preferredTurns:state.turn?[state.turn]:[],
+   referenceLocation:origin,verifiedGeoByKey:state.geoByKey
+  });
+  const comparison=renderSideBySide(result.items);
+  if(comparison)body.appendChild(comparison);
+  else {
+   const reasons=result.excluded.map(x=>({
+    official_status_closed:'estado oficial cerrado o anulado',
+    confirmed_deadline_passed:'plazo de cierre vencido',
+    duplicate_key:'identificador duplicado',
+    missing_or_invalid_key:'identificador ausente o inválido'
+   }[x.reason]||'información no comparable')).join('; ');
+   body.appendChild(node('p','apd-comparator-unavailable',
+    'No hay dos ofertas comparables: '+result.items.length+' de '+
+    selected.length+' cumplen las condiciones. '+
+    (reasons?'Motivos: '+reasons+'. ':'')+
+    'Verificá la vigencia en ABC o seleccioná otras ofertas.'));
+  }
+ } catch(_) {
+  body.appendChild(node('p','apd-comparator-unavailable',
+   'No se pudo completar la comparación. Actualizá las ofertas y probá nuevamente.'));
+ }
+ dialog.appendChild(body);
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+ document.body.appendChild(dialog);
+ if(typeof dialog.showModal==='function')dialog.showModal();
+ else {dialog.setAttribute('open','');close.focus();}
 }
 function syncCurrentButton() {
  const actions=document.querySelector('#panel-alertas .alerta-main-card .alerta-actions');
@@ -216,6 +259,7 @@ function renderSideBySide(items){
 }
 function render(){
  if(!root)return;
+ closeComparisonDialog();
  root.replaceChildren();
  root.hidden=!state.enabled||!state.available.length;
  if(root.hidden)return;
@@ -404,6 +448,7 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  render();
 }
 function reset() {
+ closeComparisonDialog();
  invalidateGeo();
  state.enabled=false;state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
