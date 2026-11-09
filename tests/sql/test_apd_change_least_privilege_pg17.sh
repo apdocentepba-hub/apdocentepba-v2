@@ -21,8 +21,11 @@ BEGIN
       'apd_change_lab.captures','SELECT,INSERT,UPDATE,DELETE') OR
     has_table_privilege('apd_lab_ingest',
       'apd_change_lab.audit_events','SELECT,INSERT,UPDATE,DELETE') OR
+    has_schema_privilege('apd_lab_ingest','apd_change_lab','USAGE') OR
+    has_schema_privilege('apd_lab_ingest','apd_change_api','CREATE') OR
     has_schema_privilege('apd_lab_ingest','apd_change_lab','CREATE') OR
     has_schema_privilege('apd_lab_function_owner','apd_change_lab','CREATE') OR
+    has_schema_privilege('apd_lab_function_owner','apd_change_api','CREATE') OR
     has_function_privilege('apd_lab_ingest',
       'apd_change_lab.save_compact(jsonb,boolean)','EXECUTE') OR
     has_function_privilege('apd_lab_ingest',
@@ -30,25 +33,34 @@ BEGIN
   RAISE EXCEPTION 'Ingest can bypass validated entrypoint or modify SQL';
  END IF;
  IF NOT has_function_privilege('apd_lab_ingest',
-      'apd_change_lab.submit_compact(jsonb)','EXECUTE') OR
+      'apd_change_api.submit_compact(jsonb)','EXECUTE') OR
     NOT has_function_privilege('apd_lab_ingest',
-      'apd_change_lab.submit_audit(jsonb)','EXECUTE') OR
+      'apd_change_api.submit_audit(jsonb)','EXECUTE') OR
     has_function_privilege('apd_lab_observer',
-      'apd_change_lab.submit_compact(jsonb)','EXECUTE') OR
+      'apd_change_api.submit_compact(jsonb)','EXECUTE') OR
     has_function_privilege('apd_lab_observer',
-      'apd_change_lab.submit_audit(jsonb)','EXECUTE') OR
-    has_schema_privilege('apd_lab_observer','apd_change_lab','USAGE') THEN
+      'apd_change_api.submit_audit(jsonb)','EXECUTE') OR
+    has_schema_privilege('apd_lab_observer','apd_change_lab','USAGE') OR
+    has_schema_privilege('apd_lab_observer','apd_change_api','USAGE') THEN
   RAISE EXCEPTION 'Stage entrypoints not restricted to ingest';
  END IF;
  IF EXISTS (
    SELECT 1 FROM pg_proc
-   WHERE oid IN ('apd_change_lab.submit_compact(jsonb)'::regprocedure,
-      'apd_change_lab.submit_audit(jsonb)'::regprocedure)
+   WHERE oid IN ('apd_change_api.submit_compact(jsonb)'::regprocedure,
+      'apd_change_api.submit_audit(jsonb)'::regprocedure)
      AND (NOT prosecdef OR proowner <> 'apd_lab_function_owner'::regrole
        OR NOT (proconfig::text LIKE '%pg_temp%'))
  ) THEN RAISE EXCEPTION 'Invalid function ownership, security or search_path'; END IF;
 END $verify$;
 
+-- Prepare synthetic snapshots as administrator; the restricted role
+-- cannot read the internal schema or its test-only constructors.
+SELECT apd_change_lab.fixture('BERISSO','2026-11-09T08:00:00Z',
+ jsonb_build_array(apd_change_lab.fixture_row('D_STAGE_1','BERISSO','Mañana')))::text
+ AS first_payload \gset
+SELECT apd_change_lab.fixture('BERISSO','2026-11-09T09:00:00Z',
+ jsonb_build_array(apd_change_lab.fixture_row('D_STAGE_1','BERISSO','Tarde')))::text
+ AS second_payload \gset
 SET ROLE apd_lab_ingest;
 DO $deny$
 BEGIN
@@ -69,13 +81,9 @@ BEGIN
  END;
 END $deny$;
 
-SELECT * FROM apd_change_lab.submit_compact(
- apd_change_lab.fixture('BERISSO','2026-11-09T08:00:00Z',
-  jsonb_build_array(apd_change_lab.fixture_row('D_STAGE_1','BERISSO','Mañana'))));
-SELECT * FROM apd_change_lab.submit_compact(
- apd_change_lab.fixture('BERISSO','2026-11-09T09:00:00Z',
-  jsonb_build_array(apd_change_lab.fixture_row('D_STAGE_1','BERISSO','Tarde'))));
-SELECT * FROM apd_change_lab.submit_audit(jsonb_build_object(
+SELECT * FROM apd_change_api.submit_compact(:'first_payload'::jsonb);
+SELECT * FROM apd_change_api.submit_compact(:'second_payload'::jsonb);
+SELECT * FROM apd_change_api.submit_audit(jsonb_build_object(
  'verified',true,'scope','BERISSO','capturedAt','2026-11-09T09:00:00Z',
  'events',jsonb_build_array(jsonb_build_object(
   'event_key',repeat('b',64),'source_offer_key','D_STAGE_1',
@@ -86,7 +94,7 @@ SELECT * FROM apd_change_lab.submit_audit(jsonb_build_object(
 DO $deny$
 BEGIN
  BEGIN
-  PERFORM * FROM apd_change_lab.submit_audit(jsonb_build_object(
+  PERFORM * FROM apd_change_api.submit_audit(jsonb_build_object(
    'verified',true,'scope','BERISSO','capturedAt','2026-11-09T09:00:00Z',
    'events',jsonb_build_array(jsonb_build_object(
     'event_key',repeat('c',64),'source_offer_key','D_STAGE_1',
@@ -115,7 +123,7 @@ SET ROLE apd_lab_observer;
 DO $deny$
 BEGIN
  BEGIN
-  PERFORM * FROM apd_change_lab.submit_compact('{}'::jsonb);
+  PERFORM * FROM apd_change_api.submit_compact('{}'::jsonb);
   RAISE EXCEPTION 'EXPECTED_DENIAL_NOT_RAISED';
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
