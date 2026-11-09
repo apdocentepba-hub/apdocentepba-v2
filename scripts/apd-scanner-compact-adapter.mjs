@@ -7,6 +7,13 @@ import {parseVerifiedClosingTime} from './apd-offer-change-detector.mjs';
 
 // Scoped to the district-only schema and the 1,500-offer PG17 guard.
 const MAX_TOTAL=1500,MAX_PAGES=100;
+export const ABC_PUBLIC_FIELDS=Object.freeze([
+ 'iddetalle','id','idoferta','descdistrito','estado','finoferta','turno',
+ 'jornada','hsmodulos','cursodivision','supl_desde','supl_hasta',
+ 'escuela','nombreestablecimiento','descripcioncargo','cargo',
+ 'descripcionarea','descnivelmodalidad'
+]);
+const SOURCE_FL=ABC_PUBLIC_FIELDS.join(',');
 const SOURCE_SORT='ult_movimiento desc,iddetalle asc';
 const publishedQuery=scope=>'descdistrito:"'+scope+'" AND estado:"Publicada"';
 const plain=v=>String(v??'').trim();
@@ -96,13 +103,14 @@ export function createAPDScannerCompactAdapter({
    // Callbacks are supplied by an isolated test. This module never opens URLs.
    const query=publishedQuery(scope);
    const packet=await readPage(Object.freeze({
-    district:scope,query,sort:SOURCE_SORT,mode:'current_published',
+    district:scope,query,sort:SOURCE_SORT,fields:SOURCE_FL,mode:'current_published',
     start:offset,rows:pageSize,pass
    }));
    const header=packet?.responseHeader;
    const params=header?.params;
    if(header?.status!==0||params?.q!==query||params?.sort!==SOURCE_SORT||
-      params?.wt!=='json'||String(params?.rows)!==String(pageSize)||
+      params?.wt!=='json'||params?.fl!==SOURCE_FL||
+      String(params?.rows)!==String(pageSize)||
       String(params?.start)!==String(offset))
     throw Error('ABC query not verified as published district with stable sort');
    const response=packet?.response;
@@ -118,7 +126,12 @@ export function createAPDScannerCompactAdapter({
    const required=Math.min(pageSize,expectedTotal-offset);
    if(required<0||response.docs.length!==required)
     throw Error('ABC page length does not match reported total');
-   const projected=response.docs.map(doc=>projectCurrentAPDHeader(doc,scope));
+   const projected=response.docs.map(doc=>{
+    if(!doc||typeof doc!=='object'||Array.isArray(doc)||
+      Object.keys(doc).some(field=>!ABC_PUBLIC_FIELDS.includes(field)))
+      throw Error('ABC response included an unapproved field');
+    return projectCurrentAPDHeader(doc,scope);
+   });
    for(const item of projected){
     if(identity.has(item.source_offer_key))
      throw Error('ABC repeated an offer across pages');
@@ -133,6 +146,24 @@ export function createAPDScannerCompactAdapter({
   return {pages,rows,sourceTotal:expectedTotal,digest:sha};
  }
  return Object.freeze({
+  async inspect({district}={}){
+   // Public-only diagnostic: two page passes, but NEVER a certified scan
+   // or snapshot and NEVER any rows in the returned report.
+   if(typeof district!=='string'||district.length>120||
+      !norm(district)||district!==norm(district))
+    throw Error('Invalid canonical district');
+   const first=await fetchPass(district,1);
+   const second=await fetchPass(district,2);
+   if(first.sourceTotal!==second.sourceTotal||first.digest!==second.digest)
+    throw Error('ABC contents shifted between public read-only passes');
+   return Object.freeze({
+    district,source:'ABC_Public_Solr',status:'read_only_diagnostic',
+    sourceTotal:first.sourceTotal,pagesPerPass:first.pages.length,
+    stableAcrossTwoPasses:true,queryVerified:true,
+    capturesSaved:0,eventsCreated:0,notificationsSent:0,
+    certifiedScannerCapture:false,authorizedForProduction:false
+   });
+  },
   async capture({district,capturedAt}={}){
    if(typeof district!=='string'||district.length>120||
       !norm(district)||district!==norm(district)||
