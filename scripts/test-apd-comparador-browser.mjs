@@ -180,7 +180,7 @@ try{
    await js('document.getElementById("apd-comparar-oferta").click();true');
    if(i===1){
     await until('!!document.querySelector(".apd-comparator-side-by-side")');
-    assert.equal(await js('document.querySelectorAll(".apd-comparator-table thead th").length'),3);
+    assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-comparator-table thead th").length'),3);
     assert.equal(await js('document.getElementById("apd-ver-comparacion")?.textContent'),
      'Ver comparación (2)');
     assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1,
@@ -192,6 +192,19 @@ try{
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
      /No verificado/);
     assert.equal(await js('document.querySelector(".apd-comparator-head h3")?.tabIndex'),-1);
+    // A real user must see a modal, even if the original panel is clipped.
+    await until('document.getElementById("apd-comparison-dialog")?.open===true');
+    assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table thead th").length'),3);
+    assert.ok(await js('document.getElementById("apd-comparison-dialog").getBoundingClientRect().width<=innerWidth'));
+    assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
+    await js('document.getElementById("apd-comparison-close").click();true');
+    await until('!document.getElementById("apd-comparison-dialog")');
+    // Emulate production CSS hiding the underlying results card.
+    await js('document.getElementById("apd-comparador-panel").style.display="none";document.getElementById("apd-ver-comparacion").click();true');
+    await until('document.getElementById("apd-comparison-dialog")?.open===true');
+    assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-table tbody tr").length'),6);
+    await js('document.getElementById("apd-comparador-panel").style.display="";document.getElementById("apd-comparison-close").click();true');
+    await until('!document.getElementById("apd-comparison-dialog")');
    }
   }
   const state=await js(`({
@@ -201,8 +214,8 @@ try{
    escapeVisible:document.querySelector('#apd-comparador-panel')?.textContent.includes('<img src=x'),
    overflow:document.documentElement.scrollWidth,viewport:innerWidth,
    hasOfficialMap:!!document.querySelector('.apd-comparator-map-link'),
-   comparisonColumns:document.querySelectorAll('.apd-comparator-table thead th').length,
-   comparisonRows:document.querySelectorAll('.apd-comparator-table tbody tr').length,
+   comparisonColumns:document.querySelectorAll('#apd-comparador-panel .apd-comparator-table thead th').length,
+   comparisonRows:document.querySelectorAll('#apd-comparador-panel .apd-comparator-table tbody tr').length,
    seeComparison:document.getElementById('apd-ver-comparacion')?.textContent
   })`);
   assert.equal(state.total,'5 de 5 ofertas seleccionadas');
@@ -326,7 +339,12 @@ try{
    /plazo de cierre vencido/);
   assert.match(await js('document.querySelector(".apd-comparator-unavailable")?.textContent||""'),
    /estado oficial cerrado o anulado/);
-  assert.equal(await js('document.activeElement?.classList.contains("apd-comparator-unavailable")'),true);
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),
+   /No hay dos ofertas comparables/);
+  assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-side-by-side")'),null);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
   results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
