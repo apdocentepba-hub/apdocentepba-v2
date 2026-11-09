@@ -263,6 +263,18 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    const pairFacts=await js(`(()=>{
+     const panel=document.getElementById('apd-comparison-dialog');
+     const box=panel.querySelector('.apd-comparator-schedule-pairs');
+     return {present:!!box,open:box?.open,
+      summary:box?.querySelector('summary')?.textContent,
+      entries:[...(box?.querySelectorAll('li')||[])].map(e=>e.textContent)};
+    })()`);
+    assert.equal(pairFacts.present,true,'Pairwise offer schedule comparisons must be available');
+    assert.equal(pairFacts.open,true,'Overlapping schedules must be visible without extra clicks');
+    assert.match(pairFacts.summary,/1 a revisar de 1 pares/);
+    assert.match(pairFacts.entries[0],/Cruce de días, horas y vigencias informadas/);
+    assert.match(pairFacts.entries[0],/07:20 a 11:50/);
     const facts=await js(`(()=>{
      const dialog=document.getElementById('apd-comparison-dialog');
      const summary=dialog.querySelector('.apd-comparator-difference-summary').textContent;
@@ -394,6 +406,8 @@ try{
   assert.equal(state.total,'5 de 5 ofertas seleccionadas');
   assert.equal(state.items,5);
   assert.equal(state.comparisonColumns,6);
+  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-comparator-schedule-item").length'),10,
+   'All five offers must be evaluated in ten pairs');
   assert.ok(state.comparisonRows>=6);
   assert.equal(state.seeComparison,'Ver comparación (5)');
   assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1);
