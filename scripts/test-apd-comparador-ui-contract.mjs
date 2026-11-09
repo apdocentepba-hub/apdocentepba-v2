@@ -12,13 +12,13 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-modal1'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261109-abcwall1'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
 test('comparison happens locally; no storage, network, tokens, or data exports',()=>{
  assert.doesNotMatch(ui,/\bfetch\s*\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage|Authorization|navigator\.geolocation|indexedDB/i);
- assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs'/);
+ assert.match(ui,/import \{compareOffers\} from '\.\/scripts\/apd-comparador-criterios\.mjs\?v=20261109-abcwall1'/);
  assert.match(ui,/state\.selected\.clear\(\)/);
 });
 test('access gated by active authenticated plan and reset when session changes',()=>{

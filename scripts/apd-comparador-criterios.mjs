@@ -15,7 +15,7 @@ function validDate(year,month,day){
  const d=new Date(Date.UTC(year,month-1,day));
  return d.getUTCFullYear()===year&&d.getUTCMonth()+1===month&&d.getUTCDate()===day;
 }
-export function parseClosure(value){
+export function parseClosure(value,{abcWallTime=false}={}){
  const x=asString(value);
  const local=x.match(/^(\d{2})\/(\d{2})\/(20\d{2})\s+(\d{1,2}):(\d{2})$/);
  if(local){
@@ -28,6 +28,11 @@ export function parseClosure(value){
  const [,y,m,d,h,minute,second,offset,oh,om]=iso;
  if(!validDate(+y,+m,+d)||+h>23||+minute>59||+(second||0)>59||
     +(oh||0)>14||+(om||0)>59||(+oh===14&&+om>0))return null;
+ // ABC APD stores the local deadline clock as an ISO string suffixed by Z.
+ // That suffix does not represent a UTC instant for the ABC finoferta field.
+ // Apply this interpretation only when the caller explicitly marks that source.
+ if(abcWallTime&&offset.toUpperCase()==='Z')
+  return Date.UTC(+y,+m-1,+d,+h+3,+minute,+(second||0));
  const result=Date.parse(x);
  return Number.isFinite(result)?result:null;
 }
@@ -76,7 +81,10 @@ export function compareOffers({
   }
   seen.add(key);
   const state=nf(offer?.estado);
-  const closedAt=parseClosure(offer?.finoferta??offer?.fecha_cierre);
+  const abcDeadline=asString(offer?.finoferta);
+  const rawDeadline=abcDeadline||asString(offer?.finoferta_label||offer?.fecha_cierre);
+  // Treat only ABC's original finoferta as wall time, never every ISO/Z value.
+  const closedAt=parseClosure(rawDeadline,{abcWallTime:!!abcDeadline});
   if(CLOSED.has(state)||closedAt!==null&&closedAt<=clock){
    excluded.push({source_offer_key:key,reason:CLOSED.has(state)?'official_status_closed':'confirmed_deadline_passed'});
    continue;
