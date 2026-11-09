@@ -56,26 +56,27 @@ test('comparison is findable and shows side-by-side differences without PID infe
  assert.match(ui,/Comparación lado a lado/);
  assert.match(ui,/class.*apd-comparator-table-scroll|apd-comparator-table-scroll/);
  assert.match(ui,/apd-comparator-diff/);
- assert.match(ui,/No verificado/);
+ assert.match(ui,/Sin información PID/);
  assert.match(css,/#apd-comparador-panel\{scroll-margin-top/);
  assert.match(css,/\.apd-comparator-table-scroll\{/);
  assert.match(css,/overflow-x:auto/);
  assert.match(css,/#panel-alertas \.alerta-row\{/);
 });
 
-test('decision table uses existing private card results only and has a safe missing-data state',()=>{
- assert.match(ui,/APD_readCachedApplicantsForComparison/);
+test('decision table reads only already visible applicant summaries with strict isolation',()=>{
+ assert.match(ui,/function captureVisibleApplicants\(\)/);
+ assert.match(ui,/function readApplicantSummaries\(offers\)/);
+ assert.match(ui,/document\.querySelector\('#panel-alertas \.alerta-main-card #alerta-postulantes-meta'\)/);
+ assert.match(ui,/observedApplicants\.clear\(\)/);
+ assert.match(ui,/applicantObserver\?\.disconnect\(\)/);
  assert.match(ui,/Postulantes visibles/);
  assert.match(ui,/Días y horarios/);
  assert.match(ui,/Diferencia de puntos/);
  assert.match(ui,/Mostrar todos los datos/);
  assert.match(ui,/Consultá la ficha para cargar/);
- const bridge=app.split('window.APD_readCachedApplicantsForComparison = function(offers) {')[1]
-  ?.split('const suggestionCache')[0];
- assert.ok(bridge,'read-only in-session bridge expected');
- assert.doesNotMatch(bridge,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage/);
- assert.match(bridge,/planActual\?\.access_active!==true/);
- assert.match(bridge,/dashboardLoadedOwner!==token/);
- assert.match(app,/postulantesResumenCache\.clear\(\)/);
- assert.match(app,/dashboardLoadedOwner!==requestOwner/);
+ const read=ui.split('function captureVisibleApplicants() {')[1]
+  ?.split('function refresh(')[0];
+ assert.ok(read);
+ assert.doesNotMatch(read,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|Authorization/);
+ assert.doesNotMatch(app,/APD_readCachedApplicantsForComparison/);
 });
