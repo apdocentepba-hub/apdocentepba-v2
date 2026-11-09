@@ -2,6 +2,7 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
+import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -325,23 +326,28 @@ function renderSideBySide(items){
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
   'Postulantes visibles','Puntaje del primero','Diferencia de puntos']);
- const differences=[];
+ const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
-  const values=items.map(item=>String(fieldValue(item)));
-  const differs=new Set(values).size>1;
-  if(differs)differences.push(label);else matching++;
+  const raw=items.map(item=>String(fieldValue(item)));
+  const assessment=assessComparatorCriterion(label,raw);
+  const differs=assessment.status==='different';
+  if(differs)differences.push(label);
+  else if(assessment.status==='same')matching++;
+  else unverified.push(label);
   const row=node('tr',differs?'apd-comparator-diff':
+   assessment.status==='unverified'?'apd-comparator-priority apd-comparator-incomplete':
    priority.has(label)?'apd-comparator-priority':'apd-comparator-same');
+  row.dataset.comparisonStatus=assessment.status;
   const labelCell=node('th','',label);labelCell.scope='row';
   row.appendChild(labelCell);
-  values.forEach(v=>row.appendChild(node('td','',v)));
+  assessment.values.forEach(v=>row.appendChild(node('td','',v)));
   tbody.appendChild(row);
  }
  const summary=node('p','apd-comparator-difference-summary',
-  differences.length?
-  'Diferencias detectadas: '+differences.join(' · '):
-  'No se detectaron diferencias en los datos disponibles.');
+  (differences.length?'Diferencias detectadas: '+differences.join(' · '):
+   'No se detectaron diferencias en los datos comparables.')+
+  (unverified.length?' Datos incompletos o no comparables: '+unverified.join(' · ')+'.':''));
  region.appendChild(summary);
  const toolbar=node('div','apd-comparator-view-tools');
  const toggle=button('Mostrar todos los datos',()=>{
@@ -350,7 +356,9 @@ function renderSideBySide(items){
  },'apd-comparator-expand');
  toolbar.appendChild(toggle);
  toolbar.appendChild(node('span','apd-comparator-hint',
-  matching+' criterios coinciden; se destacan los relevantes.'));
+  matching+' criterios coinciden; '+
+  (unverified.length?unverified.length+' sin datos suficientes; ':'')+
+  'se destacan los relevantes.'));
  region.appendChild(toolbar);
  table.classList.add('apd-comparator-focus');
  table.appendChild(tbody);wrap.appendChild(table);region.appendChild(wrap);
