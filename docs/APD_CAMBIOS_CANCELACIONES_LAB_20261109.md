@@ -285,3 +285,26 @@ Esos números describen **todos los registros del distrito encontrados por la co
 - PostgREST se levanta **después de crear la tabla privada**, comprueba que OpenAPI solo exponga `/` y dos RPC existentes y agrega intentos HTTP de lectura y ejecución de la función privada con JWT de ingesta, que deben ser rechazados.
 
 **Límites decisivos:** solo son datos **sintéticos**. La tabla privada NO está creada en Supabase real, las capturas anteriores siguen sin atestación oficial y la consulta dirigida de ABC no revela el momento exacto de transición. El registro permanece exclusivamente para **revisión manual futura** y no convierte candidatos en eventos de notificación. La integración productiva exige staging identificado, validación de fuente, límites de consultas y autorización explícita.
+
+
+## Decimoquinta etapa — carga 501 → 500 y control de unicidad (09/11/2026)
+
+**Motivo:** el tope de 500 casos por distrito estaba implementado pero no sometido a carga por encima del límite. También faltaba asegurar que dos huellas distintas no pudieran registrar dos candidatos para la misma oferta y la misma observación previa.
+
+### Implementado y probado
+- Se agregó la restricción SQL UNIQUE(scope, source_offer_key, previous_observed_at) a la tabla privada, además de PRIMARY KEY(scope, evidence_hash). Esto impide registrar dos casos con distinto hash desde la misma oferta y captura.
+- El nuevo ensayo tests/sql/test_apd_change_transition_load_pg17.sql crea **501 ofertas completamente sintéticas** para el distrito ficticio ENSENADA y registra 501 candidatos en PostgreSQL 17. Verifica el conteo tras cada inserción, el máximo final de **500**, la eliminación de un caso y la integridad de los datos de otro distrito.
+- Con fechas posteriores iguales, el SQL ordena por later_verified_at DESC y evidence_hash ASC. Conserva las 500 huellas más bajas y descarta la mayor. La primera versión del test asumía lo contrario; se corrigió la expectativa tras revisar la implementación. El desempate de hash no representa un orden cronológico.
+- La restricción adicional rechaza la inserción de una segunda huella para una oferta ya retenida. No cambia las filas previas.
+- El ensayo real de respaldo/restauración ahora verifica **501 registros de candidatos** distribuidos entre dos distritos, sus huellas y permisos; rechaza cualquier distrito con más de 500.
+- PostgREST se ejecuta después de esta prueba y sigue denegando la lectura/escritura de la tabla privada desde JWT de ingesta.
+
+### Evidencia
+- GitHub Actions: https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42657496349
+- Resultado: **92/92 Node PASS**, PostgreSQL 17 PASS, **20 solicitudes HTTP/JWT PASS**, pruebas de roles y concurrencia PASS.
+- Marcador SQL: APD_TRANSITION_LOAD_PG17_PASSED requested=501 retained=500 evicted=1 other_district=1 bytes=294912 elapsed_ms=370.
+- Restauración: APD_RESTORE_PG17_PASSED captures=15 audit_events=7 transition_candidates=501 backup_bytes=51210.
+- El consumo de 294.912 bytes es una medición de esta relación e índices, no un presupuesto productivo ni el almacenamiento total. Los 370 milisegundos de carga tampoco constituyen un SLA.
+- Se utilizaron únicamente datos ficticios y la base descartable del CI. La PR sigue en borrador.
+
+**Bloqueante:** la unicidad y los hashes no atestan que ABC haya emitido el dato. Faltan origen verificable, cuotas globales y staging autorizado. No se habilita ninguna ruta de notificaciones ni se modifica producción.
