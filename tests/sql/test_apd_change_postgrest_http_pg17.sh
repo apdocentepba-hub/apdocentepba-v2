@@ -25,6 +25,7 @@ GRANT apd_lab_observer TO apd_lab_pgrst_auth WITH ADMIN FALSE, INHERIT FALSE, SE
 DO $verify$
 BEGIN
  IF has_schema_privilege('apd_lab_pgrst_auth','apd_change_lab','USAGE') OR
+    has_schema_privilege('apd_lab_pgrst_auth','apd_change_api','USAGE') OR
     pg_has_role('apd_lab_pgrst_auth','apd_lab_ingest','USAGE') OR
     NOT pg_has_role('apd_lab_pgrst_auth','apd_lab_ingest','SET') OR
     NOT pg_has_role('apd_lab_pgrst_auth','apd_lab_observer','SET') THEN
@@ -45,7 +46,7 @@ trap cleanup EXIT
 # via its forwarded localhost:5432 port.
 docker run -d --rm --name "$name" --network host \
  -e "PGRST_DB_URI=postgres://apd_lab_pgrst_auth:${auth_pw}@localhost:5432/apd_ci" \
- -e "PGRST_DB_SCHEMAS=apd_change_lab" \
+ -e "PGRST_DB_SCHEMAS=apd_change_api" \
  -e "PGRST_DB_ANON_ROLE=apd_lab_observer" \
  -e "PGRST_JWT_SECRET=${jwt_secret}" \
  -e "PGRST_SERVER_HOST=127.0.0.1" \
