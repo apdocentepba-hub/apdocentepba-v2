@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  parseOfferWeeklySchedule,formatWeeklySchedule,schedulesEquivalent,
- sanitizeWorkProfile,checkScheduleOverlap
+ sanitizeWorkProfile,checkScheduleOverlap,compareSelectedOfferSchedules
 } from './apd-mi-jornada-comparador.mjs';
 import {assessComparatorCriterion} from './apd-comparador-datos-evaluacion.mjs';
 const first='Lunes a viernes: 07:20 a 11:50';
@@ -126,4 +126,54 @@ test('solo se aceptan los margenes declarados y el perfil antiguo migra sin perd
  assert.equal(sanitizeWorkProfile({jobs,travelGapMinutes:60}).travelGapMinutes,60);
  for(const travelGapMinutes of [-1,25,1200,'30',null])
   assert.throws(()=>sanitizeWorkProfile({jobs,travelGapMinutes}));
+});
+
+test('selected offers: same weekdays, clock and concurrent dates show a pairwise collision',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Lunes a Viernes: 07:20 a 11:50',supl_desde:'10/11/2035',supl_hasta:'01/02/2036'},
+  {horario:'Lunes a Viernes: 10:30 a 12:00',supl_desde:'2035-11-12',supl_hasta:'2036-03-01'}
+ ]);
+ assert.equal(r.length,1);assert.equal(r[0].status,'overlap');
+ assert.deepEqual(r[0].days,['Lunes','Martes','Miércoles','Jueves','Viernes']);
+ assert.equal(r[0].from,'10:30');assert.equal(r[0].to,'11:50');
+ assert.equal(r[0].firstOffer,1);assert.equal(r[0].secondOffer,2);
+});
+test('selected offers: different date periods are not treated as simultaneous',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:first,supl_desde:'01/03/2035',supl_hasta:'31/03/2035'},
+  {horario:first,supl_desde:'01/04/2035',supl_hasta:'30/04/2035'}
+ ]);
+ assert.equal(r[0].status,'separate-periods');
+});
+test('selected offers: missing and impossible date ranges warn about potential overlap',()=>{
+ const a={horario:first,supl_desde:'10/11/2035',supl_hasta:'01/01/2036'};
+ for(const b of [
+  {horario:first,supl_desde:'',supl_hasta:''},
+  {horario:first,supl_desde:'31/02/2035',supl_hasta:'01/01/2036'},
+  {horario:first,supl_desde:'01/02/2036',supl_hasta:'01/01/2036'}
+ ]){
+  assert.equal(compareSelectedOfferSchedules([a,b])[0].status,'possible-overlap');
+ }
+});
+test('selected offers: boundary times and different weekdays do not collide',()=>{
+ const base={horario:first};
+ for(const other of [
+  {horario:'Lunes a Viernes: 11:50 a 14:00'},
+  {horario:'Sábado y Domingo: 07:20 a 11:50'}
+ ])
+  assert.equal(compareSelectedOfferSchedules([base,other])[0].status,'no-time-overlap');
+});
+test('selected offers: unknown weekly schedule remains unverified',()=>{
+ const r=compareSelectedOfferSchedules([{horario:first},{horario:'Turno mañana'}]);
+ assert.equal(r[0].status,'unverified');
+});
+test('selected offers: five offers produce ten unique pairs without guessing any result',()=>{
+ const offers=Array.from({length:5},(_,i)=>({
+  horario:i===4?'Sin datos':'Lunes a Viernes: 07:20 a 11:50'
+ }));
+ const result=compareSelectedOfferSchedules(offers);
+ assert.equal(result.length,10);
+ assert.equal(new Set(result.map(x=>x.firstOffer+'-'+x.secondOffer)).size,10);
+ assert.equal(result.filter(x=>x.status==='unverified').length,4);
+ assert.throws(()=>compareSelectedOfferSchedules(offers.concat(offers[0])));
 });
