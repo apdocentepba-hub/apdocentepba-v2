@@ -19,7 +19,7 @@ Esta evidencia confirma que no existen dos capturas oficiales recientes, complet
 - IDs de evento deterministas, sin mezclar cuentas, sin enviar correos, WhatsApp ni Telegram.
 
 ## Diseño pendiente antes de cualquier producción
-1. Diseñar **captura compacta por distrito** a partir del barrido ya validado: solamente clave de oferta, estado, campos sujetos a comparación, instante, recuento de páginas y evidencia de cobertura; no guardar `raw` ni datos personales.
+1. **Prototipo implementado únicamente en memoria:** `scripts/apd-offer-compact-capture.mjs` recibe páginas del mismo distrito, exige offsets consecutivos, total de origen idéntico, identidad sin duplicados, mismo ámbito y timestamp explícito; retorna solo 14 campos necesarios, ordenados y con SHA-256. No copia `raw`, PID, postulantes, correo ni información personal. Se prueba en `scripts/test-apd-offer-compact-capture.mjs`. **No está conectado al escáner ni puede verificar por sí solo que la fuente externa entregó una instantánea atómica**.
 2. Mantener como máximo una captura anterior y una actual por distrito (o un outbox restringido con TTL), con commits transaccionales y validación de cobertura; medir bytes e índices antes de habilitar escrituras.
 3. Validar dos barridos completos consecutivos con la misma semántica de origen, sin confundir `current_published` con estado explícito de anulación.
 4. Aislar eventos en tabla privada con clave única, caducidad, idempotencia, permisos mínimos y control de acceso. Verificar RLS en cada ruta de lectura.
