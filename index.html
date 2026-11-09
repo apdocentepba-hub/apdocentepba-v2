@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true});}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual});}
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
