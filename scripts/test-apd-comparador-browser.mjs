@@ -309,6 +309,28 @@ try{
      const saved=sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1');
      return !!saved&&saved.includes('Escuela actual')&&saved.includes('Wilde, Avellaneda');
     })()`),true,'Optional profile stored only in current tab');
+    // Travel caution: ten free minutes between shifts is not a proven trip.
+    await js(`(()=>{
+      const dialog=document.getElementById('apd-comparison-dialog');
+      const details=dialog.querySelector('.apd-work-planner');details.open=true;
+      const gap=details.querySelector('select.apd-work-input');
+      if(!gap||gap.value!=='30')throw Error('Default travel margin missing');
+      const shift=details.querySelector('.apd-work-shift');
+      shift.querySelectorAll('input[type="time"]')[0].value='06:00';
+      shift.querySelectorAll('input[type="time"]')[1].value='07:10';
+      details.querySelector('form').requestSubmit();
+      return true;
+    })()`);
+    await until(`(()=>{
+      const rows=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')];
+      const row=rows.find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual');
+      return row?.textContent.includes('traslado a revisar')??false;
+    })()`);
+    assert.match(await js(`[...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+      .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual').textContent`),
+      /10 min entre horarios/, 'Only the clock gap must be shown');
+    assert.equal(await js(`JSON.parse(sessionStorage.getItem(
+      'apd_comparador_jornada_solo_pestana_v1')).travelGapMinutes`),30);
     await js(`(()=>{
       const dialog=document.getElementById('apd-comparison-dialog');
       const details=dialog.querySelector('.apd-work-planner');details.open=true;
