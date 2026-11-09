@@ -5,9 +5,13 @@ import {createHash} from 'node:crypto';
 import {parseVerifiedClosingTime} from './apd-offer-change-detector.mjs';
 
 const MAX_INTERVAL_MS=48*3600000;
-const MAX_OBSERVATION_AGE_MS=12*3600000;
 const MAX_FUTURE_MS=5*60000;
 const KEY=/^D_[0-9]{1,18}$/;
+const FIELDS=new Set([
+ 'source_offer_key','estado','finoferta','turno','jornada','hsmodulos',
+ 'cursodivision','supl_desde','supl_hasta','escuela','distrito',
+ 'cargo','area','nivel_modalidad'
+]);
 const normalize=v=>String(v??'').trim().normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const fail=reason=>Object.freeze({
@@ -31,7 +35,8 @@ function validateCapture(c,sourceOfferKey){
      normalize(row.distrito)!==normalize(c.scope))
     return {reason:'prior_capture_identity_or_scope_invalid'};
   ids.add(row.source_offer_key);
-  if(Object.keys(row).length!==14)
+  if(Object.keys(row).length!==14||
+     Object.keys(row).some(k=>!FIELDS.has(k)))
     return {reason:'prior_capture_fields_invalid'};
   if(row.source_offer_key===sourceOfferKey){seen++;prior=row;}
  }
@@ -60,7 +65,7 @@ export function createABCTransitionCorrelator({
    const earlier=parseVerifiedClosingTime(previousCapture.capturedAt);
    const started=clock();
    if(earlier===null||!Number.isFinite(started)||
-      earlier>started+MAX_FUTURE_MS||
+      earlier>=started||
       started-earlier>MAX_INTERVAL_MS)
     return fail('prior_capture_outside_observation_window');
    // Correlate by invoking the verifier with the SAME scope and ID as the prior row,
