@@ -3,7 +3,7 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
-import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-gap1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-pairs1';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261109-gap1';
 import {
@@ -274,6 +274,27 @@ function renderSideBySide(items){
  region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
   'Compará condiciones de trabajo y competencia visible. La compatibilidad PID indicada por el panel no garantiza adjudicación. Los postulantes provienen solo de fichas ya consultadas; no se actualizan al abrir esta tabla.'));
+ // A same-day clock collision is not proof of normative incompatibility.
+ const pairs=compareSelectedOfferSchedules(items);
+ const alerts=pairs.filter(p=>p.status==='overlap'||p.status==='possible-overlap');
+ const pairsBox=node('details','apd-comparator-schedule-pairs');
+ pairsBox.open=alerts.length>0;
+ const pairSummary=node('summary','apd-comparator-schedule-summary',
+  'Cruces entre ofertas: '+alerts.length+' a revisar de '+pairs.length+' pares');
+ pairsBox.appendChild(pairSummary);
+ pairsBox.appendChild(node('p','apd-comparator-hint',
+  'Compara días, horas y vigencias declaradas. No determina compatibilidad '+
+  'normativa, adjudicación ni posibilidad de traslado.'));
+ const pairsList=node('ul','apd-comparator-schedule-list');
+ for(const pair of pairs){
+  const item=node('li','apd-comparator-schedule-item apd-comparator-schedule-'+pair.status);
+  const match=pair.days?.length?
+   ' · '+pair.days.join(', ')+', '+pair.from+' a '+pair.to:'';
+  item.textContent='Ofertas '+pair.firstOffer+' y '+pair.secondOffer+': '+pair.label+match;
+  pairsList.appendChild(item);
+ }
+ pairsBox.appendChild(pairsList);
+ region.appendChild(pairsBox);
  const wrap=node('div','apd-comparator-table-scroll');
  wrap.tabIndex=0;
  wrap.setAttribute('role','region');
