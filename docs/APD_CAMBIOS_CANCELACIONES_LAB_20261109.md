@@ -155,3 +155,23 @@ Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura 
 - Los roles de ensayo son NOLOGIN y se usó `SET ROLE`: todavía falta simular conexiones independientes con credenciales y políticas equivalentes a los roles reales de una instancia Supabase separada.
 - `SECURITY DEFINER` aumenta la superficie de riesgo: exige auditoría del propietario, todas las funciones invocadas, el `search_path`, la revocación de `PUBLIC`, permisos explícitos, parámetros y cambios de schema. Se mantiene fuera del proyecto real.
 - No hay evidencia de dos escaneos provinciales completos y atómicos ni fuente de anulaciones explícitas. No activar Worker, triggers, jobs ni mensajes.
+
+
+## Novena etapa — clientes TCP independientes y autenticación real en PostgreSQL 17 (09/11/2026)
+
+**Avance objetivo:** la etapa 8 validó roles con `SET ROLE` sobre la sesión administrativa. Eso no comprobaba la autenticación real de una aplicación ni los permisos heredados por una conexión independiente.
+
+- Nuevo ensayo **exclusivo de CI descartable**: `tests/sql/test_apd_change_tcp_roles_pg17.sh`. Se niega a correr si no detecta `PGHOST=localhost`, `PGPORT=5432`, base `apd_ci`, el usuario administrador de laboratorio y el contenedor Docker con imagen **exacta** `postgres:17`.
+- Crea dos identidades PostgreSQL LOGIN con contraseñas aleatorias temporales generadas mediante `openssl rand`. Los secretos no se imprimen, no se agregan a Git ni se incorporan al proyecto Supabase real. La identidad de ingesta hereda solamente los permisos de `apd_lab_ingest`, con membresía `SET FALSE`: no puede elevarse a ese rol mediante `SET ROLE`.
+- Comprueba **conexiones TCP realmente autenticadas** (el `session_user` coincide con el usuario que inició sesión). Un usuario observador independiente no puede llamar a las funciones privadas.
+- Verifica rechazos efectivos de `SELECT` sobre capturas, `DELETE` sobre eventos, ejecución de la función interna con parámetro de fallo, uso de generadores sintéticos de test y escalamiento de roles. Revoca `EXECUTE` público de las funciones auxiliares ficticias del laboratorio, sin afectar la aplicación.
+- Genera mediante el mismo código Node del laboratorio dos capturas y un evento **enteramente sintéticos** del distrito MAGDALENA; cada `submit_compact` / `submit_audit` se ejecuta desde una nueva conexión de ingesta autenticada, sin `SET ROLE`. Prueba inserción válida, reintento idempotente y rechazo de valores `before` falsificados.
+- Comprueba mediante la conexión administrativa de prueba que la base conserva exactamente **dos capturas, un evento `audit_only` y cero registros falsificados** para ese distrito.
+- Repite el ensayo real de respaldo y restauración después de las nuevas conexiones. No se crea ningún proyecto staging externo, no se modifican reglas ni roles de Supabase y no se ejecuta código contra usuarios.
+
+**Evidencia:** ejecución CI [42626612821](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42626612821):
+`APD_TCP_ROLE_PG17_PASSED independent_logins=2 compact_captures=2 audit_events=1 unauthorized_writes=0`;
+`APD_RESTORE_PG17_PASSED captures=11 audit_events=6 backup_bytes=24572`;
+**68/68 Node PASS**, concurrencia/retención/auditoría y restauración PostgreSQL PASS. El control independiente de protección del Worker también aprobó. Los errores de permisos en logs son *esperados y comprobados por las pruebas negativas*, no fallas del trabajo.
+
+**Limitación restante:** se verificaron contraseñas de dos clientes en una instancia PostgreSQL 17 efímera, **no** una conexión a Supabase staging con roles y API efectivos de PostgREST, ni un origen ABC atómico. Mantener la PR en borrador y prohibidos los envíos hasta validar esos límites y obtener aprobación para infraestructura productiva.
