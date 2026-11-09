@@ -219,7 +219,7 @@ test('incomplete multi-block schedules fail closed rather than inventing missing
   'Lunes: 07:20 a 11:50 y 14:00 a 17:30',
   'Lunes: 07:20 a 11:50; Miércoles sin horario',
   'Lunes: 07:20 a 11:50; Miércoles: 17:30 a 14:00',
-  'Lunes: 07:20 a 11:50;',
+  'Lunes: 07:20 a 11:50; Miércoles:',
   'Lunes: 07:20 a 11:50; Miércoles: 07:20 a 11:50; Jueves: sin datos'
  ]){
   assert.equal(parseOfferWeeklySegments(raw),null,raw);
