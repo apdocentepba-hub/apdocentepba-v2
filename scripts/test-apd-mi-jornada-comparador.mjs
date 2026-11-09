@@ -177,3 +177,21 @@ test('selected offers: five offers produce ten unique pairs without guessing any
  assert.equal(result.filter(x=>x.status==='unverified').length,4);
  assert.throws(()=>compareSelectedOfferSchedules(offers.concat(offers[0])));
 });
+
+test('selected offers: matching date windows without a shared weekday do not fake a conflict',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Viernes: 08:00 a 10:00',supl_desde:'05/11/2035',supl_hasta:'06/11/2035'},
+  {horario:'Viernes: 08:30 a 11:00',supl_desde:'05/11/2035',supl_hasta:'06/11/2035'}
+ ]);
+ // Confirm these civil dates are Monday/Tuesday, not Friday.
+ assert.equal(new Date(Date.UTC(2035,10,5)).getUTCDay(),1);
+ assert.equal(r[0].status,'no-shared-date');
+});
+test('selected offers: one shared weekly day inside overlapping dates is enough',()=>{
+ const r=compareSelectedOfferSchedules([
+  {horario:'Lunes a Viernes: 07:20 a 11:50',supl_desde:'05/11/2035',supl_hasta:'07/11/2035'},
+  {horario:'Martes y Viernes: 10:30 a 12:00',supl_desde:'05/11/2035',supl_hasta:'07/11/2035'}
+ ]);
+ assert.equal(r[0].status,'overlap');
+ assert.deepEqual(r[0].days,['Martes']);
+});
