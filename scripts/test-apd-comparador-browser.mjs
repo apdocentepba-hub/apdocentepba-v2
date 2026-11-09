@@ -382,6 +382,7 @@ try{
    return true;
   })()`);
   await until('window.__heldWFS.length===2');
+  await js(`sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',JSON.stringify({domicile:'Domicilio ficticio',jobs:[]}));true`);
   await js(`(()=>{
    dashboardLoadedOwner='SYNTHETIC_USER_B';
    window.__testToken='SYNTHETIC_USER_B';
@@ -390,6 +391,8 @@ try{
    return true;
   })()`);
   await until('document.querySelector(".apd-comparator-count")?.textContent==="0 de 5 ofertas seleccionadas"');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
+   'Switching account must erase locally stored domicile and timetable');
   assert.equal(await js('!!document.querySelector(".apd-comparator-pairs")'),false,
    'Changing accounts clears all school coordinate results');
   await js(`(()=>{
