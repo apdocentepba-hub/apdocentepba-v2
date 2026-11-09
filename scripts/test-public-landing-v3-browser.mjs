@@ -249,7 +249,7 @@ try{
    cards.forEach(el=>panel.appendChild(el));
    const failsafeHidden=cards.every(el=>getComputedStyle(el).display==='none');
    const alwaysStatic=cards.every(el=>getComputedStyle(el).position==='static');
-   original.forEach(({el,parent,next})=>parent.insertBefore(el,next));
+   [...original].reverse().forEach(({el,parent,next})=>parent.insertBefore(el,next?.parentNode===parent?next:null));
    window.APD_activatePanelTab('repo',false);
    const inRepo=cards.every(el=>el.parentElement===repo&&
     getComputedStyle(el).display==='block'&&getComputedStyle(el).position==='static'&&
