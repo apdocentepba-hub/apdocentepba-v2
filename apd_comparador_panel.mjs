@@ -125,7 +125,7 @@ function focusComparison() {
  header.appendChild(close);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
- body.appendChild(createPrivatePlannerForm({onChanged:focusComparison}));
+ body.appendChild(createPrivatePlannerForm({onChanged:()=>{render();focusComparison()}}));
  try {
   const origin=state.geoByKey[state.anchor]||null;
   const result=compareOffers({
