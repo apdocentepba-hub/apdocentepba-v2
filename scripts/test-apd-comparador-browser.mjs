@@ -77,6 +77,7 @@ const server=createServer((req,res)=>{
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
+  '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
@@ -135,7 +136,8 @@ const synthetic=Array.from({length:6},(_,i)=>({
  pid_compatible:i<2?true:undefined,
  pid_puntaje_total_final:i===0?'38,10':i===1?'45,00':undefined,
  pid_listado:i<2?'oficial':undefined,
- dias_horarios:i===0?'Lunes a Viernes: 7:20 a 11:50':i===1?'Lunes a Viernes: 14:00 a 18:30':'',
+ dias_horarios:i===0?'Lunes a Viernes: 7:20HSA 11:50HS':i===1?'Lunes a Viernes: 7:20 a 11:50':'',
+ cursodivision:i===0?'0':i===1?'A':'2 B',
  hsmodulos:i<2?'4':'',revista:i===0?'Suplencia':i===1?'Provisional':'',
  supl_desde:i<2?'2035-11-10T00:00:00Z':'',
  supl_hasta:i===0?'2036-01-01T00:00:00Z':i===1?'2036-02-01T00:00:00Z':'',
@@ -227,6 +229,31 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    const facts=await js(`(()=>{
+     const dialog=document.getElementById('apd-comparison-dialog');
+     const summary=dialog.querySelector('.apd-comparator-difference-summary').textContent;
+     const byLabel=label=>[...dialog.querySelectorAll('.apd-comparator-table tbody tr')]
+      .find(row=>row.querySelector('th')?.textContent===label);
+     const schedule=byLabel('Días y horarios');
+     const course=byLabel('Curso / división');
+     return {
+      summary,scheduleState:schedule?.dataset.comparisonStatus,
+      courseState:course?.dataset.comparisonStatus,
+      scheduleValues:[...schedule.querySelectorAll('td')].map(x=>x.textContent),
+      courseValues:[...course.querySelectorAll('td')].map(x=>x.textContent),
+      courseVisible:getComputedStyle(course).display!=='none'
+     };
+    })()`);
+    assert.equal(facts.scheduleState,'same',
+     'Semantically identical ABC HSA/plain horario should not be marked different');
+    assert.equal(facts.courseState,'unverified',
+     '0 versus A is incomplete course/division data, not a demonstrated difference');
+    assert.equal(facts.courseVisible,true,'Incomplete row must remain visible');
+    assert.deepEqual(facts.scheduleValues,[
+     'Lunes a viernes: 07:20 a 11:50','Lunes a viernes: 07:20 a 11:50']);
+    assert.match(facts.summary,/Datos incompletos o no comparables: Curso \/ división/);
+    assert.doesNotMatch(facts.summary,/Diferencias detectadas:[^.]*Días y horarios/,
+     'Equivalent schedules must be removed from the differences list');
     assert.match(bodyText,/Días y horarios/);
     assert.match(bodyText,/Postulantes visibles/);
     assert.match(bodyText,/42,60/);
