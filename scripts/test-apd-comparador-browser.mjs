@@ -165,17 +165,6 @@ try{
    'Anonymous pages must not load school mapping modules');
   await js(`(()=>{
    window.__offers=${JSON.stringify(synthetic)};
-   window.APD_readCachedApplicantsForComparison=offers=>{
-    if(!window.__testToken||planActual.access_active!==true)return {};
-    const summaries=[
-     {verified_from_current_card:true,total_postulantes:25,
-      puntaje_primero:'42,60',listado_origen_primero:'oficial'},
-     {verified_from_current_card:true,total_postulantes:16,
-      puntaje_primero:'39,00',listado_origen_primero:'oficial'}
-    ];
-    return Object.fromEntries(offers.filter(o=>o.iddetalle===8000||o.iddetalle===8001)
-      .map(o=>[o.source_offer_key,summaries[o.iddetalle-8000]]));
-   };
    dashboardLoadedOwner='SYNTHETIC_USER_A';
    window.__testToken='SYNTHETIC_USER_A';
    planActual={access_active:true};
@@ -195,6 +184,27 @@ try{
     return true;
    })()`);
    await until('!!document.getElementById("apd-comparar-oferta")');
+   // Simulate the already-rendered summary from the existing card, no GET.
+   if(i<2)await js(`(()=>{
+    const count=${i===0?25:16};
+    const first=${JSON.stringify(i===0?'42,60':'39,00')};
+    const holder=document.createElement('div');
+    holder.id='alerta-postulantes-meta';
+    holder.className='alerta-meta-card';
+    const fields=[['Postulantes',String(count)],['Puntaje del primero',first],['Listado del primero','oficial']];
+    const grid=document.createElement('div');
+    grid.className='alerta-meta-grid';
+    for(const [label,value] of fields){
+     const item=document.createElement('div');
+     item.className='alerta-meta-item';
+     const k=document.createElement('span');k.className='alerta-meta-k';k.textContent=label;
+     const v=document.createElement('strong');v.className='alerta-meta-v';v.textContent=value;
+     item.append(k,v);grid.appendChild(item);
+    }
+    holder.appendChild(grid);
+    document.querySelector('.alerta-main-card').appendChild(holder);
+    return true;
+   })()`);
    await js('document.getElementById("apd-comparar-oferta").click();true');
    if(i===1){
     await until('!!document.querySelector(".apd-comparator-side-by-side")');
@@ -208,7 +218,7 @@ try{
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
      /Comparación lado a lado/);
     assert.match(await js('document.querySelector(".apd-comparator-side-by-side")?.textContent||""'),
-     /No verificado/);
+     /Coincide según el panel/);
     assert.equal(await js('document.querySelector(".apd-comparator-head h3")?.tabIndex'),-1);
     // A real user must see a modal, even if the original panel is clipped.
     await until('document.getElementById("apd-comparison-dialog")?.open===true');
