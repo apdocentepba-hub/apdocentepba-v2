@@ -80,6 +80,7 @@ const server=createServer((req,res)=>{
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
   '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
+  '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
