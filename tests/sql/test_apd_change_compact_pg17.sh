@@ -160,10 +160,12 @@ console.log(JSON.stringify(c));
 JS
 )"
 psql -X -v ON_ERROR_STOP=1 -v snapshot="$snapshot" <<'SQL'
+CREATE TEMP TABLE apd_js_result AS
+ SELECT * FROM apd_change_lab.save_compact(:'snapshot'::jsonb);
 DO $test$
 DECLARE c record;
 BEGIN
- SELECT * INTO c FROM apd_change_lab.save_compact(:'snapshot'::jsonb);
+ SELECT * INTO c FROM apd_js_result;
  IF NOT c.applied OR c.retained<>1 OR
   (SELECT rows::text LIKE '%secret%' FROM apd_change_lab.captures
    WHERE scope='BERAZATEGUI') THEN RAISE EXCEPTION 'Node->PG17 round trip invalid'; END IF;
