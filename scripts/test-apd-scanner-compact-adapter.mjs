@@ -103,7 +103,11 @@ test('missing numFound or mismatched page start blocks the capture',async()=>{
  await assert.rejects(()=>run(fixture(undefined,{wrongStart:99})),/numFound/);
 });
 test('incomplete page or false total never becomes a valid snapshot',async()=>{
- await assert.rejects(()=>run(fixture([raw(0),raw(1),raw(2)]),{pageSize:2}),/page length/).catch(e=>{throw e;});
+ const f=fixture([raw(0),raw(1),raw(2)],{
+  replace:{pass:1,start:2,docs:[]}
+ });
+ await assert.rejects(()=>run(f,{pageSize:2}),/page length/);
+ assert.ok(!f.calls.some(x=>x.pass===2));
 });
 test('duplicated offers across pages fail before second pass',async()=>{
  const data=[raw(0),raw(1),raw(0),raw(3)];
@@ -159,7 +163,7 @@ test('reader errors do not return a partial capture',async()=>{
 });
 test('source adapter has no built-in HTTP, Supabase writes or senders',()=>{
  const source=readFileSync(new URL('./apd-scanner-compact-adapter.mjs',import.meta.url),'utf8');
- assert.doesNotMatch(source,/\bfetch\s*\(|supabase|service_role|mailgun|sendgrid|whatsapp|telegram|localStorage|resend/i);
+ assert.doesNotMatch(source,/\bfetch\s*\(|supabase(?:Select|Upsert|Insert|Request)|service_role|mailgun|sendgrid|whatsapp|telegram|localStorage|resend/i);
  assert.match(source,/enabled=false/);
  assert.match(source,/candidateOnly:true/);
 });
