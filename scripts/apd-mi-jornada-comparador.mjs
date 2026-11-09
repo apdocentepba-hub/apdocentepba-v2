@@ -56,8 +56,8 @@ function parseFromString(raw){
  // Admit ABC "HS A", punctuation and whitespace; any other suffix is unknown.
  const inBetween=text.slice(found[0].index+found[0][0].length,found[1].index);
  const endText=text.slice(found[1].index+found[1][0].length);
- const connector=inBetween.replace(/\bhs?\.?\b/g,'').replace(/[\s.:\-–—]/g,'');
- const suffix=endText.replace(/\bhs?\.?\b/g,'').replace(/[\s.,;:]/g,'');
+ const connector=inBetween.replace(/hs?\.?(?=a|\s|$)/g,'').replace(/[\s.:\-–—]/g,'');
+ const suffix=endText.replace(/hs?\.?(?=\s|$)/g,'').replace(/[\s.,;:]/g,'');
  if(connector!=='a'&&connector!=='hasta')return null;
  if(suffix)return null;
  return {days,start,end};
