@@ -24,18 +24,18 @@ La [PR #267](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/267) perma
 - Adaptador del origen ABC: verifica eco de q/estado/distrito/fl/orden, start, numFound, totalidad de páginas, identidades y dos lecturas consecutivas. Modo candidato, sin integración al Worker.
 - Lector público voluntario: GET al endpoint oficial, solo 18 campos, HTTPS, respuestas acotadas por tiempo y bytes, sin credenciales y bandera OFF por defecto.
 - Prueba de recuperación añadida el 09/11: respaldo real con pg_dump 17 del laboratorio; restauración a base descartable; alteración deliberada de esa copia; recuperación desde el mismo archivo; comparación de datos y permisos.
-- Nueva validación de roles mínimos (09/11): esquema de prueba con propietario NOLOGIN sin BYPASSRLS y rol de ingesta sin acceso directo a tablas; solo puede invocar dos funciones controladas. Pruebas de escritura legítima, acceso denegado, intento de falsificación y restauración completas aprobadas.
+- Nueva validación de roles mínimos (09/11): propietario NOLOGIN sin BYPASSRLS y rol de ingesta sin acceso directo a tablas, con solo dos funciones permitidas. **Comprobado con dos clientes TCP autenticados independientemente y contraseñas temporales**, además de SET ROLE: escritura válida, lectura/borrado denegados, rechazo de falsificación y restauración aprobados.
 
 ### Evidencia de pruebas
-- CI de la nueva etapa de permisos mínimos: [GitHub Actions #42625469079](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42625469079), 68/68 pruebas Node, PostgreSQL 17 PASS (captura, auditoría, concurrencia, permisos mínimos y restauración) y sin modificación productiva.
-- Log de restauración tras agregar rol restringido: APD_RESTORE_PG17_PASSED; fuente de laboratorio: 9 capturas, 5 eventos y respaldo de 23.821 bytes. **No es una copia ni restauración de Supabase real.**
+- CI de la etapa de conexiones reales: [GitHub Actions #42626612821](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42626612821), 68/68 pruebas Node; PostgreSQL 17 PASS (captura, auditoría, concurrencia, roles TCP, restauración); ningún cambio productivo.
+- Log de restauración tras usar roles TCP autenticados: APD_RESTORE_PG17_PASSED; fuente de laboratorio: **11 capturas, 6 eventos y respaldo de 24.572 bytes**. **No es una copia ni restauración de Supabase real.**
 - Inspección solo lectura de Supabase: 1.865 ofertas actuales; histórico congelado desde 18/09/2026 porque snapshot_writes=false. No se reactivó.
 - Consulta pública real a ABC: Avellaneda sin estado filtrado muestra 9.355 registros; con filtro estado Publicada muestra 16. Dos lecturas completas de 16 ofertas (10+6) coincidieron bajo fl restringido a 18 campos y desempate iddetalle. No se almacenaron registros originales en el repo.
 - Las ofertas productivas leídas figuraban PUBLICADA: no hay evidencia suficiente para acreditar anulaciones reales, ni dos rondas recientes de scanner oficial con semántica atómica.
 
 ## Pendientes y orden de trabajo
 1. Probar capturas oficiales completas de más de un distrito con control de frescura, persistencia solo en staging y límite efectivo de consultas.
-2. Ejecutar staging con roles equivalentes a Supabase y backup-restauración sobre una copia aislada, no sobre la base productiva.
+2. Ejecutar staging **Supabase/PostgREST** con roles reales, presupuestos y backup-restauración sobre una copia aislada (ya se probaron clientes TCP PostgreSQL independientes, pero **no** las políticas y APIs de Supabase). No tocar base productiva.
 3. Obtener evidencia explícita de cambios de estado oficial; no inferir cancelaciones por desaparición. Conciliar eventos con ofertas y vencimientos.
 4. Diseñar y verificar autorización y límites de los futuros avisos. Cualquier envío, migración o Worker productivo requiere autorización expresa.
 5. Verificar comparador con ofertas reales de sesión. Agregar domicilio de referencia y cálculo de cercanía bajo control de privacidad; **no implementado**.
