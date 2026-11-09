@@ -31,3 +31,12 @@ Es una prueba local de producto. Los campos de domicilio y empleo pueden ser dat
 2. Incorporar, solo si se aprueba, persistencia por cuenta autenticada con cifrado apropiado y reglas de acceso verificadas; nunca guardar domicilio particular sin consentimiento.
 3. Integrar, si fuese útil, comparación de rutas reales mediante servicio opt-in y presupuesto de API. La distancia en línea recta entre escuelas verificadas no sustituye tiempo de viaje.
 4. Contrastar normativa actual de incompatibilidades docentes de PBA antes de hablar de incompatibilidad administrativa o de adjudicación.
+
+## Política de acceso definida — Insigne únicamente (09/11/2026)
+
+- El catálogo vigente identifica cuatro niveles principales: Prueba 7 días, Plus, Premium e **Insigne**. La pantalla de planes anuncia la comparación con domicilio y jornadas solamente en la tarjeta Insigne.
+- El comparador básico y sus 19 criterios anteriores no cambian para cuentas con acceso confirmado al panel. La sección de domicilio/escuelas/horarios y la fila de cruce con jornada solo se renderizan si el plan actual recibido de `/api/mi-plan` cumple: `access_active === true`, `subscription.plan_code` correspondiente a Insigne/Insigne anual/Signature, estado activo/autorizado/aprobado, sin fuente `fallback_frontend`, sin contradicción con `plan.code`.
+- Plus, Premium, plan de prueba, pagos pendientes, suscripciones vencidas o sin verificación **no** tienen acceso a la opción avanzada. La promoción no habilita la función por sí misma; el acceso depende del plan vigente confirmado.
+- Un cambio de plan descendente elimina los datos opcionales almacenados en `sessionStorage` de la pestaña y quita la interfaz privada, manteniendo la comparación básica. Cerrar sesión o cambiar de cuenta también borra el perfil.
+- Limitación de seguridad: este planificador usa solo datos proporcionados por el propio usuario en el navegador y no consume una API privada de cálculo; por ello la restricción es una **habilitación de producto en interfaz sustentada por la respuesta autenticada del Worker**, no una barrera criptográfica contra quienes manipulen su propio JavaScript. Toda futura API prémium deberá verificar el plan **en el servidor** y nunca confiar en `planInfo` enviado por el cliente.
+- Pruebas unitarias de códigos y estados, y pruebas Chromium de Insigne, Plus y degradación sin pérdida del comparador básico. No se modifican cuotas, cobros, tablas ni la lógica de notificaciones.
