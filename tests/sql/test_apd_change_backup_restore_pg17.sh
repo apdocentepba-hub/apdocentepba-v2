@@ -30,7 +30,10 @@ SELECT
   (SELECT count(*) FROM apd_change_lab.captures),
   (SELECT count(*) FROM apd_change_lab.audit_events),
   (SELECT md5(coalesce(string_agg(to_jsonb(c)::text, '|' ORDER BY c.scope,c.captured_at),'')) FROM apd_change_lab.captures c),
-  (SELECT md5(coalesce(string_agg(to_jsonb(e)::text, '|' ORDER BY e.scope,e.event_key),'')) FROM apd_change_lab.audit_events e);
+  (SELECT md5(coalesce(string_agg(to_jsonb(e)::text, '|' ORDER BY e.scope,e.event_key),'')) FROM apd_change_lab.audit_events e),
+  (SELECT count(*) FROM apd_change_lab.transition_candidates),
+  (SELECT md5(coalesce(string_agg(to_jsonb(t)::text, '|' ORDER BY t.scope,t.evidence_hash),''))
+   FROM apd_change_lab.transition_candidates t);
 SQL
 )"
 state() {
@@ -38,12 +41,12 @@ state() {
     -U apd_ci -d "$1" -c "$summary_sql" | tr -d '\r'
 }
 original="$(state apd_ci)"
-if [[ ! "$original" =~ ^[0-9]+\|[0-9]+\|[0-9a-f]{32}\|[0-9a-f]{32}$ ]]; then
+if [[ ! "$original" =~ ^[0-9]+\|[0-9]+\|[0-9a-f]{32}\|[0-9a-f]{32}\|[0-9]+\|[0-9a-f]{32}$ ]]; then
   echo 'APD_RESTORE_FAIL: invalid original fingerprint' >&2
   exit 1
 fi
-IFS='|' read -r captures events _ _ <<<"$original"
-if ((captures<2 || events<1)); then
+IFS='|' read -r captures events _ _ candidates _ <<<"$original"
+if ((captures<2 || events<1 || candidates<1)); then
   echo 'APD_RESTORE_FAIL: source lab lacks captured and audit evidence' >&2
   exit 1
 fi
@@ -75,6 +78,14 @@ posture_sql="$(cat <<'SQL'
 SELECT CASE WHEN
   (SELECT relrowsecurity FROM pg_class WHERE oid='apd_change_lab.captures'::regclass)
   AND (SELECT relrowsecurity FROM pg_class WHERE oid='apd_change_lab.audit_events'::regclass)
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid='apd_change_lab.transition_candidates'::regclass)
+  AND NOT has_table_privilege('apd_lab_ingest',
+     'apd_change_lab.transition_candidates','SELECT,INSERT,UPDATE,DELETE')
+  AND NOT has_function_privilege('apd_lab_ingest',
+     'apd_change_lab.record_transition_candidate(jsonb,text,boolean)','EXECUTE')
+  AND NOT EXISTS(SELECT 1 FROM apd_change_lab.transition_candidates
+     WHERE status<>'review_only' OR delivery_allowed OR source_attested
+        OR historic_transition_proven)
   AND NOT has_schema_privilege('apd_lab_ingest','apd_change_lab','USAGE')
   AND has_schema_privilege('apd_lab_ingest','apd_change_api','USAGE')
   AND NOT has_table_privilege('apd_lab_ingest','apd_change_lab.captures','SELECT,INSERT,DELETE')
@@ -130,4 +141,4 @@ if [[ "$posture" != "PASS" ]]; then
   echo 'APD_RESTORE_FAIL: permissions not restored after recovery' >&2
   exit 1
 fi
-echo "APD_RESTORE_PG17_PASSED captures=$captures audit_events=$events backup_bytes=$backup_bytes"
+echo "APD_RESTORE_PG17_PASSED captures=$captures audit_events=$events transition_candidates=$candidates backup_bytes=$backup_bytes"
