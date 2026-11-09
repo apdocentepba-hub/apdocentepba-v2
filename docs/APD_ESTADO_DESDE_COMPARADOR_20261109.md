@@ -24,10 +24,11 @@ La [PR #267](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/267) perma
 - Adaptador del origen ABC: verifica eco de q/estado/distrito/fl/orden, start, numFound, totalidad de páginas, identidades y dos lecturas consecutivas. Modo candidato, sin integración al Worker.
 - Lector público voluntario: GET al endpoint oficial, solo 18 campos, HTTPS, respuestas acotadas por tiempo y bytes, sin credenciales y bandera OFF por defecto.
 - Prueba de recuperación añadida el 09/11: respaldo real con pg_dump 17 del laboratorio; restauración a base descartable; alteración deliberada de esa copia; recuperación desde el mismo archivo; comparación de datos y permisos.
+- Nueva validación de roles mínimos (09/11): esquema de prueba con propietario NOLOGIN sin BYPASSRLS y rol de ingesta sin acceso directo a tablas; solo puede invocar dos funciones controladas. Pruebas de escritura legítima, acceso denegado, intento de falsificación y restauración completas aprobadas.
 
 ### Evidencia de pruebas
-- CI más reciente de recuperación: [GitHub Actions #42622944134](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42622944134), 68/68 pruebas Node aprobadas, PostgreSQL 17 PASS (captura, auditoría, concurrencia y restauración) y sin modificación productiva.
-- Log de restauración: APD_RESTORE_PG17_PASSED; fuente del laboratorio: 7 capturas, 4 eventos y backup de 20.179 bytes. **No es una copia ni restauración de Supabase real.**
+- CI de la nueva etapa de permisos mínimos: [GitHub Actions #42625469079](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42625469079), 68/68 pruebas Node, PostgreSQL 17 PASS (captura, auditoría, concurrencia, permisos mínimos y restauración) y sin modificación productiva.
+- Log de restauración tras agregar rol restringido: APD_RESTORE_PG17_PASSED; fuente de laboratorio: 9 capturas, 5 eventos y respaldo de 23.821 bytes. **No es una copia ni restauración de Supabase real.**
 - Inspección solo lectura de Supabase: 1.865 ofertas actuales; histórico congelado desde 18/09/2026 porque snapshot_writes=false. No se reactivó.
 - Consulta pública real a ABC: Avellaneda sin estado filtrado muestra 9.355 registros; con filtro estado Publicada muestra 16. Dos lecturas completas de 16 ofertas (10+6) coincidieron bajo fl restringido a 18 campos y desempate iddetalle. No se almacenaron registros originales en el repo.
 - Las ofertas productivas leídas figuraban PUBLICADA: no hay evidencia suficiente para acreditar anulaciones reales, ni dos rondas recientes de scanner oficial con semántica atómica.
