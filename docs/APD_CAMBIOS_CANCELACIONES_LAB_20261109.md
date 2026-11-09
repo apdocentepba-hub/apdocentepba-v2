@@ -195,3 +195,28 @@ APD_RESTORE_PG17_PASSED captures=13 audit_events=7 backup_bytes=24731
 Además se ejecutaron exitosamente las 68 pruebas Node del detector, los ensayos previos de roles TCP y PostgreSQL y la protección independiente del Worker.
 
 **Limitación de seguridad:** un contenedor PostgREST en CI representa la interfaz HTTP/JWT y el cambio de rol PostgreSQL, pero **no equivale a Supabase staging**: no se validaron todavía API Gateway, JWT/roles exactos de Supabase Auth, configuración efectiva de PostgREST de ese proveedor, conexiones SSL remotas, políticas reales de producción ni rollback de un proyecto externo. No usar estos secretos ni contenedores en producción. La PR continúa en borrador.
+
+
+## Undécima etapa — separación de esquema de API y almacén (09/11/2026)
+
+**Motivo:** la prueba PostgREST anterior incluía `apd_change_lab` como esquema expuesto. Aunque los roles de JWT no recibían permisos para acceder a sus tablas y funciones internas, esos objetos compartían superficie de API. La guía oficial de Supabase (actualizada el 22/10/2026) recomienda esquemas dedicados para la API y esquemas no expuestos para almacenamiento y lógica interna: https://supabase.com/docs/guides/api/securing-your-api.
+
+### Corrección realizada solo en pruebas aisladas
+- `tests/sql/apd_change_least_privilege_pg17.sql`: ahora crea el esquema **`apd_change_api`** exclusivamente para `submit_compact(jsonb)` y `submit_audit(jsonb)`. La tabla `captures`, la tabla `audit_events` y los procedimientos originales con parámetros de inyección quedan en **`apd_change_lab`**, fuera del esquema expuesto.
+- El rol `apd_lab_ingest` perdió incluso `USAGE` del esquema privado. Solamente tiene `USAGE` sobre `apd_change_api` y `EXECUTE` sobre sus dos funciones. El propietario de las funciones es un rol interno NOLOGIN/NOBYPASSRLS; ambos esquemas mantienen privilegios `CREATE` revocados.
+- `tests/sql/test_apd_change_least_privilege_pg17.sh` comprueba que el rol de ingesta nunca puede navegar el esquema privado. Los documentos sintéticos se preparan como administrador del laboratorio antes de cambiar al rol restringido.
+- `tests/sql/test_apd_change_tcp_roles_pg17.sh` verifica lo mismo con clientes autenticados en conexiones TCP independientes.
+- `tests/sql/test_apd_change_postgrest_http_pg17.sh` establece `PGRST_DB_SCHEMAS=apd_change_api`. El test HTTP inspecciona el **OpenAPI generado de verdad**: aparecen únicamente la ruta raíz y las dos rutas `/rpc/submit_*`; no aparecen tablas ni funciones internas. Además se mantienen los rechazos por JWT inválido, lectura/escritura directa y datos falsificados.
+- `tests/sql/test_apd_change_backup_restore_pg17.sh` ahora respalda/restaura **ambos esquemas** (privado y API), comprueba permisos de `ingest` después de la restauración y repite la recuperación tras daño simulado.
+
+### Evidencia reproducible
+- [GitHub Actions #42630104515](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42630104515): **68/68** pruebas Node; PostgreSQL 17 y PostgREST aislados PASS; 18 solicitudes HTTP/JWT, prueba OpenAPI de tres rutas (raíz y dos RPC), contraseñas temporales de clientes TCP, concurrencia e idempotencia, backup/restauración de 13 capturas y 7 eventos de ensayo, archivo de 25.125 bytes.
+- La primera ejecución reveló un test incorrecto de introspección ACL: el rol restringido no podía inspeccionar el esquema privado. Se corrigió para que el **administrador del laboratorio audite permisos y el rol limitado pruebe rechazos efectivos**, sin ampliar permisos.
+- La segunda ejecución reveló que PostgREST genera la ruta estándar `/` además de las dos RPC; el test se ajustó para permitir esa única ruta no operativa. Ninguna tabla privada apareció en OpenAPI.
+
+### Lectura no invasiva de Supabase real (sin cambios)
+- Dos proyectos conectados; **ninguno identificado explícitamente como staging dedicado**. No se reutilizó el otro proyecto ni se crearon recursos.
+- En el proyecto actualmente utilizado por APDocentePBA no existe el esquema `apd_change_lab`. Las ocho tablas públicas cuyo nombre comienza con `apd` tienen RLS habilitado. Se observaron permisos SQL generales `SELECT/INSERT/UPDATE/DELETE` para roles `anon` y `authenticated` en esas tablas; **esos GRANT no demuestran acceso efectivo a las filas** por sí mismos porque RLS controla cada operación. Su revisión de políticas detalladas queda pendiente como auditoría separada, sin alterar el sistema.
+- **No hay staging Supabase aprobado.** El paso futuro debe comenzar con identificación inequívoca del proyecto aislado, costo y autorización específica, sin confundirlo con ninguna base existente.
+
+**Límites:** el nuevo aislamiento no autentica por sí mismo la procedencia oficial de las capturas. El backend todavía acepta datos enviados por el rol interno autorizado, por lo que **no debe entregarse una credencial de ingesta al navegador**; antes de producción deberá agregarse atestación del origen, validación de escáner, credenciales exclusivas del servidor y control de cuotas. No activar cron, Worker ni avisos.
