@@ -19,15 +19,16 @@ const raw=(i)=>({
  finoferta:'2026-11-12T07:30:00Z',descnivelmodalidad:'Secundaria',
  descripcioncargo:'PRECEPTOR',descripcionarea:'/PR',escuela:'E.E.S.T. Nº 6',
  turno:i%2===0?'M':'T',jornada:'JS',hsmodulos:'4',
- cursodivision:'1°1°',supl_desde:'2026-11-04',supl_hasta:'2026-11-18',
- email:'private@example.invalid',raw:{other:'secret'}
+ cursodivision:'1°1°',supl_desde:'2026-11-04',supl_hasta:'2026-11-18'
 });
+const withPII=i=>({...raw(i),email:'private@example.invalid',
+ raw:{other:'secret'}});
 const fixture=(items=[raw(0),raw(1),raw(2),raw(3)],changes={})=>{
  const calls=[];
  let states=0;
  const readScanState=async()=>{states++;return states===2&&changes.stateAfter?changes.stateAfter:scan()};
- const readPage=async ({district,query,sort,mode,start,rows,pass})=>{
-  calls.push({district,query,sort,mode,start,rows,pass});
+ const readPage=async ({district,query,sort,fields,mode,start,rows,pass})=>{
+  calls.push({district,query,sort,fields,mode,start,rows,pass});
   if(changes.failAt===pass+':'+start)throw Error('FAKE_ABC_IO_FAILURE');
   const docs=(pass===2&&changes.secondRows?changes.secondRows:items).slice(start,start+rows);
   if(changes.replace&&changes.replace.pass===pass&&changes.replace.start===start)
@@ -38,6 +39,7 @@ const fixture=(items=[raw(0),raw(1),raw(2),raw(3)],changes={})=>{
    params:{
     q:changes.echoQuery??query,
     sort:changes.echoSort??sort,
+    fl:changes.echoFl??fields,
     start:String(changes.echoStart??start),
     rows:String(changes.echoRows??rows),
     wt:changes.echoWt??'json'
@@ -170,6 +172,14 @@ test('real ABC published filter and tiebreak sort are explicitly enforced',async
   /query not verified/);
  await assert.rejects(()=>run(fixture([raw(0)],{echoQuery:'descdistrito:"QUILMES" AND estado:"Publicada"'})),
   /query not verified/);
+});
+test('response fl mismatch and unexpected fields in ABC docs are rejected',async()=>{
+ await assert.rejects(()=>run(fixture([raw(0)],{echoFl:'*'})),
+  /query not verified/);
+ const fixtureWithPII=fixture([raw(0)],{
+  replace:{pass:1,start:0,docs:[withPII(0)]}
+ });
+ await assert.rejects(()=>run(fixtureWithPII),/unapproved field/);
 });
 test('response header absent, mismatched rows/start or non-JSON is rejected',async()=>{
  const variants=[
