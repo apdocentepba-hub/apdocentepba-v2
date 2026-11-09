@@ -248,3 +248,21 @@ Esos números describen **todos los registros del distrito encontrados por la co
 - Todo es laboratorio. El nuevo verificador **no se ejecutó en producción, no se conectó al scanner y no emitió alertas**.
 
 **Pendiente indispensable:** establecer un procedimiento comprobable para correlacionar una captura oficial previa \`Publicada\` con una **consulta posterior de estado validada** y registrar procedencia, sello temporal y evidencia en una estructura de auditoría diferente a las capturas \`current_published\` (que solo contienen publicadas). Hasta esa prueba, la bandeja de cambios no debe emitir anulaciones. Ningún staging fue creado ni autorizado.
+
+
+## Decimotercera etapa — correlación temporal Publicada → Anulada, sin notificaciones (09/11/2026)
+
+**Avance implementado (únicamente en laboratorio):**
+- `scripts/apd-abc-transition-correlator.mjs`: recibe una **captura compacta anterior** con 14 campos de oferta y una interfaz inyectada del verificador de estados ABC. No importa módulos de red, no persiste, no envía mensajes y se mantiene `enabled=false` por defecto.
+- Antes de consultar ABC exige `complete:true`, total de registros coincidente, ámbito/distrito coherente, claves únicas, campos exactos, huella de contenido SHA-256 sin alteraciones, un único `D_<iddetalle>` y estado anterior `Publicada`. Rechaza estados anteriores distintos y también IDs de la familia `O_`, todavía no probada como identificador único del endpoint.
+- Control temporal: la captura `Publicada` debe ser **anterior** a la consulta, dentro de una ventana máxima de 48 horas; se rechazan fechas inválidas, futuras, viejas y verificaciones que tarden más de 60 segundos.
+- El correlador **invoca él mismo** `verifier.inspect({district,sourceOfferKey})` con la misma identidad que encontró en la captura, en vez de aceptar un resultado de estado arbitrariamente desligado de la oferta.
+- Solamente cuando ese verificador devuelve **dos consultas válidas y consistentes** de `ANULADA`, mismo distrito y metadatos de auditoría esperados, produce un **candidato no entregable para revisión** con `evidenceHash` estable y ventana `previousObservedAt` → `laterVerifiedAt`. El hash se genera a partir de huella de la captura, distrito, clave y estado, evitando incluir la identidad textual de la oferta en el resultado.
+- Señales preventivas obligatorias: `originalCaptureAttestedByABC:false`, `exactStateTransitionTimeKnown:false`, `historicTransitionProven:false`, `candidateOnly:true`, `notificationAllowed:false`, `eventsCreated:0` y `recordsStored:0`. **No permite afirmar que ABC anuló una oferta en un instante preciso ni que la captura anterior sea atómica.**
+- `scripts/test-apd-abc-transition-correlator.mjs`: pruebas de integración **sintética** mediante el verificador real alimentado con respuestas HTTP simuladas. Cubre éxito acotado, identidad y distrito, huella de datos alterada, campos personales extra, estados `Designada/Desierta/Renunciada`, timestamps imposibles/desordenados, fallas de ABC, metadatos falsificados, duración excesiva y ausencia de cualquier emisión o almacenamiento.
+
+**Comprobación:** GitHub Actions [#42634378137](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42634378137): **92/92 pruebas Node PASS**; PostgreSQL 17 con PostgREST/JWT, roles y backup/restauración PASS. El control independiente del Worker continúa sin modificación.
+
+**Limitación decisiva:** se correlacionó en pruebas una **captura sintética** con una **respuesta sintética** que pasa por el verificador de ABC. No se observó en producción una transición cronológica auténtica `Publicada→Anulada`. Tampoco se implementaron cuotas globales, atestación criptográfica de capturas, esquema de evidencia persistente ni vínculo con el Worker. El módulo deliberadamente no produce un evento en la cola `audit_only`.
+
+**Próximo criterio de aceptación:** usar un staging identificado y autorizado para almacenar únicamente evidencias compactas de una oferta previamente publicada, volver a consultar ABC por `iddetalle` ante un cambio comprobable y auditar la secuencia sin datos personales ni alertas. No usar un proyecto Supabase existente como staging por inferencia, no publicar ni enviar mensajes.
