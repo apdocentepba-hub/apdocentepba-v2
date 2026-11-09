@@ -457,9 +457,12 @@ try{
     if(i===1)return {...offer,dias_horarios:'Lunes: 09:00 a 11:00; Miércoles: 15:00 a 18:00'};
     return offer;
    });
-   window.APD_comparatorRefresh({offers:window.__offers,index:0,enabled:true,planInfo:planActual});
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
    return true;
   })()`);
+  await until('!!document.getElementById("apd-ver-comparacion") && document.querySelector(".apd-comparator-count")?.textContent==="5 de 5 ofertas seleccionadas"');
   await js('document.getElementById("apd-ver-comparacion").click();true');
   await until('document.getElementById("apd-comparison-dialog")?.open===true');
   const multiBlockText=await js(`[...document.querySelectorAll(
