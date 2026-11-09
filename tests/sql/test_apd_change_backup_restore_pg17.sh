@@ -46,7 +46,7 @@ if [[ ! "$original" =~ ^[0-9]+\|[0-9]+\|[0-9a-f]{32}\|[0-9a-f]{32}\|[0-9]+\|[0-9
   exit 1
 fi
 IFS='|' read -r captures events _ _ candidates _ <<<"$original"
-if ((captures<2 || events<1 || candidates<1)); then
+if ((captures<2 || events<1 || candidates!=501)); then
   echo 'APD_RESTORE_FAIL: source lab lacks captured and audit evidence' >&2
   exit 1
 fi
@@ -86,6 +86,14 @@ SELECT CASE WHEN
   AND NOT EXISTS(SELECT 1 FROM apd_change_lab.transition_candidates
      WHERE status<>'review_only' OR delivery_allowed OR source_attested
         OR historic_transition_proven)
+  AND NOT EXISTS(SELECT 1 FROM (
+     SELECT scope,count(*) AS n FROM apd_change_lab.transition_candidates
+     GROUP BY scope
+   ) capped WHERE n>500)
+  AND (SELECT count(*) FROM apd_change_lab.transition_candidates
+       WHERE scope='ENSENADA')=500
+  AND (SELECT count(*) FROM apd_change_lab.transition_candidates
+       WHERE scope='MERLO')=1
   AND NOT has_schema_privilege('apd_lab_ingest','apd_change_lab','USAGE')
   AND has_schema_privilege('apd_lab_ingest','apd_change_api','USAGE')
   AND NOT has_table_privilege('apd_lab_ingest','apd_change_lab.captures','SELECT,INSERT,DELETE')
