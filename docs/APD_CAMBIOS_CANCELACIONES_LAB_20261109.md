@@ -220,3 +220,31 @@ Además se ejecutaron exitosamente las 68 pruebas Node del detector, los ensayos
 - **No hay staging Supabase aprobado.** El paso futuro debe comenzar con identificación inequívoca del proyecto aislado, costo y autorización específica, sin confundirlo con ninguna base existente.
 
 **Límites:** el nuevo aislamiento no autentica por sí mismo la procedencia oficial de las capturas. El backend todavía acepta datos enviados por el rol interno autorizado, por lo que **no debe entregarse una credencial de ingesta al navegador**; antes de producción deberá agregarse atestación del origen, validación de escáner, credenciales exclusivas del servidor y control de cuotas. No activar cron, Worker ni avisos.
+
+
+## Duodécima etapa — estados históricos oficiales y verificación puntual de anulación (09/11/2026)
+
+**Nuevo dato primario:** el endpoint público \`https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select\` responde a \`facet=true&facet.field=estado&rows=0\` con el detalle agregado de los estados. Para el distrito **AVELLANEDA** se observaron:
+- \`designada\`: **6.448** registros históricos
+- \`desierta\`: **1.866**
+- \`anulada\`: **515**
+- \`renunciada\`: **510**
+- \`publicada\`: **16**
+
+Esos números describen **todos los registros del distrito encontrados por la consulta**, no cambios recientes ni avisos cancelados durante este día. El catálogo corriente filtra \`Publicada\` y por eso no muestra el historial de \`Anulada\`.
+
+**Identidad oficial comprobada:** con un ejemplo \`Publicada\` y otro \`Anulada\` se consultó \`q=descdistrito:"AVELLANEDA" AND iddetalle:<identificador numérico>\`, \`fl=iddetalle,idoferta,estado,descdistrito\`. ABC devolvió una coincidencia exacta y el estado correspondiente en cada caso. No se almacenaron ni publicaron los identificadores, nombres, CUIL o datos adicionales. En una comprobación posterior de dos pasadas a través de un servicio de lectura externo, solo una pasada produjo respuestas utilizables y otra quedó sin datos parseables; **no se declara una doble verificación real exitosa**.
+
+### Código de laboratorio
+- \`scripts/apd-abc-official-status-verifier.mjs\`: módulo sin conexión al Worker, **deshabilitado por defecto**, que realiza **dos GET** sucesivos con consulta exacta por \`D_<iddetalle>\`, solo cuatro campos autorizados, endpoint fijo HTTPS, \`credentials:omit\`, \`redirect:error\`, \`cache:no-store\`, tiempo máximo de respuesta y tope de 32 KiB por lectura.
+- Rechaza resultados ausentes o no únicos, ID diferente, distrito diferente, campos extra, consulta Solr no coincidente en \`responseHeader\`, estado desconocido y cambios de estado entre las dos lecturas. No admite \`O_<idoferta>\` porque su unicidad **no fue validada**.
+- Clasifica \`ANULADA\` como \`officially_annulled\`, \`PUBLICADA\` como \`published\`, y \`DESIERTA\`, \`DESIGNADA\`, \`RENUNCIADA\` como \`other_terminal\`. **Las tres últimas no se consideran anulaciones.**
+- El resultado señala siempre \`historicTransitionProven:false\`, \`notificationAllowed:false\`, \`recordsStored:0\` y \`eventsCreated:0\`: confirmar el estado actual de una oferta por ID no acredita por sí mismo cuándo cambió desde una publicación anterior.
+- El módulo tiene **máximo 10 verificaciones por instancia** por defecto (20 GET), con límite configurable solo entre 1 y 20. Esto NO constituye un límite central por usuario o servidor; necesitaría cuotas distribuidas al integrar en staging.
+
+### Evidencia automatizada
+- \`scripts/test-apd-abc-official-status-verifier.mjs\`: estados oficiales diferenciados, dos pasadas consistentes, consultas exactas, bloqueo de IDs/distritos inválidos, rechazo de datos privados, identidades duplicadas, cambios entre lecturas, HTTP/MIME/JSON defectuoso, respuesta demasiado grande y límite de consultas.
+- [GitHub Actions #42632101233](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42632101233): **81/81 tests Node PASS**; PostgreSQL 17, rol TCP, PostgREST JWT, concurrencia, restauración y protección del Worker PASS.
+- Todo es laboratorio. El nuevo verificador **no se ejecutó en producción, no se conectó al scanner y no emitió alertas**.
+
+**Pendiente indispensable:** establecer un procedimiento comprobable para correlacionar una captura oficial previa \`Publicada\` con una **consulta posterior de estado validada** y registrar procedencia, sello temporal y evidencia en una estructura de auditoría diferente a las capturas \`current_published\` (que solo contienen publicadas). Hasta esa prueba, la bandeja de cambios no debe emitir anulaciones. Ningún staging fue creado ni autorizado.
