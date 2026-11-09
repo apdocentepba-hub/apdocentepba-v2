@@ -78,10 +78,10 @@ BEGIN
  END IF;
  v_bytes:=octet_length(v_rows::text);
  IF v_bytes>1048576 THEN RAISE EXCEPTION 'Compact payload over 1 MiB'; END IF;
- CREATE TEMP TABLE IF NOT EXISTS pg_temp.apd_capture_keys (
-  offer_key text PRIMARY KEY
- ) ON COMMIT DROP;
- TRUNCATE pg_temp.apd_capture_keys;
+ IF (SELECT count(DISTINCT btrim(value->>'source_offer_key'))
+     FROM jsonb_array_elements(v_rows) AS t(value))<>v_total THEN
+  RAISE EXCEPTION 'Duplicate offer identity';
+ END IF;
  FOR v_item IN SELECT value FROM jsonb_array_elements(v_rows) LOOP
   IF jsonb_typeof(v_item)<>'object' OR
      (SELECT count(*) FROM jsonb_object_keys(v_item))<>14 OR
@@ -95,11 +95,7 @@ BEGIN
      upper(btrim(v_item->>'distrito'))<>upper(v_scope) THEN
    RAISE EXCEPTION 'Offer identity or district mismatch';
   END IF;
-  BEGIN
-   INSERT INTO pg_temp.apd_capture_keys(offer_key) VALUES(v_key);
-  EXCEPTION WHEN unique_violation THEN
-   RAISE EXCEPTION 'Duplicate offer identity';
-  END;
+  -- Only one identity per district and scan. Checked above without temp tables.
  END LOOP;
  SELECT coalesce(jsonb_agg(value ORDER BY value->>'source_offer_key'),'[]'::jsonb)
  INTO v_sorted FROM jsonb_array_elements(v_rows) AS t(value);
