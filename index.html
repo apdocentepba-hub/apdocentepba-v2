@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="mobile_optimizations.css?v=visual4">
   <link rel="stylesheet" href="mobile_overrides_v2.css?v=visual3">
   <link rel="stylesheet" href="visual_contrast_patch.css?v=2">
-  <link rel="stylesheet" href="apd_comparador_panel.css?v=20261108-visible1">
+  <link rel="stylesheet" href="apd_comparador_panel.css?v=20261109-exclusion1">
   <style>
     #panel-docente{position:relative;}
     .apd-safe-side-ad{display:none;position:absolute;top:112px;width:min(300px,calc((100vw - 1180px)/2 - 28px));z-index:1;border-radius:22px;padding:18px 16px;box-shadow:0 18px 44px rgba(16,36,61,.13);box-sizing:border-box;line-height:1.35;}
@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261108-visible1')
+   import('./apd_comparador_panel.mjs?v=20261109-exclusion1')
     .then(()=>{loading=false;sync();})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }

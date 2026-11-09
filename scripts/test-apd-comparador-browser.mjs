@@ -293,6 +293,40 @@ try{
   })()`);
   await until('document.getElementById("apd-comparador-panel").hidden');
   assert.equal(await js('document.querySelector(".apd-comparator-item")'),null);
+  // Regression: selecting two closed/expired offers must not leave a silent empty comparison.
+  await js(`(()=>{
+   dashboardLoadedOwner='SYNTHETIC_USER_EXPIRED';
+   window.__testToken='SYNTHETIC_USER_EXPIRED';
+   planActual={access_active:true};
+   window.alertasState={items:[
+    {...window.__offers[0],finoferta:'01/01/2020 10:00'},
+    {...window.__offers[1],estado:'ANULADA'}
+   ],index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.getElementById("apd-comparar-oferta") && !document.getElementById("apd-comparador-panel").hidden');
+  await js('document.getElementById("apd-comparar-oferta").click();true');
+  await js(`(()=>{
+   window.alertasState.index=1;
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.getElementById("apd-comparar-oferta")');
+  await js('document.getElementById("apd-comparar-oferta").click();true');
+  await until('!!document.querySelector(".apd-comparator-unavailable")');
+  assert.equal(await js('document.querySelector(".apd-comparator-count")?.textContent'),
+   '2 de 5 ofertas seleccionadas');
+  assert.equal(await js('!!document.querySelector(".apd-comparator-side-by-side")'),false);
+  assert.match(await js('document.querySelector(".apd-comparator-unavailable")?.textContent||""'),
+   /0 de 2 ofertas seleccionadas/);
+  assert.match(await js('document.querySelector(".apd-comparator-unavailable")?.textContent||""'),
+   /plazo de cierre vencido/);
+  assert.match(await js('document.querySelector(".apd-comparator-unavailable")?.textContent||""'),
+   /estado oficial cerrado o anulado/);
+  assert.equal(await js('document.activeElement?.classList.contains("apd-comparator-unavailable")'),true);
   results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
