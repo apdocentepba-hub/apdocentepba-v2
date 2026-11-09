@@ -7,7 +7,7 @@ El usuario pidió que el comparador permita ingresar un domicilio de referencia 
 - En el módulo Comparar ofertas, panel y ventana de comparación, aparece la sección desplegable **«Mi domicilio y jornadas actuales (opcional)»**.
 - Domicilio libre opcional, máximo 180 caracteres; no se geolocaliza ni se calcula distancia en forma automática.
 - Hasta cinco jornadas, cada una con escuela, selección de días lunes a domingo y horario desde/hasta; validación de horas e intervalos.
-- Botón «Guardar en esta pestaña»: guarda únicamente en `sessionStorage`, sin POST ni escritura en Supabase. No sincroniza con otros dispositivos ni otras pestañas. Botón de borrado y limpieza al pulsar Cerrar sesión.
+- Botón «Guardar en esta pestaña»: guarda únicamente en `sessionStorage`, sin POST ni escritura en Supabase. No sincroniza con otros dispositivos ni otras pestañas. Botón de borrado y limpieza al pulsar Cerrar sesión, cambiar de cuenta autenticada o reiniciar la sesión del comparador.
 - Solo después de que el usuario haya pedido verificar ubicaciones oficiales de establecimientos y exista clave/posición WFS verificada, puede abrir voluntariamente un enlace a Google Maps con domicilio de origen. Al pulsar el enlace, el domicilio se entrega a Google para que calcule la ruta; la aplicación no hace esa consulta por cuenta propia.
 - No se pide geolocalización, ni dirección de GPS ni permisos del sistema operativo.
 
@@ -23,7 +23,7 @@ Es una prueba local de producto. Los campos de domicilio y empleo pueden ser dat
 
 ### Evidencia y límites
 - PR #269: https://github.com/apdocentepba-hub/apdocentepba-v2/pull/269
-- CI del primer candidato: https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42676974336, **58/58 tests Node PASS** y Chromium QA en escritorios 1280px y móviles 390px PASS. La prueba de navegador carga una jornada, verifica superposición, comprueba `sessionStorage` y la eliminación al borrar.
+- CI del primer candidato: https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/42676974336, **58/58 tests Node PASS** y Chromium QA en escritorio 1280px y móvil 390px PASS; el test verifica también borrado automático al cambiar de cuenta. La prueba de navegador carga una jornada, verifica superposición, comprueba `sessionStorage` y la eliminación al borrar.
 - PR en borrador, **no desplegada**. Antes de producción: revisar versión de importación/caché, experiencia visual en navegador autenticado real, accesibilidad, políticas de privacidad y pruebas contra casos de jornadas múltiples.
 
 ### Pendientes
