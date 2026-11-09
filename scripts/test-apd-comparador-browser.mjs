@@ -45,10 +45,12 @@ window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
  if(u.hostname==='apis.datos.gob.ar'){
   window.__georefRequests.push({method:opts.method,credentials:opts.credentials,
-   provincia:u.searchParams.get('provincia'),query:u.searchParams.get('direccion')});
+   provincia:u.searchParams.get('provincia'),query:u.searchParams.get('direccion'),
+   partido:u.searchParams.get('departamento')});
   const data={direcciones:[{
    nomenclatura:'MITRE 200, Avellaneda, Buenos Aires',
-   ubicacion:{lat:-34.680,lon:-58.310},provincia:{nombre:'Buenos Aires'}
+   ubicacion:{lat:-34.680,lon:-58.310},provincia:{nombre:'Buenos Aires'},
+   departamento:{nombre:'Avellaneda'}
   }]};
   const bytes=new TextEncoder().encode(JSON.stringify(data));
   return {ok:true,headers:{get:()=>String(bytes.length)},
@@ -322,6 +324,8 @@ try{
   assert.equal(await js('window.__georefRequests.length'),1);
   assert.equal(await js('window.__georefRequests[0].credentials'),'omit');
   assert.equal(await js('window.__georefRequests[0].provincia'),'Buenos Aires');
+  assert.equal(await js('window.__georefRequests[0].partido'),'Avellaneda');
+  assert.equal(await js('window.__georefRequests[0].query'),'Mitre 200');
   await js('document.querySelector(".apd-reference-choice").click();true');
   await until('!!document.querySelector(".apd-reference-clear")');
   assert.match(await js('document.getElementById("apd-comparador-panel").textContent'),/línea recta/);
