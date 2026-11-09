@@ -22,7 +22,7 @@ const sign=(role,{expiresIn=120,key=secret}={})=>{
 const ingest=sign('apd_lab_ingest');
 let count=0;
 async function request(path,{method='GET',token=null,body}={}){
- assert.ok(path==='/'||/^\/(rpc\/[a-z_]+|captures|audit_events)(?:\?select=\*)?$/.test(path));
+ assert.ok(path==='/'||/^\/(rpc\/[a-z_]+|captures|audit_events|transition_candidates)(?:\?select=\*)?$/.test(path));
  const headers={Accept:'application/json'};
  if(token)headers.Authorization='Bearer '+token;
  if(body!==undefined)headers['Content-Type']='application/json';
@@ -78,6 +78,13 @@ const direct=await request('/captures?select=*',{token:ingest});
 assert.ok(denied(direct),'Ingest JWT must not directly read capture rows');
 const auditRead=await request('/audit_events?select=*',{token:ingest});
 assert.ok(denied(auditRead),'Ingest JWT must not directly read audit records');
+const privateCandidateRead=await request('/transition_candidates?select=*',{token:ingest});
+assert.ok(denied(privateCandidateRead),'Ingest JWT cannot read review ledger');
+const privateCandidateRPC=await request('/rpc/record_transition_candidate',{
+ method:'POST',token:ingest,
+ body:{p_candidate:{},p_source_offer_key:'D_1'}
+});
+assert.ok(denied(privateCandidateRPC),'Private registry writer is not exposed via HTTP');
 const directWrite=await request('/captures',{method:'POST',token:ingest,
  body:{scope:'LOMAS DE ZAMORA'}});
 assert.ok(denied(directWrite),'Ingest JWT must not write directly to tables');
