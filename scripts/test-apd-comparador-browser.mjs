@@ -185,6 +185,10 @@ try{
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
   assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),true,
    'Active Insigne must see private work planner');
+  assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-work-planner").open'),false,
+   'Optional editor starts collapsed on mobile and desktop');
+  assert.equal(await js(`getComputedStyle(document.querySelector(
+   '#apd-comparador-panel .apd-work-summary')).minHeight`),'44px');
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -286,6 +290,8 @@ try{
      'Equivalent schedules must be removed from the differences list');
     assert.equal(await js('!!document.querySelector("#apd-comparison-dialog .apd-work-planner")'),true,
      'Optional domicile and current job editor must be available');
+    assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-work-planner").open'),false,
+     'The dialog must initially prioritize the offers, not the optional personal-data editor');
     await js(`(()=>{
      const dialog=document.getElementById('apd-comparison-dialog');
      const details=dialog.querySelector('.apd-work-planner');details.open=true;
@@ -293,6 +299,11 @@ try{
      const form=details.querySelector('form');
      form.querySelector('input[type="text"]').value='Wilde, Avellaneda';
      const job=details.querySelector('.apd-work-shift');
+     const chips=[...job.querySelectorAll('.apd-work-day')];
+     if(chips.length!==7||chips.some(x=>x.getBoundingClientRect().height<43))
+      throw Error('Seven touch-friendly weekday controls required');
+     if(details.scrollWidth>details.clientWidth+2)
+      throw Error('Private planner must not overflow the dialog');
      job.querySelector('input[type="text"]').value='Escuela actual';
      for(const c of job.querySelectorAll('input[type="checkbox"]'))c.checked=Number(c.value)<=5;
      job.querySelectorAll('input[type="time"]')[0].value='07:20';
@@ -338,6 +349,12 @@ try{
       return true;
     })()`);
     await until('!sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")');
+    assert.equal(await js(`(()=>{
+     const details=document.querySelector('#apd-comparison-dialog .apd-work-planner');
+     return !details.open &&
+       [...details.querySelectorAll('input[type="text"]')].every(x=>x.value==='') &&
+       details.querySelectorAll('.apd-work-shift').length===0;
+    })()`),true,'Deleting the profile must clear all visible DOM values');
     assert.equal(await js(`!![...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
       .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')`),false,
      'Clearing profile must remove evaluation row');
