@@ -79,7 +79,10 @@ export function parseOfferWeeklySegments(raw){
 export function formatWeeklySchedule(raw){
  const blocks=parseOfferWeeklySegments(raw);
  if(!blocks)return String(raw??'').trim()||'No informado';
- return blocks.map(p=>{
+ const ordered=[...blocks].sort((a,b)=>
+  a.days[0]-b.days[0]||a.start-b.start||a.end-b.end||
+  a.days.join(',').localeCompare(b.days.join(',')));
+ return ordered.map(p=>{
   const days=p.days;
   const label=days.length>=2&&days.every((d,i)=>d===days[0]+i)
    ?WEEKDAYS[days[0]-1].name+' a '+WEEKDAYS[days.at(-1)-1].name.toLowerCase()
