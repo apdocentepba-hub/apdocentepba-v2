@@ -151,3 +151,51 @@ test('explicit -03:00 and display-label fallback remain stable',()=>{
  assert.equal(compare([{...A,finoferta:'',finoferta_label:'12/11/2026 07:30'}],
   {now:'2026-11-12T08:00:00Z'}).items[0].cierre_ms,expected);
 });
+
+test('decision facts come from offer fields and session cache without inferring eligibility',()=>{
+ const offer={...A,pid_compatible:true,pid_puntaje_total_final:'38,10',
+  pid_listado:'oficial',dias_horarios:'Lunes a Viernes: 7:20 a 11:50',
+  hsmodulos:'4',revista:'Suplencia',supl_desde:'2026-11-04T00:00:00Z',
+  supl_hasta:'2026-11-18T00:00:00Z'};
+ const o=compare([offer],{applicantSummaries:{
+  D_100:{verified_from_current_card:true,total_postulantes:25,
+   puntaje_primero:'42,60',listado_origen_primero:'oficial'}
+ }}).items[0];
+ assert.equal(o.horario,'Lunes a Viernes: 7:20 a 11:50');
+ assert.equal(o.modulos,'4');
+ assert.equal(o.revista,'Suplencia');
+ assert.equal(o.supl_desde,'04/11/2026');
+ assert.equal(o.supl_hasta,'18/11/2026');
+ assert.equal(o.pid_compatible_panel,true);
+ assert.equal(o.pid_puntaje_panel,38.1);
+ assert.equal(o.postulantes_observados,25);
+ assert.equal(o.puntaje_primero_observado,42.6);
+ assert.equal(o.diferencia_puntaje_comparable,-4.5);
+ assert.equal(o.eligibility_or_appointment_probability,undefined);
+});
+test('unknown or different PID listings do not fabricate point differences',()=>{
+ const offer={...A,pid_compatible:true,pid_puntaje_total_final:38.1,pid_listado:'oficial'};
+ const absent=compare([offer]).items[0];
+ assert.equal(absent.postulantes_observados,null);
+ assert.equal(absent.diferencia_puntaje_comparable,null);
+ const mismatched=compare([offer],{applicantSummaries:{
+  D_100:{verified_from_current_card:true,total_postulantes:5,puntaje_primero:42.6,listado_origen_primero:'108 A'}
+ }}).items[0];
+ assert.equal(mismatched.postulantes_observados,5);
+ assert.equal(mismatched.diferencia_puntaje_comparable,null);
+ const unverified=compare([offer],{applicantSummaries:{
+  D_100:{verified_from_current_card:false,total_postulantes:100,puntaje_primero:42.6,listado_origen_primero:'oficial'}
+ }}).items[0];
+ assert.equal(unverified.postulantes_observados,null);
+});
+test('PID false is descriptive, not a verified ranking or eligibility conclusion',()=>{
+ const row=compare([{...A,pid_compatible:false,pid_puntaje_total_final:40,
+  pid_listado:'oficial'}],{applicantSummaries:{D_100:{
+   verified_from_current_card:true,total_postulantes:0,puntaje_primero:0,
+   listado_origen_primero:'oficial'
+ }}}).items[0];
+ assert.equal(row.pid_compatible_panel,false);
+ assert.equal(row.pid_puntaje_panel,null);
+ assert.equal(row.postulantes_observados,0);
+ assert.equal(row.diferencia_puntaje_comparable,null);
+});
