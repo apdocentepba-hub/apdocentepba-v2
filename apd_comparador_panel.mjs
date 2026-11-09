@@ -1,7 +1,7 @@
 /* APDocentePBA — comparador opt-in; isolated browser-only UI.
  * No credentials, user data storage, outbound fetches or mutations.
  */
-import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
+import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-nearby1';
 import {findAddressReference,validateReferenceQuery} from './scripts/apd-reference-georef.mjs?v=20261109-nearby1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
