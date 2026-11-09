@@ -23,6 +23,8 @@ on:
       - 'tests/sql/apd_change_least_privilege_pg17.sql'
       - 'tests/sql/test_apd_change_least_privilege_pg17.sh'
       - 'tests/sql/test_apd_change_tcp_roles_pg17.sh'
+      - 'tests/sql/test_apd_change_postgrest_http_pg17.sh'
+      - 'scripts/test-apd-postgrest-http.mjs'
       - 'docs/APD_CAMBIOS_CANCELACIONES_LAB_20261109.md'
       - 'docs/APD_ESTADO_DESDE_COMPARADOR_20261109.md'
       - '.github/workflows/apd-offer-change-lab.yml'
@@ -47,6 +49,7 @@ jobs:
           node --check scripts/apd-scanner-compact-adapter.mjs
           node --check scripts/apd-abc-public-reader.mjs
           node --check scripts/apd-abc-public-probe.mjs
+          node --check scripts/test-apd-postgrest-http.mjs
           node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs scripts/test-apd-scanner-compact-adapter.mjs scripts/test-apd-abc-public-reader.mjs
   pg17-compact-transactions:
     runs-on: ubuntu-latest
@@ -90,6 +93,10 @@ jobs:
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
         run: bash tests/sql/test_apd_change_tcp_roles_pg17.sh
+      - name: PostgREST v14 local-only HTTP API with real JWT, restricted RPC and no table access
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_postgrest_http_pg17.sh
       - name: Verify actual backup and recovery in disposable PostgreSQL 17
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
