@@ -131,3 +131,23 @@ test('unknown sort and invalid preferences are rejected',()=>{
  assert.throws(()=>compare([A],{sortBy:'probabilidad'}),/unsupported_sort/);
  assert.throws(()=>compare([A],{preferredDistricts:'Avellaneda'}),/invalid_preferences/);
 });
+
+test('ABC finoferta ISO/Z is Argentina wall time, not a UTC instant',()=>{
+ const raw='2026-11-12T07:30:00Z';
+ const localExpected=Date.parse('2026-11-12T07:30:00-03:00');
+ assert.equal(parseClosure(raw),Date.parse(raw),'ordinary ISO Z keeps UTC semantics');
+ assert.equal(parseClosure(raw,{abcWallTime:true}),localExpected);
+ const x=compare([{...A,finoferta:raw,finoferta_label:'12/11/2026 07:30'}],
+  {now:'2026-11-12T09:00:00Z'});
+ assert.equal(x.items.length,1,'should not discard offer 90 min before 07:30 AR');
+ assert.equal(x.items[0].cierre_ms,localExpected);
+ assert.equal(x.items[0].horas_hasta_cierre,1.5);
+ assert.equal(compare([{...A,finoferta:raw}],{now:'2026-11-12T10:30:01Z'}).items.length,0);
+});
+test('explicit -03:00 and display-label fallback remain stable',()=>{
+ const expected=Date.parse('2026-11-12T07:30:00-03:00');
+ assert.equal(compare([{...A,finoferta:'2026-11-12T07:30:00-03:00'}],
+  {now:'2026-11-12T08:00:00Z'}).items[0].cierre_ms,expected);
+ assert.equal(compare([{...A,finoferta:'',finoferta_label:'12/11/2026 07:30'}],
+  {now:'2026-11-12T08:00:00Z'}).items[0].cierre_ms,expected);
+});
