@@ -141,3 +141,65 @@ export function checkScheduleOverlap(rawOffer,profile){
  return {status:'no-overlap',label:'Sin superposición horaria declarada',
   conflicts:[],transitions:[],travelGapMinutes:minimum};
 }
+
+/**
+ * Pairwise, read-only comparison between selected ABC offers.
+ * Detects clock intersections independently of a teacher's private work profile.
+ * A simultaneous appointment, legal compatibility or eligibility is NEVER inferred.
+ */
+function parseCivilDate(value){
+ const raw=String(value??'').trim();
+ const iso=raw.match(/^(20\d{2})-(\d{2})-(\d{2})(?:T.*)?$/);
+ const local=raw.match(/^(\d{2})\/(\d{2})\/(20\d{2})$/);
+ if(!iso&&!local)return null;
+ const [year,month,day]=(iso?[iso[1],iso[2],iso[3]]:
+  [local[3],local[2],local[1]]).map(Number);
+ const ms=Date.UTC(year,month-1,day);
+ const check=new Date(ms);
+ return check.getUTCFullYear()===year&&check.getUTCMonth()+1===month&&
+  check.getUTCDate()===day?ms:null;
+}
+function offerPeriod(offer){
+ const start=parseCivilDate(offer?.supl_desde);
+ const end=parseCivilDate(offer?.supl_hasta);
+ return start!==null&&end!==null&&start<=end?{start,end}:null;
+}
+export function compareSelectedOfferSchedules(offers){
+ if(!Array.isArray(offers)||offers.length<2||offers.length>5)
+  throw Error('Se requieren de dos a cinco ofertas');
+ const comparisons=[];
+ for(let i=0;i<offers.length;i++)for(let j=i+1;j<offers.length;j++){
+  const a=offers[i],b=offers[j];
+  const first=parseOfferWeeklySchedule(a?.horario);
+  const second=parseOfferWeeklySchedule(b?.horario);
+  const base={firstOffer:i+1,secondOffer:j+1};
+  if(!first||!second){
+   comparisons.push({...base,status:'unverified',
+    label:'Horarios insuficientes para evaluar'});
+   continue;
+  }
+  const days=first.days.filter(d=>second.days.includes(d));
+  const from=Math.max(first.start,second.start);
+  const to=Math.min(first.end,second.end);
+  if(!days.length||from>=to){
+   comparisons.push({...base,status:'no-time-overlap',
+    label:'Sin cruces de días y horas declarados'});
+   continue;
+  }
+  const periodA=offerPeriod(a),periodB=offerPeriod(b);
+  const common={...base,days:days.map(d=>WEEKDAYS[d-1].name),
+   from:hhmm(from),to:hhmm(to)};
+  if(periodA&&periodB&&
+    (periodA.end<periodB.start||periodB.end<periodA.start)){
+   comparisons.push({...common,status:'separate-periods',
+    label:'Horarios coincidentes, pero las vigencias informadas no se cruzan'});
+  }else if(periodA&&periodB){
+   comparisons.push({...common,status:'overlap',
+    label:'Cruce de días, horas y vigencias informadas'});
+  }else{
+   comparisons.push({...common,status:'possible-overlap',
+    label:'Cruce horario potencial; fechas de vigencia incompletas'});
+  }
+ }
+ return comparisons;
+}
