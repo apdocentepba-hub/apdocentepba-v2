@@ -10,6 +10,18 @@ const KEY=/^[A-Za-z0-9_.:|-]{1,160}$/;
 const SCHOOL=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/;
 const nf=v=>String(v??'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const asString=v=>String(v??'').trim().slice(0,180);
+const numericScore=v=>{
+ if(v===null||v===undefined||String(v).trim()==='')return null;
+ const normalized=String(v).trim().replace(/\s/g,'').replace(',', '.');
+ const n=Number(normalized);
+ return Number.isFinite(n)&&n>=0&&n<=1000?n:null;
+};
+const displayABCDate=v=>{
+ const s=asString(v);
+ const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+ return iso?iso[3]+'/'+iso[2]+'/'+iso[1]:s;
+};
+const offerText=(offer,...keys)=>asString(keys.map(k=>offer?.[k]).find(v=>v!==null&&v!==undefined&&String(v).trim()!=='')??'');
 function validDate(year,month,day){
  if(!Number.isInteger(year)||year<2000||year>2100||month<1||month>12||day<1||day>31)return false;
  const d=new Date(Date.UTC(year,month-1,day));
@@ -60,7 +72,7 @@ function cmpNumMissingLast(a,b){
 export function compareOffers({
  offers=[],now=new Date(),sortBy='cierre',
  preferredDistricts=[],preferredTurns=[],
- referenceLocation=null,verifiedGeoByKey={}
+ referenceLocation=null,verifiedGeoByKey={},applicantSummaries={}
 }={}){
  if(!Array.isArray(offers)||offers.length>5)throw Error('select_at_most_five_offers');
  if(!VALID_SORT.has(sortBy))throw Error('unsupported_sort');
@@ -72,6 +84,7 @@ export function compareOffers({
  }:null;
  const districts=new Set(preferredDistricts.filter(x=>typeof x==='string').map(nf));
  const turns=new Set(preferredTurns.filter(x=>typeof x==='string').map(nf));
+ if(!applicantSummaries||typeof applicantSummaries!=='object'||Array.isArray(applicantSummaries))throw Error('invalid_applicant_summaries');
  const seen=new Set(),items=[],excluded=[];
  for(const offer of offers){
   const key=asString(offer?.source_offer_key);
@@ -97,8 +110,24 @@ export function compareOffers({
   const distanceKm=hasVerifiedGeo?
    Math.round(earthKm(location,{lat:Number(geo.lat),lon:Number(geo.lon)})*10)/10:null;
   const pidVerified=offer?.pid_verified===true&&typeof offer?.pid_match==='boolean';
-  const competitionVerified=offer?.competition_verified===true&&
-   Number.isInteger(offer?.postulantes_count)&&offer.postulantes_count>=0;
+  // Panel PID is shown as a reference, never as confirmation of eligibility.
+  const pidFromPanel=typeof offer?.pid_compatible==='boolean'?offer.pid_compatible:null;
+  const pidScore=pidFromPanel===true?
+   numericScore(offer?.pid_puntaje_total_final??offer?.pid_puntaje_total):null;
+  const summary=Object.hasOwn(applicantSummaries,key)?applicantSummaries[key]:null;
+  const cached=summary?.verified_from_current_card===true&&
+   Number.isSafeInteger(summary.total_postulantes)&&summary.total_postulantes>=0;
+  const competitionVerified=cached||
+   (offer?.competition_verified===true&&
+    Number.isSafeInteger(offer?.postulantes_count)&&offer.postulantes_count>=0);
+  const competitorCount=cached?summary.total_postulantes:
+   competitionVerified?offer.postulantes_count:null;
+  const firstScore=cached?numericScore(summary.puntaje_primero):null;
+  const myListing=nf(offer?.pid_listado);
+  const firstListing=cached?nf(summary.listado_origen_primero):'';
+  const listingComparable=!!myListing&&!!firstListing&&myListing===firstListing;
+  const applicantGap=listingComparable&&pidScore!==null&&firstScore!==null&&
+   competitorCount>0?Math.round((pidScore-firstScore)*100)/100:null;
   const districtMatch=districts.size?districts.has(nf(offer?.distrito)):null;
   const turnMatch=turns.size?turns.has(nf(offer?.turno)):null;
   const remainingHours=closedAt!==null?
@@ -122,7 +151,22 @@ export function compareOffers({
    district_preferred:districtMatch,
    turn_preferred:turnMatch,
    pid_match_verified:pidVerified?offer.pid_match:null,
-   postulantes_observados:competitionVerified?offer.postulantes_count:null,
+   pid_compatible_panel:pidFromPanel,
+   pid_puntaje_panel:pidScore,
+   pid_listado:offerText(offer,'pid_listado'),
+   postulantes_observados:competitorCount,
+   puntaje_primero_observado:firstScore,
+   listado_primero_observado:cached?asString(summary.listado_origen_primero):'',
+   diferencia_puntaje_comparable:applicantGap,
+   competencia_en_cache:cached,
+   horario:offerText(offer,'dias_horarios','horario')||
+    ['lunes','martes','miercoles','jueves','viernes','sabado'].map(k=>offerText(offer,k)).filter(Boolean).join(' · ').slice(0,180),
+   modulos:offerText(offer,'hsmodulos','modulos'),
+   revista:offerText(offer,'revista','supl_revista'),
+   jornada:offerText(offer,'jornada'),
+   curso_division:offerText(offer,'cursodivision','curso_division'),
+   supl_desde:displayABCDate(offerText(offer,'supl_desde_label','supl_desde','desde')),
+   supl_hasta:displayABCDate(offerText(offer,'supl_hasta_label','supl_hasta','hasta')),
    explicacion:remarks,
    enlace_solo_abc:true
   };
