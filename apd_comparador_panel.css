@@ -97,3 +97,9 @@
  .apd-comparator-table th,.apd-comparator-table td{padding:9px 8px}
  .apd-compare-view{width:100%;justify-content:center}
 }
+
+/* Clear guidance when two selected offers leave fewer than two comparable. */
+.apd-comparator-side-by-side,.apd-comparator-unavailable{scroll-margin-top:18px}
+.apd-comparator-unavailable{border-left:3px solid #ad642b;background:#fff8eb;
+ padding:11px 13px;border-radius:6px;font-size:13px;line-height:1.5;color:#683917}
+.apd-comparator-unavailable:focus{outline:2px solid #416fa8;outline-offset:2px}
