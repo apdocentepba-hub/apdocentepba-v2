@@ -582,6 +582,9 @@ function refresh({offers=[],index=0,enabled=false}={}) {
  render();
 }
 function reset() {
+ // Auth/session ownership changes must not expose a former account's local
+ // home address or work timetable to the next account in the same tab.
+ clearPrivatePlanner();
  applicantObserver?.disconnect();
  observedApplicants.clear();
  closeComparisonDialog();
