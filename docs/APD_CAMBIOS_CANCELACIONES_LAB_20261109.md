@@ -96,3 +96,26 @@ Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura 
 - Regresiones sintéticas para 16 ofertas en páginas 10+6, consulta solo por distrito, consulta solo por estado, distrito cruzado, eco de parámetros incorrecto, total >1.500 y cambios de contenido dentro de dos pasadas.
 
 **Limitación:** dos respuestas aparentemente idénticas podrían proceder de caché HTTP o un índice actualizado mientras se leen; no se certifica atomicidad del backend. La API pública devuelve campos personales que se descartan **antes** de materializar la captura, pero las respuestas originales existen en el transporte del servicio de lectura. No se habilita almacenamiento ni notificación.
+
+
+## Sexta etapa — lector público seguro y ensayo opt-in (09/11/2026)
+
+**Hallazgo oficial contrastado con dos pasadas reales de ABC (consulta pública, solo lectura):**
+- La API Solr admite `fl` para elegir exclusivamente 18 campos de infraestructura/oferta: `iddetalle,id,idoferta,descdistrito,estado,finoferta,turno,jornada,hsmodulos,cursodivision,supl_desde,supl_hasta,escuela,nombreestablecimiento,descripcioncargo,cargo,descripcionarea,descnivelmodalidad`.
+- No es necesario solicitar CUIL, nombres de reemplazantes, domicilios, autores ni observaciones. Los 18 campos autorizados se comprobaron directamente en el eco `responseHeader.params.fl`; ninguna respuesta de la prueba contenía campos adicionales.
+- Dos consultas completas secuenciales con el filtro `descdistrito:"AVELLANEDA" AND estado:"Publicada"`, `rows=10`, `start=0/10`, `sort=ult_movimiento desc,iddetalle asc` y `fl` anterior: ambas dieron **`numFound=16`, páginas de 10+6, 16 identificadores únicos y mismos campos autorizados en igual orden**. No se almacenaron los documentos devueltos en el repositorio ni en la base.
+- Estas verificaciones se hicieron mediante consultas web de solo lectura. **No prueban atomicidad ni garantizan que las pasadas vengan de instancias o cachés diferentes**.
+
+**Código integrado exclusivamente en la rama de laboratorio:**
+- `scripts/apd-scanner-compact-adapter.mjs`: ahora envía el listado `fields` y exige eco literal `responseHeader.params.fl`. Rechaza cualquier documento con campos ajenos a los 18 autorizados. Agrega `inspect({district})` que ejecuta dos pasadas, sin llamar al estado provincial del escáner y **sin devolver oferta por oferta, capturas certificadas, eventos o destinatarios**; `certifiedScannerCapture=false`.
+- `scripts/apd-abc-public-reader.mjs`: construye un GET contra **endpoint HTTPS fijo de ABC**. El transporte está deshabilitado por defecto; exige consulta, distrito, `fl`, estado y orden exactos; usa `credentials:omit`, `redirect:error`, tiempo máximo de 20 segundos y lectura por stream limitada a 1 MiB por página. No contiene credenciales ni URLs personalizables, datos de usuarios, POST, base de datos o envío.
+- `scripts/apd-abc-public-probe.mjs`: ensayo manual restringido **solo a AVELLANEDA**. Exige simultáneamente la variable de entorno `APD_ABC_READONLY_PROBE=1` y las dos opciones `--read-only --district=AVELLANEDA`. La salida es un JSON de métricas agregadas, sin filas, nombres ni identificadores de oferta. Si falta algún requisito, no hay solicitud de red y termina con `PROBE_DISABLED`. Comando opt-in para una sesión de pruebas autorizada:
+  ```sh
+  APD_ABC_READONLY_PROBE=1 node scripts/apd-abc-public-probe.mjs --read-only --district=AVELLANEDA
+  ```
+  **Este comando queda preparado, no programado, no invocado por CI y no se ejecuta desde el Worker productivo.**
+- `scripts/test-apd-abc-public-reader.mjs`: pruebas con transporte HTTP simulado que comprueban listas de campos, rechazo de CUIL inesperado, respuesta de HTML, HTTP 429, tamaño excesivo, datos inestables y ejecución accidental del CLI con bandera apagada. Las pruebas automáticas **nunca hacen GET reales a ABC**.
+
+**Evidencia del CI antes de actualizar esta documentación:** 68/68 tests Node aprobados; PostgreSQL 17 descartable para capturas/auditoría/concurrencia aprobado; control del Worker aprobado (ejecución de GitHub Actions `42616329224`).
+
+**Pendientes y límites:** comparar periódicamente resultados de consultas oficiales sin sobrecargar ABC; validación formal de integridad/atomicidad del índice, escenarios con varios distritos, límites físicos y credenciales de staging, recuperación sobre copia y autorización para cualquier conexión real con el escáner. Ninguna escritura a Supabase ni emisión se autorizó o realizó.
