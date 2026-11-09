@@ -104,6 +104,22 @@ test('O_ fallback IDs, URL injection and invalid districts fail before GET',asyn
   assert.equal(f.calls.length,0);
  }
 });
+test('bounded lookup quota allows one verification and blocks further GETs',async()=>{
+ const f=fixture();
+ const verifier=createABCOfficialStatusVerifier({
+  enabled:true,fetchImpl:f.fetchImpl,maxChecks:1
+ });
+ const first=await verifier.inspect({district:'AVELLANEDA',sourceOfferKey:source});
+ assert.equal(first.verified,true);
+ assert.equal(f.calls.length,2);
+ await assert.rejects(()=>verifier.inspect({
+  district:'AVELLANEDA',sourceOfferKey:source
+ }),/budget exceeded/);
+ assert.equal(f.calls.length,2);
+ assert.throws(()=>createABCOfficialStatusVerifier({
+  enabled:true,fetchImpl:f.fetchImpl,maxChecks:100
+ }),/Invalid ABC status transport/);
+});
 test('missing or nonunique official detail IDs are fail closed',async()=>{
  for(const found of [0,2]){
   const f=fixture({found});
