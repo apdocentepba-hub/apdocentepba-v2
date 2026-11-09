@@ -79,3 +79,20 @@ Todas las 1.865 ofertas de `current` presentan estado `PUBLICADA`: esta tabla fi
 Bandera apagada, estado del escáner incompleto o modificado, tiempo de captura fuera de una ventana fresca, `numFound` ausente/cambiante, respuesta `start` errónea, página incompleta, ID duplicado, distrito equivocado, estado no publicado, ausencia de identificador, cambio de campos con recuento estable, error del callback antes de completar y distrito genuinamente vacío. Datos ficticios; no se consultó ABC con usuarios reales. La ejecución completa del laboratorio incluye las pruebas Node previas, los ensayos PostgreSQL 17 y la protección del Worker.
 
 **Limitación metodológica:** incluso dos pasadas idénticas no prueban una instantánea atómica, dado que el índice puede cambiar y volver al mismo estado entre lecturas. Por eso el adaptador no se considera listo para notificaciones ni vinculado a producción.
+
+## Quinta etapa — lectura REAL y filtrada de ABC, sin escrituras (09/11/2026)
+**Origen oficial consultado en modo público y solo lectura:** `https://servicios3.abc.gob.ar/valoracion.docente/api/apd.oferta.encabezado/select`. Las herramientas de consulta devolvieron JSON Solr; no se conservaron documentos completos ni se incorporaron CUIL, nombres, reemplazantes o datos personales al repositorio.
+
+### Hallazgo reproducible que corrige el contrato
+- `q=descdistrito:"AVELLANEDA"` (sin filtro de estado): **`numFound=9355`**. Es un universo de registros del distrito **no equivalente** al conjunto de publicaciones vigentes, por lo que no debe tratarse como listado para notificaciones.
+- `q=descdistrito:"AVELLANEDA" AND estado:"Publicada"`: **`numFound=16`**, `start=0`. La variante `q=estado:"Publicada"` para toda la provincia devolvió `numFound=2034`, por lo que un filtro exclusivo de estado tampoco identifica un distrito.
+- ABC aceptó `sort=ult_movimiento desc,iddetalle asc`, que incorpora desempate por clave para que el orden de las páginas sea determinista frente a fechas `ult_movimiento` idénticas.
+- Se hicieron dos lecturas independientes de Avellaneda con **`rows=10`**, `start=0` y `start=10`, y exactamente el filtro de distrito+estado anterior: **cada lectura devolvió 10+6 ofertas, 16 claves sin repetición, 16 estados `Publicada` y 16 distritos `AVELLANEDA`**. La proyección mínima de 14 campos y el orden coincidieron entre las dos lecturas.
+- Consulta adicional de solo lectura en `public.apd_ofertas_global_current`: **16** registros de Avellaneda, todos `PUBLICADA`. Es coincidencia de conteos; **no** se asevera equivalencia temporal oferta por oferta, ni que las 16 permanezcan vigentes después de la observación.
+
+### Ajuste de código y pruebas
+- El adaptador `scripts/apd-scanner-compact-adapter.mjs` exige que `responseHeader.status=0` y que `params.q`, `params.sort`, `params.rows`, `params.start` y `params.wt` reconfirmen el contrato de fuente, filtro y paginación. Entrega a `readPage` esos parámetros para que una implementación futura los respete; continúa sin realizar ninguna petición HTTP por sí mismo.
+- El máximo del ámbito compactado baja a 1.500 ofertas por distrito, acorde con el límite ya establecido en las pruebas de persistencia. Rechaza tanto el `q` no filtrado como ordenamiento sin desempate, aunque la página contenga aparentemente ofertas publicadas.
+- Regresiones sintéticas para 16 ofertas en páginas 10+6, consulta solo por distrito, consulta solo por estado, distrito cruzado, eco de parámetros incorrecto, total >1.500 y cambios de contenido dentro de dos pasadas.
+
+**Limitación:** dos respuestas aparentemente idénticas podrían proceder de caché HTTP o un índice actualizado mientras se leen; no se certifica atomicidad del backend. La API pública devuelve campos personales que se descartan **antes** de materializar la captura, pero las respuestas originales existen en el transporte del servicio de lectura. No se habilita almacenamiento ni notificación.
