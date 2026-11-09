@@ -16,6 +16,8 @@ on:
       - 'scripts/test-apd-abc-public-reader.mjs'
       - 'scripts/apd-abc-official-status-verifier.mjs'
       - 'scripts/test-apd-abc-official-status-verifier.mjs'
+      - 'scripts/apd-abc-transition-correlator.mjs'
+      - 'scripts/test-apd-abc-transition-correlator.mjs'
       - 'tests/sql/apd_change_compact_pg17.sql'
       - 'tests/sql/test_apd_change_compact_pg17.sh'
       - 'tests/sql/apd_change_audit_events_pg17.sql'
@@ -52,8 +54,9 @@ jobs:
           node --check scripts/apd-abc-public-reader.mjs
           node --check scripts/apd-abc-public-probe.mjs
           node --check scripts/apd-abc-official-status-verifier.mjs
+          node --check scripts/apd-abc-transition-correlator.mjs
           node --check scripts/test-apd-postgrest-http.mjs
-          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs scripts/test-apd-scanner-compact-adapter.mjs scripts/test-apd-abc-public-reader.mjs scripts/test-apd-abc-official-status-verifier.mjs
+          node --test scripts/test-apd-offer-change-detector.mjs scripts/test-apd-offer-compact-capture.mjs scripts/test-apd-offer-audit-batch.mjs scripts/test-apd-scanner-compact-adapter.mjs scripts/test-apd-abc-public-reader.mjs scripts/test-apd-abc-official-status-verifier.mjs scripts/test-apd-abc-transition-correlator.mjs
   pg17-compact-transactions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
