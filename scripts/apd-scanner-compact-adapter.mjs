@@ -5,7 +5,10 @@ import {createHash} from 'node:crypto';
 import {compactCaptureFromPages} from './apd-offer-compact-capture.mjs';
 import {parseVerifiedClosingTime} from './apd-offer-change-detector.mjs';
 
-const MAX_TOTAL=25000,MAX_PAGES=100;
+// Scoped to the district-only schema and the 1,500-offer PG17 guard.
+const MAX_TOTAL=1500,MAX_PAGES=100;
+const SOURCE_SORT='ult_movimiento desc,iddetalle asc';
+const publishedQuery=scope=>'descdistrito:"'+scope+'" AND estado:"Publicada"';
 const plain=v=>String(v??'').trim();
 const norm=v=>plain(v).toUpperCase().normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^\p{L}\p{N}\s/().,-]/gu,' ')
@@ -88,9 +91,20 @@ export function createAPDScannerCompactAdapter({
   const pages=[],identity=new Set();
   do{
    if(pages.length>=MAX_PAGES)throw Error('APD page limit exceeded');
+   // Do NOT trust a district-only Solr query: it includes historical states.
+   // Require an echoed filter on current publication AND a stable tie-breaker.
    // Callbacks are supplied by an isolated test. This module never opens URLs.
-   const packet=await readPage(Object.freeze({district:scope,start:offset,
-    rows:pageSize,pass}));
+   const query=publishedQuery(scope);
+   const packet=await readPage(Object.freeze({
+    district:scope,query,sort:SOURCE_SORT,mode:'current_published',
+    start:offset,rows:pageSize,pass
+   }));
+   const header=packet?.responseHeader;
+   const params=header?.params;
+   if(header?.status!==0||params?.q!==query||params?.sort!==SOURCE_SORT||
+      params?.wt!=='json'||String(params?.rows)!==String(pageSize)||
+      String(params?.start)!==String(offset))
+    throw Error('ABC query not verified as published district with stable sort');
    const response=packet?.response;
    if(!response||!Number.isSafeInteger(response.numFound)||
       response.numFound<0||response.numFound>MAX_TOTAL||
@@ -151,6 +165,8 @@ export function createAPDScannerCompactAdapter({
      pagesPerPass:second.pages.length,
      sourceTotal:second.sourceTotal,
      stableAcrossTwoPasses:true,
+     queryVerified:true,
+     stableTieBreaker:true,
      scanFinishedAt:firstScan.finished_at
     })
    });
