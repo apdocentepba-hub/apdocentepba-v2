@@ -101,14 +101,14 @@ jobs:
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
         run: bash tests/sql/test_apd_change_tcp_roles_pg17.sh
-      - name: PostgREST v14 local-only HTTP API with real JWT, restricted RPC and no table access
-        env:
-          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
-        run: bash tests/sql/test_apd_change_postgrest_http_pg17.sh
       - name: Private transition candidate ledger, no delivery, TTL and rollback
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
         run: bash tests/sql/test_apd_change_transition_candidates_pg17.sh
+      - name: PostgREST v14 local-only HTTP API with real JWT, restricted RPC and no table access
+        env:
+          PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tests/sql/test_apd_change_postgrest_http_pg17.sh
       - name: Verify actual backup and recovery in disposable PostgreSQL 17
         env:
           PG_SERVICE_CONTAINER: ${{ job.services.postgres.id }}
