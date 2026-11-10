@@ -462,6 +462,44 @@ try{
     r.credentials==='omit' && r.method==='GET'));
   assert.match(geographic.pairText,/km en línea recta/);
   assert.match(geographic.origin,/^[0-9]{4}MS[0-9]{4}$/);
+  // E2E of explicit address lookup with two homonymous streets and one selected home.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   field.value='Rondeau 319';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   planner.querySelector('.apd-home-lookup').click();
+   return true;
+  })()`);
+  await until('document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  const homeSuggestions=await js(`[...document.querySelectorAll(
+   '#apd-comparador-panel .apd-home-candidate')].map(x=>x.textContent)`);
+  assert.match(homeSuggestions[0],/Wilde, Avellaneda, Buenos Aires/);
+  assert.match(homeSuggestions[1],/Bahía Blanca/);
+  const homeRequests=await js('window.__homeGeoRequests');
+  assert.equal(homeRequests.length,1);
+  assert.equal(homeRequests[0].method,'GET');
+  assert.equal(homeRequests[0].credentials,'omit');
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  const homeFacts=await js(`(()=>{
+   const value=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1'));
+   return {selected:value?.homeLocation,domicile:value?.domicile,
+    distances:[...document.querySelectorAll('.apd-comparator-home-distance')]
+      .map(x=>x.textContent)};
+  })()`);
+  assert.equal(homeFacts.selected?.source,'GEOREF_AR_V2');
+  assert.equal(homeFacts.selected?.lat,-34.7);
+  assert.equal(homeFacts.selected?.lon,-58.32);
+  assert.match(homeFacts.domicile,/RONDEAU 319, Wilde/);
+  assert.ok(homeFacts.distances.every(x=>/km en línea recta/.test(x)));
+  assert.equal(await js('document.querySelectorAll(".apd-comparator-home-map").length'),5);
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
