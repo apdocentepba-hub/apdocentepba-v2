@@ -100,7 +100,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   'Los datos se guardan solo en esta pestaña, nunca en nuestros servidores.');
  form.appendChild(help);
  const domicile=input('text',saved.domicile,180);
- domicile.placeholder='Ej.: Rondeau 319, Wilde';
+ domicile.placeholder='Ej.: Rondeau 319, Wilde, Avellaneda, Buenos Aires';
  domicile.autocomplete='off';
  form.appendChild(line('Domicilio de referencia (opcional)',domicile));
  // Never transmit a private address while typing. The lookup is a one-off
@@ -168,9 +168,12 @@ export function createPrivatePlannerForm({onChanged}={}){
     homeCandidates.appendChild(choose);
    });
   }catch(error){
-   if(!controller.signal.aborted)
-    homeStatus.textContent='No se pudo consultar Georef. '+
-     'Revisá la conexión o ingresá una dirección más específica.';
+   if(!controller.signal.aborted){
+    const message=String(error?.message||'');
+    homeStatus.textContent=/^(?:Ingresá|Dirección demasiado)/.test(message)?
+     message:'No se pudo consultar Georef. '+
+      'Revisá la conexión o ingresá una dirección más específica.';
+   }
   }finally{
    activeHomeLookups.delete(controller);
    if(homeRequest===controller){
@@ -204,7 +207,8 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap);
  form.appendChild(element('p','apd-comparator-hint',
   'El domicilio solo se consulta si pulsás «Buscar direcciones» o activás '+
-  '«Sugerir mientras escribo». Georef recibe el texto ingresado; nunca usamos '+
+  '«Sugerir mientras escribo». Si hay varias opciones, agregá localidad, '+
+  'partido y provincia separados por comas. Georef recibe el texto ingresado; nunca usamos '+
   'tu GPS ni enviamos el domicilio al servidor '+
   'de AlertasAPD. La distancia estimada será en línea recta entre puntos.' ));
  const travelGap=element('select','apd-work-input');
