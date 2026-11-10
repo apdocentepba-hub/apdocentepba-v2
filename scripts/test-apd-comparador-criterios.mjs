@@ -203,9 +203,9 @@ test('PID false is descriptive, not a verified ranking or eligibility conclusion
 
 test('multi-block schedule survives extraction beyond ordinary 180-character label limit',()=>{
  const week={
-  lunes:'07:20 a 11:50',martes:'07:20 a 11:50',
-  miercoles:'14:00 a 18:30',jueves:'14:00 a 18:30',
-  viernes:'08:00 a 12:00',sabado:'08:00 a 12:00',
+  lunes:'07:20 hs a 11:50 hs',martes:'07:20 hs a 11:50 hs',
+  miercoles:'14:00 hs a 18:30 hs',jueves:'14:00 hs a 18:30 hs',
+  viernes:'08:00 hs a 12:00 hs',sabado:'08:00 hs a 12:00 hs',
   domingo:'08:00 a 12:00'
  };
  const result=compare([{...A,...week}]).items[0].horario;
