@@ -94,11 +94,12 @@ export async function lookupHomeAddressesDetailed(query,{fetchImpl=fetch,signal}
  const filters=parsed.filters;
  const stages=[
   {scope:'exacta',filters},
-  ...(filters.localidad_censal?[{scope:'partido',filters:{
+  ...(filters.localidad_censal?[{scope:filters.departamento?'partido':
+   filters.provincia?'provincia':'pais',filters:{
    ...(filters.provincia?{provincia:filters.provincia}:{}),
    ...(filters.departamento?{departamento:filters.departamento}:{})
   }}]:[]),
-  ...(filters.departamento?[{scope:'provincia',filters:{
+  ...(filters.departamento?[{scope:filters.provincia?'provincia':'pais',filters:{
    ...(filters.provincia?{provincia:filters.provincia}:{})
   }}]:[]),
   ...(filters.provincia?[{scope:'pais',filters:{}}]:[])
