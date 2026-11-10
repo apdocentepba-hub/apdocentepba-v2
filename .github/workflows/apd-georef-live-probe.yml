@@ -1,0 +1,32 @@
+# CANDIDATE ONLY. Read-only public API probe. Remove before merging PR #270.
+name: APD Georef public API smoke (no deploy)
+on:
+  push:
+    branches:
+      - feature/apd-insigne-margen-traslado-20261109
+    paths:
+      - 'scripts/test-apd-georef-live-probe.mjs'
+      - '.github/workflows/apd-georef-live-probe.yml'
+permissions:
+  contents: read
+jobs:
+  public-georef:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify script syntax
+        run: node --check scripts/test-apd-georef-live-probe.mjs
+      - name: Probe public Georef API (2 fixed example addresses, no private data)
+        run: node scripts/test-apd-georef-live-probe.mjs
+      - name: Keep evidence even if API is unavailable
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-georef-public-probe
+          path: tmp/apd-georef-public-probe.json
+          retention-days: 7
+          if-no-files-found: ignore
