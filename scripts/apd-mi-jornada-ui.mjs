@@ -186,7 +186,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   ' Sugerir mientras escribo (usa Georef Argentina)'));
  homeAuto.addEventListener('change',()=>{
   if(!homeAuto.checked){clearTimeout(homeAutoTimer);return}
-  if(/[\\p{L}]/u.test(domicile.value)&&/\\b[1-9]\\d{0,4}\\b/.test(domicile.value))
+  if(/[\p{L}]/u.test(domicile.value)&&/\b[1-9]\d{0,4}\b/.test(domicile.value))
    homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
  });
  domicile.addEventListener('input',()=>{
@@ -196,7 +196,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   homeStatus.textContent='';
   showChosen();
   if(homeAuto.checked&&details.isConnected&&
-     /[\\p{L}]/u.test(domicile.value)&&/\\b[1-9]\\d{0,4}\\b/.test(domicile.value))
+     /[\p{L}]/u.test(domicile.value)&&/\b[1-9]\d{0,4}\b/.test(domicile.value))
    homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
  });
  showChosen();
