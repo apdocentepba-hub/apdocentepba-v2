@@ -217,3 +217,23 @@
  .apd-comparator-schedule-pairs{padding:8px 10px;margin:9px 0}
  .apd-comparator-schedule-list{max-height:160px}
 }
+
+
+/* Insigne private home selection (read-only, explicitly triggered Georef). */
+.apd-home-lookup,.apd-home-map{min-height:44px;max-width:100%;white-space:normal}
+.apd-home-lookup{margin:1px 0 0}
+.apd-home-candidates{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.apd-home-candidate{min-height:44px;max-width:100%;text-align:left;
+ white-space:normal;overflow-wrap:anywhere;font-size:12px;padding:9px 11px}
+.apd-home-candidate:focus-visible,.apd-home-lookup:focus-visible{
+ outline:3px solid #3878b2;outline-offset:2px}
+.apd-home-status,.apd-home-chosen{font-size:12px;line-height:1.4;
+ overflow-wrap:anywhere;margin:0}
+.apd-home-chosen{font-weight:600}
+.apd-home-status:empty{display:none}
+.apd-home-map[hidden]{display:none}
+.apd-comparator-home-distance{font-size:12px;color:#1d5a58;
+ font-weight:750;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .apd-home-lookup,.apd-home-map,.apd-home-candidate{width:100%;justify-content:flex-start}
+}
