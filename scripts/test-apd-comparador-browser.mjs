@@ -56,7 +56,9 @@ window.fetch=async (target,opts={})=>{
   // Reproduce the live Georef behavior: Wilde's census-locality filter
   // returns nothing, while Avellaneda+Buenos Aires returns a valid location.
   const matches=u.searchParams.has('localidad_censal')?[]:
-   u.searchParams.has('departamento')?[places[0]]:places;
+   u.searchParams.has('departamento')?[{
+    ...places[0],localidad_censal:{nombre:'Avellaneda'}
+   }]:places;
   const bytes=new TextEncoder().encode(JSON.stringify({
    direcciones:matches,cantidad:matches.length
   }));
@@ -542,6 +544,10 @@ try{
   await until('window.__homeGeoRequests.length===4 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===1');
   assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-status").textContent'),
    /La localidad exacta no devolvió coincidencias/);
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent'),
+   /RONDEAU 319, Avellaneda, Buenos Aires/);
+  assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent.includes("Wilde")'),false,
+   'Never invent Wilde when Georef reports only Avellaneda');
   const searchFields=await js(`(()=>{
    const p=new URL(window.__homeGeoRequests[2].url).searchParams;
    return {address:p.get('direccion'),province:p.get('provincia'),
