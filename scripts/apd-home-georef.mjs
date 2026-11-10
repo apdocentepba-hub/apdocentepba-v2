@@ -83,25 +83,58 @@ export function parseGeorefCandidates(payload,originalQuery){
  }
  return out;
 }
-export async function lookupHomeAddresses(query,{fetchImpl=fetch,signal}={}){
+/**
+ * The official Georef data can have a valid street+house number inside a
+ * department while a user-provided localidad_censal name returns no rows.
+ * Relax only as needed. A fallback result is a CANDIDATE, never an
+ * automatically verified home: the user must explicitly select it.
+ */
+export async function lookupHomeAddressesDetailed(query,{fetchImpl=fetch,signal}={}){
  const parsed=parseHomeAddressQuery(query);
- const url=new URL(GEOREF_URL);
- // Georef officially supports these locality/department/province filters.
- // Keep unqualified street names nation-wide for user-disambiguation.
- url.search=new URLSearchParams({direccion:parsed.street,max:'30',...parsed.filters});
- const timeout=AbortSignal.timeout(9500);
+ const filters=parsed.filters;
+ const stages=[
+  {scope:'exacta',filters},
+  ...(filters.localidad_censal?[{scope:'partido',filters:{
+   ...(filters.provincia?{provincia:filters.provincia}:{}),
+   ...(filters.departamento?{departamento:filters.departamento}:{})
+  }}]:[]),
+  ...(filters.departamento?[{scope:'provincia',filters:{
+   ...(filters.provincia?{provincia:filters.provincia}:{})
+  }}]:[]),
+  ...(filters.provincia?[{scope:'pais',filters:{}}]:[])
+ ];
+ const unique=new Set();
+ // Combined timeout is shared by all attempts. Never keep making requests
+ // after logout, a new input, a network failure or the overall time limit.
+ const timeout=AbortSignal.timeout(16000);
  const combined=signal?AbortSignal.any([signal,timeout]):timeout;
- const response=await fetchImpl(url.toString(),{
-  method:'GET',mode:'cors',credentials:'omit',redirect:'error',
-  headers:{Accept:'application/json'},signal:combined
- });
- if(!response?.ok)throw Error('El servicio Georef no respondió');
- const advertised=Number(response.headers?.get?.('content-length')||0);
- if(!Number.isFinite(advertised)||advertised>MAX_BYTES)throw Error('Respuesta demasiado extensa');
- const bytes=await response.arrayBuffer();
- if(bytes.byteLength>MAX_BYTES)throw Error('Respuesta demasiado extensa');
- const payload=JSON.parse(new TextDecoder().decode(bytes));
- return parseGeorefCandidates(payload,parsed.original);
+ let attempted=0;
+ for(const stage of stages){
+  const id=JSON.stringify(stage.filters);
+  if(unique.has(id))continue;
+  unique.add(id);
+  if(combined.aborted)throw Error('Consulta cancelada');
+  const url=new URL(GEOREF_URL);
+  url.search=new URLSearchParams({direccion:parsed.street,max:'30',...stage.filters});
+  attempted++;
+  const response=await fetchImpl(url.toString(),{
+   method:'GET',mode:'cors',credentials:'omit',redirect:'error',
+   headers:{Accept:'application/json'},signal:combined
+  });
+  if(!response?.ok)throw Error('El servicio Georef no respondió');
+  const advertised=Number(response.headers?.get?.('content-length')||0);
+  if(!Number.isFinite(advertised)||advertised>MAX_BYTES)throw Error('Respuesta demasiado extensa');
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength>MAX_BYTES)throw Error('Respuesta demasiado extensa');
+  const payload=JSON.parse(new TextDecoder().decode(bytes));
+  const candidates=parseGeorefCandidates(payload,parsed.original);
+  if(candidates.length)return {candidates,scope:stage.scope,attempted};
+ }
+ return {candidates:[],scope:'sin_resultados',attempted};
+}
+export async function lookupHomeAddresses(query,options){
+ const found=await lookupHomeAddressesDetailed(query,options);
+ return found.candidates;
 }
 export function straightLineHomeSchoolKm(home,school){
  try{
