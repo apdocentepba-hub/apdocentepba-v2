@@ -455,6 +455,11 @@ try{
    window.__offers=window.__offers.map((offer,i)=>{
     if(i===0)return {...offer,dias_horarios:'Lunes: 08:00 a 10:00; Miércoles: 14:00 a 17:00'};
     if(i===1)return {...offer,dias_horarios:'Lunes: 09:00 a 11:00; Miércoles: 15:00 a 18:00'};
+    if(i===2)return {...offer,dias_horarios:'',
+     lunes:'07:20 hs a 11:50 hs',martes:'07:20 hs a 11:50 hs',
+     miercoles:'14:00 hs a 18:30 hs',jueves:'14:00 hs a 18:30 hs',
+     viernes:'08:00 hs a 12:00 hs',sabado:'08:00 hs a 12:00 hs',
+     domingo:'08:00 a 12:00'};
     return offer;
    });
    window.alertasState={items:window.__offers,index:0};
@@ -478,6 +483,17 @@ try{
    .find(x=>x.textContent.includes('Lunes, 09:00 a 10:00'))?.textContent||''`);
   assert.match(multiBlockText,/Lunes, 09:00 a 10:00/);
   assert.match(multiBlockText,/Miércoles, 15:00 a 17:00/);
+  // Browser-level regression: ABC weekday columns cannot be truncated before
+  // the comparator assesses a Sunday conflict.
+  const weeklyFallback=await js(`(()=>{
+   const dialog=document.getElementById('apd-comparison-dialog');
+   const row=[...dialog.querySelectorAll('.apd-comparator-table tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return [...row.querySelectorAll('td')].map(x=>x.textContent)
+    .find(x=>x.includes('Domingo: 08:00 a 12:00'))||'';
+  })()`);
+  assert.ok(weeklyFallback.length>180,'Full seven-day fallback must exceed 180 characters');
+  assert.match(weeklyFallback,/Domingo: 08:00 a 12:00/);
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
 
