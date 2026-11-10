@@ -495,6 +495,23 @@ try{
    planner.querySelector('form').requestSubmit();
    return true;
   })()`);
+  const blockedHome=await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   const stored=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1')||'{}');
+   return {message:planner.querySelector('.apd-work-status').textContent,
+    homeStored:!!stored.homeLocation,
+    checkboxVisible:!planner.querySelector('.apd-home-review-row').hidden};
+  })()`);
+  assert.match(blockedHome.message,/Revisá el punto en Maps/);
+  assert.equal(blockedHome.homeStored,false,
+   'Unverified fallback home must not be silently persisted');
+  assert.equal(blockedHome.checkboxVisible,true);
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-review-check').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
   const homeFacts=await js(`(()=>{
    const value=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1'));
@@ -503,6 +520,8 @@ try{
       .map(x=>x.textContent)};
   })()`);
   assert.equal(homeFacts.selected?.source,'GEOREF_AR_V2');
+  assert.equal(homeFacts.selected?.scope,'pais');
+  assert.equal(homeFacts.selected?.reviewed,true);
   assert.equal(homeFacts.selected?.lat,-34.7);
   assert.equal(homeFacts.selected?.lon,-58.32);
   assert.match(homeFacts.domicile,/RONDEAU 319, Wilde/);
@@ -526,6 +545,7 @@ try{
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
    planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('.apd-home-review-check').click();
    planner.querySelector('form').requestSubmit();
    return true;
   })()`);
@@ -565,12 +585,15 @@ try{
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
    planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('.apd-home-review-check').click();
    planner.querySelector('form').requestSubmit();
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
   const actualScope=await js(`JSON.parse(sessionStorage.getItem(
    'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.scope`);
+  assert.equal(await js(`JSON.parse(sessionStorage.getItem(
+   'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.reviewed`),true);
   assert.equal(actualScope,'partido',
    'Scope of a fallback Georef result must be persisted');
   assert.match(await js('document.querySelector(".apd-comparator-home-distance").textContent'),
