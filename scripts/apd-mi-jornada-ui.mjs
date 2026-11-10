@@ -112,16 +112,25 @@ export function createPrivatePlannerForm({onChanged}={}){
  const homeStatus=element('p','apd-home-status');
  homeStatus.setAttribute('role','status');
  const homeCheck=element('p','apd-home-chosen');
+ const reviewCheck=element('input','apd-home-review-check');
+ reviewCheck.type='checkbox';
+ reviewCheck.checked=saved.homeLocation?.reviewed===true;
+ const reviewRow=element('label','apd-home-review-row');
+ reviewRow.append(reviewCheck,document.createTextNode(
+  ' Revisé el punto en Maps y acepto usar esta ubicación aproximada para las distancias.'));
  const homeMap=element('button','btn btn-secondary apd-home-map','Ver domicilio elegido en el mapa');
  homeMap.type='button';
  const showChosen=()=>{
-  const warning=homeLocation?.scope&&homeLocation.scope!=='exacta'?
-   ' Importante: la búsqueda se amplió; no se confirmó la localidad '+
-   'ingresada. Verificá el punto en el mapa antes de usar la distancia.':'';
+  const uncertain=!!homeLocation&&homeLocation.scope!=='exacta';
+  const warning=uncertain?
+   ' La búsqueda no confirmó tu localidad de manera exacta. '+
+   'Verificá el punto en el mapa antes de aceptar las distancias.':'';
   homeCheck.textContent=homeLocation?
    'Dirección elegida: '+homeLocation.label+
    ' (ubicación aproximada, no la puerta exacta).'+warning:
    'Sin dirección georreferenciada seleccionada.';
+  reviewRow.hidden=!uncertain;
+  if(!uncertain)reviewCheck.checked=false;
   homeMap.hidden=!homeLocation;
  };
  homeMap.addEventListener('click',()=>{
@@ -172,6 +181,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     choose.addEventListener('click',()=>{
      if(controller.signal.aborted)return;
      homeLocation=candidate;
+     reviewCheck.checked=false;
      domicile.value=candidate.label;
      homeCandidates.replaceChildren();
      homeStatus.textContent='Ubicación seleccionada. Guardá para usarla en las distancias.';
@@ -216,7 +226,7 @@ export function createPrivatePlannerForm({onChanged}={}){
    homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
  });
  showChosen();
- form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap);
+ form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap,reviewRow);
  form.appendChild(element('p','apd-comparator-hint',
   'El domicilio solo se consulta si pulsás «Buscar direcciones» o activás '+
   '«Sugerir mientras escribo». Si hay varias opciones, agregá localidad, '+
@@ -256,7 +266,8 @@ export function createPrivatePlannerForm({onChanged}={}){
   // callback fails, sensitive text must not remain on screen.
   clearTimeout(homeAutoTimer);
   homeRequest?.abort();
-  homeLocation=null;homeCandidates.replaceChildren();homeStatus.textContent='';
+  homeLocation=null;reviewCheck.checked=false;
+  homeCandidates.replaceChildren();homeStatus.textContent='';
   showChosen();
   clearPrivatePlanner();
   domicile.value='';
@@ -279,7 +290,12 @@ export function createPrivatePlannerForm({onChanged}={}){
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
     return {school:school.value,days:selected,start:start.value,end:end.value};
    });
-   savePrivatePlanner({domicile:domicile.value,jobs,travelGapMinutes:Number(travelGap.value),homeLocation});
+   if(homeLocation&&homeLocation.scope!=='exacta'&&!reviewCheck.checked)
+    throw Error('Revisá el punto en Maps y marcá la confirmación antes de guardar.');
+   const reviewedHome=homeLocation&&reviewCheck.checked?
+    {...homeLocation,reviewed:true}:homeLocation;
+   savePrivatePlanner({domicile:domicile.value,jobs,
+    travelGapMinutes:Number(travelGap.value),homeLocation:reviewedHome});
    onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
  });
