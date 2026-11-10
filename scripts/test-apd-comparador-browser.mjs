@@ -53,10 +53,12 @@ window.fetch=async (target,opts={})=>{
     localidad_censal:{nombre:'Bahía Blanca'},departamento:{nombre:'Bahía Blanca'},
     provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-38.7,lon:-62.3}}
   ];
-  // Reproduce the live Georef behavior: Wilde's census-locality filter
-  // returns nothing, while Avellaneda+Buenos Aires returns a valid location.
-  const matches=u.searchParams.has('localidad_censal')?[]:
-   u.searchParams.has('departamento')?[{
+  // Real Georef uses 'localidad=Wilde' (not 'localidad_censal=Wilde').
+  // Its matching row reports both localidad Wilde and census area Avellaneda.
+  const matches=u.searchParams.has('localidad')?[{
+   ...places[0],calle:{nombre:'CNL JOSE RONDEAU'},
+   localidad:{nombre:'Wilde'},localidad_censal:{nombre:'Avellaneda'}
+  }]:u.searchParams.has('departamento')?[{
     ...places[0],localidad_censal:{nombre:'Avellaneda'}
    }]:places;
   const bytes=new TextEncoder().encode(JSON.stringify({
@@ -572,55 +574,41 @@ try{
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
-  // A fully qualified address must reach the official service as geographic
-  // filters, preserving the original street+height without guessing location.
+  // Reproduce the actual user screenshot input, with NO commas.
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
    planner.open=true;
    const field=planner.querySelector('input.apd-work-input[type="text"]');
-   field.value='Rondeau 319, Wilde, Avellaneda, Buenos Aires';
+   field.value='rondeau 319 wilde';
    field.dispatchEvent(new Event('input',{bubbles:true}));
    planner.querySelector('.apd-home-lookup').click();
    return true;
   })()`);
-  await until('window.__homeGeoRequests.length===4 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===1');
-  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-status").textContent'),
-   /La localidad exacta no devolvió coincidencias/);
-  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent'),
-   /RONDEAU 319, Avellaneda, Buenos Aires/);
-  assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent.includes("Wilde")'),false,
-   'Never invent Wilde when Georef reports only Avellaneda');
-  const searchFields=await js(`(()=>{
+  await until('window.__homeGeoRequests.length===3 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===1');
+  const correctedAddress=await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent');
+  assert.match(correctedAddress,/CNL JOSE RONDEAU 319, Wilde, Avellaneda, Buenos Aires/);
+  const selectedParams=await js(`(()=>{
    const p=new URL(window.__homeGeoRequests[2].url).searchParams;
-   return {address:p.get('direccion'),province:p.get('provincia'),
-    district:p.get('departamento'),locality:p.get('localidad_censal')};
+   return {direccion:p.get('direccion'),localidad:p.get('localidad'),
+    censal:p.get('localidad_censal'),provincia:p.get('provincia')};
   })()`);
-  assert.deepEqual(searchFields,{address:'Rondeau 319',province:'Buenos Aires',
-   district:'Avellaneda',locality:'Wilde'});
-  const fallbackFields=await js(`(()=>{
-   const p=new URL(window.__homeGeoRequests[3].url).searchParams;
-   return {address:p.get('direccion'),province:p.get('provincia'),
-    district:p.get('departamento'),locality:p.get('localidad_censal')};
-  })()`);
-  assert.deepEqual(fallbackFields,{address:'Rondeau 319',province:'Buenos Aires',
-   district:'Avellaneda',locality:null});
+  assert.deepEqual(selectedParams,{direccion:'rondeau 319',localidad:'wilde',
+   censal:null,provincia:null});
+  assert.doesNotMatch(await js('document.querySelector("#apd-comparador-panel .apd-home-status").textContent'),
+   /alternativas de otras zonas|no devolvió coincidencias/i);
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
    planner.querySelector('.apd-home-candidate').click();
-   planner.querySelector('.apd-home-review-check').click();
    planner.querySelector('form').requestSubmit();
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
-  const actualScope=await js(`JSON.parse(sessionStorage.getItem(
+  const realScope=await js(`JSON.parse(sessionStorage.getItem(
    'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.scope`);
-  assert.equal(await js(`JSON.parse(sessionStorage.getItem(
-   'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.reviewed`),true);
-  assert.equal(actualScope,'partido',
-   'Scope of a fallback Georef result must be persisted');
+  assert.equal(realScope,'exacta','A locality-filtered result should be exact in scope');
+  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length'),0);
   assert.match(await js('document.querySelector(".apd-comparator-home-distance").textContent'),
-   /La localidad ingresada no pudo confirmarse/);
-
+   /km en línea recta/);
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
   // E2E: the real comparison UI must surface BOTH separate weekly collisions,
