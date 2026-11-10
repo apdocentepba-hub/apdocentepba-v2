@@ -56,8 +56,11 @@ export function sanitizeHomeLocation(raw){
  const scope=raw.scope;
  if(scope!==undefined&&!['exacta','partido','provincia','pais'].includes(scope))
   throw Error('Origen de georreferencia inválido');
+ if(raw.reviewed!==undefined&&raw.reviewed!==true)
+  throw Error('Confirmación de punto geográfico inválida');
  return {source:'GEOREF_AR_V2',label,height,lat:num(raw.lat),lon:num(raw.lon),
-  ...(scope!==undefined?{scope}:{})};
+  ...(scope!==undefined?{scope}:{}),
+  ...(raw.reviewed===true?{reviewed:true}:{})};
 }
 export function parseGeorefCandidates(payload,originalQuery){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.direcciones))return [];
@@ -96,8 +99,10 @@ export function parseGeorefCandidates(payload,originalQuery){
 export async function lookupHomeAddressesDetailed(query,{fetchImpl=fetch,signal}={}){
  const parsed=parseHomeAddressQuery(query);
  const filters=parsed.filters;
+ const initialScope=filters.localidad_censal?'exacta':
+  filters.departamento?'partido':filters.provincia?'provincia':'pais';
  const stages=[
-  {scope:'exacta',filters},
+  {scope:initialScope,filters},
   ...(filters.localidad_censal?[{scope:filters.departamento?'partido':
    filters.provincia?'provincia':'pais',filters:{
    ...(filters.provincia?{provincia:filters.provincia}:{}),
