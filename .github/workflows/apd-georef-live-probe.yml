@@ -6,13 +6,14 @@ on:
       - feature/apd-insigne-margen-traslado-20261109
     paths:
       - 'scripts/test-apd-georef-live-probe.mjs'
+      - 'scripts/test-apd-georef-live-browser.mjs'
       - '.github/workflows/apd-georef-live-probe.yml'
 permissions:
   contents: read
 jobs:
   public-georef:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +23,10 @@ jobs:
         run: node --check scripts/test-apd-georef-live-probe.mjs
       - name: Probe public Georef API (2 fixed example addresses, no private data)
         run: node scripts/test-apd-georef-live-probe.mjs
+      - name: Probe actual Insigne Georef module inside Chromium (real CORS)
+        run: |
+          node --check scripts/test-apd-georef-live-browser.mjs
+          node scripts/test-apd-georef-live-browser.mjs
       - name: Keep evidence even if API is unavailable
         if: always()
         uses: actions/upload-artifact@v4
