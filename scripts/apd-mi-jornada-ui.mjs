@@ -191,7 +191,8 @@ export function createPrivatePlannerForm({onChanged}={}){
  });
  domicile.addEventListener('input',()=>{
   clearTimeout(homeAutoTimer);
-  homeRequest?.abort();homeLocation=null;
+  homeRequest?.abort();homeRequest=null;homeLookup.disabled=false;
+  homeLocation=null;
   homeCandidates.replaceChildren();
   homeStatus.textContent='';
   showChosen();
