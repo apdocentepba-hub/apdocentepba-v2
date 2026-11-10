@@ -4,8 +4,9 @@
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home1';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261109-gap1';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261110-home1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -236,8 +237,8 @@ function invalidateGeo(){
 async function verifySchoolDistances(){
  if(!state.enabled||state.geoWorking)return;
  const codes=selectedSchoolKeys();
- if(codes.length<2){
-  state.geoStatus='Seleccioná al menos dos escuelas con claves provinciales válidas.';
+ if(codes.length<1){
+  state.geoStatus='Seleccioná una escuela con clave provincial válida.';
   render();return;
  }
  invalidateGeo();
@@ -365,6 +366,14 @@ function renderSideBySide(items){
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
    'No verificada':x.distancia_km+' km en línea recta']);
  const privateProfile=state.privatePlannerAllowed?loadPrivatePlanner():null;
+ if(privateProfile?.homeLocation){
+  data.push(['Desde mi domicilio',x=>{
+   const school=state.geoByKey[String(x.escuela||'').trim().toUpperCase()];
+   const km=straightLineHomeSchoolKm(privateProfile.homeLocation,school);
+   return km===null?'Escuela sin ubicación ABC verificada':
+    km+' km en línea recta (no es distancia de viaje)';
+  }]);
+ }
  if(privateProfile?.jobs.length){
   data.push(['Cruce con mi jornada actual',x=>{
    const o=checkScheduleOverlap(x.horario,privateProfile);
@@ -385,7 +394,7 @@ function renderSideBySide(items){
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
   'Postulantes visibles','Puntaje del primero','Diferencia de puntos',
-  'Cruce con mi jornada actual']);
+  'Cruce con mi jornada actual','Desde mi domicilio']);
  const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
@@ -470,7 +479,7 @@ function render(){
      value=>{state.anchor=value;render()}));
   }
   root.appendChild(tools);
-  if(codes.length>=2){
+  if(codes.length>=1){
    const geoButton=button(state.geoWorking?'Consultando ABC...':
      state.geoRequested?'Actualizar ubicaciones oficiales':'Consultar distancias oficiales',
      ()=>{void verifySchoolDistances()},'btn btn-secondary apd-comparator-geobutton');
@@ -541,16 +550,29 @@ function render(){
      entry.appendChild(node('p','apd-comparator-geo-detail',
       [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
        .filter(Boolean).join(' · ')));
-     const home=state.privatePlannerAllowed?loadPrivatePlanner().domicile:'';
-     if(home&&Number.isFinite(verified.lat)&&Number.isFinite(verified.lon)){
-      entry.appendChild(button('Ver trayecto desde domicilio en Maps',()=>{
+     const home=state.privatePlannerAllowed?loadPrivatePlanner().homeLocation:null;
+     const homeDistance=straightLineHomeSchoolKm(home,verified);
+     if(homeDistance!==null){
+      entry.appendChild(node('p','apd-comparator-home-distance',
+       'Desde tu domicilio seleccionado: '+homeDistance+
+       ' km en línea recta (no es el recorrido por calles).'));
+      entry.appendChild(button('Ver recorrido desde domicilio en Maps',()=>{
        const url='https://www.google.com/maps/dir/?'+new URLSearchParams({
-        api:'1',origin:home,destination:verified.lat+','+verified.lon
+        api:'1',origin:home.lat+','+home.lon,
+        destination:verified.lat+','+verified.lon
        });
        window.open(url,'_blank','noopener,noreferrer');
       },'btn btn-secondary apd-comparator-home-map'));
      }
     }
+   }
+   const activeHome=state.privatePlannerAllowed?loadPrivatePlanner().homeLocation:null;
+   if(activeHome&&!state.geoRequested){
+    entry.appendChild(node('p','apd-comparator-hint',
+     'Para ver la distancia desde tu domicilio, consultá la ubicación oficial de la escuela.'));
+   }else if(activeHome&&state.geoRequested&&!state.geoByKey[row.escuela.toUpperCase()]){
+    entry.appendChild(node('p','apd-comparator-hint',
+     'No se pudo verificar en ABC la ubicación de esta escuela.'));
    }
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
    entry.appendChild(explanation);
