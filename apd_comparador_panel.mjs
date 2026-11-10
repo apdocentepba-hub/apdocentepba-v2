@@ -2,10 +2,11 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
-import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs';
-import {checkScheduleOverlap} from './scripts/apd-mi-jornada-comparador.mjs';
+import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home3';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261110-home3';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
 } from './scripts/apd-school-geodistance.mjs';
@@ -236,8 +237,8 @@ function invalidateGeo(){
 async function verifySchoolDistances(){
  if(!state.enabled||state.geoWorking)return;
  const codes=selectedSchoolKeys();
- if(codes.length<2){
-  state.geoStatus='Seleccioná al menos dos escuelas con claves provinciales válidas.';
+ if(codes.length<1){
+  state.geoStatus='Seleccioná una escuela con clave provincial válida.';
   render();return;
  }
  invalidateGeo();
@@ -274,6 +275,38 @@ function renderSideBySide(items){
  region.appendChild(heading);
  region.appendChild(node('p','apd-comparator-hint',
   'Compará condiciones de trabajo y competencia visible. La compatibilidad PID indicada por el panel no garantiza adjudicación. Los postulantes provienen solo de fichas ya consultadas; no se actualizan al abrir esta tabla.'));
+ // A same-day clock collision is not proof of normative incompatibility.
+ const pairs=compareSelectedOfferSchedules(items);
+ const alerts=pairs.filter(p=>p.status==='overlap'||p.status==='possible-overlap');
+ const pairsBox=node('details','apd-comparator-schedule-pairs');
+ pairsBox.open=alerts.length>0;
+ const pairSummary=node('summary','apd-comparator-schedule-summary',
+  'Cruces entre ofertas: '+alerts.length+' a revisar de '+pairs.length+' pares');
+ pairsBox.appendChild(pairSummary);
+ pairsBox.appendChild(node('p','apd-comparator-hint',
+  'Compara días, horas y vigencias declaradas. No determina compatibilidad '+
+  'normativa, adjudicación ni posibilidad de traslado.'));
+ const pairsList=node('ul','apd-comparator-schedule-list');
+ // Priority sorting keeps actionable collisions visible without requiring
+ // scrolling through ten pairs when five offers are selected.
+ const severity={overlap:0,'possible-overlap':1,unverified:2,
+  'no-shared-date':3,'separate-periods':4,'no-time-overlap':5};
+ const displayPairs=[...pairs].sort((a,b)=>
+  (severity[a.status]??6)-(severity[b.status]??6)||
+  a.firstOffer-b.firstOffer||a.secondOffer-b.secondOffer);
+ for(const pair of displayPairs){
+  const item=node('li','apd-comparator-schedule-item apd-comparator-schedule-'+pair.status);
+  const blocks=pair.matches?.length?pair.matches:[pair];
+  const match=blocks.filter(x=>x.days?.length).map(x=>
+   x.days.join(', ')+', '+x.from+' a '+x.to+
+   (x.status==='possible-overlap'?' (vigencia sin confirmar)':'')
+  ).join('; ');
+  item.textContent='Ofertas '+pair.firstOffer+' y '+pair.secondOffer+': '+pair.label+
+   (match?' · '+match:'');
+  pairsList.appendChild(item);
+ }
+ pairsBox.appendChild(pairsList);
+ region.appendChild(pairsBox);
  const wrap=node('div','apd-comparator-table-scroll');
  wrap.tabIndex=0;
  wrap.setAttribute('role','region');
@@ -333,22 +366,38 @@ function renderSideBySide(items){
   data.push(['Distancia desde referencia',x=>x.distancia_km===null?
    'No verificada':x.distancia_km+' km en línea recta']);
  const privateProfile=state.privatePlannerAllowed?loadPrivatePlanner():null;
+ if(privateProfile?.homeLocation){
+  data.push(['Desde mi domicilio',x=>{
+   const school=state.geoByKey[String(x.escuela||'').trim().toUpperCase()];
+   const km=straightLineHomeSchoolKm(privateProfile.homeLocation,school);
+   const origin=privateProfile.homeLocation;
+   return km===null?'Escuela sin ubicación ABC verificada':
+    km+' km en línea recta (no es distancia de viaje)'+
+    (origin.scope&&origin.scope!=='exacta'?
+     ' · Revisar localidad elegida en el mapa':'');
+  }]);
+ }
  if(privateProfile?.jobs.length){
   data.push(['Cruce con mi jornada actual',x=>{
    const o=checkScheduleOverlap(x.horario,privateProfile);
    return o.status==='overlap'?
     'Superposición de horarios: '+o.conflicts.map(c=>
      c.school+' ('+c.days.join(', ')+', '+c.from+' a '+c.to+')').join('; '):
+    o.status==='tight-transition'?
+    'Sin cruce, pero traslado a revisar: '+o.transitions.map(t=>
+     t.school+' ('+t.days.join(', ')+', '+t.gapMinutes+' min entre horarios)').join('; ')+
+     '. Margen elegido: '+o.travelGapMinutes+
+     ' min. No es un tiempo de viaje calculado ni una incompatibilidad legal.':
     o.status==='no-overlap'?
-    'Sin superposición exacta (traslados y normativa no evaluados)':
-    'No evaluable: horario de oferta incompleto';
+    'Sin superposición exacta (viaje real y normativa no evaluados)':
+    'No evaluable: horario de oferta o jornadas incompletas';
   }]);
  }
  // The most useful fields stay visible even when they match.
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
   'Postulantes visibles','Puntaje del primero','Diferencia de puntos',
-  'Cruce con mi jornada actual']);
+  'Cruce con mi jornada actual','Desde mi domicilio']);
  const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
@@ -433,7 +482,7 @@ function render(){
      value=>{state.anchor=value;render()}));
   }
   root.appendChild(tools);
-  if(codes.length>=2){
+  if(codes.length>=1){
    const geoButton=button(state.geoWorking?'Consultando ABC...':
      state.geoRequested?'Actualizar ubicaciones oficiales':'Consultar distancias oficiales',
      ()=>{void verifySchoolDistances()},'btn btn-secondary apd-comparator-geobutton');
@@ -504,16 +553,31 @@ function render(){
      entry.appendChild(node('p','apd-comparator-geo-detail',
       [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
        .filter(Boolean).join(' · ')));
-     const home=state.privatePlannerAllowed?loadPrivatePlanner().domicile:'';
-     if(home&&Number.isFinite(verified.lat)&&Number.isFinite(verified.lon)){
-      entry.appendChild(button('Ver trayecto desde domicilio en Maps',()=>{
+     const home=state.privatePlannerAllowed?loadPrivatePlanner().homeLocation:null;
+     const homeDistance=straightLineHomeSchoolKm(home,verified);
+     if(homeDistance!==null){
+      entry.appendChild(node('p','apd-comparator-home-distance',
+       'Desde tu domicilio seleccionado: '+homeDistance+
+       ' km en línea recta (no es el recorrido por calles).'+
+       (home.scope&&home.scope!=='exacta'?
+        ' La localidad ingresada no pudo confirmarse; verificá el mapa.':'')));
+      entry.appendChild(button('Ver recorrido desde domicilio en Maps',()=>{
        const url='https://www.google.com/maps/dir/?'+new URLSearchParams({
-        api:'1',origin:home,destination:verified.lat+','+verified.lon
+        api:'1',origin:home.lat+','+home.lon,
+        destination:verified.lat+','+verified.lon
        });
        window.open(url,'_blank','noopener,noreferrer');
       },'btn btn-secondary apd-comparator-home-map'));
      }
     }
+   }
+   const activeHome=state.privatePlannerAllowed?loadPrivatePlanner().homeLocation:null;
+   if(activeHome&&!state.geoRequested){
+    entry.appendChild(node('p','apd-comparator-hint',
+     'Para ver la distancia desde tu domicilio, consultá la ubicación oficial de la escuela.'));
+   }else if(activeHome&&state.geoRequested&&!state.geoByKey[row.escuela.toUpperCase()]){
+    entry.appendChild(node('p','apd-comparator-hint',
+     'No se pudo verificar en ABC la ubicación de esta escuela.'));
    }
    const explanation=node('p','apd-comparator-reasons',row.explicacion.join(' · '));
    entry.appendChild(explanation);

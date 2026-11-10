@@ -22,6 +22,40 @@ const displayABCDate=v=>{
  return iso?iso[3]+'/'+iso[2]+'/'+iso[1]:s;
 };
 const offerText=(offer,...keys)=>asString(keys.map(k=>offer?.[k]).find(v=>v!==null&&v!==undefined&&String(v).trim()!=='')??'');
+
+// Keep a complete weekly schedule: ordinary offer labels are capped at 180
+// characters, but seven independent weekday blocks can exceed that.
+// Never truncate a schedule into an apparently complete (but false) subset.
+const MAX_SCHEDULE_LENGTH=900;
+const SCHEDULE_TOO_LONG='Horario demasiado extenso para comparar; verificá ABC';
+const weekdays=[
+ ['lunes','Lunes'],['martes','Martes'],['miercoles','Miércoles'],
+ ['jueves','Jueves'],['viernes','Viernes'],['sabado','Sábado'],
+ ['domingo','Domingo']
+];
+const safeSchedule=value=>{
+ const raw=String(value??'').trim();
+ return raw.length>MAX_SCHEDULE_LENGTH?SCHEDULE_TOO_LONG:raw;
+};
+export function extractOfferSchedule(offer){
+ if(!offer||typeof offer!=='object'||Array.isArray(offer))return '';
+ for(const key of ['dias_horarios','horario']){
+  const raw=String(offer[key]??'').trim();
+  if(raw&&!/^(?:sin datos?|no informado|n\/a)$/i.test(raw))
+   return safeSchedule(raw);
+ }
+ const blocks=[];
+ for(const [key,name] of weekdays){
+  const value=String(offer[key]??'').trim();
+  if(!value)continue;
+  // A weekday-specific ABC property states the day; it is not guessed from
+  // a time or a free-text turno. Preserve already-explicit day prefixes.
+  const hasDayPrefix=/^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)(?:\s*:|\s+(?:a|al|hasta)\s+)/i.test(value);
+  blocks.push(hasDayPrefix?value:name+': '+value);
+ }
+ return safeSchedule(blocks.join('; '));
+}
+
 function validDate(year,month,day){
  if(!Number.isInteger(year)||year<2000||year>2100||month<1||month>12||day<1||day>31)return false;
  const d=new Date(Date.UTC(year,month-1,day));
@@ -159,8 +193,7 @@ export function compareOffers({
    listado_primero_observado:cached?asString(summary.listado_origen_primero):'',
    diferencia_puntaje_comparable:applicantGap,
    competencia_en_cache:cached,
-   horario:offerText(offer,'dias_horarios','horario')||
-    ['lunes','martes','miercoles','jueves','viernes','sabado'].map(k=>offerText(offer,k)).filter(Boolean).join(' · ').slice(0,180),
+   horario:extractOfferSchedule(offer),
    modulos:offerText(offer,'hsmodulos','modulos'),
    revista:offerText(offer,'revista','supl_revista'),
    jornada:offerText(offer,'jornada'),

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compareOffers,parseClosure} from './apd-comparador-criterios.mjs';
+import {compareOffers,parseClosure,extractOfferSchedule} from './apd-comparador-criterios.mjs';
+import {parseOfferWeeklySegments,checkScheduleOverlap} from './apd-mi-jornada-comparador.mjs';
 
 const now='2026-11-07T20:00:00Z';
 const A={
@@ -198,4 +199,42 @@ test('PID false is descriptive, not a verified ranking or eligibility conclusion
  assert.equal(row.pid_puntaje_panel,null);
  assert.equal(row.postulantes_observados,0);
  assert.equal(row.diferencia_puntaje_comparable,null);
+});
+
+test('multi-block schedule survives extraction beyond ordinary 180-character label limit',()=>{
+ const week={
+  lunes:'07:20 hs a 11:50 hs',martes:'07:20 hs a 11:50 hs',
+  miercoles:'14:00 hs a 18:30 hs',jueves:'14:00 hs a 18:30 hs',
+  viernes:'08:00 hs a 12:00 hs',sabado:'08:00 hs a 12:00 hs',
+  domingo:'08:00 a 12:00'
+ };
+ const result=compare([{...A,...week}]).items[0].horario;
+ assert.ok(result.length>180,'Seven declared weekday blocks require more than 180 chars');
+ assert.ok(result.includes('Domingo: 08:00 a 12:00'),'Last weekday cannot be silently discarded');
+ assert.equal(parseOfferWeeklySegments(result)?.length,7);
+ assert.equal(checkScheduleOverlap(result,{jobs:[{
+  school:'Escuela domingo',days:[7],start:'09:00',end:'10:00'
+ }]}).status,'overlap');
+});
+test('explicit ABC schedule takes precedence over fallback weekday fields',()=>{
+ const explicit='Lunes: 07:20 a 11:50; Miércoles: 14:00 a 17:30';
+ const offer={...A,dias_horarios:explicit,lunes:'08:00 a 15:00'};
+ assert.equal(compare([offer]).items[0].horario,explicit);
+ const fallback={...A,dias_horarios:'Sin datos',lunes:'07:20 a 11:50'};
+ assert.equal(compare([fallback]).items[0].horario,'Lunes: 07:20 a 11:50');
+});
+test('oversized schedule is rejected as unverified, never truncated into a false complete subset',()=>{
+ const giant='Lunes: 08:00 a 12:00; Miércoles: 14:00 a 17:30; '+
+  'X'.repeat(900);
+ const extracted=extractOfferSchedule({...A,dias_horarios:giant});
+ assert.match(extracted,/demasiado extenso/);
+ assert.equal(parseOfferWeeklySegments(extracted),null);
+ assert.equal(compare([{...A,dias_horarios:giant}]).items[0].horario,extracted);
+});
+test('prefixed weekday source stays intact rather than getting duplicate day labels',()=>{
+ const offer={...A,lunes:'Lunes: 08:00 a 12:00',
+  martes:'Martes: 14:00 a 18:00',miercoles:'Miércoles: 09:00 a 12:00'};
+ const schedule=extractOfferSchedule(offer);
+ assert.equal(schedule,'Lunes: 08:00 a 12:00; Martes: 14:00 a 18:00; Miércoles: 09:00 a 12:00');
+ assert.equal(parseOfferWeeklySegments(schedule)?.length,3);
 });

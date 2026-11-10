@@ -1,4 +1,4 @@
-import {parseOfferWeeklySchedule,formatWeeklySchedule} from './apd-mi-jornada-comparador.mjs';
+import {parseOfferWeeklySegments,formatWeeklySchedule} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
 /**
  * APD comparator presentation-only checks. No network, auth or persistence.
  * Prevent false highlights from superficial ABC formatting differences.
@@ -24,10 +24,11 @@ function courseDisplay(value){
 export function assessComparatorCriterion(label,inputValues){
  const values=inputValues.map(text);
  if(label==='Días y horarios'){
-  const parsed=values.map(parseOfferWeeklySchedule);
+  const parsed=values.map(parseOfferWeeklySegments);
   const formatted=values.map(formatWeeklySchedule);
   if(parsed.some(x=>x===null))return {status:'unverified',values:formatted};
-  const key=x=>x.days.join(',')+'|'+x.start+'|'+x.end;
+  const blockKey=x=>x.days.join(',')+'|'+x.start+'|'+x.end;
+  const key=blocks=>blocks.map(blockKey).sort().join(';');
   return {
    status:new Set(parsed.map(key)).size>1?'different':'same',
    values:formatted

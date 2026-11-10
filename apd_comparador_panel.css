@@ -166,3 +166,113 @@
  .apd-work-weekdays{gap:7px}
  .apd-work-actions button{width:100%;white-space:normal}
 }
+
+/* Insigne R270 QA: compact editor, accessible day chips and mobile actions. */
+.apd-work-planner{overflow:clip}
+.apd-work-summary{min-height:44px;line-height:1.35;outline-offset:3px}
+.apd-work-summary:focus-visible{outline:3px solid #356bb6}
+.apd-work-form{gap:10px}
+.apd-work-input{min-height:42px}
+.apd-work-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.apd-work-day{min-width:0;min-height:44px;padding:5px 2px;
+ border:1px solid #cedcee;border-radius:8px;background:#fff;
+ display:flex;flex-direction:column;align-items:center;justify-content:center;
+ gap:3px;text-align:center;cursor:pointer;font-size:11px;font-weight:750}
+.apd-work-day:has(input:checked){background:#e8f5ff;border-color:#4784c3;color:#123b73}
+.apd-work-day:focus-within{outline:2px solid #356bb6;outline-offset:2px}
+.apd-work-day input{width:16px;height:16px;margin:0;accent-color:#225fae}
+.apd-work-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.apd-work-actions button{min-width:0;min-height:44px;padding:8px 9px;
+ margin:0;white-space:normal;line-height:1.25}
+.apd-work-shift>button{min-height:40px;justify-self:start}
+.apd-work-status:empty{display:none}
+@media(max-width:600px){
+ .apd-work-form{padding:0 10px 12px;gap:10px}
+ .apd-work-summary{padding:11px 12px}
+ .apd-work-weekdays{gap:4px}
+ .apd-work-actions button{width:auto}
+ .apd-comparator-dialog .apd-comparator-modal-body{overflow-x:hidden}
+}
+@media(max-width:360px){
+ .apd-work-weekdays{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .apd-work-actions{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Comparison of selected offers: visible warnings, compact on phone. */
+.apd-comparator-schedule-pairs{margin:10px 0 13px;border:1px solid #cbd9e9;
+ border-radius:10px;background:#f7fbff;padding:9px 11px;max-width:100%;min-width:0}
+.apd-comparator-schedule-summary{min-height:40px;cursor:pointer;font-size:13px;
+ font-weight:800;line-height:1.45;display:list-item;overflow-wrap:anywhere}
+.apd-comparator-schedule-summary:focus-visible{outline:2px solid #2e6aaa;outline-offset:3px}
+.apd-comparator-schedule-list{margin:7px 0;padding:0 0 0 19px;max-height:200px;
+ overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+.apd-comparator-schedule-item{padding:5px 0;font-size:12px;line-height:1.5;
+ overflow-wrap:anywhere}
+.apd-comparator-schedule-overlap,
+.apd-comparator-schedule-possible-overlap{color:#8b4017;font-weight:750}
+.apd-comparator-schedule-separate-periods,
+.apd-comparator-schedule-no-time-overlap{color:#31576f}
+.apd-comparator-schedule-unverified{color:#735f3e}
+@media(max-width:600px){
+ .apd-comparator-schedule-pairs{padding:8px 10px;margin:9px 0}
+ .apd-comparator-schedule-list{max-height:160px}
+}
+
+
+/* Insigne private home selection (read-only, explicitly triggered Georef). */
+.apd-home-lookup,.apd-home-map{min-height:44px;max-width:100%;white-space:normal}
+.apd-home-lookup{margin:1px 0 0}
+.apd-home-candidates{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.apd-home-candidate{min-height:44px;max-width:100%;text-align:left;
+ white-space:normal;overflow-wrap:anywhere;font-size:12px;padding:9px 11px}
+.apd-home-candidate:focus-visible,.apd-home-lookup:focus-visible{
+ outline:3px solid #3878b2;outline-offset:2px}
+.apd-home-status,.apd-home-chosen{font-size:12px;line-height:1.4;
+ overflow-wrap:anywhere;margin:0}
+.apd-home-chosen{font-weight:600}
+.apd-home-status:empty{display:none}
+.apd-home-map[hidden]{display:none}
+.apd-comparator-home-distance{font-size:12px;color:#1d5a58;
+ font-weight:750;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .apd-home-lookup,.apd-home-map,.apd-home-candidate{width:100%;justify-content:flex-start}
+}
+
+.apd-home-auto-label{display:flex;align-items:center;gap:8px;cursor:pointer;
+ font-size:12px;font-weight:650;line-height:1.4;padding:4px 1px}
+.apd-home-auto-toggle{width:18px;height:18px;flex:none;accent-color:#225fae}
+
+/* Explicit acceptance when a Georef address was found outside the
+   original exact-locality query. Hidden until a candidate is selected. */
+.apd-home-review-row{display:flex;gap:9px;align-items:flex-start;
+ padding:10px 12px;border:1px solid #a9c6df;border-radius:9px;
+ background:#f3f8fe;line-height:1.5;font-size:12px;font-weight:650;
+ cursor:pointer;overflow-wrap:anywhere}
+.apd-home-review-row[hidden]{display:none}
+.apd-home-review-check{margin-top:2px;width:19px;height:19px;
+ accent-color:#225fae;flex:none}
+.apd-home-review-check:focus-visible{outline:3px solid #225fae;outline-offset:3px}
+
+
+/* Single-scroll comparison dialog: the screenshot from production exposed
+   a scrollable dialog inside a scrollable body over the scrolling document.
+   Keep the header fixed, constrain the body, and freeze the background only
+   while this *specific* native dialog is open. */
+dialog.apd-comparator-dialog[open]{
+ display:flex;flex-direction:column;
+ max-height:calc(100dvh - 28px);
+ overflow:hidden;
+}
+dialog.apd-comparator-dialog[open] .apd-comparator-modal-head{
+ flex:0 0 auto;
+}
+dialog.apd-comparator-dialog[open] .apd-comparator-modal-body{
+ flex:1 1 auto;min-height:0;
+ max-height:none;overflow-x:hidden;overflow-y:auto;
+ overscroll-behavior:contain;
+ scrollbar-gutter:stable;
+}
+html:has(dialog.apd-comparator-dialog[open]),
+body:has(dialog.apd-comparator-dialog[open]){
+ overflow:hidden;
+}

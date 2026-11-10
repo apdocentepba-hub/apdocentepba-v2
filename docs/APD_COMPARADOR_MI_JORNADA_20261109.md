@@ -40,3 +40,24 @@ Es una prueba local de producto. Los campos de domicilio y empleo pueden ser dat
 - Un cambio de plan descendente elimina los datos opcionales almacenados en `sessionStorage` de la pestaña y quita la interfaz privada, manteniendo la comparación básica. Cerrar sesión o cambiar de cuenta también borra el perfil.
 - Limitación de seguridad: este planificador usa solo datos proporcionados por el propio usuario en el navegador y no consume una API privada de cálculo; por ello la restricción es una **habilitación de producto en interfaz sustentada por la respuesta autenticada del Worker**, no una barrera criptográfica contra quienes manipulen su propio JavaScript. Toda futura API prémium deberá verificar el plan **en el servidor** y nunca confiar en `planInfo` enviado por el cliente.
 - Pruebas unitarias de códigos y estados, y pruebas Chromium de Insigne, Plus y degradación sin pérdida del comparador básico. No se modifican cuotas, cobros, tablas ni la lógica de notificaciones.
+
+## Siguiente mejora aislada (candidato, 09/11/2026): márgenes entre jornadas
+
+Se agrega una advertencia **orientativa** cuando la oferta y la jornada declarada no se cruzan en el mismo día pero queda poco tiempo entre sus comienzos y finales. La advertencia resuelve el falso negativo del caso `11:50` → `11:50`, que antes aparecía como «sin superposición» y podía interpretarse como traslado viable.
+
+- Solo Insigne: el perfil opcional incorpora `travelGapMinutes` (0, 15, 30, 45, 60, 90 o 120); opción inicial **30 minutos**, modificable por el docente, con 0 para desactivar advertencias. Los perfiles guardados previamente migran en lectura al valor predeterminado.
+- Resultado «Superposición horaria» conserva prioridad ante cualquier conflicto; cuando no hay cruce y el margen disponible es menor al umbral, se indica «Sin cruce, pero traslado a revisar» y los minutos exactos entre jornadas. Nunca se afirma «Compatible» ni «Incompatible legalmente».
+- Es una diferencia de relojes entre turnos, no calcula rutas, velocidades, distancia hogar-escuela ni tiempos reales. Las escuelas actuales siguen ingresándose como texto; no se presume que dos nombres iguales sean el mismo establecimiento.
+- Todo sigue local en `sessionStorage` y sin envío de domicilio. No modifica Worker, Supabase, planes, cobranzas, escáner ni notificaciones.
+- Validaciones: casos límite de 0, 15, 20 y 30 minutos, conflicto prioritario, oferta anterior a jornada, diferentes días, horario incompleto, margen inválido; QA de la tabla en Chromium.
+- **Estado:** implementado en rama de laboratorio, sin publicación y sujeto a controles de CI. Validar sesión real Insigne y normativa PBA antes de ofrecer conclusiones adicionales.
+
+## QA visual y privacidad del editor (continuación en PR #270)
+
+- En escritorio y celular el editor privado Insigne **arranca cerrado**; solo ocupa el resumen «Configurar mis jornadas y domicilio» hasta que la persona decide abrirlo. No interrumpe la tabla de comparación.
+- Días como controles táctiles de al menos 44 px, botones Guardar/Borrar distribuidos en dos columnas cuando entran, con versión de una sola columna para pantallas muy pequeñas.
+- Al borrar, se limpian la información persistida en pestaña, los `input` del formulario visible y los renglones de jornadas **antes** de notificar a la interfaz principal para repintarla. Evita que datos privados queden a la vista si una actualización de pantalla falla.
+- Menos texto repetitivo junto a los controles, conservando aviso de privacidad, geocodificación solo a pedido y carácter no normativo del margen.
+- Versión renovada de HTML/CSS/JS para evitar interfaz obsoleta por caché. Los módulos, cobros, alertas y Worker productivos quedan intactos.
+- Casos Chromium agregados: editor cerrado al ingresar al panel y al abrir la comparación; días táctiles, ancho sin desborde; eliminación de los valores visibles y de `sessionStorage`.
+- **Pruebas CI:** consultar el resultado del último commit de la PR #270. La cuenta Insigne real todavía no fue utilizada.

@@ -36,12 +36,35 @@ window.alertasState={items:[],index:0};
 window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
+window.__homeGeoRequests=[];
 window.__geoNetworkDown=false;
 window.__holdWFS=false;
 window.__heldWFS=[];
 window.__realFetch=window.fetch.bind(window);
 window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
+ if(u.hostname==='apis.datos.gob.ar'){
+  window.__homeGeoRequests.push({url:u.toString(),method:opts.method,credentials:opts.credentials});
+  const places=[
+   {calle:{nombre:'RONDEAU'},altura:{valor:319},
+    localidad_censal:{nombre:'Wilde'},departamento:{nombre:'Avellaneda'},
+    provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.32}},
+   {calle:{nombre:'RONDEAU'},altura:{valor:319},
+    localidad_censal:{nombre:'Bahía Blanca'},departamento:{nombre:'Bahía Blanca'},
+    provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-38.7,lon:-62.3}}
+  ];
+  // Reproduce the live Georef behavior: Wilde's census-locality filter
+  // returns nothing, while Avellaneda+Buenos Aires returns a valid location.
+  const matches=u.searchParams.has('localidad_censal')?[]:
+   u.searchParams.has('departamento')?[{
+    ...places[0],localidad_censal:{nombre:'Avellaneda'}
+   }]:places;
+  const bytes=new TextEncoder().encode(JSON.stringify({
+   direcciones:matches,cantidad:matches.length
+  }));
+  return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
+   arrayBuffer:async()=>bytes.buffer};
+ }
  if(u.hostname!=='mapaescolar.abc.gob.ar')return window.__realFetch(target,opts);
  window.__wfsRequests.push({
   origin:u.origin,filter:u.searchParams.get('CQL_FILTER'),
@@ -79,6 +102,7 @@ const server=createServer((req,res)=>{
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
+  '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
   '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
   '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
@@ -185,6 +209,10 @@ try{
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
   assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),true,
    'Active Insigne must see private work planner');
+  assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-work-planner").open'),false,
+   'Optional editor starts collapsed on mobile and desktop');
+  assert.equal(await js(`getComputedStyle(document.querySelector(
+   '#apd-comparador-panel .apd-work-summary')).minHeight`),'44px');
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -259,6 +287,40 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    const scrollLayout=await js(`(()=>{
+     const dialog=document.getElementById('apd-comparison-dialog');
+     const body=dialog.querySelector('.apd-comparator-modal-body');
+     return {
+      dialogOverflow:getComputedStyle(dialog).overflowY,
+      bodyOverflow:getComputedStyle(body).overflowY,
+      background:getComputedStyle(document.documentElement).overflowY,
+      bodyVisible:body.clientHeight>100,
+      insideViewport:dialog.getBoundingClientRect().bottom<=innerHeight+2,
+      editorInitiallyCollapsed:!dialog.querySelector('.apd-work-planner').open
+     };
+    })()`);
+    assert.equal(scrollLayout.dialogOverflow,'hidden',
+     'Dialog must not create a second vertical scrollbar');
+    assert.equal(scrollLayout.bodyOverflow,'auto',
+     'Comparison content must remain scrollable within a single region');
+    assert.equal(scrollLayout.background,'hidden',
+     'Underlying page must not scroll while modal is visible');
+    assert.equal(scrollLayout.bodyVisible,true);
+    assert.equal(scrollLayout.insideViewport,true,
+     'Dialog must remain entirely visible on mobile and desktop');
+    assert.equal(scrollLayout.editorInitiallyCollapsed,true);
+    const pairFacts=await js(`(()=>{
+     const panel=document.getElementById('apd-comparison-dialog');
+     const box=panel.querySelector('.apd-comparator-schedule-pairs');
+     return {present:!!box,open:box?.open,
+      summary:box?.querySelector('summary')?.textContent,
+      entries:[...(box?.querySelectorAll('li')||[])].map(e=>e.textContent)};
+    })()`);
+    assert.equal(pairFacts.present,true,'Pairwise offer schedule comparisons must be available');
+    assert.equal(pairFacts.open,true,'Overlapping schedules must be visible without extra clicks');
+    assert.match(pairFacts.summary,/1 a revisar de 1 pares/);
+    assert.match(pairFacts.entries[0],/Cruce de días, horas y vigencias informadas/);
+    assert.match(pairFacts.entries[0],/07:20 a 11:50/);
     const facts=await js(`(()=>{
      const dialog=document.getElementById('apd-comparison-dialog');
      const summary=dialog.querySelector('.apd-comparator-difference-summary').textContent;
@@ -286,6 +348,8 @@ try{
      'Equivalent schedules must be removed from the differences list');
     assert.equal(await js('!!document.querySelector("#apd-comparison-dialog .apd-work-planner")'),true,
      'Optional domicile and current job editor must be available');
+    assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-work-planner").open'),false,
+     'The dialog must initially prioritize the offers, not the optional personal-data editor');
     await js(`(()=>{
      const dialog=document.getElementById('apd-comparison-dialog');
      const details=dialog.querySelector('.apd-work-planner');details.open=true;
@@ -293,6 +357,11 @@ try{
      const form=details.querySelector('form');
      form.querySelector('input[type="text"]').value='Wilde, Avellaneda';
      const job=details.querySelector('.apd-work-shift');
+     const chips=[...job.querySelectorAll('.apd-work-day')];
+     if(chips.length!==7||chips.some(x=>x.getBoundingClientRect().height<43))
+      throw Error('Seven touch-friendly weekday controls required');
+     if(details.scrollWidth>details.clientWidth+2)
+      throw Error('Private planner must not overflow the dialog');
      job.querySelector('input[type="text"]').value='Escuela actual';
      for(const c of job.querySelectorAll('input[type="checkbox"]'))c.checked=Number(c.value)<=5;
      job.querySelectorAll('input[type="time"]')[0].value='07:20';
@@ -309,6 +378,28 @@ try{
      const saved=sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1');
      return !!saved&&saved.includes('Escuela actual')&&saved.includes('Wilde, Avellaneda');
     })()`),true,'Optional profile stored only in current tab');
+    // Travel caution: ten free minutes between shifts is not a proven trip.
+    await js(`(()=>{
+      const dialog=document.getElementById('apd-comparison-dialog');
+      const details=dialog.querySelector('.apd-work-planner');details.open=true;
+      const gap=details.querySelector('select.apd-work-input');
+      if(!gap||gap.value!=='30')throw Error('Default travel margin missing');
+      const shift=details.querySelector('.apd-work-shift');
+      shift.querySelectorAll('input[type="time"]')[0].value='06:00';
+      shift.querySelectorAll('input[type="time"]')[1].value='07:10';
+      details.querySelector('form').requestSubmit();
+      return true;
+    })()`);
+    await until(`(()=>{
+      const rows=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')];
+      const row=rows.find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual');
+      return row?.textContent.includes('traslado a revisar')??false;
+    })()`);
+    assert.match(await js(`[...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+      .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual').textContent`),
+      /10 min entre horarios/, 'Only the clock gap must be shown');
+    assert.equal(await js(`JSON.parse(sessionStorage.getItem(
+      'apd_comparador_jornada_solo_pestana_v1')).travelGapMinutes`),30);
     await js(`(()=>{
       const dialog=document.getElementById('apd-comparison-dialog');
       const details=dialog.querySelector('.apd-work-planner');details.open=true;
@@ -316,6 +407,12 @@ try{
       return true;
     })()`);
     await until('!sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")');
+    assert.equal(await js(`(()=>{
+     const details=document.querySelector('#apd-comparison-dialog .apd-work-planner');
+     return !details.open &&
+       [...details.querySelectorAll('input[type="text"]')].every(x=>x.value==='') &&
+       details.querySelectorAll('.apd-work-shift').length===0;
+    })()`),true,'Deleting the profile must clear all visible DOM values');
     assert.equal(await js(`!![...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
       .find(x=>x.querySelector('th')?.textContent==='Cruce con mi jornada actual')`),false,
      'Clearing profile must remove evaluation row');
@@ -355,6 +452,11 @@ try{
   assert.equal(state.total,'5 de 5 ofertas seleccionadas');
   assert.equal(state.items,5);
   assert.equal(state.comparisonColumns,6);
+  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-comparator-schedule-item").length'),10,
+   'All five offers must be evaluated in ten pairs');
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-comparator-schedule-list li")?.textContent||""'),
+   /Cruce de días, horas y vigencias informadas/,
+   'Highest priority collisions must appear first, above insufficient-data pairs');
   assert.ok(state.comparisonRows>=6);
   assert.equal(state.seeComparison,'Ver comparación (5)');
   assert.equal(await js('document.querySelectorAll("#apd-ver-comparacion").length'),1);
@@ -390,9 +492,194 @@ try{
     r.credentials==='omit' && r.method==='GET'));
   assert.match(geographic.pairText,/km en línea recta/);
   assert.match(geographic.origin,/^[0-9]{4}MS[0-9]{4}$/);
+  // E2E of explicit address lookup with two homonymous streets and one selected home.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   field.value='Rondeau 319';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   planner.querySelector('.apd-home-lookup').click();
+   return true;
+  })()`);
+  await until('document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  const homeSuggestions=await js(`[...document.querySelectorAll(
+   '#apd-comparador-panel .apd-home-candidate')].map(x=>x.textContent)`);
+  assert.match(homeSuggestions[0],/Wilde, Avellaneda, Buenos Aires/);
+  assert.match(homeSuggestions[1],/Bahía Blanca/);
+  const homeRequests=await js('window.__homeGeoRequests');
+  assert.equal(homeRequests.length,1);
+  assert.equal(homeRequests[0].method,'GET');
+  assert.equal(homeRequests[0].credentials,'omit');
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  const blockedHome=await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   const stored=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1')||'{}');
+   return {message:planner.querySelector('.apd-work-status').textContent,
+    homeStored:!!stored.homeLocation,
+    checkboxVisible:!planner.querySelector('.apd-home-review-row').hidden};
+  })()`);
+  assert.match(blockedHome.message,/Revisá el punto en Maps/);
+  assert.equal(blockedHome.homeStored,false,
+   'Unverified fallback home must not be silently persisted');
+  assert.equal(blockedHome.checkboxVisible,true);
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-review-check').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  const homeFacts=await js(`(()=>{
+   const value=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1'));
+   return {selected:value?.homeLocation,domicile:value?.domicile,
+    distances:[...document.querySelectorAll('.apd-comparator-home-distance')]
+      .map(x=>x.textContent)};
+  })()`);
+  assert.equal(homeFacts.selected?.source,'GEOREF_AR_V2');
+  assert.equal(homeFacts.selected?.scope,'pais');
+  assert.equal(homeFacts.selected?.reviewed,true);
+  assert.equal(homeFacts.selected?.lat,-34.7);
+  assert.equal(homeFacts.selected?.lon,-58.32);
+  assert.match(homeFacts.domicile,/RONDEAU 319, Wilde/);
+  assert.ok(homeFacts.distances.every(x=>/km en línea recta/.test(x)));
+  assert.equal(await js('document.querySelectorAll(".apd-comparator-home-map").length'),5);
+  // Opted-in autocomplete: no request until the user enables the switch,
+  // then a single debounced lookup after typing a complete street+height.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   const toggle=planner.querySelector('.apd-home-auto-toggle');
+   if(toggle.checked)throw Error('Automatic suggestions must be opt-in');
+   toggle.checked=true;
+   toggle.dispatchEvent(new Event('change',{bubbles:true}));
+   field.value='Rondeau 319';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   return true;
+  })()`);
+  await until('window.__homeGeoRequests.length===2 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('.apd-home-review-check').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  // A fully qualified address must reach the official service as geographic
+  // filters, preserving the original street+height without guessing location.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   field.value='Rondeau 319, Wilde, Avellaneda, Buenos Aires';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   planner.querySelector('.apd-home-lookup').click();
+   return true;
+  })()`);
+  await until('window.__homeGeoRequests.length===4 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===1');
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-status").textContent'),
+   /La localidad exacta no devolvió coincidencias/);
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent'),
+   /RONDEAU 319, Avellaneda, Buenos Aires/);
+  assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-home-candidate").textContent.includes("Wilde")'),false,
+   'Never invent Wilde when Georef reports only Avellaneda');
+  const searchFields=await js(`(()=>{
+   const p=new URL(window.__homeGeoRequests[2].url).searchParams;
+   return {address:p.get('direccion'),province:p.get('provincia'),
+    district:p.get('departamento'),locality:p.get('localidad_censal')};
+  })()`);
+  assert.deepEqual(searchFields,{address:'Rondeau 319',province:'Buenos Aires',
+   district:'Avellaneda',locality:'Wilde'});
+  const fallbackFields=await js(`(()=>{
+   const p=new URL(window.__homeGeoRequests[3].url).searchParams;
+   return {address:p.get('direccion'),province:p.get('provincia'),
+    district:p.get('departamento'),locality:p.get('localidad_censal')};
+  })()`);
+  assert.deepEqual(fallbackFields,{address:'Rondeau 319',province:'Buenos Aires',
+   district:'Avellaneda',locality:null});
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('.apd-home-review-check').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  const actualScope=await js(`JSON.parse(sessionStorage.getItem(
+   'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.scope`);
+  assert.equal(await js(`JSON.parse(sessionStorage.getItem(
+   'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.reviewed`),true);
+  assert.equal(actualScope,'partido',
+   'Scope of a fallback Georef result must be persisted');
+  assert.match(await js('document.querySelector(".apd-comparator-home-distance").textContent'),
+   /La localidad ingresada no pudo confirmarse/);
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
+  // E2E: the real comparison UI must surface BOTH separate weekly collisions,
+  // not just unit-test the parser or silently keep the first interval.
+  await js(`(()=>{
+   window.__offers=window.__offers.map((offer,i)=>{
+    if(i===0)return {...offer,dias_horarios:'Lunes: 08:00 a 10:00; Miércoles: 14:00 a 17:00'};
+    if(i===1)return {...offer,dias_horarios:'Lunes: 09:00 a 11:00; Miércoles: 15:00 a 18:00'};
+    if(i===2)return {...offer,dias_horarios:'',
+     lunes:'07:20 hs a 11:50 hs',martes:'07:20 hs a 11:50 hs',
+     miercoles:'14:00 hs a 18:30 hs',jueves:'14:00 hs a 18:30 hs',
+     viernes:'08:00 hs a 12:00 hs',sabado:'08:00 hs a 12:00 hs',
+     domingo:'08:00 a 12:00'};
+    return offer;
+   });
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  // Wait for the real dashboard MutationObserver to propagate the new ABC
+  // records. A pre-existing count of five is NOT evidence of refreshed rows.
+  await until(`(()=>{
+   const table=document.querySelector('#apd-comparador-panel .apd-comparator-table');
+   const row=[...(table?.querySelectorAll('tbody tr')||[])]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return row?.textContent.includes('Miércoles: 14:00 a 17:00')??false;
+  })()`);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  // Column numbers follow the visible expiry sort, not original source indexes.
+  const multiBlockText=await js(`[...document.querySelectorAll(
+   '#apd-comparison-dialog .apd-comparator-schedule-item')]
+   .find(x=>x.textContent.includes('Lunes, 09:00 a 10:00'))?.textContent||''`);
+  assert.match(multiBlockText,/Lunes, 09:00 a 10:00/);
+  assert.match(multiBlockText,/Miércoles, 15:00 a 17:00/);
+  // Browser-level regression: ABC weekday columns cannot be truncated before
+  // the comparator assesses a Sunday conflict.
+  const weeklyFallback=await js(`(()=>{
+   const dialog=document.getElementById('apd-comparison-dialog');
+   const row=[...dialog.querySelectorAll('.apd-comparator-table tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return [...row.querySelectorAll('td')].map(x=>x.textContent)
+    .find(x=>x.includes('Domingo: 08:00 a 12:00'))||'';
+  })()`);
+  // The visual table canonicalizes HS abbreviations, so its formatted value
+  // may be shorter than 180. Verify the underlying comparator preserved the
+  // entire *unformatted* ABC schedule before that presentation step.
+  const rawFallbackSize=await js(`(async()=>{
+   const core=await import('/scripts/apd-comparador-criterios.mjs?v=20261109-decision1');
+   const offer={...window.__offers[2],source_offer_key:'D_8002'};
+   return core.compareOffers({offers:[offer],now:'2035-11-01T07:00:00Z'})
+    .items[0].horario.length;
+  })()`);
+  assert.ok(rawFallbackSize>180,'Complete weekly schedule must survive the data extraction');
+  assert.match(weeklyFallback,/Domingo: 08:00 a 12:00/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
+
   await js(`(()=>{
     window.alertasState.index=5;
     document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';

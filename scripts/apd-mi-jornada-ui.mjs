@@ -2,9 +2,11 @@
  * APD optional home/work schedule form. User chooses to save to sessionStorage
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
-import {WEEKDAYS,sanitizeWorkProfile} from './apd-mi-jornada-comparador.mjs';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home3';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
+const activeHomeLookups=new Set();
 const element=(tag,cls='',value)=>{
  const el=document.createElement(tag);
  if(cls)el.className=cls;
@@ -32,6 +34,8 @@ export function savePrivatePlanner(profile){
  return clean;
 }
 export function clearPrivatePlanner(){
+ for(const controller of activeHomeLookups)controller.abort();
+ activeHomeLookups.clear();
  ephemeral=null;
  try{key()?.removeItem(STORE)}catch{}
 }
@@ -55,6 +59,8 @@ function makeWorkRow(initial={},remove){
  school.required=true;
  row.appendChild(line('Escuela donde trabajás',school));
  const days=element('div','apd-work-weekdays');
+ days.setAttribute('role','group');
+ days.setAttribute('aria-label','Días de trabajo');
  for(const day of WEEKDAYS){
   const label=element('label','apd-work-day');
   const check=input('checkbox');
@@ -81,25 +87,163 @@ function makeWorkRow(initial={},remove){
 export function createPrivatePlannerForm({onChanged}={}){
  const saved=loadPrivatePlanner();
  const details=element('details','apd-work-planner');
- details.open=!saved.jobs.length&&!saved.domicile;
+ // The public comparison remains compact; users open this optional editor explicitly.
+ details.open=false;
  const summary=element('summary','apd-work-summary',
-  saved.jobs.length?'Mi domicilio y jornadas · '+saved.jobs.length+' cargadas':
-   'Mi domicilio y jornadas actuales (opcional)');
+  saved.jobs.length?'Mis jornadas · '+saved.jobs.length+' guardadas (Insigne)':
+   'Configurar mis jornadas y domicilio (Insigne)');
  details.appendChild(summary);
  const form=element('form','apd-work-form');
  form.noValidate=true;
  const help=element('p','apd-comparator-hint',
-  'Ingresá tu domicilio de referencia y tus horarios actuales para comparar superposiciones. '+
-  'Se guarda solo en esta pestaña, no en tu cuenta ni en nuestros servidores. '+
-  'Borrá los datos antes de compartir el equipo.');
+  'Cargá tus horarios para detectar cruces y poco margen entre clases. '+
+  'Los datos se guardan solo en esta pestaña, nunca en nuestros servidores.');
  form.appendChild(help);
  const domicile=input('text',saved.domicile,180);
- domicile.placeholder='Calle, altura y localidad (opcional)';
+ domicile.placeholder='Ej.: Rondeau 319, Wilde, Avellaneda, Buenos Aires';
  domicile.autocomplete='off';
  form.appendChild(line('Domicilio de referencia (opcional)',domicile));
+ // Never transmit a private address while typing. The lookup is a one-off
+ // request to the official Georef service after explicit user interaction.
+ let homeLocation=saved.homeLocation||null,homeRequest=null,homeAutoTimer=null;
+ const homeCandidates=element('div','apd-home-candidates');
+ homeCandidates.setAttribute('role','group');
+ homeCandidates.setAttribute('aria-label','Direcciones posibles para seleccionar');
+ const homeStatus=element('p','apd-home-status');
+ homeStatus.setAttribute('role','status');
+ const homeCheck=element('p','apd-home-chosen');
+ const reviewCheck=element('input','apd-home-review-check');
+ reviewCheck.type='checkbox';
+ reviewCheck.checked=saved.homeLocation?.reviewed===true;
+ const reviewRow=element('label','apd-home-review-row');
+ reviewRow.append(reviewCheck,document.createTextNode(
+  ' Revisé el punto en Maps y acepto usar esta ubicación aproximada para las distancias.'));
+ const homeMap=element('button','btn btn-secondary apd-home-map','Ver domicilio elegido en el mapa');
+ homeMap.type='button';
+ const showChosen=()=>{
+  const uncertain=!!homeLocation&&homeLocation.scope!=='exacta';
+  const warning=uncertain?
+   ' La búsqueda no confirmó tu localidad de manera exacta. '+
+   'Verificá el punto en el mapa antes de aceptar las distancias.':'';
+  homeCheck.textContent=homeLocation?
+   'Dirección elegida: '+homeLocation.label+
+   ' (ubicación aproximada, no la puerta exacta).'+warning:
+   'Sin dirección georreferenciada seleccionada.';
+  reviewRow.hidden=!uncertain;
+  if(!uncertain)reviewCheck.checked=false;
+  homeMap.hidden=!homeLocation;
+ };
+ homeMap.addEventListener('click',()=>{
+  if(!homeLocation)return;
+  const url='https://www.google.com/maps/search/?'+new URLSearchParams({
+   api:'1',query:homeLocation.lat+','+homeLocation.lon
+  });
+  window.open(url,'_blank','noopener,noreferrer');
+ });
+ const homeLookup=element('button','btn btn-secondary apd-home-lookup',
+  'Buscar direcciones coincidentes');
+ homeLookup.type='button';
+ homeLookup.addEventListener('click',async()=>{
+  if(!details.isConnected)return;
+  homeRequest?.abort();
+  const controller=new AbortController();
+  homeRequest=controller;
+  activeHomeLookups.add(controller);
+  homeCandidates.replaceChildren();
+  homeLocation=null;
+  showChosen();
+  homeLookup.disabled=true;
+  homeStatus.textContent='Consultando direcciones de Georef Argentina...';
+  try{
+   const query=domicile.value.trim();
+   const lookup=await lookupHomeAddressesDetailed(query,{signal:controller.signal});
+   const matches=lookup.candidates;
+   if(controller.signal.aborted||!details.isConnected||
+      domicile.value.trim()!==query)return;
+   if(!matches.length){
+    homeStatus.textContent='Sin coincidencias con esa calle y altura. '+
+     'Probá incluyendo localidad, partido y provincia.';
+    return;
+   }
+   const advisory={
+    partido:'La localidad exacta no devolvió coincidencias. '+
+     'Se muestran direcciones del partido; verificá la ubicación en el mapa.',
+    provincia:'El partido indicado no devolvió coincidencias. '+
+     'Se muestran opciones de la provincia; confirmá que sea la localidad correcta.',
+    pais:'La provincia indicada no devolvió coincidencias. '+
+     'Se muestran alternativas de otras zonas: verificá antes de guardar.'
+   };
+   homeStatus.textContent=(advisory[lookup.scope]||'Elegí la localidad correcta.')+
+    ' La posición de Georef es aproximada.';
+   matches.forEach(candidate=>{
+    const choose=element('button','btn btn-secondary apd-home-candidate',candidate.label);
+    choose.type='button';
+    choose.addEventListener('click',()=>{
+     if(controller.signal.aborted)return;
+     homeLocation=candidate;
+     reviewCheck.checked=false;
+     domicile.value=candidate.label;
+     homeCandidates.replaceChildren();
+     homeStatus.textContent='Ubicación seleccionada. Guardá para usarla en las distancias.';
+     showChosen();
+    });
+    homeCandidates.appendChild(choose);
+   });
+  }catch(error){
+   if(!controller.signal.aborted){
+    const message=String(error?.message||'');
+    homeStatus.textContent=/^(?:Ingresá|Dirección demasiado)/.test(message)?
+     message:'No se pudo consultar Georef. '+
+      'Revisá la conexión o ingresá una dirección más específica.';
+   }
+  }finally{
+   activeHomeLookups.delete(controller);
+   if(homeRequest===controller){
+    homeRequest=null;homeLookup.disabled=false;
+   }
+  }
+ });
+ const homeAuto=element('input','apd-home-auto-toggle');
+ homeAuto.type='checkbox';
+ homeAuto.checked=false;
+ const homeAutoLabel=element('label','apd-home-auto-label');
+ homeAutoLabel.append(homeAuto,document.createTextNode(
+  ' Sugerir mientras escribo (usa Georef Argentina)'));
+ homeAuto.addEventListener('change',()=>{
+  if(!homeAuto.checked){clearTimeout(homeAutoTimer);return}
+  if(/[\p{L}]/u.test(domicile.value)&&/\b[1-9]\d{0,4}\b/.test(domicile.value))
+   homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
+ });
+ domicile.addEventListener('input',()=>{
+  clearTimeout(homeAutoTimer);
+  homeRequest?.abort();homeRequest=null;homeLookup.disabled=false;
+  homeLocation=null;
+  homeCandidates.replaceChildren();
+  homeStatus.textContent='';
+  showChosen();
+  if(homeAuto.checked&&details.isConnected&&
+     /[\p{L}]/u.test(domicile.value)&&/\b[1-9]\d{0,4}\b/.test(domicile.value))
+   homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
+ });
+ showChosen();
+ form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap,reviewRow);
  form.appendChild(element('p','apd-comparator-hint',
-  'El domicilio no se geolocaliza ni calcula viajes automáticamente. '+
-  'Un enlace de mapas externo solo se abrirá si vos lo elegís.'));
+  'El domicilio solo se consulta si pulsás «Buscar direcciones» o activás '+
+  '«Sugerir mientras escribo». Si hay varias opciones, agregá localidad, '+
+  'partido y provincia separados por comas. Georef recibe el texto ingresado; nunca usamos '+
+  'tu GPS ni enviamos el domicilio al servidor '+
+  'de AlertasAPD. La distancia estimada será en línea recta entre puntos.' ));
+ const travelGap=element('select','apd-work-input');
+ for(const minutes of TRAVEL_GAP_OPTIONS){
+  const option=element('option','',minutes?minutes+' minutos':'Desactivado');
+  option.value=String(minutes);
+  travelGap.appendChild(option);
+ }
+ travelGap.value=String(saved.travelGapMinutes??30);
+ form.appendChild(line('Avisarme cuando queden menos de...',travelGap));
+ form.appendChild(element('p','apd-comparator-hint',
+  'Advertencia según los minutos libres entre clases; no calcula viajes reales '+
+  'ni determina compatibilidad legal.'));
  const rows=element('div','apd-work-shifts');
  const status=element('p','apd-work-status');
  status.setAttribute('role','status');
@@ -115,20 +259,43 @@ export function createPrivatePlannerForm({onChanged}={}){
  const buttons=element('div','apd-work-actions');
  const save=element('button','btn btn-primary','Guardar en esta pestaña');
  save.type='submit';
- const erase=element('button','btn btn-secondary','Borrar mis datos de esta pestaña');
+ const erase=element('button','btn btn-secondary','Borrar mis datos');
  erase.type='button';
- erase.addEventListener('click',()=>{clearPrivatePlanner();onChanged?.()});
+ erase.addEventListener('click',()=>{
+  // Clear values from *this rendered form* before repainting. If the host
+  // callback fails, sensitive text must not remain on screen.
+  clearTimeout(homeAutoTimer);
+  homeRequest?.abort();
+  homeLocation=null;reviewCheck.checked=false;
+  homeCandidates.replaceChildren();homeStatus.textContent='';
+  showChosen();
+  clearPrivatePlanner();
+  domicile.value='';
+  travelGap.value='30';
+  rows.replaceChildren();
+  status.textContent='';
+  details.open=false;
+  homeAuto.checked=false;
+  summary.textContent='Configurar mis jornadas y domicilio (Insigne)';
+  onChanged?.();
+ });
  buttons.append(save,erase);
  form.append(buttons,status);
  form.addEventListener('submit',event=>{
   event.preventDefault();
   try{
+   clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
     const {school,days,start,end}=row._apdInputs;
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
     return {school:school.value,days:selected,start:start.value,end:end.value};
    });
-   savePrivatePlanner({domicile:domicile.value,jobs});
+   if(homeLocation&&homeLocation.scope!=='exacta'&&!reviewCheck.checked)
+    throw Error('Revisá el punto en Maps y marcá la confirmación antes de guardar.');
+   const reviewedHome=homeLocation&&reviewCheck.checked?
+    {...homeLocation,reviewed:true}:homeLocation;
+   savePrivatePlanner({domicile:domicile.value,jobs,
+    travelGapMinutes:Number(travelGap.value),homeLocation:reviewedHome});
    onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
  });
