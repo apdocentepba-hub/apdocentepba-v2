@@ -237,3 +237,7 @@
 @media(max-width:600px){
  .apd-home-lookup,.apd-home-map,.apd-home-candidate{width:100%;justify-content:flex-start}
 }
+
+.apd-home-auto-label{display:flex;align-items:center;gap:8px;cursor:pointer;
+ font-size:12px;font-weight:650;line-height:1.4;padding:4px 1px}
+.apd-home-auto-toggle{width:18px;height:18px;flex:none;accent-color:#225fae}
