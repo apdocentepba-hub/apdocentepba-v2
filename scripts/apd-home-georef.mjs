@@ -10,6 +10,40 @@ const num=(v)=>v===null||v===undefined||String(v).trim()===''?NaN:Number(v);
 const validPoint=p=>p&&Number.isFinite(num(p.lat))&&Number.isFinite(num(p.lon))&&
  num(p.lat)>=-56&&num(p.lat)<=-21&&num(p.lon)>=-74&&num(p.lon)<=-53;
 const short=v=>String(v??'').trim().slice(0,180);
+const MAX_QUERY_LENGTH=180;
+const isProvince=s=>/^(?:provincia de )?(?:buenos aires|c[oó]rdoba|santa fe|entre r[ií]os|mendoza|tucum[aá]n|salta|jujuy|chaco|corrientes|misiones|san juan|san luis|la pampa|la rioja|catamarca|formosa|neuqu[eé]n|r[ií]o negro|chubut|santa cruz|tierra del fuego|ciudad aut[oó]noma de buenos aires)$/i.test(s);
+/**
+ * Parse user-supplied comma-delimited geographic hints without guessing a
+ * locality from IP address, browser GPS or the user's account.
+ * e.g. "Rondeau 319, Wilde, Avellaneda, Buenos Aires".
+ */
+export function parseHomeAddressQuery(raw){
+ const q=String(raw??'').trim();
+ if(q.length<5||q.length>MAX_QUERY_LENGTH||/[<>\r\n]/.test(q))
+  throw Error('Ingresá calle y altura (máximo 180 caracteres)');
+ const parts=q.split(',').map(p=>p.trim()).filter(Boolean);
+ if(!parts.length||parts.length>4)throw Error('Dirección demasiado ambigua');
+ // Floor, apartment and postal numbers are not house numbers. Ignore them
+ // after the first comma or after an explicit unit/floor marker.
+ const street=parts[0].replace(/\s+(?:piso|p\.?|dpto\.?|dto\.?|depto\.?|unidad|oficina)\s*[\s\S]*$/i,'').trim();
+ const matches=[...street.matchAll(/\b([1-9]\d{0,4})\b/g)];
+ const height=matches.length?Number(matches.at(-1)[1]):null;
+ if(!height||!/\p{L}/u.test(street))
+  throw Error('Ingresá una calle y su altura');
+ const suffix=parts.slice(1);
+ const filters={};
+ if(suffix.length&&isProvince(suffix.at(-1))){
+  filters.provincia=suffix.pop().replace(/^provincia de /i,'');
+ }
+ if(suffix.length>2)throw Error('Indicá localidad, partido y provincia separados por comas');
+ if(suffix.length===2){
+  filters.localidad_censal=suffix[0];
+  filters.departamento=suffix[1];
+ }else if(suffix.length===1){
+  filters.localidad_censal=suffix[0];
+ }
+ return {street,height,filters,original:q};
+}
 export function sanitizeHomeLocation(raw){
  if(raw===null||raw===undefined)return null;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||raw.source!=='GEOREF_AR_V2')
@@ -23,12 +57,9 @@ export function sanitizeHomeLocation(raw){
 }
 export function parseGeorefCandidates(payload,originalQuery){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.direcciones))return [];
- const query=short(originalQuery);
- // A numbered street name ("25 de Mayo") is valid: the last number is the
- // house number for a common street + height entry.
- const nums=[...query.matchAll(/\b([1-9]\d{0,4})\b/g)];
- const height=nums.length?Number(nums.at(-1)[1]):null;
- if(!height)return [];
+ let parsed;
+ try{parsed=parseHomeAddressQuery(originalQuery)}catch{return []}
+ const height=parsed.height;
  const unique=new Set(),out=[];
  for(const item of payload.direcciones.slice(0,30)){
   const street=short(item?.calle?.nombre);
@@ -53,11 +84,11 @@ export function parseGeorefCandidates(payload,originalQuery){
  return out;
 }
 export async function lookupHomeAddresses(query,{fetchImpl=fetch,signal}={}){
- const q=short(query);
- if(q.length<5||q.length>180||!/[\p{L}]/u.test(q)||
-    !/\b[1-9]\d{0,4}\b/.test(q))throw Error('Ingresá calle y altura');
+ const parsed=parseHomeAddressQuery(query);
  const url=new URL(GEOREF_URL);
- url.search=new URLSearchParams({direccion:q,max:'10'});
+ // Georef officially supports these locality/department/province filters.
+ // Keep unqualified street names nation-wide for user-disambiguation.
+ url.search=new URLSearchParams({direccion:parsed.street,max:'30',...parsed.filters});
  const timeout=AbortSignal.timeout(9500);
  const combined=signal?AbortSignal.any([signal,timeout]):timeout;
  const response=await fetchImpl(url.toString(),{
@@ -70,7 +101,7 @@ export async function lookupHomeAddresses(query,{fetchImpl=fetch,signal}={}){
  const bytes=await response.arrayBuffer();
  if(bytes.byteLength>MAX_BYTES)throw Error('Respuesta demasiado extensa');
  const payload=JSON.parse(new TextDecoder().decode(bytes));
- return parseGeorefCandidates(payload,q);
+ return parseGeorefCandidates(payload,parsed.original);
 }
 export function straightLineHomeSchoolKm(home,school){
  try{
