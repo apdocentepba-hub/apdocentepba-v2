@@ -3,6 +3,7 @@
  * Local to a browser tab. No Supabase, mail, geolocation, legal eligibility,
  * transport-time predictions or connection to the official ABC platform.
  */
+import {sanitizeHomeLocation} from './apd-home-georef.mjs?v=20261110-home1';
 export const WEEKDAYS=Object.freeze([
  {id:1,name:'Lunes'}, {id:2,name:'Martes'}, {id:3,name:'Miércoles'},
  {id:4,name:'Jueves'}, {id:5,name:'Viernes'}, {id:6,name:'Sábado'},
@@ -118,7 +119,11 @@ export function sanitizeWorkProfile(data){
    throw Error('Revisá el horario de '+school);
   return {school,days:[...days].sort((a,b)=>a-b),start,end};
  });
- return {domicile,jobs:clean,travelGapMinutes};
+ const homeLocation=sanitizeHomeLocation(data.homeLocation);
+ // A manually edited address can never reuse stale coordinates.
+ if(homeLocation&&domicile!==homeLocation.label)
+  throw Error('Elegí nuevamente la dirección para verificar su ubicación');
+ return {domicile,jobs:clean,travelGapMinutes,homeLocation};
 }
 export function checkScheduleOverlap(rawOffer,profile){
  const blocks=parseOfferWeeklySegments(rawOffer);
