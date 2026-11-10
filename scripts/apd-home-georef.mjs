@@ -25,7 +25,7 @@ export function parseHomeAddressQuery(raw){
  if(!parts.length||parts.length>4)throw Error('Dirección demasiado ambigua');
  // Floor, apartment and postal numbers are not house numbers. Ignore them
  // after the first comma or after an explicit unit/floor marker.
- let street=parts[0].replace(/\s+(?:piso|p\.?|dpto\.?|dto\.?|depto\.?|unidad|oficina)\s*[\s\S]*$/i,'').trim();
+ let street=parts[0].replace(/\s+(?:(?:piso|dpto|dto|depto|unidad|oficina)\b\.?|p\.?(?=\s+\d))\s*[\s\S]*$/i,'').trim();
  const matches=[...street.matchAll(/\b([1-9]\d{0,4})\b/g)];
  const last=matches.at(-1);
  const height=last?Number(last[1]):null;
