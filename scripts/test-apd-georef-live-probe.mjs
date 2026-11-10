@@ -9,7 +9,11 @@ const BASE='https://apis.datos.gob.ar/georef/api/v2.0/direcciones';
 const MAX_BODY=180000;
 const checks=[
  {key:'official_example',params:{direccion:'Urquiza 400',provincia:'Santa Fe',departamento:'Rosario',max:'5'}},
- {key:'wilde_example',params:{direccion:'Rondeau 319',provincia:'Buenos Aires',departamento:'Avellaneda',localidad_censal:'Wilde',max:'30'}}
+ {key:'wilde_example',params:{direccion:'Rondeau 319',provincia:'Buenos Aires',departamento:'Avellaneda',localidad_censal:'Wilde',max:'30'}},
+ {key:'avellaneda_fallback',params:{direccion:'Rondeau 319',provincia:'Buenos Aires',departamento:'Avellaneda',max:'30'}},
+ {key:'buenos_aires_fallback',params:{direccion:'Rondeau 319',provincia:'Buenos Aires',max:'30'}},
+ {key:'nationwide_fallback',params:{direccion:'Rondeau 319',max:'30'}},
+ {key:'wilde_alternative_text',params:{direccion:'Rondeau al 319',provincia:'Buenos Aires',departamento:'Avellaneda',max:'30'}}
 ];
 async function probe({key,params}){
  const url=new URL(BASE);
