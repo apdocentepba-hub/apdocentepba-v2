@@ -492,7 +492,16 @@ try{
    return [...row.querySelectorAll('td')].map(x=>x.textContent)
     .find(x=>x.includes('Domingo: 08:00 a 12:00'))||'';
   })()`);
-  assert.ok(weeklyFallback.length>180,'Full seven-day fallback must exceed 180 characters');
+  // The visual table canonicalizes HS abbreviations, so its formatted value
+  // may be shorter than 180. Verify the underlying comparator preserved the
+  // entire *unformatted* ABC schedule before that presentation step.
+  const rawFallbackSize=await js(`(async()=>{
+   const core=await import('/scripts/apd-comparador-criterios.mjs?v=20261109-decision1');
+   const offer={...window.__offers[2],source_offer_key:'D_8002'};
+   return core.compareOffers({offers:[offer],now:'2035-11-01T07:00:00Z'})
+    .items[0].horario.length;
+  })()`);
+  assert.ok(rawFallbackSize>180,'Complete weekly schedule must survive the data extraction');
   assert.match(weeklyFallback,/Domingo: 08:00 a 12:00/);
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
