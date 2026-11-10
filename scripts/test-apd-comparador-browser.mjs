@@ -500,6 +500,28 @@ try{
   assert.match(homeFacts.domicile,/RONDEAU 319, Wilde/);
   assert.ok(homeFacts.distances.every(x=>/km en línea recta/.test(x)));
   assert.equal(await js('document.querySelectorAll(".apd-comparator-home-map").length'),5);
+  // Opted-in autocomplete: no request until the user enables the switch,
+  // then a single debounced lookup after typing a complete street+height.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   const toggle=planner.querySelector('.apd-home-auto-toggle');
+   if(toggle.checked)throw Error('Automatic suggestions must be opt-in');
+   toggle.checked=true;
+   toggle.dispatchEvent(new Event('change',{bubbles:true}));
+   field.value='Rondeau 319';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   return true;
+  })()`);
+  await until('window.__homeGeoRequests.length===2 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
