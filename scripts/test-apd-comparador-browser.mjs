@@ -53,7 +53,13 @@ window.fetch=async (target,opts={})=>{
     localidad_censal:{nombre:'Bahía Blanca'},departamento:{nombre:'Bahía Blanca'},
     provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-38.7,lon:-62.3}}
   ];
-  const bytes=new TextEncoder().encode(JSON.stringify({direcciones:places,cantidad:2}));
+  // Reproduce the live Georef behavior: Wilde's census-locality filter
+  // returns nothing, while Avellaneda+Buenos Aires returns a valid location.
+  const matches=u.searchParams.has('localidad_censal')?[]:
+   u.searchParams.has('departamento')?[places[0]]:places;
+  const bytes=new TextEncoder().encode(JSON.stringify({
+   direcciones:matches,cantidad:matches.length
+  }));
   return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
    arrayBuffer:async()=>bytes.buffer};
  }
@@ -533,7 +539,9 @@ try{
    planner.querySelector('.apd-home-lookup').click();
    return true;
   })()`);
-  await until('window.__homeGeoRequests.length===3 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  await until('window.__homeGeoRequests.length===4 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===1');
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-home-status").textContent'),
+   /La localidad exacta no devolvió coincidencias/);
   const searchFields=await js(`(()=>{
    const p=new URL(window.__homeGeoRequests[2].url).searchParams;
    return {address:p.get('direccion'),province:p.get('provincia'),
@@ -541,6 +549,13 @@ try{
   })()`);
   assert.deepEqual(searchFields,{address:'Rondeau 319',province:'Buenos Aires',
    district:'Avellaneda',locality:'Wilde'});
+  const fallbackFields=await js(`(()=>{
+   const p=new URL(window.__homeGeoRequests[3].url).searchParams;
+   return {address:p.get('direccion'),province:p.get('provincia'),
+    district:p.get('departamento'),locality:p.get('localidad_censal')};
+  })()`);
+  assert.deepEqual(fallbackFields,{address:'Rondeau 319',province:'Buenos Aires',
+   district:'Avellaneda',locality:null});
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
    planner.querySelector('.apd-home-candidate').click();
