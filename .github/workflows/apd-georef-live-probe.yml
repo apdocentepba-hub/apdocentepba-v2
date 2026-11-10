@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/test-apd-georef-live-probe.mjs'
       - 'scripts/test-apd-georef-live-browser.mjs'
+      - 'scripts/apd-home-georef.mjs'
       - '.github/workflows/apd-georef-live-probe.yml'
 permissions:
   contents: read
