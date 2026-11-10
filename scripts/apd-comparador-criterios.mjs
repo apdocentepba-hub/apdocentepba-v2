@@ -50,7 +50,7 @@ export function extractOfferSchedule(offer){
   if(!value)continue;
   // A weekday-specific ABC property states the day; it is not guessed from
   // a time or a free-text turno. Preserve already-explicit day prefixes.
-  const hasDayPrefix=/^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s*(?:a|al|hasta|:)\b?/i.test(value);
+  const hasDayPrefix=/^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)(?:\s*:|\s+(?:a|al|hasta)\s+)/i.test(value);
   blocks.push(hasDayPrefix?value:name+': '+value);
  }
  return safeSchedule(blocks.join('; '));
