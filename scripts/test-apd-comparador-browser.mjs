@@ -287,6 +287,28 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    const scrollLayout=await js(`(()=>{
+     const dialog=document.getElementById('apd-comparison-dialog');
+     const body=dialog.querySelector('.apd-comparator-modal-body');
+     return {
+      dialogOverflow:getComputedStyle(dialog).overflowY,
+      bodyOverflow:getComputedStyle(body).overflowY,
+      background:getComputedStyle(document.documentElement).overflowY,
+      bodyVisible:body.clientHeight>100,
+      insideViewport:dialog.getBoundingClientRect().bottom<=innerHeight+2,
+      editorInitiallyCollapsed:!dialog.querySelector('.apd-work-planner').open
+     };
+    })()`);
+    assert.equal(scrollLayout.dialogOverflow,'hidden',
+     'Dialog must not create a second vertical scrollbar');
+    assert.equal(scrollLayout.bodyOverflow,'auto',
+     'Comparison content must remain scrollable within a single region');
+    assert.equal(scrollLayout.background,'hidden',
+     'Underlying page must not scroll while modal is visible');
+    assert.equal(scrollLayout.bodyVisible,true);
+    assert.equal(scrollLayout.insideViewport,true,
+     'Dialog must remain entirely visible on mobile and desktop');
+    assert.equal(scrollLayout.editorInitiallyCollapsed,true);
     const pairFacts=await js(`(()=>{
      const panel=document.getElementById('apd-comparison-dialog');
      const box=panel.querySelector('.apd-comparator-schedule-pairs');
