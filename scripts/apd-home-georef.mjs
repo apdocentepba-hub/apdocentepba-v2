@@ -11,7 +11,7 @@ const validPoint=p=>p&&Number.isFinite(num(p.lat))&&Number.isFinite(num(p.lon))&
  num(p.lat)>=-56&&num(p.lat)<=-21&&num(p.lon)>=-74&&num(p.lon)<=-53;
 const short=v=>String(v??'').trim().slice(0,180);
 const MAX_QUERY_LENGTH=180;
-const isProvince=s=>/^(?:provincia de )?(?:buenos aires|c[oó]rdoba|santa fe|entre r[ií]os|mendoza|tucum[aá]n|salta|jujuy|chaco|corrientes|misiones|san juan|san luis|la pampa|la rioja|catamarca|formosa|neuqu[eé]n|r[ií]o negro|chubut|santa cruz|tierra del fuego|ciudad aut[oó]noma de buenos aires)$/i.test(s);
+const isProvince=s=>/^(?:provincia de )?(?:buenos aires|c[oó]rdoba|santa fe|entre r[ií]os|mendoza|tucum[aá]n|salta|jujuy|chaco|corrientes|misiones|san juan|san luis|santiago del estero|la pampa|la rioja|catamarca|formosa|neuqu[eé]n|r[ií]o negro|chubut|santa cruz|tierra del fuego|ciudad aut[oó]noma de buenos aires|ciudad de buenos aires|caba|capital federal)$/i.test(s);
 /**
  * Parse user-supplied comma-delimited geographic hints without guessing a
  * locality from IP address, browser GPS or the user's account.
@@ -29,8 +29,8 @@ export function parseHomeAddressQuery(raw){
  const matches=[...street.matchAll(/\b([1-9]\d{0,4})\b/g)];
  const height=matches.length?Number(matches.at(-1)[1]):null;
  if(!height||!/\p{L}/u.test(street))
-  throw Error('Ingresá una calle y su altura');
- const suffix=parts.slice(1);
+  throw Error('Ingresá calle y altura');
+ const suffix=parts.slice(1).filter(x=>!/^(?:[a-z])?\d{4}(?:[a-z]{3})?$/i.test(x));
  const filters={};
  if(suffix.length&&isProvince(suffix.at(-1))){
   filters.provincia=suffix.pop().replace(/^provincia de /i,'');
