@@ -5,6 +5,7 @@ import {
  sanitizeWorkProfile,checkScheduleOverlap,compareSelectedOfferSchedules
 } from './apd-mi-jornada-comparador.mjs';
 import {assessComparatorCriterion} from './apd-comparador-datos-evaluacion.mjs';
+import {sanitizeHomeLocation,parseGeorefCandidates,lookupHomeAddresses,straightLineHomeSchoolKm} from './apd-home-georef.mjs';
 const first='Lunes a viernes: 07:20 a 11:50';
 const second='Lunes a Viernes: 7:20 a 11:50';
 const hsa='Lunes a Viernes: 7:20HSA 11:50HS';
@@ -284,4 +285,76 @@ test('selected offers: mixed complete/partial blocks cannot be declared non-over
   {horario:'Martes: 08:00 a 10:00; Miércoles: SIN DATOS'}
  ]);
  assert.equal(r[0].status,'unverified');
+});
+
+
+test('Georef candidates disambiguate homonymous street+height by locality and province',()=>{
+ const payload={cantidad:3,direcciones:[
+  {calle:{nombre:'RONDEAU'},altura:{valor:319},localidad_censal:{nombre:'Wilde'},
+   departamento:{nombre:'Avellaneda'},provincia:{nombre:'Buenos Aires'},
+   ubicacion:{lat:-34.7,lon:-58.32}},
+  {calle:{nombre:'RONDEAU'},altura:{valor:319},localidad_censal:{nombre:'Bahía Blanca'},
+   departamento:{nombre:'Bahía Blanca'},provincia:{nombre:'Buenos Aires'},
+   ubicacion:{lat:-38.7,lon:-62.3}},
+  {calle:{nombre:'RONDEAU'},altura:{valor:321},provincia:{nombre:'Buenos Aires'},
+   ubicacion:{lat:-34.6,lon:-58.3}}
+ ]};
+ const results=parseGeorefCandidates(payload,'Rondeau 319');
+ assert.equal(results.length,2,'Wrong house number must not be selectable');
+ assert.match(results[0].label,/Wilde, Avellaneda, Buenos Aires/);
+ assert.match(results[1].label,/Bahía Blanca/);
+ assert.equal(results[0].source,'GEOREF_AR_V2');
+ assert.equal(results[0].height,319);
+});
+test('Georef rejects missing coordinates, mismatched heights and malformed locations',()=>{
+ const sample={calle:{nombre:'RONDEAU'},altura:{valor:319},
+  provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.3}};
+ assert.deepEqual(parseGeorefCandidates({direcciones:[sample]},'Rondeau 320'),[]);
+ assert.deepEqual(parseGeorefCandidates({direcciones:[{...sample,ubicacion:null}]},'Rondeau 319'),[]);
+ assert.deepEqual(parseGeorefCandidates({direcciones:[{...sample,ubicacion:{lat:0,lon:0}}]},'Rondeau 319'),[]);
+ assert.deepEqual(parseGeorefCandidates({direcciones:[sample]},'Rondeau'),[]);
+ assert.throws(()=>sanitizeHomeLocation({source:'GEOREF_AR_V2',label:'Rondeau 319',
+  height:319,lat:0,lon:0}));
+});
+test('Georef only fetches once after explicit call, without cookies/GPS and with bounded results',async()=>{
+ const calls=[],input='Rondeau 319';
+ const data={direcciones:[{calle:{nombre:'RONDEAU'},altura:{valor:319},
+  provincia:{nombre:'Buenos Aires'},departamento:{nombre:'Avellaneda'},
+  localidad_censal:{nombre:'Wilde'},ubicacion:{lat:-34.7,lon:-58.32}}]};
+ const fetchImpl=async (url,opts)=>{
+  calls.push({url,opts});
+  const body=new TextEncoder().encode(JSON.stringify(data));
+  return {ok:true,headers:{get:()=>String(body.byteLength)},arrayBuffer:async()=>body.buffer};
+ };
+ const matches=await lookupHomeAddresses(input,{fetchImpl});
+ assert.equal(matches.length,1);
+ assert.equal(calls.length,1);
+ const url=new URL(calls[0].url);
+ assert.equal(url.hostname,'apis.datos.gob.ar');
+ assert.equal(url.pathname,'/georef/api/v2.0/direcciones');
+ assert.equal(url.searchParams.get('direccion'),input);
+ assert.equal(calls[0].opts.credentials,'omit');
+ assert.equal(calls[0].opts.method,'GET');
+ assert.equal(calls[0].opts.mode,'cors');
+ await assert.rejects(()=>lookupHomeAddresses('Rondeau',{fetchImpl}),/calle y altura/);
+ assert.equal(calls.length,1,'Incomplete input must not trigger external requests');
+});
+test('home-to-school distance is only a straight line between chosen point and exact ABC key',()=>{
+ const home=sanitizeHomeLocation({source:'GEOREF_AR_V2',label:'Rondeau 319, Wilde, Avellaneda, Buenos Aires',
+  height:319,lat:-34.7,lon:-58.32});
+ const school={source:'ABC_WFS',exact_key_match:true,clave:'0005MS0004',lat:-34.71,lon:-58.33};
+ const km=straightLineHomeSchoolKm(home,school);
+ assert.ok(km>0&&km<3);
+ assert.equal(straightLineHomeSchoolKm(home,{...school,source:'GOOGLE'}),null);
+ assert.equal(straightLineHomeSchoolKm(home,{...school,exact_key_match:false}),null);
+ assert.equal(straightLineHomeSchoolKm(home,{...school,clave:'bad'}),null);
+});
+test('private work profile never retains coordinates after manual domicile edit',()=>{
+ const home={source:'GEOREF_AR_V2',label:'Rondeau 319, Wilde, Avellaneda, Buenos Aires',
+  height:319,lat:-34.7,lon:-58.32};
+ const good=sanitizeWorkProfile({domicile:home.label,jobs:[],homeLocation:home});
+ assert.deepEqual(good.homeLocation,home);
+ assert.throws(()=>sanitizeWorkProfile({domicile:'Calle diferente',homeLocation:home,jobs:[]}),
+  /Elegí nuevamente/);
+ assert.equal(sanitizeWorkProfile({domicile:'Calle libre',jobs:[]}).homeLocation,null);
 });
