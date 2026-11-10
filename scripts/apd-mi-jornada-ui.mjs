@@ -3,6 +3,7 @@
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
 import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {lookupHomeAddresses} from './apd-home-georef.mjs?v=20261110-home1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
 const element=(tag,cls='',value)=>{
@@ -96,12 +97,93 @@ export function createPrivatePlannerForm({onChanged}={}){
   'Los datos se guardan solo en esta pestaña, nunca en nuestros servidores.');
  form.appendChild(help);
  const domicile=input('text',saved.domicile,180);
- domicile.placeholder='Calle, altura y localidad (opcional)';
+ domicile.placeholder='Ej.: Rondeau 319, Wilde';
  domicile.autocomplete='off';
  form.appendChild(line('Domicilio de referencia (opcional)',domicile));
+ // Never transmit a private address while typing. The lookup is a one-off
+ // request to the official Georef service after explicit user interaction.
+ let homeLocation=saved.homeLocation||null,homeRequest=null;
+ const homeCandidates=element('div','apd-home-candidates');
+ homeCandidates.setAttribute('role','group');
+ homeCandidates.setAttribute('aria-label','Direcciones posibles para seleccionar');
+ const homeStatus=element('p','apd-home-status');
+ homeStatus.setAttribute('role','status');
+ const homeCheck=element('p','apd-home-chosen');
+ const homeMap=element('button','btn btn-secondary apd-home-map','Ver domicilio elegido en el mapa');
+ homeMap.type='button';
+ const showChosen=()=>{
+  homeCheck.textContent=homeLocation?
+   'Dirección elegida: '+homeLocation.label+
+   ' (ubicación aproximada; el recorrido todavía no está calculado)':
+   'Sin dirección georreferenciada seleccionada.';
+  homeMap.hidden=!homeLocation;
+ };
+ homeMap.addEventListener('click',()=>{
+  if(!homeLocation)return;
+  const url='https://www.google.com/maps/search/?'+new URLSearchParams({
+   api:'1',query:homeLocation.lat+','+homeLocation.lon
+  });
+  window.open(url,'_blank','noopener,noreferrer');
+ });
+ const homeLookup=element('button','btn btn-secondary apd-home-lookup',
+  'Buscar direcciones coincidentes');
+ homeLookup.type='button';
+ homeLookup.addEventListener('click',async()=>{
+  homeRequest?.abort();
+  const controller=new AbortController();
+  homeRequest=controller;
+  homeCandidates.replaceChildren();
+  homeLocation=null;
+  showChosen();
+  homeLookup.disabled=true;
+  homeStatus.textContent='Consultando direcciones de Georef Argentina...';
+  try{
+   const query=domicile.value.trim();
+   const matches=await lookupHomeAddresses(query,{signal:controller.signal});
+   if(controller.signal.aborted||!details.isConnected||
+      domicile.value.trim()!==query)return;
+   if(!matches.length){
+    homeStatus.textContent='Sin coincidencias con esa calle y altura. '+
+     'Probá incluyendo localidad, partido y provincia.';
+    return;
+   }
+   homeStatus.textContent='Elegí la localidad correcta. '+
+    'Las coordenadas del servicio son estimadas, no la puerta exacta.';
+   matches.forEach(candidate=>{
+    const choose=element('button','btn btn-secondary apd-home-candidate',candidate.label);
+    choose.type='button';
+    choose.addEventListener('click',()=>{
+     if(controller.signal.aborted)return;
+     homeLocation=candidate;
+     domicile.value=candidate.label;
+     homeCandidates.replaceChildren();
+     homeStatus.textContent='Ubicación seleccionada. Guardá para usarla en las distancias.';
+     showChosen();
+    });
+    homeCandidates.appendChild(choose);
+   });
+  }catch(error){
+   if(!controller.signal.aborted)
+    homeStatus.textContent='No se pudo consultar Georef. '+
+     'Revisá la conexión o ingresá una dirección más específica.';
+  }finally{
+   if(homeRequest===controller){
+    homeRequest=null;homeLookup.disabled=false;
+   }
+  }
+ });
+ domicile.addEventListener('input',()=>{
+  homeRequest?.abort();homeLocation=null;
+  homeCandidates.replaceChildren();
+  homeStatus.textContent='';
+  showChosen();
+ });
+ showChosen();
+ form.append(homeLookup,homeStatus,homeCandidates,homeCheck,homeMap);
  form.appendChild(element('p','apd-comparator-hint',
-  'El domicilio es opcional. No se geolocaliza; solo se comparte con Maps '+
-  'si elegís abrir un trayecto.'));
+  'Solo al pulsar «Buscar direcciones» se consulta Georef Argentina con el '+
+  'texto ingresado. Nunca usamos tu GPS ni enviamos el domicilio al servidor '+
+  'de AlertasAPD. La distancia estimada será en línea recta entre puntos.' ));
  const travelGap=element('select','apd-work-input');
  for(const minutes of TRAVEL_GAP_OPTIONS){
   const option=element('option','',minutes?minutes+' minutos':'Desactivado');
@@ -133,6 +215,9 @@ export function createPrivatePlannerForm({onChanged}={}){
  erase.addEventListener('click',()=>{
   // Clear values from *this rendered form* before repainting. If the host
   // callback fails, sensitive text must not remain on screen.
+  homeRequest?.abort();
+  homeLocation=null;homeCandidates.replaceChildren();homeStatus.textContent='';
+  showChosen();
   clearPrivatePlanner();
   domicile.value='';
   travelGap.value='30';
@@ -152,7 +237,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
     return {school:school.value,days:selected,start:start.value,end:end.value};
    });
-   savePrivatePlanner({domicile:domicile.value,jobs,travelGapMinutes:Number(travelGap.value)});
+   savePrivatePlanner({domicile:domicile.value,jobs,travelGapMinutes:Number(travelGap.value),homeLocation});
    onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
  });
