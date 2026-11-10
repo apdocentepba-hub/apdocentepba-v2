@@ -3,7 +3,7 @@
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
 import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
-import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home2';
+import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home3';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
 const activeHomeLookups=new Set();
