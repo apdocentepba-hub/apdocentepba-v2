@@ -82,7 +82,7 @@ export function parseGeorefCandidates(payload,originalQuery){
   const h=Number(item?.altura?.valor);
   const province=short(item?.provincia?.nombre);
   const district=short(item?.departamento?.nombre);
-  const locality=short(item?.localidad_censal?.nombre||item?.localidad?.nombre);
+  const locality=short(item?.localidad?.nombre||item?.localidad_censal?.nombre);
   const pos=item?.ubicacion;
   if(!street||!province||!Number.isSafeInteger(h)||h!==height||
      !validPoint(pos))continue;
