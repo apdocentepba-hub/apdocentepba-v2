@@ -569,6 +569,12 @@ try{
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  const actualScope=await js(`JSON.parse(sessionStorage.getItem(
+   'apd_comparador_jornada_solo_pestana_v1'))?.homeLocation?.scope`);
+  assert.equal(actualScope,'partido',
+   'Scope of a fallback Georef result must be persisted');
+  assert.match(await js('document.querySelector(".apd-comparator-home-distance").textContent'),
+   /La localidad ingresada no pudo confirmarse/);
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
