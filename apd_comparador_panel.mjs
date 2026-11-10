@@ -370,8 +370,11 @@ function renderSideBySide(items){
   data.push(['Desde mi domicilio',x=>{
    const school=state.geoByKey[String(x.escuela||'').trim().toUpperCase()];
    const km=straightLineHomeSchoolKm(privateProfile.homeLocation,school);
+   const origin=privateProfile.homeLocation;
    return km===null?'Escuela sin ubicación ABC verificada':
-    km+' km en línea recta (no es distancia de viaje)';
+    km+' km en línea recta (no es distancia de viaje)'+
+    (origin.scope&&origin.scope!=='exacta'?
+     ' · Revisar localidad elegida en el mapa':'');
   }]);
  }
  if(privateProfile?.jobs.length){
@@ -555,7 +558,9 @@ function render(){
      if(homeDistance!==null){
       entry.appendChild(node('p','apd-comparator-home-distance',
        'Desde tu domicilio seleccionado: '+homeDistance+
-       ' km en línea recta (no es el recorrido por calles).'));
+       ' km en línea recta (no es el recorrido por calles).'+
+       (home.scope&&home.scope!=='exacta'?
+        ' La localidad ingresada no pudo confirmarse; verificá el mapa.':'')));
       entry.appendChild(button('Ver recorrido desde domicilio en Maps',()=>{
        const url='https://www.google.com/maps/dir/?'+new URLSearchParams({
         api:'1',origin:home.lat+','+home.lon,
