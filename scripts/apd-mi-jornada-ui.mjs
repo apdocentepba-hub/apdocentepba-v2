@@ -3,7 +3,7 @@
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
 import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
-import {lookupHomeAddresses} from './apd-home-georef.mjs?v=20261110-home1';
+import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home2';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
 const activeHomeLookups=new Set();
@@ -144,7 +144,8 @@ export function createPrivatePlannerForm({onChanged}={}){
   homeStatus.textContent='Consultando direcciones de Georef Argentina...';
   try{
    const query=domicile.value.trim();
-   const matches=await lookupHomeAddresses(query,{signal:controller.signal});
+   const lookup=await lookupHomeAddressesDetailed(query,{signal:controller.signal});
+   const matches=lookup.candidates;
    if(controller.signal.aborted||!details.isConnected||
       domicile.value.trim()!==query)return;
    if(!matches.length){
@@ -152,8 +153,16 @@ export function createPrivatePlannerForm({onChanged}={}){
      'Probá incluyendo localidad, partido y provincia.';
     return;
    }
-   homeStatus.textContent='Elegí la localidad correcta. '+
-    'Las coordenadas del servicio son estimadas, no la puerta exacta.';
+   const advisory={
+    partido:'La localidad exacta no devolvió coincidencias. '+
+     'Se muestran direcciones del partido; verificá la ubicación en el mapa.',
+    provincia:'El partido indicado no devolvió coincidencias. '+
+     'Se muestran opciones de la provincia; confirmá que sea la localidad correcta.',
+    pais:'La provincia indicada no devolvió coincidencias. '+
+     'Se muestran alternativas de otras zonas: verificá antes de guardar.'
+   };
+   homeStatus.textContent=(advisory[lookup.scope]||'Elegí la localidad correcta.')+
+    ' La posición de Georef es aproximada.';
    matches.forEach(candidate=>{
     const choose=element('button','btn btn-secondary apd-home-candidate',candidate.label);
     choose.type='button';
