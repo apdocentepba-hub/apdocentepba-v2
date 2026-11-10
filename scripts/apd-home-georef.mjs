@@ -25,22 +25,31 @@ export function parseHomeAddressQuery(raw){
  if(!parts.length||parts.length>4)throw Error('Dirección demasiado ambigua');
  // Floor, apartment and postal numbers are not house numbers. Ignore them
  // after the first comma or after an explicit unit/floor marker.
- const street=parts[0].replace(/\s+(?:piso|p\.?|dpto\.?|dto\.?|depto\.?|unidad|oficina)\s*[\s\S]*$/i,'').trim();
+ let street=parts[0].replace(/\s+(?:(?:piso|dpto|dto|depto|unidad|oficina)\b\.?|p\.?(?=\s+\d))\s*[\s\S]*$/i,'').trim();
  const matches=[...street.matchAll(/\b([1-9]\d{0,4})\b/g)];
- const height=matches.length?Number(matches.at(-1)[1]):null;
+ const last=matches.at(-1);
+ const height=last?Number(last[1]):null;
  if(!height||!/\p{L}/u.test(street))
   throw Error('Ingresá calle y altura');
  const suffix=parts.slice(1).filter(x=>!/^(?:[a-z])?\d{4}(?:[a-z]{3})?$/i.test(x));
+ // Support "Rondeau 319 Wilde" (no comma). A trailing locality after the
+ // last house number is not part of the street. Do not split corner hints.
+ const after=street.slice(last.index+last[0].length).trim();
+ if(after&&/^[\p{L}\p{M} .'-]{2,65}$/u.test(after)&&
+    !/^(?:esq(?:uina)?|entre|intersecci[oó]n|altura)\b/i.test(after)){
+  suffix.unshift(after);
+  street=street.slice(0,last.index+last[0].length).trim();
+ }
  const filters={};
  if(suffix.length&&isProvince(suffix.at(-1))){
   filters.provincia=suffix.pop().replace(/^provincia de /i,'');
  }
  if(suffix.length>2)throw Error('Indicá localidad, partido y provincia separados por comas');
  if(suffix.length===2){
-  filters.localidad_censal=suffix[0];
+  filters.localidad=suffix[0];
   filters.departamento=suffix[1];
  }else if(suffix.length===1){
-  filters.localidad_censal=suffix[0];
+  filters.localidad=suffix[0];
  }
  return {street,height,filters,original:q};
 }
@@ -73,7 +82,7 @@ export function parseGeorefCandidates(payload,originalQuery){
   const h=Number(item?.altura?.valor);
   const province=short(item?.provincia?.nombre);
   const district=short(item?.departamento?.nombre);
-  const locality=short(item?.localidad_censal?.nombre||item?.localidad?.nombre);
+  const locality=short(item?.localidad?.nombre||item?.localidad_censal?.nombre);
   const pos=item?.ubicacion;
   if(!street||!province||!Number.isSafeInteger(h)||h!==height||
      !validPoint(pos))continue;
@@ -99,19 +108,16 @@ export function parseGeorefCandidates(payload,originalQuery){
 export async function lookupHomeAddressesDetailed(query,{fetchImpl=fetch,signal}={}){
  const parsed=parseHomeAddressQuery(query);
  const filters=parsed.filters;
- const initialScope=filters.localidad_censal?'exacta':
+ const initialScope=filters.localidad?'exacta':
   filters.departamento?'partido':filters.provincia?'provincia':'pais';
  const stages=[
   {scope:initialScope,filters},
-  ...(filters.localidad_censal?[{scope:filters.departamento?'partido':
-   filters.provincia?'provincia':'pais',filters:{
+  // Avoid showing provinces unrelated to an explicitly named locality.
+  // When a department was given, only broaden to that department.
+  ...(filters.localidad&&filters.departamento?[{scope:'partido',filters:{
    ...(filters.provincia?{provincia:filters.provincia}:{}),
-   ...(filters.departamento?{departamento:filters.departamento}:{})
-  }}]:[]),
-  ...(filters.departamento?[{scope:filters.provincia?'provincia':'pais',filters:{
-   ...(filters.provincia?{provincia:filters.provincia}:{})
-  }}]:[]),
-  ...(filters.provincia?[{scope:'pais',filters:{}}]:[])
+   departamento:filters.departamento
+  }}]:[])
  ];
  const unique=new Set();
  // Combined timeout is shared by all attempts. Never keep making requests

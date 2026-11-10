@@ -365,7 +365,7 @@ test('Georef: comma-delimited Wilde and Avellaneda hints become official API fil
  assert.equal(parsed.street,'Rondeau 319');
  assert.equal(parsed.height,319);
  assert.deepEqual(parsed.filters,{
-  provincia:'Buenos Aires',localidad_censal:'Wilde',departamento:'Avellaneda'
+  provincia:'Buenos Aires',localidad:'Wilde',departamento:'Avellaneda'
  });
  const queried=[];
  const fetchImpl=async(url,opts)=>{
@@ -383,7 +383,7 @@ test('Georef: comma-delimited Wilde and Avellaneda hints become official API fil
  assert.equal(url.searchParams.get('direccion'),'Rondeau 319');
  assert.equal(url.searchParams.get('provincia'),'Buenos Aires');
  assert.equal(url.searchParams.get('departamento'),'Avellaneda');
- assert.equal(url.searchParams.get('localidad_censal'),'Wilde');
+ assert.equal(url.searchParams.get('localidad'),'Wilde');
  assert.equal(url.searchParams.get('max'),'30');
  assert.equal(queried[0].opts.credentials,'omit');
 });
@@ -391,11 +391,55 @@ test('Georef: numbered street, floor and postal code must not replace street hei
  assert.equal(parseHomeAddressQuery('25 de Mayo 480').height,480);
  assert.equal(parseHomeAddressQuery('Rondeau 319, Wilde, 1875').height,319);
  assert.equal(parseHomeAddressQuery('Rondeau 319 piso 2, Wilde').height,319);
- assert.equal(parseHomeAddressQuery('Rondeau 319, Wilde').filters.localidad_censal,'Wilde');
+ assert.equal(parseHomeAddressQuery('Rondeau 319, Wilde').filters.localidad,'Wilde');
  assert.equal(parseHomeAddressQuery('Rondeau 319').filters.provincia,undefined);
  const result={direcciones:[{calle:{nombre:'RONDEAU'},altura:{valor:319},
   provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.32}}]};
  assert.equal(parseGeorefCandidates(result,'Rondeau 319 piso 2, Wilde').length,1);
+});
+test('real screenshot input: Rondeau 319 wilde without commas resolves the official localidad filter',async()=>{
+ const parsed=parseHomeAddressQuery('rondeau 319 wilde');
+ assert.equal(parsed.street,'rondeau 319');
+ assert.equal(parsed.height,319);
+ assert.deepEqual(parsed.filters,{localidad:'wilde'});
+ assert.deepEqual(parseHomeAddressQuery('25 de Mayo 480 Mar del Plata').filters,
+  {localidad:'Mar del Plata'});
+ const urls=[];
+ const fixture={cantidad:1,direcciones:[{
+  calle:{nombre:'CNL JOSE RONDEAU'},altura:{valor:319},
+  localidad:{nombre:'Wilde'},localidad_censal:{nombre:'Avellaneda'},
+  departamento:{nombre:'Avellaneda'},provincia:{nombre:'Buenos Aires'},
+  ubicacion:{lat:-34.7052,lon:-58.3249}
+ }]};
+ const bytes=new TextEncoder().encode(JSON.stringify(fixture));
+ const fetchImpl=async url=>{
+  urls.push(new URL(url));
+  return {ok:true,headers:{get:()=>String(bytes.byteLength)},
+   arrayBuffer:async()=>bytes.buffer};
+ };
+ const result=await lookupHomeAddressesDetailed('rondeau 319 wilde',{fetchImpl});
+ assert.equal(result.scope,'exacta');
+ assert.equal(result.candidates.length,1);
+ assert.equal(result.candidates[0].label,
+  'CNL JOSE RONDEAU 319, Wilde, Avellaneda, Buenos Aires');
+ assert.equal(urls.length,1);
+ assert.equal(urls[0].searchParams.get('direccion'),'rondeau 319');
+ assert.equal(urls[0].searchParams.get('localidad'),'wilde');
+ assert.equal(urls[0].searchParams.has('localidad_censal'),false);
+});
+test('explicit locality without match never falls back to unrelated national streets',async()=>{
+ const urls=[],empty=new TextEncoder().encode('{"cantidad":0,"direcciones":[]}');
+ const fetchImpl=async url=>{
+  urls.push(new URL(url));
+  return {ok:true,headers:{get:()=>String(empty.byteLength)},
+   arrayBuffer:async()=>empty.buffer};
+ };
+ const result=await lookupHomeAddressesDetailed('rondeau 319 wilde',{fetchImpl});
+ assert.equal(result.candidates.length,0);
+ assert.equal(result.scope,'sin_resultados');
+ assert.equal(result.attempted,1);
+ assert.equal(urls.length,1);
+ assert.equal(urls[0].searchParams.get('localidad'),'wilde');
 });
 test('Georef: oversized, unnumbered and injected addresses fail before network',async()=>{
  const calls=[];
@@ -421,7 +465,7 @@ test('Georef: a missing Wilde locality retries only within Avellaneda first',asy
  const fetchImpl=async(url,opts)=>{
   const u=new URL(url);
   calls.push({scope:Object.fromEntries(u.searchParams),opts});
-  return u.searchParams.has('localidad_censal')?payload([]):payload([match]);
+  return u.searchParams.has('localidad')?payload([]):payload([match]);
  };
  const result=await lookupHomeAddressesDetailed(
   'Rondeau 319, Wilde, Avellaneda, Buenos Aires',{fetchImpl});
@@ -429,8 +473,8 @@ test('Georef: a missing Wilde locality retries only within Avellaneda first',asy
  assert.equal(result.attempted,2);
  assert.equal(result.candidates.length,1);
  assert.equal(calls.length,2);
- assert.equal(calls[0].scope.localidad_censal,'Wilde');
- assert.equal(calls[1].scope.localidad_censal,undefined);
+ assert.equal(calls[0].scope.localidad,'Wilde');
+ assert.equal(calls[1].scope.localidad,undefined);
  assert.equal(calls[1].scope.departamento,'Avellaneda');
  assert.equal(calls[1].scope.provincia,'Buenos Aires');
  assert.equal(calls[0].opts.credentials,'omit');
@@ -446,8 +490,8 @@ test('Georef: all retries bounded and aborted queries never continue',async()=>{
   'Rondeau 319, Wilde, Avellaneda, Buenos Aires',{fetchImpl});
  assert.equal(out.candidates.length,0);
  assert.equal(out.scope,'sin_resultados');
- assert.equal(out.attempted,4);
- assert.equal(calls.length,4);
+ assert.equal(out.attempted,2);
+ assert.equal(calls.length,2);
  const controller=new AbortController(),afterAbort=[];
  const fetchAbort=async url=>{
   afterAbort.push(url);controller.abort();
