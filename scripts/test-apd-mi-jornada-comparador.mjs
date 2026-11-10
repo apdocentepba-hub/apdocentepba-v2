@@ -5,7 +5,7 @@ import {
  sanitizeWorkProfile,checkScheduleOverlap,compareSelectedOfferSchedules
 } from './apd-mi-jornada-comparador.mjs';
 import {assessComparatorCriterion} from './apd-comparador-datos-evaluacion.mjs';
-import {sanitizeHomeLocation,parseGeorefCandidates,lookupHomeAddresses,straightLineHomeSchoolKm,parseHomeAddressQuery} from './apd-home-georef.mjs';
+import {sanitizeHomeLocation,parseGeorefCandidates,lookupHomeAddresses,lookupHomeAddressesDetailed,straightLineHomeSchoolKm,parseHomeAddressQuery} from './apd-home-georef.mjs';
 const first='Lunes a viernes: 07:20 a 11:50';
 const second='Lunes a Viernes: 7:20 a 11:50';
 const hsa='Lunes a Viernes: 7:20HSA 11:50HS';
@@ -405,4 +405,56 @@ test('Georef: oversized, unnumbered and injected addresses fail before network',
   await assert.rejects(()=>lookupHomeAddresses(query,{fetchImpl}));
  }
  assert.equal(calls.length,0);
+});
+
+test('Georef: a missing Wilde locality retries only within Avellaneda first',async()=>{
+ const calls=[];
+ const payload=items=>{
+  const bytes=new TextEncoder().encode(JSON.stringify({
+   cantidad:items.length,direcciones:items
+  }));
+  return {ok:true,headers:{get:()=>String(bytes.byteLength)},arrayBuffer:async()=>bytes.buffer};
+ };
+ const match={calle:{nombre:'RONDEAU'},altura:{valor:319},
+  departamento:{nombre:'Avellaneda'},provincia:{nombre:'Buenos Aires'},
+  ubicacion:{lat:-34.7,lon:-58.32}};
+ const fetchImpl=async(url,opts)=>{
+  const u=new URL(url);
+  calls.push({scope:Object.fromEntries(u.searchParams),opts});
+  return u.searchParams.has('localidad_censal')?payload([]):payload([match]);
+ };
+ const result=await lookupHomeAddressesDetailed(
+  'Rondeau 319, Wilde, Avellaneda, Buenos Aires',{fetchImpl});
+ assert.equal(result.scope,'partido');
+ assert.equal(result.attempted,2);
+ assert.equal(result.candidates.length,1);
+ assert.equal(calls.length,2);
+ assert.equal(calls[0].scope.localidad_censal,'Wilde');
+ assert.equal(calls[1].scope.localidad_censal,undefined);
+ assert.equal(calls[1].scope.departamento,'Avellaneda');
+ assert.equal(calls[1].scope.provincia,'Buenos Aires');
+ assert.equal(calls[0].opts.credentials,'omit');
+ assert.match(result.candidates[0].label,/Avellaneda, Buenos Aires/);
+});
+test('Georef: all retries bounded and aborted queries never continue',async()=>{
+ const calls=[],body=new TextEncoder().encode('{"cantidad":0,"direcciones":[]}');
+ const fetchImpl=async(url)=>{
+  calls.push(url);
+  return {ok:true,headers:{get:()=>String(body.byteLength)},arrayBuffer:async()=>body.buffer};
+ };
+ const out=await lookupHomeAddressesDetailed(
+  'Rondeau 319, Wilde, Avellaneda, Buenos Aires',{fetchImpl});
+ assert.equal(out.candidates.length,0);
+ assert.equal(out.scope,'sin_resultados');
+ assert.equal(out.attempted,4);
+ assert.equal(calls.length,4);
+ const controller=new AbortController(),afterAbort=[];
+ const fetchAbort=async url=>{
+  afterAbort.push(url);controller.abort();
+  return {ok:true,headers:{get:()=>String(body.byteLength)},arrayBuffer:async()=>body.buffer};
+ };
+ await assert.rejects(()=>lookupHomeAddressesDetailed(
+  'Rondeau 319, Wilde, Avellaneda, Buenos Aires',
+  {fetchImpl:fetchAbort,signal:controller.signal}),/Consulta cancelada/);
+ assert.equal(afterAbort.length,1);
 });
