@@ -20,7 +20,7 @@ async function probe({key,params}){
  url.search=new URLSearchParams(params);
  const info={key,endpoint:url.origin+url.pathname,status:null,content_type:'',
   cors_allow_origin:null,result_count:null,structure_valid:false,
-  any_valid_height:false,any_geocoordinates:false,error:null};
+  any_valid_height:false,any_geocoordinates:false,area_names:[],error:null};
  try{
   const response=await fetch(url,{method:'GET',headers:{Accept:'application/json'},
    credentials:'omit',signal:AbortSignal.timeout(12000),redirect:'error'});
@@ -37,6 +37,12 @@ async function probe({key,params}){
    Number.isInteger(data.cantidad);
   if(!info.structure_valid)throw Error('unexpected_api_schema');
   info.result_count=data.cantidad;
+  // Only public administrative labels, NOT address coordinates or user data.
+  info.area_names=data.direcciones.slice(0,3).map(item=>({
+   localidad:String(item?.localidad_censal?.nombre||'').slice(0,55),
+   partido:String(item?.departamento?.nombre||'').slice(0,55),
+   provincia:String(item?.provincia?.nombre||'').slice(0,55)
+  }));
   info.any_valid_height=data.direcciones.some(item=>
    Number.isInteger(item?.altura?.valor)&&item.altura.valor===Number(params.direccion.match(/\d+$/)?.[0]));
   info.any_geocoordinates=data.direcciones.some(item=>{
