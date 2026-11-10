@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0C2641"/><stop offset="1" stop-color="#105A6B"/></linearGradient></defs>
+<rect width="1080" height="1350" fill="url(#bg)"/>
+<circle cx="1040" cy="90" r="360" fill="#55D7C7" opacity=".11"/>
+<text x="70" y="100" font-family="Arial,DejaVu Sans,sans-serif" font-size="40" font-weight="bold" fill="#B9F6E5">APDocentePBA</text>
+<rect x="70" y="139" width="435" height="53" rx="23" fill="#205C6A"/>
+<text x="98" y="174" font-family="Arial,DejaVu Sans,sans-serif" font-size="24" font-weight="bold" fill="#B6F9E7">GUÍA DOCENTE · SERVADO</text>
+<text x="70" y="284" font-family="Arial,DejaVu Sans,sans-serif" font-size="67" font-weight="bold" fill="#FFFFFF">¿Se te pasó una</text>
+<text x="70" y="366" font-family="Arial,DejaVu Sans,sans-serif" font-size="67" font-weight="bold" fill="#FFFFFF">inscripción?</text>
+<text x="70" y="443" font-family="Arial,DejaVu Sans,sans-serif" font-size="36" fill="#B8F5E3">Revisá el calendario oficial antes de anotarte.</text>
+<rect x="62" y="501" width="956" height="565" rx="33" fill="#F7FAF9"/>
+<g font-family="Arial,DejaVu Sans,sans-serif" fill="#14384D">
+<rect x="91" y="540" width="65" height="65" rx="17" fill="#D8F3EA"/>
+<text x="110" y="585" font-size="34" font-weight="bold">1</text>
+<text x="184" y="570" font-size="35" font-weight="bold">Entrá al calendario</text>
+<text x="184" y="614" font-size="27">de inscripciones de SerVaDo.</text>
+<line x1="97" y1="652" x2="978" y2="652" stroke="#D8E4E5" stroke-width="2"/>
+<rect x="91" y="690" width="65" height="65" rx="17" fill="#D8F3EA"/>
+<text x="110" y="735" font-size="34" font-weight="bold">2</text>
+<text x="184" y="720" font-size="35" font-weight="bold">Buscá tu trámite</text>
+<text x="184" y="764" font-size="27">y comprobá el estado y el plazo.</text>
+<line x1="97" y1="803" x2="978" y2="803" stroke="#D8E4E5" stroke-width="2"/>
+<rect x="91" y="839" width="65" height="65" rx="17" fill="#D8F3EA"/>
+<text x="110" y="884" font-size="34" font-weight="bold">3</text>
+<text x="184" y="869" font-size="35" font-weight="bold">Si está habilitado,</text>
+<text x="184" y="913" font-size="27">seguí el acceso oficial con ABC.</text>
+<rect x="94" y="961" width="885" height="72" rx="14" fill="#E4F5EE"/>
+<text x="114" y="1006" font-size="26" font-weight="bold">Una alerta NO reemplaza una inscripción.</text>
+</g>
+<text x="70" y="1152" font-family="Arial,DejaVu Sans,sans-serif" font-size="32" font-weight="bold" fill="#B9F6E5">Fuente: servido.abc.gob.ar/calendario-inscripciones</text>
+<text x="70" y="1207" font-family="Arial,DejaVu Sans,sans-serif" font-size="27" fill="#E7F6F5">Guardá esta guía y compartila con un colega.</text>
+<text x="70" y="1281" font-family="Arial,DejaVu Sans,sans-serif" font-size="22" fill="#C9E6E6">APDocentePBA: plataforma independiente de ABC/DGCyE.</text>
+</svg>
