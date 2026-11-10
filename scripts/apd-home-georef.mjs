@@ -53,7 +53,11 @@ export function sanitizeHomeLocation(raw){
  if(label.length<8||/[\r\n<>]/.test(label))throw Error('Dirección seleccionada inválida');
  const height=Number(raw.height);
  if(!Number.isSafeInteger(height)||height<1||height>99999)throw Error('Altura inválida');
- return {source:'GEOREF_AR_V2',label,height,lat:num(raw.lat),lon:num(raw.lon)};
+ const scope=raw.scope;
+ if(scope!==undefined&&!['exacta','partido','provincia','pais'].includes(scope))
+  throw Error('Origen de georreferencia inválido');
+ return {source:'GEOREF_AR_V2',label,height,lat:num(raw.lat),lon:num(raw.lon),
+  ...(scope!==undefined?{scope}:{})};
 }
 export function parseGeorefCandidates(payload,originalQuery){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.direcciones))return [];
@@ -129,7 +133,9 @@ export async function lookupHomeAddressesDetailed(query,{fetchImpl=fetch,signal}
   if(bytes.byteLength>MAX_BYTES)throw Error('Respuesta demasiado extensa');
   const payload=JSON.parse(new TextDecoder().decode(bytes));
   const candidates=parseGeorefCandidates(payload,parsed.original);
-  if(candidates.length)return {candidates,scope:stage.scope,attempted};
+  if(candidates.length)return {candidates:candidates.map(candidate=>({
+   ...candidate,scope:stage.scope
+  })),scope:stage.scope,attempted};
  }
  return {candidates:[],scope:'sin_resultados',attempted};
 }
