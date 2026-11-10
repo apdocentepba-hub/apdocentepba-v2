@@ -252,3 +252,27 @@
 .apd-home-review-check{margin-top:2px;width:19px;height:19px;
  accent-color:#225fae;flex:none}
 .apd-home-review-check:focus-visible{outline:3px solid #225fae;outline-offset:3px}
+
+
+/* Single-scroll comparison dialog: the screenshot from production exposed
+   a scrollable dialog inside a scrollable body over the scrolling document.
+   Keep the header fixed, constrain the body, and freeze the background only
+   while this *specific* native dialog is open. */
+dialog.apd-comparator-dialog[open]{
+ display:flex;flex-direction:column;
+ max-height:calc(100dvh - 28px);
+ overflow:hidden;
+}
+dialog.apd-comparator-dialog[open] .apd-comparator-modal-head{
+ flex:0 0 auto;
+}
+dialog.apd-comparator-dialog[open] .apd-comparator-modal-body{
+ flex:1 1 auto;min-height:0;
+ max-height:none;overflow-x:hidden;overflow-y:auto;
+ overscroll-behavior:contain;
+ scrollbar-gutter:stable;
+}
+html:has(dialog.apd-comparator-dialog[open]),
+body:has(dialog.apd-comparator-dialog[open]){
+ overflow:hidden;
+}
