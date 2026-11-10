@@ -6,6 +6,7 @@ import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-
 import {lookupHomeAddresses} from './apd-home-georef.mjs?v=20261110-home1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
+const activeHomeLookups=new Set();
 const element=(tag,cls='',value)=>{
  const el=document.createElement(tag);
  if(cls)el.className=cls;
@@ -33,6 +34,8 @@ export function savePrivatePlanner(profile){
  return clean;
 }
 export function clearPrivatePlanner(){
+ for(const controller of activeHomeLookups)controller.abort();
+ activeHomeLookups.clear();
  ephemeral=null;
  try{key()?.removeItem(STORE)}catch{}
 }
@@ -102,7 +105,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.appendChild(line('Domicilio de referencia (opcional)',domicile));
  // Never transmit a private address while typing. The lookup is a one-off
  // request to the official Georef service after explicit user interaction.
- let homeLocation=saved.homeLocation||null,homeRequest=null;
+ let homeLocation=saved.homeLocation||null,homeRequest=null,homeAutoTimer=null;
  const homeCandidates=element('div','apd-home-candidates');
  homeCandidates.setAttribute('role','group');
  homeCandidates.setAttribute('aria-label','Direcciones posibles para seleccionar');
@@ -129,9 +132,11 @@ export function createPrivatePlannerForm({onChanged}={}){
   'Buscar direcciones coincidentes');
  homeLookup.type='button';
  homeLookup.addEventListener('click',async()=>{
+  if(!details.isConnected)return;
   homeRequest?.abort();
   const controller=new AbortController();
   homeRequest=controller;
+  activeHomeLookups.add(controller);
   homeCandidates.replaceChildren();
   homeLocation=null;
   showChosen();
@@ -167,22 +172,39 @@ export function createPrivatePlannerForm({onChanged}={}){
     homeStatus.textContent='No se pudo consultar Georef. '+
      'Revisá la conexión o ingresá una dirección más específica.';
   }finally{
+   activeHomeLookups.delete(controller);
    if(homeRequest===controller){
     homeRequest=null;homeLookup.disabled=false;
    }
   }
  });
+ const homeAuto=element('input','apd-home-auto-toggle');
+ homeAuto.type='checkbox';
+ homeAuto.checked=false;
+ const homeAutoLabel=element('label','apd-home-auto-label');
+ homeAutoLabel.append(homeAuto,document.createTextNode(
+  ' Sugerir mientras escribo (usa Georef Argentina)'));
+ homeAuto.addEventListener('change',()=>{
+  if(!homeAuto.checked){clearTimeout(homeAutoTimer);return}
+  if(/[\\p{L}]/u.test(domicile.value)&&/\\b[1-9]\\d{0,4}\\b/.test(domicile.value))
+   homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
+ });
  domicile.addEventListener('input',()=>{
+  clearTimeout(homeAutoTimer);
   homeRequest?.abort();homeLocation=null;
   homeCandidates.replaceChildren();
   homeStatus.textContent='';
   showChosen();
+  if(homeAuto.checked&&details.isConnected&&
+     /[\\p{L}]/u.test(domicile.value)&&/\\b[1-9]\\d{0,4}\\b/.test(domicile.value))
+   homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
  });
  showChosen();
- form.append(homeLookup,homeStatus,homeCandidates,homeCheck,homeMap);
+ form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap);
  form.appendChild(element('p','apd-comparator-hint',
-  'Solo al pulsar «Buscar direcciones» se consulta Georef Argentina con el '+
-  'texto ingresado. Nunca usamos tu GPS ni enviamos el domicilio al servidor '+
+  'El domicilio solo se consulta si pulsás «Buscar direcciones» o activás '+
+  '«Sugerir mientras escribo». Georef recibe el texto ingresado; nunca usamos '+
+  'tu GPS ni enviamos el domicilio al servidor '+
   'de AlertasAPD. La distancia estimada será en línea recta entre puntos.' ));
  const travelGap=element('select','apd-work-input');
  for(const minutes of TRAVEL_GAP_OPTIONS){
@@ -215,6 +237,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  erase.addEventListener('click',()=>{
   // Clear values from *this rendered form* before repainting. If the host
   // callback fails, sensitive text must not remain on screen.
+  clearTimeout(homeAutoTimer);
   homeRequest?.abort();
   homeLocation=null;homeCandidates.replaceChildren();homeStatus.textContent='';
   showChosen();
@@ -224,6 +247,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   rows.replaceChildren();
   status.textContent='';
   details.open=false;
+  homeAuto.checked=false;
   summary.textContent='Configurar mis jornadas y domicilio (Insigne)';
   onChanged?.();
  });
@@ -232,6 +256,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.addEventListener('submit',event=>{
   event.preventDefault();
   try{
+   clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
     const {school,days,start,end}=row._apdInputs;
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
