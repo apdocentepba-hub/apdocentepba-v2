@@ -5,7 +5,7 @@ import {
  sanitizeWorkProfile,checkScheduleOverlap,compareSelectedOfferSchedules
 } from './apd-mi-jornada-comparador.mjs';
 import {assessComparatorCriterion} from './apd-comparador-datos-evaluacion.mjs';
-import {sanitizeHomeLocation,parseGeorefCandidates,lookupHomeAddresses,straightLineHomeSchoolKm} from './apd-home-georef.mjs';
+import {sanitizeHomeLocation,parseGeorefCandidates,lookupHomeAddresses,straightLineHomeSchoolKm,parseHomeAddressQuery} from './apd-home-georef.mjs';
 const first='Lunes a viernes: 07:20 a 11:50';
 const second='Lunes a Viernes: 7:20 a 11:50';
 const hsa='Lunes a Viernes: 7:20HSA 11:50HS';
@@ -357,4 +357,52 @@ test('private work profile never retains coordinates after manual domicile edit'
  assert.throws(()=>sanitizeWorkProfile({domicile:'Calle diferente',homeLocation:home,jobs:[]}),
   /Elegí nuevamente/);
  assert.equal(sanitizeWorkProfile({domicile:'Calle libre',jobs:[]}).homeLocation,null);
+});
+
+
+test('Georef: comma-delimited Wilde and Avellaneda hints become official API filters',async()=>{
+ const parsed=parseHomeAddressQuery('Rondeau 319, Wilde, Avellaneda, Buenos Aires');
+ assert.equal(parsed.street,'Rondeau 319');
+ assert.equal(parsed.height,319);
+ assert.deepEqual(parsed.filters,{
+  provincia:'Buenos Aires',localidad_censal:'Wilde',departamento:'Avellaneda'
+ });
+ const queried=[];
+ const fetchImpl=async(url,opts)=>{
+  queried.push({url,opts});
+  const raw=new TextEncoder().encode(JSON.stringify({
+   direcciones:[{calle:{nombre:'RONDEAU'},altura:{valor:319},
+    provincia:{nombre:'Buenos Aires'},departamento:{nombre:'Avellaneda'},
+    localidad_censal:{nombre:'Wilde'},ubicacion:{lat:-34.7,lon:-58.32}}]
+  }));
+  return {ok:true,headers:{get:()=>String(raw.length)},arrayBuffer:async()=>raw.buffer};
+ };
+ const actual=await lookupHomeAddresses(parsed.original,{fetchImpl});
+ assert.equal(actual.length,1);
+ const url=new URL(queried[0].url);
+ assert.equal(url.searchParams.get('direccion'),'Rondeau 319');
+ assert.equal(url.searchParams.get('provincia'),'Buenos Aires');
+ assert.equal(url.searchParams.get('departamento'),'Avellaneda');
+ assert.equal(url.searchParams.get('localidad_censal'),'Wilde');
+ assert.equal(url.searchParams.get('max'),'30');
+ assert.equal(queried[0].opts.credentials,'omit');
+});
+test('Georef: numbered street, floor and postal code must not replace street height',()=>{
+ assert.equal(parseHomeAddressQuery('25 de Mayo 480').height,480);
+ assert.equal(parseHomeAddressQuery('Rondeau 319, Wilde, 1875').height,319);
+ assert.equal(parseHomeAddressQuery('Rondeau 319 piso 2, Wilde').height,319);
+ assert.equal(parseHomeAddressQuery('Rondeau 319, Wilde').filters.localidad_censal,'Wilde');
+ assert.equal(parseHomeAddressQuery('Rondeau 319').filters.provincia,undefined);
+ const result={direcciones:[{calle:{nombre:'RONDEAU'},altura:{valor:319},
+  provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.32}}]};
+ assert.equal(parseGeorefCandidates(result,'Rondeau 319 piso 2, Wilde').length,1);
+});
+test('Georef: oversized, unnumbered and injected addresses fail before network',async()=>{
+ const calls=[];
+ const fetchImpl=async()=>{calls.push(1);throw Error('network request must not run');};
+ for(const query of ['Rondeau','Rondeau 319'+'A'.repeat(180),'<script> Rondeau 319',
+  'Rondeau 319\nWilde']){
+  await assert.rejects(()=>lookupHomeAddresses(query,{fetchImpl}));
+ }
+ assert.equal(calls.length,0);
 });
