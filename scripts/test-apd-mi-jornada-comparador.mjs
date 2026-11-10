@@ -458,3 +458,37 @@ test('Georef: all retries bounded and aborted queries never continue',async()=>{
   {fetchImpl:fetchAbort,signal:controller.signal}),/Consulta cancelada/);
  assert.equal(afterAbort.length,1);
 });
+
+test('A national Georef query must never claim an exact locality',async()=>{
+ const fixture={direcciones:[{
+  calle:{nombre:'RONDEAU'},altura:{valor:319},
+  localidad_censal:{nombre:'Wilde'},departamento:{nombre:'Avellaneda'},
+  provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.32}
+ }],cantidad:1};
+ const bytes=new TextEncoder().encode(JSON.stringify(fixture));
+ const fetchImpl=async()=>({
+  ok:true,headers:{get:()=>String(bytes.byteLength)},
+  arrayBuffer:async()=>bytes.buffer
+ });
+ const nationwide=await lookupHomeAddressesDetailed('Rondeau 319',{fetchImpl});
+ assert.equal(nationwide.scope,'pais');
+ assert.equal(nationwide.candidates[0].scope,'pais');
+ const provincial=await lookupHomeAddressesDetailed('Rondeau 319, Buenos Aires',{fetchImpl});
+ assert.equal(provincial.scope,'provincia');
+ assert.equal(provincial.candidates[0].scope,'provincia');
+ const exact=await lookupHomeAddressesDetailed(
+  'Rondeau 319, Wilde, Avellaneda, Buenos Aires',{fetchImpl});
+ assert.equal(exact.scope,'exacta');
+ assert.equal(exact.candidates[0].scope,'exacta');
+});
+test('A reviewed approximate home survives private validation without claiming official certainty',()=>{
+ const initial={source:'GEOREF_AR_V2',label:'Rondeau 319, Wilde, Avellaneda, Buenos Aires',
+  height:319,lat:-34.7,lon:-58.32,scope:'partido'};
+ const reviewed=sanitizeHomeLocation({...initial,reviewed:true});
+ assert.equal(reviewed.reviewed,true);
+ assert.equal(reviewed.scope,'partido');
+ const profile=sanitizeWorkProfile({domicile:reviewed.label,jobs:[],homeLocation:reviewed});
+ assert.equal(profile.homeLocation.reviewed,true);
+ assert.equal(profile.homeLocation.scope,'partido');
+ assert.throws(()=>sanitizeHomeLocation({...initial,reviewed:false}),/inválida/);
+});
