@@ -522,6 +522,32 @@ try{
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
+  // A fully qualified address must reach the official service as geographic
+  // filters, preserving the original street+height without guessing location.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   const field=planner.querySelector('input.apd-work-input[type="text"]');
+   field.value='Rondeau 319, Wilde, Avellaneda, Buenos Aires';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   planner.querySelector('.apd-home-lookup').click();
+   return true;
+  })()`);
+  await until('window.__homeGeoRequests.length===3 && document.querySelectorAll("#apd-comparador-panel .apd-home-candidate").length===2');
+  const searchFields=await js(`(()=>{
+   const p=new URL(window.__homeGeoRequests[2].url).searchParams;
+   return {address:p.get('direccion'),province:p.get('provincia'),
+    district:p.get('departamento'),locality:p.get('localidad_censal')};
+  })()`);
+  assert.deepEqual(searchFields,{address:'Rondeau 319',province:'Buenos Aires',
+   district:'Avellaneda',locality:'Wilde'});
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.querySelector('.apd-home-candidate').click();
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===5');
 
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
