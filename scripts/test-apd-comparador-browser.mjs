@@ -36,12 +36,27 @@ window.alertasState={items:[],index:0};
 window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
+window.__homeGeoRequests=[];
 window.__geoNetworkDown=false;
 window.__holdWFS=false;
 window.__heldWFS=[];
 window.__realFetch=window.fetch.bind(window);
 window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
+ if(u.hostname==='apis.datos.gob.ar'){
+  window.__homeGeoRequests.push({url:u.toString(),method:opts.method,credentials:opts.credentials});
+  const places=[
+   {calle:{nombre:'RONDEAU'},altura:{valor:319},
+    localidad_censal:{nombre:'Wilde'},departamento:{nombre:'Avellaneda'},
+    provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-34.7,lon:-58.32}},
+   {calle:{nombre:'RONDEAU'},altura:{valor:319},
+    localidad_censal:{nombre:'Bahía Blanca'},departamento:{nombre:'Bahía Blanca'},
+    provincia:{nombre:'Buenos Aires'},ubicacion:{lat:-38.7,lon:-62.3}}
+  ];
+  const bytes=new TextEncoder().encode(JSON.stringify({direcciones:places,cantidad:2}));
+  return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
+   arrayBuffer:async()=>bytes.buffer};
+ }
  if(u.hostname!=='mapaescolar.abc.gob.ar')return window.__realFetch(target,opts);
  window.__wfsRequests.push({
   origin:u.origin,filter:u.searchParams.get('CQL_FILTER'),
