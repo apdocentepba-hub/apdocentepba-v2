@@ -241,3 +241,14 @@
 .apd-home-auto-label{display:flex;align-items:center;gap:8px;cursor:pointer;
  font-size:12px;font-weight:650;line-height:1.4;padding:4px 1px}
 .apd-home-auto-toggle{width:18px;height:18px;flex:none;accent-color:#225fae}
+
+/* Explicit acceptance when a Georef address was found outside the
+   original exact-locality query. Hidden until a candidate is selected. */
+.apd-home-review-row{display:flex;gap:9px;align-items:flex-start;
+ padding:10px 12px;border:1px solid #a9c6df;border-radius:9px;
+ background:#f3f8fe;line-height:1.5;font-size:12px;font-weight:650;
+ cursor:pointer;overflow-wrap:anywhere}
+.apd-home-review-row[hidden]{display:none}
+.apd-home-review-check{margin-top:2px;width:19px;height:19px;
+ accent-color:#225fae;flex:none}
+.apd-home-review-check:focus-visible{outline:3px solid #225fae;outline-offset:3px}
