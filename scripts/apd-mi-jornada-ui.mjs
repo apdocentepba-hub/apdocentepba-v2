@@ -115,9 +115,12 @@ export function createPrivatePlannerForm({onChanged}={}){
  const homeMap=element('button','btn btn-secondary apd-home-map','Ver domicilio elegido en el mapa');
  homeMap.type='button';
  const showChosen=()=>{
+  const warning=homeLocation?.scope&&homeLocation.scope!=='exacta'?
+   ' Importante: la búsqueda se amplió; no se confirmó la localidad '+
+   'ingresada. Verificá el punto en el mapa antes de usar la distancia.':'';
   homeCheck.textContent=homeLocation?
    'Dirección elegida: '+homeLocation.label+
-   ' (ubicación aproximada; el recorrido todavía no está calculado)':
+   ' (ubicación aproximada, no la puerta exacta).'+warning:
    'Sin dirección georreferenciada seleccionada.';
   homeMap.hidden=!homeLocation;
  };
