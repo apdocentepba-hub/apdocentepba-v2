@@ -6,6 +6,8 @@ import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
+// Revokes old forms, including autocomplete timers not fired before logout.
+let privacyGeneration=0;
 const activeHomeLookups=new Set();
 const element=(tag,cls='',value)=>{
  const el=document.createElement(tag);
@@ -34,6 +36,7 @@ export function savePrivatePlanner(profile){
  return clean;
 }
 export function clearPrivatePlanner(){
+ privacyGeneration++;
  for(const controller of activeHomeLookups)controller.abort();
  activeHomeLookups.clear();
  ephemeral=null;
@@ -86,6 +89,8 @@ function makeWorkRow(initial={},remove){
 }
 export function createPrivatePlannerForm({onChanged}={}){
  const saved=loadPrivatePlanner();
+ const generation=privacyGeneration;
+ const isCurrent=()=>generation===privacyGeneration;
  const details=element('details','apd-work-planner');
  // The public comparison remains compact; users open this optional editor explicitly.
  details.open=false;
@@ -134,7 +139,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   homeMap.hidden=!homeLocation;
  };
  homeMap.addEventListener('click',()=>{
-  if(!homeLocation)return;
+  if(!isCurrent()||!homeLocation)return;
   const url='https://www.google.com/maps/search/?'+new URLSearchParams({
    api:'1',query:homeLocation.lat+','+homeLocation.lon
   });
@@ -144,7 +149,7 @@ export function createPrivatePlannerForm({onChanged}={}){
   'Buscar direcciones coincidentes');
  homeLookup.type='button';
  homeLookup.addEventListener('click',async()=>{
-  if(!details.isConnected)return;
+  if(!details.isConnected||!isCurrent())return;
   homeRequest?.abort();
   const controller=new AbortController();
   homeRequest=controller;
@@ -158,7 +163,7 @@ export function createPrivatePlannerForm({onChanged}={}){
    const query=domicile.value.trim();
    const lookup=await lookupHomeAddressesDetailed(query,{signal:controller.signal});
    const matches=lookup.candidates;
-   if(controller.signal.aborted||!details.isConnected||
+   if(controller.signal.aborted||!details.isConnected||!isCurrent()||
       domicile.value.trim()!==query)return;
    if(!matches.length){
     homeStatus.textContent='Sin coincidencias con esa calle y altura. '+
@@ -179,7 +184,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     const choose=element('button','btn btn-secondary apd-home-candidate',candidate.label);
     choose.type='button';
     choose.addEventListener('click',()=>{
-     if(controller.signal.aborted)return;
+     if(controller.signal.aborted||!isCurrent())return;
      homeLocation=candidate;
      reviewCheck.checked=false;
      domicile.value=candidate.label;
@@ -190,7 +195,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     homeCandidates.appendChild(choose);
    });
   }catch(error){
-   if(!controller.signal.aborted){
+   if(!controller.signal.aborted&&isCurrent()){
     const message=String(error?.message||'');
     homeStatus.textContent=/^(?:Ingresá|Dirección demasiado)/.test(message)?
      message:'No se pudo consultar Georef. '+
@@ -199,7 +204,8 @@ export function createPrivatePlannerForm({onChanged}={}){
   }finally{
    activeHomeLookups.delete(controller);
    if(homeRequest===controller){
-    homeRequest=null;homeLookup.disabled=false;
+    homeRequest=null;
+    if(isCurrent())homeLookup.disabled=false;
    }
   }
  });
@@ -210,11 +216,18 @@ export function createPrivatePlannerForm({onChanged}={}){
  homeAutoLabel.append(homeAuto,document.createTextNode(
   ' Sugerir mientras escribo (usa Georef Argentina)'));
  homeAuto.addEventListener('change',()=>{
-  if(!homeAuto.checked){clearTimeout(homeAutoTimer);return}
+  if(!isCurrent())return;
+  if(!homeAuto.checked){
+   clearTimeout(homeAutoTimer);
+   // Consent withdrawn: stop an in-flight autocomplete too.
+   homeRequest?.abort();
+   return;
+  }
   if(/[\p{L}]/u.test(domicile.value)&&/\b[1-9]\d{0,4}\b/.test(domicile.value))
    homeAutoTimer=setTimeout(()=>homeLookup.click(),700);
  });
  domicile.addEventListener('input',()=>{
+  if(!isCurrent())return;
   clearTimeout(homeAutoTimer);
   homeRequest?.abort();homeRequest=null;homeLookup.disabled=false;
   homeLocation=null;
@@ -262,6 +275,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  const erase=element('button','btn btn-secondary','Borrar mis datos');
  erase.type='button';
  erase.addEventListener('click',()=>{
+  if(!isCurrent())return;
   // Clear values from *this rendered form* before repainting. If the host
   // callback fails, sensitive text must not remain on screen.
   clearTimeout(homeAutoTimer);
@@ -283,6 +297,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.append(buttons,status);
  form.addEventListener('submit',event=>{
   event.preventDefault();
+  if(!isCurrent())return;
   try{
    clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
