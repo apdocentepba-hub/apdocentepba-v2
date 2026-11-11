@@ -290,6 +290,10 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-dialog-geobutton").length'),1,
+     'Insigne must be able to request official locations directly from the comparison modal');
+    assert.match(bodyText,/Todavía no consultaste la ubicación oficial/,
+     'A missing consultation must not be misrepresented as an ABC verification failure');
     const scrollLayout=await js(`(()=>{
      const dialog=document.getElementById('apd-comparison-dialog');
      const body=dialog.querySelector('.apd-comparator-modal-body');
@@ -479,8 +483,16 @@ try{
    'The carousel itself also has the exact-school map link');
   const geoAvailable=await js('!!document.querySelector(".apd-comparator-geobutton")');
   assert.equal(geoAvailable,true,'Optional official distance action should appear');
-  await js('document.querySelector(".apd-comparator-geobutton").click();true');
-  await until('document.querySelector(".apd-comparator-geo-status")?.textContent.includes("2 de 2")');
+  // The teacher from the screenshot is already inside the modal: verify
+  // the opt-in works there and returns to the comparison automatically.
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.querySelector("#apd-comparison-dialog .apd-comparator-dialog-geobutton")');
+  await js('document.querySelector("#apd-comparison-dialog .apd-comparator-dialog-geobutton").click();true');
+  await until('document.querySelector(".apd-comparator-geo-status")?.textContent.includes("2 de 2") && document.getElementById("apd-comparison-dialog")?.open===true');
+  assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-dialog-geobutton")'),null,
+   'Once location data is requested, the first-time lookup button disappears');
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
   const geographic=await js(`({
    pairCount:document.querySelectorAll(".apd-comparator-pairs li").length,
    distanceRows:document.querySelectorAll(".apd-comparator-distance").length,
@@ -720,6 +732,46 @@ try{
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
 
+  // Exact timing pattern reported by a real Insigne user:
+  // '07:30 a 11:50' versus '7:30 A 12'. The latter is noon, not missing data.
+  await js(`(()=>{
+   window.__offers=window.__offers.map((offer,i)=>{
+    if(i===0)return {...offer,dias_horarios:'Lunes a viernes: 07:30 a 11:50',
+     supl_desde:'2035-11-06',supl_hasta:'2035-11-20'};
+    if(i===1)return {...offer,dias_horarios:'Lunes a Viernes: 7:30 A 12',
+     supl_desde:'2035-11-10',supl_hasta:'2035-11-17'};
+    return offer;
+   });
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until(`(()=>{
+   const table=document.querySelector('#apd-comparador-panel .apd-comparator-table');
+   const row=[...(table?.querySelectorAll('tbody tr')||[])]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return row?.textContent.includes('12:00')??false;
+  })()`);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  const actualScreenshotCheck=await js(`(()=>{
+   const dialog=document.getElementById('apd-comparison-dialog');
+   const row=[...dialog.querySelectorAll('.apd-comparator-table tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return {status:row?.dataset.comparisonStatus,
+    cells:[...(row?.querySelectorAll('td')||[])].map(x=>x.textContent),
+    match:[...dialog.querySelectorAll('.apd-comparator-schedule-item')]
+     .map(x=>x.textContent).find(x=>x.includes('07:30 a 11:50'))||''};
+  })()`);
+  // The table compares all five selected offers; three have incomplete
+  // schedules, so its overall criterion must stay unverified. The actual
+  // two-offer collision is independently verified in the pair list below.
+  assert.equal(actualScreenshotCheck.status,'unverified');
+  assert.ok(actualScreenshotCheck.cells.some(x=>x.includes('07:30 a 12:00')));
+  assert.match(actualScreenshotCheck.match,/Cruce de días, horas y vigencias informadas/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
   await js(`(()=>{
     window.alertasState.index=5;
     document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
@@ -740,7 +792,7 @@ try{
    toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
    field.value='Rondeau 319';
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261111-workgeo1');
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261111-qa2');
    clearPrivatePlanner();
    return true;
   })()`);

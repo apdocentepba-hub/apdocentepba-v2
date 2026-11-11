@@ -336,7 +336,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261111-workgeo1')
+   import('./apd_comparador_panel.mjs?v=20261111-qa2')
     .then(()=>{loading=false;sync();})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
