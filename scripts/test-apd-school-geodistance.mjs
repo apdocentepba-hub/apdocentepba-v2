@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {
  SCHOOL_WFS_LAYERS,verifiedSchoolKey,fetchVerifiedSchool,fetchSelectedSchools,
- distanceBetweenSchools,pairSchoolDistances
+ distanceBetweenSchools,pairSchoolDistances,workToOfferSchoolDistances
 } from './apd-school-geodistance.mjs';
 
 const code='0005MS0004',tcode='0005MT0006';
@@ -112,6 +112,24 @@ test('pairwise distances in straight line for two trusted school markers',()=>{
  assert.equal(distanceBetweenSchools(a,a),0);
  assert.deepEqual(pairSchoolDistances({[code]:a,[tcode]:b},[code,tcode,code]),
   [{escuela_a:code,escuela_b:tcode,km_linea_recta:distance}]);
+});
+test('current job to offer distance requires independently ABC verified school keys',()=>{
+ const current={source:'ABC_WFS',exact_key_match:true,clave:'0005MS0099',lat:-34.68,lon:-58.31};
+ const offered={source:'ABC_WFS',exact_key_match:true,clave:code,lat:-34.69,lon:-58.33};
+ const jobs=[{school:'Escuela actual A',schoolKey:'0005MS0099'},
+  {school:'Escuela actual B sin clave'},
+  {school:'Escuela duplicada',schoolKey:'0005MS0099'}];
+ const valid=workToOfferSchoolDistances(jobs,code,{'0005MS0099':current,[code]:offered});
+ assert.equal(valid.length,1);
+ assert.equal(valid[0].school,'Escuela actual A');
+ assert.ok(valid[0].km_linea_recta>0&&valid[0].km_linea_recta<4);
+ assert.deepEqual(workToOfferSchoolDistances(jobs,code,{'0005MS0099':current}),[]);
+ assert.deepEqual(workToOfferSchoolDistances(jobs,code,{[code]:offered}),[]);
+ assert.deepEqual(workToOfferSchoolDistances(jobs,'invalid',{'0005MS0099':current,[code]:offered}),[]);
+ assert.deepEqual(workToOfferSchoolDistances(jobs,code,{
+  '0005MS0099':{...current,exact_key_match:false},[code]:offered}),[]);
+ assert.deepEqual(workToOfferSchoolDistances(Array(6).fill(jobs[0]),code,{
+  '0005MS0099':current,[code]:offered}),[]);
 });
 test('forged location flags cannot become a trusted geo pair',()=>{
  const a={source:'ABC_WFS',exact_key_match:true,clave:code,lat:-34.69,lon:-58.33};
