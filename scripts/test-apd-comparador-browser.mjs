@@ -677,6 +677,34 @@ try{
   await js('document.getElementById("apd-comparar-oferta").click();true');
   assert.equal(await js('document.querySelectorAll(".apd-comparator-item").length'),5);
   assert.match(await js('document.querySelector("#apd-comparator-status").textContent'),/hasta cinco ofertas/);
+  // A pending opted-in autocomplete must not send Georef after revocation,
+  // even if its old form remains mounted and its timer has not fired.
+  const georefBeforeRevoke=await js('window.__homeGeoRequests.length');
+  await js(`(async()=>{
+   const form=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   form.open=true;
+   const field=form.querySelector('input.apd-work-input[type="text"]');
+   const toggle=form.querySelector('.apd-home-auto-toggle');
+   toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
+   field.value='Rondeau 319';
+   field.dispatchEvent(new Event('input',{bubbles:true}));
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261110-home4');
+   clearPrivatePlanner();
+   return true;
+  })()`);
+  await sleep(900);
+  assert.equal(await js('window.__homeGeoRequests.length'),georefBeforeRevoke,
+   'Revoked autocomplete timer must not leak the address');
+  await js(`(()=>{
+   const form=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   form.querySelector('.apd-home-lookup').click();
+   form.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  assert.equal(await js('window.__homeGeoRequests.length'),georefBeforeRevoke,
+   'Revoked form must not request Georef');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
+   'Revoked form must not restore private data');
   // Simulate a WFS provider finishing AFTER the original user is gone.
   // The async result must never repaint the next account's data.
   await js(`(()=>{
