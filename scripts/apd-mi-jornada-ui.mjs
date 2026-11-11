@@ -68,7 +68,7 @@ function makeWorkRow(initial={},remove){
  row.appendChild(line('Clave provincial de la escuela (opcional)',schoolKey));
  row.appendChild(element('p','apd-comparator-hint',
   'La clave se verifica en ABC solo cuando pedís consultar distancias. '+
-  'Sin clave no se deduce la ubicación por el nombre.'));
+  'Sin clave no se deduce la ubicación por el nombre. Revisá que la clave coincida con tu escuela.'));
  const days=element('div','apd-work-weekdays');
  days.setAttribute('role','group');
  days.setAttribute('aria-label','Días de trabajo');
