@@ -77,7 +77,8 @@ window.fetch=async (target,opts={})=>{
  const code=expression.startsWith("clave='")?expression.slice(7,-1):'';
  const points={
   '0005MS0004':[-34.69,-58.33],
-  '0085MS0043':[-34.72,-58.35]
+  '0085MS0043':[-34.72,-58.35],
+  '0005MS0099':[-34.71,-58.34]
  };
  const coords=points[code];
  const features=coords?[{type:'Feature',properties:{
@@ -611,7 +612,58 @@ try{
    /km en línea recta/);
   assert.ok(state.overflow<=state.viewport+6,'Horizontal overflow '+JSON.stringify(state));
   await screenshot('comparator-'+width+'-five-selected');
-  // E2E: the real comparison UI must surface BOTH separate weekly collisions,
+  // The optional workplace key must cause no request until the teacher
+  // explicitly presses 'Consultar distancias oficiales'.
+  const beforeWorkLookups=await js('window.__wfsRequests.length');
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   planner.open=true;
+   [...planner.querySelectorAll('button')].find(x=>x.textContent.includes('Agregar escuela')).click();
+   const row=planner.querySelector('.apd-work-shift');
+   const fields=row.querySelectorAll('input[type="text"]');
+   fields[0].value='Escuela laboral sintética';
+   fields[1].value='0005MS0099';
+   for(const check of row.querySelectorAll('.apd-work-day input'))
+    check.checked=Number(check.value)<=5;
+   const hours=row.querySelectorAll('input[type="time"]');
+   hours[0].value='07:20';hours[1].value='11:50';
+   if(planner.scrollWidth>planner.clientWidth+2)
+    throw Error('Work-school key field must not overflow '+innerWidth+'px');
+   planner.querySelector('form').requestSubmit();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-home-distance").length===0');
+  assert.equal(await js('window.__wfsRequests.length'),beforeWorkLookups,
+   'Saving a work key must not trigger automatic network requests');
+  await js('document.querySelector(".apd-comparator-geobutton").click();true');
+  await until('document.querySelector(".apd-comparator-geo-status")?.textContent.includes("1 de 1 escuelas de tus jornadas")');
+  assert.equal(await js('document.querySelectorAll(".apd-comparator-work-distance").length'),5);
+  assert.match(await js('document.querySelector(".apd-comparator-work-distance").textContent'),
+   /0005MS0099.*km en línea recta/);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.querySelector("#apd-comparison-dialog .apd-comparator-table")');
+  const workComparison=await js(`(()=>{
+   const row=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Desde mis escuelas actuales');
+   return {found:!!row,text:row?.textContent||''};
+  })()`);
+  assert.equal(workComparison.found,true,'Official workplace distances must appear in the comparison table');
+  assert.match(workComparison.text,/0005MS0099.*km en línea recta/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
+  assert.equal(await js('window.__wfsRequests.length')-beforeWorkLookups,3,
+   'Two selected offers plus one workplace require three bounded WFS queries');
+  assert.equal(await js('JSON.parse(sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")).jobs[0].schoolKey'),
+   '0005MS0099');
+  // Clear private profile so subsequent account-switch QA uses the two offers.
+  await js(`(()=>{
+   const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
+   [...planner.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar mis datos')).click();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-comparator-work-distance").length===0');
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null);
+    // E2E: the real comparison UI must surface BOTH separate weekly collisions,
   // not just unit-test the parser or silently keep the first interval.
   await js(`(()=>{
    window.__offers=window.__offers.map((offer,i)=>{
@@ -688,7 +740,7 @@ try{
    toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
    field.value='Rondeau 319';
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261110-home4');
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261111-workgeo1');
    clearPrivatePlanner();
    return true;
   })()`);

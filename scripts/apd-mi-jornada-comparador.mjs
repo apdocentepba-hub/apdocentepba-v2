@@ -4,6 +4,7 @@
  * transport-time predictions or connection to the official ABC platform.
  */
 import {sanitizeHomeLocation} from './apd-home-georef.mjs?v=20261110-home4';
+import {verifiedSchoolKey} from './apd-school-geodistance.mjs?v=20261111-workgeo1';
 export const WEEKDAYS=Object.freeze([
  {id:1,name:'Lunes'}, {id:2,name:'Martes'}, {id:3,name:'Miércoles'},
  {id:4,name:'Jueves'}, {id:5,name:'Viernes'}, {id:6,name:'Sábado'},
@@ -117,7 +118,12 @@ export function sanitizeWorkProfile(data){
   const start=String(job.start??''),end=String(job.end??'');
   if(minute(start)===null||minute(end)===null||minute(start)>=minute(end))
    throw Error('Revisá el horario de '+school);
-  return {school,days:[...days].sort((a,b)=>a-b),start,end};
+  // Optional official key; never infer it from the free-text school name.
+  const supplied=String(job.schoolKey??'').trim();
+  const schoolKey=supplied?verifiedSchoolKey(supplied):null;
+  if(supplied&&!schoolKey)throw Error('Clave provincial inválida para '+school);
+  return {school,days:[...days].sort((a,b)=>a-b),start,end,
+   ...(schoolKey?{schoolKey}:{})};
  });
  const homeLocation=sanitizeHomeLocation(data.homeLocation);
  // A manually edited address can never reuse stale coordinates.

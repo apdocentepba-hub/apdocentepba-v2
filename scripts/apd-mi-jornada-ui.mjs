@@ -2,7 +2,7 @@
  * APD optional home/work schedule form. User chooses to save to sessionStorage
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
-import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261111-workgeo1';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
@@ -61,6 +61,14 @@ function makeWorkRow(initial={},remove){
  school.placeholder='Ej.: E.E.S.T. N.º 6';school.autocomplete='off';
  school.required=true;
  row.appendChild(line('Escuela donde trabajás',school));
+ const schoolKey=input('text',initial.schoolKey||'',10);
+ schoolKey.placeholder='Ej.: 0005MS0004';schoolKey.autocomplete='off';
+ schoolKey.setAttribute('aria-description',
+  'Clave provincial opcional de diez caracteres tomada del Mapa Escolar ABC.');
+ row.appendChild(line('Clave provincial de la escuela (opcional)',schoolKey));
+ row.appendChild(element('p','apd-comparator-hint',
+  'La clave se verifica en ABC solo cuando pedís consultar distancias. '+
+  'Sin clave no se deduce la ubicación por el nombre. Revisá que la clave coincida con tu escuela.'));
  const days=element('div','apd-work-weekdays');
  days.setAttribute('role','group');
  days.setAttribute('aria-label','Días de trabajo');
@@ -84,7 +92,7 @@ function makeWorkRow(initial={},remove){
  removeBtn.type='button';
  removeBtn.addEventListener('click',()=>remove(row));
  row.appendChild(removeBtn);
- row._apdInputs={school,days,start,end};
+ row._apdInputs={school,schoolKey,days,start,end};
  return row;
 }
 export function createPrivatePlannerForm({onChanged}={}){
@@ -301,9 +309,10 @@ export function createPrivatePlannerForm({onChanged}={}){
   try{
    clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
-    const {school,days,start,end}=row._apdInputs;
+    const {school,schoolKey,days,start,end}=row._apdInputs;
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
-    return {school:school.value,days:selected,start:start.value,end:end.value};
+    return {school:school.value,schoolKey:schoolKey.value,days:selected,
+     start:start.value,end:end.value};
    });
    if(homeLocation&&homeLocation.scope!=='exacta'&&!reviewCheck.checked)
     throw Error('Revisá el punto en Maps y marcá la confirmación antes de guardar.');

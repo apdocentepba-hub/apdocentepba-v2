@@ -3,13 +3,13 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261111-workgeo1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261110-home4';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261111-workgeo1';
 import {
- fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey
-} from './scripts/apd-school-geodistance.mjs';
+ fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
+} from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
 
 const state={
  available:[],selected:new Set(),index:0,current:null,enabled:false,
@@ -226,6 +226,14 @@ function countLabel(n) {return n+' de '+max+' ofertas seleccionadas';}
 function selectedSchoolKeys(){
  return [...new Set(selectedOffers().map(x=>verifiedSchoolKey(x.escuela)).filter(Boolean))];
 }
+function currentWorkSchoolKeys(){
+ if(!state.privatePlannerAllowed)return [];
+ return [...new Set((loadPrivatePlanner().jobs||[])
+  .map(job=>verifiedSchoolKey(job.schoolKey)).filter(Boolean))];
+}
+function schoolGeoSignature(){
+ return JSON.stringify({selected:selectedSchoolKeys(),current:currentWorkSchoolKeys()});
+}
 function invalidateGeo(){
  state.geoRunId++;
  state.geoAbort?.abort();
@@ -237,6 +245,7 @@ function invalidateGeo(){
 async function verifySchoolDistances(){
  if(!state.enabled||state.geoWorking)return;
  const codes=selectedSchoolKeys();
+ const workCodes=currentWorkSchoolKeys();
  if(codes.length<1){
   state.geoStatus='Seleccioná una escuela con clave provincial válida.';
   render();return;
@@ -247,17 +256,24 @@ async function verifySchoolDistances(){
  state.geoAbort=controller;
  state.geoRequested=true;state.geoWorking=true;
  state.geoStatus='Consultando el Mapa Escolar ABC...';
- state.geoSignature=JSON.stringify(codes);
+ state.geoSignature=schoolGeoSignature();
  render();
  try{
-  // At most five anonymous, read-only GETs, on explicit click only.
-  const response=await fetchSelectedSchools(codes,{signal:controller.signal});
+  // Explicit click only; at most 5 offers + 5 current jobs.
+  // Deduplicate keys and respect the WFS resolver cap of 5 per batch.
+  const all=[...new Set([...codes,...workCodes])];
+  const groups=[all.slice(0,5),all.slice(5,10)].filter(x=>x.length);
+  const responses=await Promise.all(groups.map(group=>
+   fetchSelectedSchools(group,{signal:controller.signal})));
   if(run!==state.geoRunId||!state.enabled||controller.signal.aborted)return;
-  state.geoByKey=response.verified;
-  const count=Object.keys(response.verified).length;
-  state.anchor=codes.find(key=>response.verified[key])||'';
+  state.geoByKey=Object.assign(Object.create(null),...responses.map(x=>x.verified));
+  const count=codes.filter(key=>!!state.geoByKey[key]).length;
+  const workCount=workCodes.filter(key=>!!state.geoByKey[key]).length;
+  state.anchor=codes.find(key=>state.geoByKey[key])||'';
   state.geoStatus=count+' de '+codes.length+
-   ' escuelas con ubicación exacta verificada en ABC.';
+   ' escuelas de ofertas verificadas en ABC.'+
+   (workCodes.length?' '+workCount+' de '+workCodes.length+
+    ' escuelas de tus jornadas verificadas.':'');
   if(count>=2)state.sort='distancia';
  }catch(_){
   if(run===state.geoRunId)state.geoStatus='No se pudieron verificar las escuelas.';
@@ -377,6 +393,14 @@ function renderSideBySide(items){
      ' · Revisar localidad elegida en el mapa':'');
   }]);
  }
+ if(privateProfile?.jobs.some(job=>job.schoolKey)&&state.geoRequested){
+  data.push(['Desde mis escuelas actuales',x=>{
+   const km=workToOfferSchoolDistances(privateProfile.jobs,x.escuela,state.geoByKey);
+   return km.length?km.map(item=>item.school+' ('+item.schoolKey+'): '+
+    item.km_linea_recta+' km en línea recta').join('; '):
+    'Falta verificar la ubicación ABC de ambas escuelas';
+  }]);
+ }
  if(privateProfile?.jobs.length){
   data.push(['Cruce con mi jornada actual',x=>{
    const o=checkScheduleOverlap(x.horario,privateProfile);
@@ -397,7 +421,7 @@ function renderSideBySide(items){
  const priority=new Set(['Escuela','Cierra','Tiempo hasta el cierre','Días y horarios',
   'Módulos','Vigencia desde','Vigencia hasta','PID según ficha','Tu puntaje PID',
   'Postulantes visibles','Puntaje del primero','Diferencia de puntos',
-  'Cruce con mi jornada actual','Desde mi domicilio']);
+  'Cruce con mi jornada actual','Desde mi domicilio','Desde mis escuelas actuales']);
  const differences=[],unverified=[];
  let matching=0;
  for(const [label,fieldValue] of data){
@@ -438,6 +462,8 @@ function renderSideBySide(items){
 }
 function render(){
  if(!root)return;
+ // Editing an existing job invalidates previously verified distances.
+ if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
  root.hidden=!state.enabled||!state.available.length;
@@ -459,7 +485,7 @@ function render(){
  if(state.selected.size){
   const selected=selectedOffers();
   const codes=selectedSchoolKeys();
-  const verifiedCount=Object.keys(state.geoByKey).length;
+  const verifiedCount=codes.filter(key=>!!state.geoByKey[key]).length;
   const tools=node('div','apd-comparator-tools');
   const sortOptions=[['cierre','Próximo cierre'],['preferencias','Distrito y turno']];
   if(verifiedCount>=2)sortOptions.push(['distancia','Distancia desde escuela elegida']);
@@ -550,6 +576,14 @@ function render(){
      'A '+distance+' km en línea recta de '+state.anchor;
     entry.appendChild(node('p','apd-comparator-distance',geographic));
     if(verified){
+     const profile=state.privatePlannerAllowed?loadPrivatePlanner():null;
+     const workDistances=profile?.jobs?.some(job=>job.schoolKey)?
+      workToOfferSchoolDistances(profile.jobs,row.escuela,state.geoByKey):[];
+     for(const item of workDistances){
+      entry.appendChild(node('p','apd-comparator-work-distance',
+       'Desde '+item.school+' ('+item.schoolKey+'): '+
+       item.km_linea_recta+' km en línea recta entre escuelas, no recorrido ni tiempo.'));
+     }
      entry.appendChild(node('p','apd-comparator-geo-detail',
       [verified.domicilio,verified.cue?'CUE '+verified.cue:'']
        .filter(Boolean).join(' · ')));
@@ -656,7 +690,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  }
  if(removed)invalidateGeo();
  if(state.geoRequested&&
-   JSON.stringify(selectedSchoolKeys())!==state.geoSignature)invalidateGeo();
+   schoolGeoSignature()!==state.geoSignature)invalidateGeo();
  syncCurrentButton();
  watchVisibleApplicants();
  render();

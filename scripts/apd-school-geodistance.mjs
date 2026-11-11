@@ -94,3 +94,29 @@ export function pairSchoolDistances(verified,codes){
  }
  return pairs;
 }
+
+/**
+ * Official straight-line distances from each keyed current workplace to an
+ * offered school. Both points need exact, independent ABC WFS verification.
+ */
+export function workToOfferSchoolDistances(jobs,offerSchoolKey,verified){
+ if(!Array.isArray(jobs)||jobs.length>5)return [];
+ const offerKey=verifiedSchoolKey(offerSchoolKey);
+ if(!offerKey)return [];
+ const out=[],seen=new Set();
+ for(const job of jobs){
+  const key=verifiedSchoolKey(job?.schoolKey);
+  if(!key||seen.has(key))continue;
+  seen.add(key);
+  const work=verified?.[key],offer=verified?.[offerKey];
+  // Validate the dictionary keys too: never compute with a different school's
+  // marker accidentally stored under the requested provincial key.
+  if(work?.clave!==key||offer?.clave!==offerKey)continue;
+  const km=distanceBetweenSchools(work,offer);
+  if(km===null)continue;
+  // Prefer the official ABC establishment name over teacher-entered free text.
+  out.push({school:String(work.nombre||key).trim().slice(0,120),
+   schoolKey:key,km_linea_recta:km});
+ }
+ return out;
+}
