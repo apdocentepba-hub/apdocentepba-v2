@@ -94,3 +94,24 @@ export function pairSchoolDistances(verified,codes){
  }
  return pairs;
 }
+
+/**
+ * Official straight-line distances from each keyed current workplace to an
+ * offered school. Both points need exact, independent ABC WFS verification.
+ */
+export function workToOfferSchoolDistances(jobs,offerSchoolKey,verified){
+ if(!Array.isArray(jobs)||jobs.length>5)return [];
+ const offerKey=verifiedSchoolKey(offerSchoolKey);
+ if(!offerKey)return [];
+ const out=[],seen=new Set();
+ for(const job of jobs){
+  const key=verifiedSchoolKey(job?.schoolKey);
+  if(!key||seen.has(key))continue;
+  seen.add(key);
+  const km=distanceBetweenSchools(verified?.[key],verified?.[offerKey]);
+  if(km===null)continue;
+  out.push({school:String(job?.school||key).trim().slice(0,120),
+   schoolKey:key,km_linea_recta:km});
+ }
+ return out;
+}
