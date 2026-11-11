@@ -3,13 +3,13 @@
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261111-workgeo1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261110-home4';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261111-workgeo1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
-} from './scripts/apd-school-geodistance.mjs';
+} from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
 
 const state={
  available:[],selected:new Set(),index:0,current:null,enabled:false,
