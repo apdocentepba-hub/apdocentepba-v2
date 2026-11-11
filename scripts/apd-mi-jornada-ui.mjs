@@ -2,7 +2,7 @@
  * APD optional home/work schedule form. User chooses to save to sessionStorage
  * (same browser tab only); never fetches, uploads, geocodes or logs these values.
  */
-import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261109-blocks1';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261111-workgeo1';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
