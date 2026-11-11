@@ -4,7 +4,7 @@
  * transport-time predictions or connection to the official ABC platform.
  */
 import {sanitizeHomeLocation} from './apd-home-georef.mjs?v=20261110-home4';
-import {verifiedSchoolKey} from './apd-school-geodistance.mjs';
+import {verifiedSchoolKey} from './apd-school-geodistance.mjs?v=20261111-workgeo1';
 export const WEEKDAYS=Object.freeze([
  {id:1,name:'Lunes'}, {id:2,name:'Martes'}, {id:3,name:'Miércoles'},
  {id:4,name:'Jueves'}, {id:5,name:'Viernes'}, {id:6,name:'Sábado'},
