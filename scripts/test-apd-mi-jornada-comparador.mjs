@@ -87,6 +87,17 @@ test('privacy/safety: reject wrong working times and malformed days',()=>{
  assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:Array(6).fill(jobs[0])}));
 });
 
+test('current work school key is optional and strictly validated against ABC layers',()=>{
+ const current={...jobs[0],schoolKey:' 0005ms0099 '};
+ const profile=sanitizeWorkProfile({domicile:'',jobs:[current]});
+ assert.equal(profile.jobs[0].schoolKey,'0005MS0099');
+ assert.equal(Object.hasOwn(sanitizeWorkProfile({domicile:'',jobs}).jobs[0],'schoolKey'),false);
+ for(const key of ['0005MS00999','0005ZZ0099','<script>','0005MS0099 OR 1=1']){
+  assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:[{...jobs[0],schoolKey:key}]}),
+   /Clave provincial inválida/);
+ }
+ assert.equal(Object.hasOwn(profile.jobs[0],'lat'),false);
+});
 test('margen de traslado: horarios contiguos sin cruce quedan marcados para revisar',()=>{
  const offer='Lunes a Viernes: 11:50 a 13:00';
  const result=checkScheduleOverlap(offer,{jobs});
