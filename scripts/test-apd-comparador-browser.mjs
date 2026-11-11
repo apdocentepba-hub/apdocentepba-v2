@@ -627,6 +627,8 @@ try{
     check.checked=Number(check.value)<=5;
    const hours=row.querySelectorAll('input[type="time"]');
    hours[0].value='07:20';hours[1].value='11:50';
+   if(planner.scrollWidth>planner.clientWidth+2)
+    throw Error('Work-school key field must not overflow '+innerWidth+'px');
    planner.querySelector('form').requestSubmit();
    return true;
   })()`);
@@ -638,6 +640,17 @@ try{
   assert.equal(await js('document.querySelectorAll(".apd-comparator-work-distance").length'),5);
   assert.match(await js('document.querySelector(".apd-comparator-work-distance").textContent'),
    /0005MS0099.*km en línea recta/);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.querySelector("#apd-comparison-dialog .apd-comparator-table")');
+  const workComparison=await js(`(()=>{
+   const row=[...document.querySelectorAll('#apd-comparison-dialog tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Desde mis escuelas actuales');
+   return {found:!!row,text:row?.textContent||''};
+  })()`);
+  assert.equal(workComparison.found,true,'Official workplace distances must appear in the comparison table');
+  assert.match(workComparison.text,/0005MS0099.*km en línea recta/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
   assert.equal(await js('window.__wfsRequests.length')-beforeWorkLookups,3,
    'Two selected offers plus one workplace require three bounded WFS queries');
   assert.equal(await js('JSON.parse(sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")).jobs[0].schoolKey'),
