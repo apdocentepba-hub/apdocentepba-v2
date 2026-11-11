@@ -108,9 +108,14 @@ export function workToOfferSchoolDistances(jobs,offerSchoolKey,verified){
   const key=verifiedSchoolKey(job?.schoolKey);
   if(!key||seen.has(key))continue;
   seen.add(key);
-  const km=distanceBetweenSchools(verified?.[key],verified?.[offerKey]);
+  const work=verified?.[key],offer=verified?.[offerKey];
+  // Validate the dictionary keys too: never compute with a different school's
+  // marker accidentally stored under the requested provincial key.
+  if(work?.clave!==key||offer?.clave!==offerKey)continue;
+  const km=distanceBetweenSchools(work,offer);
   if(km===null)continue;
-  out.push({school:String(job?.school||key).trim().slice(0,120),
+  // Prefer the official ABC establishment name over teacher-entered free text.
+  out.push({school:String(work.nombre||key).trim().slice(0,120),
    schoolKey:key,km_linea_recta:km});
  }
  return out;
