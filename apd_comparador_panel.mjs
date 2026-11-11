@@ -136,8 +136,8 @@ function focusComparison() {
   'La comparación básica de ofertas sigue disponible.'));
  if(state.privatePlannerAllowed&&selectedSchoolKeys().length&&!state.geoRequested){
   body.appendChild(node('p','apd-comparator-hint',
-   'La distancia desde tu domicilio todavía no está consultada en ABC. '+
-   'Podés verificar las escuelas desde esta misma comparación.'));
+   'Todavía no consultaste la ubicación oficial de estas escuelas en ABC. '+
+   'Podés verificarlas desde esta misma comparación.'));
   body.appendChild(button('Consultar ubicaciones en ABC',()=>{
    // Every official WFS request starts with this explicit click.
    void verifySchoolDistances().then(()=>{
