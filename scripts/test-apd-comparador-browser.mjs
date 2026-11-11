@@ -764,7 +764,10 @@ try{
     match:[...dialog.querySelectorAll('.apd-comparator-schedule-item')]
      .map(x=>x.textContent).find(x=>x.includes('07:30 a 11:50'))||''};
   })()`);
-  assert.equal(actualScreenshotCheck.status,'different');
+  // The table compares all five selected offers; three have incomplete
+  // schedules, so its overall criterion must stay unverified. The actual
+  // two-offer collision is independently verified in the pair list below.
+  assert.equal(actualScreenshotCheck.status,'unverified');
   assert.ok(actualScreenshotCheck.cells.some(x=>x.includes('07:30 a 12:00')));
   assert.match(actualScreenshotCheck.match,/Cruce de días, horas y vigencias informadas/);
   await js('document.getElementById("apd-comparison-close").click();true');
