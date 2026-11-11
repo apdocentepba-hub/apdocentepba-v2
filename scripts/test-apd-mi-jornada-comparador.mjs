@@ -24,6 +24,38 @@ test('HSA, HS and zero width characters match canonical schedule',()=>{
   assert.equal(schedulesEquivalent(raw,first),true,raw);
  }
 });
+test('real Insigne screenshot: 07:30 a 11:50 versus 7:30 A 12 means 12:00 and overlaps',()=>{
+ const first='Lunes a viernes: 07:30 a 11:50';
+ const second='Lunes a Viernes: 7:30 A 12';
+ assert.deepEqual(parseOfferWeeklySchedule(second),
+  {days:[1,2,3,4,5],start:450,end:720});
+ assert.equal(formatWeeklySchedule(second),'Lunes a viernes: 07:30 a 12:00');
+ assert.equal(schedulesEquivalent(second,'Lunes a Viernes: 7:30 a 12:00'),true);
+ assert.equal(assessComparatorCriterion('Días y horarios',[first,second]).status,'different');
+ const comparisons=compareSelectedOfferSchedules([
+  {horario:first,supl_desde:'06/11/2026',supl_hasta:'20/11/2026'},
+  {horario:second,supl_desde:'10/11/2026',supl_hasta:'17/11/2026'}
+ ]);
+ assert.equal(comparisons[0].status,'overlap');
+ assert.deepEqual(comparisons[0].days,['Lunes','Martes','Miércoles','Jueves','Viernes']);
+ assert.equal(comparisons[0].from,'07:30');
+ assert.equal(comparisons[0].to,'11:50');
+});
+
+test('whole-hour ABC fallback requires explicit weekdays, minute precision and bounded text',()=>{
+ for(const raw of [
+  '7:30 A 12',
+  'Lunes a Viernes: 7 A 12',
+  'Lunes a Viernes: 7:30 A 24',
+  'Lunes a Viernes: 7:30 A 12.30',
+  'Lunes a Viernes: 7:30 A 12/11/2026',
+  'Lunes a Viernes: 7:30 A 12 y 15:00',
+  'Lunes a Viernes: 7:30 A 12 remoto',
+  'Lunes a Viernes: 12:30 A 12'
+ ])assert.equal(parseOfferWeeklySchedule(raw),null,raw);
+ assert.equal(parseOfferWeeklySchedule('Lunes a Viernes: 7:30 hs A 12 hs').end,720);
+});
+
 test('real time/day differences remain different',()=>{
  assert.equal(schedulesEquivalent(first,'Lunes a Viernes: 14:00 a 18:30'),false);
  assert.equal(schedulesEquivalent(first,'Lunes a Jueves: 07:20 a 11:50'),false);
