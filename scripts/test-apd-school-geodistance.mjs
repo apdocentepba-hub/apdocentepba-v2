@@ -114,20 +114,26 @@ test('pairwise distances in straight line for two trusted school markers',()=>{
   [{escuela_a:code,escuela_b:tcode,km_linea_recta:distance}]);
 });
 test('current job to offer distance requires independently ABC verified school keys',()=>{
- const current={source:'ABC_WFS',exact_key_match:true,clave:'0005MS0099',lat:-34.68,lon:-58.31};
+ const current={source:'ABC_WFS',exact_key_match:true,clave:'0005MS0099',lat:-34.68,lon:-58.31,nombre:'Nombre oficial ABC'};
  const offered={source:'ABC_WFS',exact_key_match:true,clave:code,lat:-34.69,lon:-58.33};
  const jobs=[{school:'Escuela actual A',schoolKey:'0005MS0099'},
   {school:'Escuela actual B sin clave'},
   {school:'Escuela duplicada',schoolKey:'0005MS0099'}];
  const valid=workToOfferSchoolDistances(jobs,code,{'0005MS0099':current,[code]:offered});
  assert.equal(valid.length,1);
- assert.equal(valid[0].school,'Escuela actual A');
+ assert.equal(valid[0].school,'Nombre oficial ABC','Do not trust teacher-entered school label as official');
  assert.ok(valid[0].km_linea_recta>0&&valid[0].km_linea_recta<4);
  assert.deepEqual(workToOfferSchoolDistances(jobs,code,{'0005MS0099':current}),[]);
  assert.deepEqual(workToOfferSchoolDistances(jobs,code,{[code]:offered}),[]);
  assert.deepEqual(workToOfferSchoolDistances(jobs,'invalid',{'0005MS0099':current,[code]:offered}),[]);
  assert.deepEqual(workToOfferSchoolDistances(jobs,code,{
   '0005MS0099':{...current,exact_key_match:false},[code]:offered}),[]);
+ assert.deepEqual(workToOfferSchoolDistances(jobs,code,{
+  '0005MS0099':{...current,clave:'0005MS0098'},[code]:offered}),[],
+  'Wrong keyed school must never yield a distance');
+ assert.deepEqual(workToOfferSchoolDistances(jobs,code,{
+  '0005MS0099':current,[code]:{...offered,clave:'0005MS0008'}}),[],
+  'Wrong offered school marker must never yield a distance');
  assert.deepEqual(workToOfferSchoolDistances(Array(6).fill(jobs[0]),code,{
   '0005MS0099':current,[code]:offered}),[]);
 });
