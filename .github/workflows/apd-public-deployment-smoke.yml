@@ -1,0 +1,25 @@
+name: APD public deployment smoke (read-only)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/apd-public-deployment-smoke.mjs'
+      - '.github/workflows/apd-public-deployment-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify live domain serves the checked-out Insigne assets
+        run: |
+          node --check scripts/apd-public-deployment-smoke.mjs
+          node scripts/apd-public-deployment-smoke.mjs
