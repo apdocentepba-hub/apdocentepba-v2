@@ -123,16 +123,21 @@ const browser=spawn(chromeCmd,[
  '--disable-background-networking','--no-first-run',
  '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'
 ],{stdio:['ignore','ignore','pipe']});
+// Preserve only bounded diagnostic output; never print session data or tokens.
+let browserStderr='';
+browser.stderr?.on('data',chunk=>{
+ browserStderr=(browserStderr+String(chunk)).slice(-1600);
+});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let ws,seq=0;const pending=new Map();
 async function debugPort(){
- for(let i=0;i<120;i++){
+ for(let i=0;i<300;i++){
   const file=path.join(profile,'DevToolsActivePort');
   if(existsSync(file))return Number(readFileSync(file,'utf8').split('\n')[0]);
-  if(browser.exitCode!==null)throw Error('Chrome unexpectedly closed');
+  if(browser.exitCode!==null)throw Error('Chrome unexpectedly closed: '+browserStderr.slice(-500));
   await sleep(100);
  }
- throw Error('Chrome debugging unavailable');
+ throw Error('Chrome debugging unavailable after 30 s: '+browserStderr.slice(-700));
 }
 function cdp(method,params={}){
  const id=++seq;
