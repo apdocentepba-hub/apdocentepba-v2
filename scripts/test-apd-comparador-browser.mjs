@@ -110,6 +110,8 @@ const server=createServer((req,res)=>{
   '/scripts/apd-account-home-write-policy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-home-write-policy.mjs')},
   '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
+  '/scripts/apd-multimodal-transport.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-multimodal-transport.mjs')},
+  '/scripts/apd-mobility-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mobility-ui.mjs')},
   '/apd_comparador_panel.css':{type:'text/css',body:readFileSync('apd_comparador_panel.css')}
  };
  if(!paths[pathname]){res.writeHead(404);res.end('Missing');return;}
