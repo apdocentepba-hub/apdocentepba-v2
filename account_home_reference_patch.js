@@ -104,6 +104,7 @@
     delete existing.dataset.dirty;
     if(field)field.value='';
     if(status)status.textContent='Cargando domicilio de esta cuenta...';
+    existing.querySelectorAll('[role=group] button').forEach(b=>b.remove());
     void reload();
    }
    if(status&&existing.dataset.busy!=='1'&&existing.dataset.dirty!=='1'){
@@ -136,9 +137,102 @@
   input.autocomplete='street-address';
   input.style.cssText='box-sizing:border-box;width:100%;padding:10px;margin:4px 0 10px;border:1px solid #aac4df;border-radius:8px';
   input.value=home?.address_text||'';
+  let chosenGeo=null,geoController=null,lookupSerial=0;
+  const geoLookup=document.createElement('button');
+  geoLookup.type='button';geoLookup.className='btn btn-secondary';
+  geoLookup.textContent='Buscar calle y localidad';
+  geoLookup.style.cssText='margin:0 0 8px';
+  const geoStatus=document.createElement('p');
+  geoStatus.setAttribute('role','status');
+  geoStatus.style.fontSize='13px';
+  geoStatus.textContent='Para calcular distancias, buscá y elegí una ubicación. La consulta a Georef es opcional.';
+  const geoCandidates=document.createElement('div');
+  geoCandidates.setAttribute('role','group');
+  geoCandidates.setAttribute('aria-label','Ubicaciones posibles');
+  const geoReviewLabel=document.createElement('label');
+  geoReviewLabel.style.cssText='display:block;margin:6px 0;font-size:13px';
+  const geoReview=document.createElement('input');
+  geoReview.type='checkbox';
+  geoReviewLabel.append(geoReview,document.createTextNode(
+   ' Revisé la ubicación aproximada en el mapa y acepto usarla para las distancias.'));
+  geoReviewLabel.hidden=true;
+  const geoMap=document.createElement('button');
+  geoMap.type='button';geoMap.className='btn btn-secondary';
+  geoMap.textContent='Ver ubicación en el mapa';
+  geoMap.hidden=true;geoMap.style.margin='4px 0 8px';
+  geoMap.addEventListener('click',()=>{
+   const point=chosenGeo||home?.georef;
+   if(!point)return;
+   window.open('https://www.google.com/maps/search/?'+new URLSearchParams({
+    api:'1',query:point.lat+','+point.lon
+   }),'_blank','noopener,noreferrer');
+  });
+  const clearGeo=()=>{
+   lookupSerial++;geoController?.abort();geoController=null;
+   chosenGeo=null;geoReview.checked=false;geoReviewLabel.hidden=true;
+   geoMap.hidden=true;geoCandidates.replaceChildren();
+  };
   input.addEventListener('input',()=>{
    section.dataset.dirty='1';
+   clearGeo();
+   geoStatus.textContent='La dirección cambió. Podés buscarla de nuevo o guardar solamente el texto.';
    status.textContent='Dirección sin guardar. Tocá «Guardar domicilio en mi cuenta».';
+  });
+  geoLookup.addEventListener('click',async()=>{
+   const token=reScope(),owner=epoch;
+   if(!token)return;
+   clearGeo();
+   const request=lookupSerial,query=input.value.trim();
+   geoLookup.disabled=true;
+   geoStatus.textContent='Buscando direcciones en Georef Argentina...';
+   const controller=new AbortController();
+   geoController=controller;
+   try{
+    const {lookupHomeAddressesDetailed}=await import(
+     './scripts/apd-home-georef.mjs?v=20261110-home4');
+    if(epoch!==owner||request!==lookupSerial||controller.signal.aborted)return;
+    const result=await lookupHomeAddressesDetailed(query,{signal:controller.signal});
+    if(epoch!==owner||request!==lookupSerial||controller.signal.aborted||
+       !section.isConnected||input.value.trim()!==query)return;
+    const options=result.candidates||[];
+    if(!options.length){
+     geoStatus.textContent='No encontré coincidencias. Agregá localidad, partido y provincia para precisar la búsqueda.';
+     return;
+    }
+    geoStatus.textContent='Elegí la dirección y localidad correctas. Los puntos de Georef son aproximados.';
+    options.forEach(point=>{
+     const item=document.createElement('button');
+     item.type='button';item.className='btn btn-secondary';
+     item.style.cssText='display:block;white-space:normal;text-align:left;margin:6px 0;width:100%';
+     item.textContent=point.label;
+     item.addEventListener('click',()=>{
+      if(epoch!==owner||request!==lookupSerial||!section.isConnected)return;
+      chosenGeo=point;
+      input.value=point.label;
+      section.dataset.dirty='1';
+      geoCandidates.replaceChildren();
+      geoMap.hidden=false;
+      geoReview.checked=false;
+      geoReviewLabel.hidden=point.scope==='exacta';
+      geoStatus.textContent='Ubicación seleccionada (aproximada).'+
+       (point.scope==='exacta'?' Ya podés guardar.':
+        ' Revisá el punto en el mapa y marcá la confirmación antes de guardar.');
+      status.textContent='Ubicación elegida, todavía sin guardar en tu cuenta.';
+     });
+     geoCandidates.appendChild(item);
+    });
+   }catch(error){
+    if(!controller.signal.aborted&&epoch===owner&&request===lookupSerial){
+     const message=String(error?.message||'');
+     geoStatus.textContent=/^(?:Ingresá|Dirección demasiado|Indicá)/.test(message)?
+      message:'No se pudo consultar Georef. Probá incluyendo localidad y partido.';
+    }
+   }finally{
+    if(geoController===controller){
+     geoController=null;
+     if(epoch===owner)geoLookup.disabled=false;
+    }
+   }
   });
   const save=document.createElement('button');
   save.type='button';save.className='btn btn-primary';save.textContent='Guardar domicilio en mi cuenta';
@@ -169,8 +263,12 @@
    const address_text=input.value.trim();
    busy(true);status.textContent='Guardando...';
    try{
-    await persist({address_text,georef:
-     home?.address_text===address_text?home.georef||null:null});
+    if(chosenGeo&&chosenGeo.scope!=='exacta'&&!geoReview.checked)
+     throw Error('Confirmá el punto aproximado en el mapa antes de guardarlo.');
+    const geo=chosenGeo?.label===address_text?
+     {...chosenGeo,...(geoReview.checked?{reviewed:true}:{})}:
+     home?.address_text===address_text?home.georef||null:null;
+    await persist({address_text,georef:geo});
     delete section.dataset.dirty;
     status.textContent='Domicilio guardado en tu cuenta.';
    }catch(e){status.textContent=String(e.message||'No se pudo guardar');}
@@ -185,7 +283,8 @@
    }catch(e){status.textContent=String(e.message||'No se pudo eliminar');}
    finally{busy(false);}
   });
-  section.append(heading,hint,input,save,remove,retry,status);
+  section.append(heading,hint,input,geoLookup,geoStatus,geoCandidates,
+   geoMap,geoReviewLabel,save,remove,retry,status);
   box.appendChild(section);
   void reload();
  }
