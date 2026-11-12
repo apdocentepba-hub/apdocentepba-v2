@@ -31,3 +31,5 @@ jobs:
           node scripts/test-live-source-equivalence.mjs
       - name: Promote only the QA-approved 0-percent candidate, smoke and rollback on error
         run: node scripts/promote-apd-home-verified-version.mjs
+
+# Recheck pinned candidate UUID directly; pagination-safe release gate.
