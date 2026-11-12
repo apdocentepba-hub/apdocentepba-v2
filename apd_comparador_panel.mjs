@@ -2,7 +2,7 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
-import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
+import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
