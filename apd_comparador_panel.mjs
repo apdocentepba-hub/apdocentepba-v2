@@ -6,6 +6,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
+import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261112-mobility1';
 import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-georef-safe1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
@@ -163,7 +164,15 @@ function focusComparison() {
   });
   const comparison=renderSideBySide(result.items);
   if(comparison)body.appendChild(comparison);
-  else {
+  // Route links and OSM stop searches become visible only after the user has
+  // explicitly verified school coordinates via ABC and Insigne is active.
+  if(state.privatePlannerAllowed&&state.geoRequested&&!state.geoWorking){
+   const currentHome=loadPrivatePlanner().homeLocation;
+   body.appendChild(createMobilitySection({
+    home:currentHome,offers:result.items,verifiedBySchool:state.geoByKey
+   }));
+  }
+  if(!comparison){
    const reasons=result.excluded.map(x=>({
     official_status_closed:'estado oficial cerrado o anulado',
     confirmed_deadline_passed:'plazo de cierre vencido',
