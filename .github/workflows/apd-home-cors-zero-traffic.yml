@@ -1,0 +1,45 @@
+name: APD home scoped CORS - zero traffic Cloudflare candidate
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-home-cors-zero-traffic.yml'
+      - 'scripts/build-apd-home-cors-version.mjs'
+      - 'scripts/stage-apd-home-cors-version.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: apd-home-cors-zero-traffic
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate source and new builder syntax
+        run: |
+          set -euo pipefail
+          node --check scripts/build-apd-home-cors-version.mjs
+          node --check scripts/stage-apd-home-cors-version.mjs
+          node --test scripts/test-apd-account-home.mjs scripts/test-apd-account-home-panel-dom.mjs
+      - name: Guard build against exact attested live Cloudflare UUID, SHA256, 29 bindings and 4 cron
+        run: node scripts/build-apd-home-cors-version.mjs
+      - name: Check generated candidate syntax
+        run: node --check tmp/apd-home-cors/worker-cors-candidate.mjs
+      - name: Install same Wrangler client used by existing repository
+        run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - name: Upload immutable candidate at zero production traffic and test browser CORS OPTIONS
+        run: node scripts/stage-apd-home-cors-version.mjs
+      - name: Publish candidate UUID only, never code or credentials
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-home-cors-candidate-uuid
+          path: tmp/apd-home-cors/candidate-id.txt
+          retention-days: 14
+          if-no-files-found: error
