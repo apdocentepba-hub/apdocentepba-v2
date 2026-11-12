@@ -16,15 +16,25 @@ const element=(tag,cls='',value)=>{
  return el;
 };
 const key=()=>{try{return window.sessionStorage}catch{return null}};
+function withAccountHome(profile){
+ const bridge=window.APD_accountHome;
+ if(!bridge?.ready?.())return profile;
+ const home=bridge.peek();
+ // The authenticated account is authoritative for the home. Jobs and
+ // commuting margin remain ephemeral and never reach the account server.
+ try{return sanitizeWorkProfile({...profile,
+  domicile:home?.address_text||'',homeLocation:home?.georef||null})}
+ catch{return profile}
+}
 export function loadPrivatePlanner(){
- if(ephemeral)return ephemeral;
+ if(ephemeral)return withAccountHome(ephemeral);
  try{
   const raw=key()?.getItem(STORE);
-  if(!raw)return {domicile:'',jobs:[]};
+  if(!raw)return withAccountHome({domicile:'',jobs:[]});
   const profile=sanitizeWorkProfile(JSON.parse(raw));
   ephemeral=profile;
-  return profile;
- }catch{return {domicile:'',jobs:[]}}
+  return withAccountHome(profile);
+ }catch{return withAccountHome({domicile:'',jobs:[]})}
 }
 export function savePrivatePlanner(profile){
  const clean=sanitizeWorkProfile(profile);
@@ -110,7 +120,8 @@ export function createPrivatePlannerForm({onChanged}={}){
  form.noValidate=true;
  const help=element('p','apd-comparator-hint',
   'Cargá tus horarios para detectar cruces y poco margen entre clases. '+
-  'Los datos se guardan solo en esta pestaña, nunca en nuestros servidores.');
+  'Los horarios y escuelas se guardan solo en esta pestaña. El domicilio '+
+  'de referencia se recupera de Datos personales y se guarda en tu cuenta al confirmar.');
  form.appendChild(help);
  const domicile=input('text',saved.domicile,180);
  domicile.placeholder='Ej.: Rondeau 319, Wilde, Avellaneda, Buenos Aires';
@@ -278,7 +289,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  add.type='button';add.addEventListener('click',()=>addRow());
  form.appendChild(add);
  const buttons=element('div','apd-work-actions');
- const save=element('button','btn btn-primary','Guardar en esta pestaña');
+ const save=element('button','btn btn-primary','Guardar jornadas y domicilio');
  save.type='submit';
  const erase=element('button','btn btn-secondary','Borrar mis datos');
  erase.type='button';
@@ -303,9 +314,10 @@ export function createPrivatePlannerForm({onChanged}={}){
  });
  buttons.append(save,erase);
  form.append(buttons,status);
- form.addEventListener('submit',event=>{
+ form.addEventListener('submit',async event=>{
   event.preventDefault();
   if(!isCurrent())return;
+  save.disabled=true;
   try{
    clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
@@ -320,8 +332,25 @@ export function createPrivatePlannerForm({onChanged}={}){
     {...homeLocation,reviewed:true}:homeLocation;
    savePrivatePlanner({domicile:domicile.value,jobs,
     travelGapMinutes:Number(travelGap.value),homeLocation:reviewedHome});
-   onChanged?.();
+   const bridge=window.APD_accountHome;
+   if(bridge?.ready?.()&&domicile.value.trim()){
+    try{
+     await bridge.persist({address_text:domicile.value.trim(),
+      georef:reviewedHome});
+     if(!isCurrent())return;
+     status.textContent='Domicilio guardado en tu cuenta. Jornadas guardadas en esta pestaña.';
+    }catch(error){
+     status.textContent='Jornadas guardadas en la pestaña, pero no el domicilio en la cuenta: '+
+      String(error.message||'Servicio no disponible');
+    }
+   }else{
+    status.textContent='Jornadas guardadas en esta pestaña. '+
+     (bridge?.ready?.()?'Para borrar el domicilio de tu cuenta, usá Datos personales.':
+      'La cuenta todavía no confirmó su domicilio.');
+   }
+   if(isCurrent())onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
+  finally{save.disabled=false;}
  });
  details.appendChild(form);
  return details;
