@@ -82,7 +82,6 @@ test('ABC hour-dot notation accepts explicit times but rejects malformed or gues
   ['Lunes: 14 A 18:30',840,1110],
   ['Lunes: 14.30 A 18:30',870,1110],
   ['Lunes: 14:30 A 18.30',870,1110],
-  ['Lunes: 14 A 18',840,1080],
   ['Lunes: 14 hs a 18.30 hs',840,1110],
   ['Lunes a Viernes: 7:30 A 12',450,720]
  ]){
@@ -92,7 +91,8 @@ test('ABC hour-dot notation accepts explicit times but rejects malformed or gues
   assert.equal(parsed.end,end,raw);
  }
  for(const raw of [
-  '14 A 18.30','Turno tarde','Lunes: 14 A 18.3',
+  '14 A 18.30','Turno tarde','Lunes: 14 A 18',
+  'Lunes: 14 A 18.3',
   'Lunes: 14 A 18.60','Lunes: 14 A 25.30',
   'Lunes: 18 A 14.30','Lunes: 14 A 18.30 remoto',
   'Lunes: 14 A 18.30 y 20.00','Lunes: 14 A 18/11/2026'
