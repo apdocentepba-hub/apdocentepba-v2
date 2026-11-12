@@ -47,13 +47,14 @@ test('whole-hour ABC fallback requires explicit weekdays, minute precision and b
   '7:30 A 12',
   'Lunes a Viernes: 7 A 12',
   'Lunes a Viernes: 7:30 A 24',
-  'Lunes a Viernes: 7:30 A 12.30',
+  
   'Lunes a Viernes: 7:30 A 12/11/2026',
   'Lunes a Viernes: 7:30 A 12 y 15:00',
   'Lunes a Viernes: 7:30 A 12 remoto',
   'Lunes a Viernes: 12:30 A 12'
  ])assert.equal(parseOfferWeeklySchedule(raw),null,raw);
  assert.equal(parseOfferWeeklySchedule('Lunes a Viernes: 7:30 hs A 12 hs').end,720);
+ assert.equal(parseOfferWeeklySchedule('Lunes a Viernes: 7:30 A 12.30').end,750);
 });
 
 test('real screenshot: Costa 14 A 18.30 repeated by weekday is explicit time, not unavailable',()=>{
