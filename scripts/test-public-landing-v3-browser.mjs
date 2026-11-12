@@ -18,16 +18,22 @@ const chrome=spawn(chromeCmd,[
  "--disable-background-networking","--no-first-run","--no-default-browser-check",
  "--remote-debugging-port=0","--user-data-dir="+root,"about:blank"
 ],{stdio:["ignore","ignore","pipe"]});
+// CI browsers occasionally take longer to start on shared runners.
+// Capture only bounded browser startup diagnostics, never page/session data.
+let startupStderr="";
+chrome.stderr?.on("data",chunk=>{
+ startupStderr=(startupStderr+String(chunk)).slice(-1200);
+});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let socket,number=0;const pending=new Map();
 async function debugPort(){
- for(let i=0;i<120;i++){
+ for(let i=0;i<300;i++){
   const file=path.join(root,"DevToolsActivePort");
   if(existsSync(file))return Number(readFileSync(file,"utf8").split("\n")[0]);
-  if(chrome.exitCode!==null)throw Error("Chrome quit prematurely");
+  if(chrome.exitCode!==null)throw Error("Chrome quit prematurely: "+startupStderr.slice(-500));
   await sleep(100);
  }
- throw Error("Chrome debugging connection timeout");
+ throw Error("Chrome debugging connection timeout after 30 s: "+startupStderr.slice(-650));
 }
 async function cdp(method,params={}){
  const id=++number;
