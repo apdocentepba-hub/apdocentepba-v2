@@ -9,7 +9,7 @@ const root='tmp/apd-account-home/';
 const read=name=>fs.readFileSync(root+name,'utf8').trim();
 const live=read('active-worker.mjs');
 const candidate=read('worker-home-candidate.mjs');
-const mark='// Authenticated home reference.';
+const mark='\n// Authenticated home reference.';
 const start=candidate.indexOf(mark),end=candidate.indexOf('async function handleAccountPreferencesSecureV1',start);
 if(start<0||end<start)throw Error('New handler missing');
 const withoutHandler=candidate.slice(0,start)+candidate.slice(end);
