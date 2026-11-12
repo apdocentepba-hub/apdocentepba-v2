@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 const worker='ancient-wildflower-cd37';
 const before='c36834b1-0a35-4a3f-9a5e-0cc117a00bd7';
 const candidate='3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2';
-const tag='apd-home-pr277-a75d6643';
+const expectedTag=/^apd-home-pr277-[0-9a-f]{8}$/;
 const token=String(process.env.CLOUDFLARE_API_TOKEN||'').trim();
 const configuredId=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim();
 const runRef=String(process.env.GITHUB_REF_NAME||'');
@@ -90,10 +90,10 @@ try{
  if(String(detail?.id||'')!==candidate)
   throw Error('QA-approved candidate UUID missing or replaced');
  const candidateTag=String(detail?.annotations?.['workers/tag']||'');
- if(candidateTag && candidateTag!==tag)
-  throw Error('QA candidate tag changed: refusing promotion');
+ if(!expectedTag.test(candidateTag))
+  throw Error('QA candidate tag is outside expected PR277 pattern: refusing promotion');
  console.log('APD_HOME_RELEASE_CANDIDATE '+JSON.stringify({
-  id:detail.id,tag_present:!!candidateTag,tag_matches:!candidateTag||candidateTag===tag,
+  id:detail.id,tag:candidateTag,tag_format_ok:true,
   module_count:detail.modules?.length||0
  }));
  const modules=detail?.modules||[];
