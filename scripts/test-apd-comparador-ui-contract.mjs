@@ -105,6 +105,7 @@ test('Insigne mobility feature is gated by official ABC schools and never reads 
  assert.match(api,/Valhalla \/ OpenStreetMap/);
  assert.match(mobility,/Transporte público/);
  assert.match(mobility,/Calcular km en auto/);
- assert.match(mobility,/Consultar paradas y líneas cercanas/);
+ assert.match(mobility,/Ver líneas de colectivo cercanas/);
+ assert.match(mobility,/fetchAmbaBusLinesNear/);
  assert.doesNotMatch(mobility,/localStorage|sessionStorage|navigator\.geolocation|innerHTML/);
 });
