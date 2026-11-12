@@ -84,12 +84,18 @@ let completed=false;
 try{
  const current=await liveVersion();
  if(current!==before)throw Error('STOP: production Worker changed since QA; expected pinned previous version');
- const versionsRaw=await cloud(prefix+'workers/'+worker+'/versions?per_page=50');
- const list=Array.isArray(versionsRaw)?versionsRaw:versionsRaw?.versions||[];
- const selected=list.find(x=>x.id===candidate);
- if(!selected||selected.annotations?.['workers/tag']!==tag)
-  throw Error('QA-approved candidate id/tag missing or replaced');
+ // The list endpoint returns only a limited page and the already-approved
+ // version may have aged out. Fetch the immutable UUID directly.
  const detail=await cloud(prefix+'workers/'+worker+'/versions/'+candidate+'?include=modules');
+ if(String(detail?.id||'')!==candidate)
+  throw Error('QA-approved candidate UUID missing or replaced');
+ const candidateTag=String(detail?.annotations?.['workers/tag']||'');
+ if(candidateTag && candidateTag!==tag)
+  throw Error('QA candidate tag changed: refusing promotion');
+ console.log('APD_HOME_RELEASE_CANDIDATE '+JSON.stringify({
+  id:detail.id,tag_present:!!candidateTag,tag_matches:!candidateTag||candidateTag===tag,
+  module_count:detail.modules?.length||0
+ }));
  const modules=detail?.modules||[];
  if(modules.length!==1||typeof modules[0].content_base64!=='string')
   throw Error('Cloudflare candidate module bytes missing');
