@@ -64,7 +64,7 @@ jobs:
           // The 12/11 release is already promoted after the user's actual
           // 200-HTTP authenticated QA and the guarded 11/11 production smoke.
           // Its canonical snapshot must be refreshed in a follow-up audit PR.
-          const approved='3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2';
+          const approved='8d0d65d9-a338-45d2-b7e9-68879f35b6d8';
           const knownOld='da0632dd-1b9e-4332-9c4a-75b5eade8d74';
           if(current!==expected && !(current===approved&&expected===knownOld))
             throw Error('STOP: unapproved live Worker version drift');
