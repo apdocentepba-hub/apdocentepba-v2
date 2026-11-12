@@ -20,7 +20,9 @@ test('AMBA bus line query is bounded to 400m, no token, all four jurisdictions',
   assert.equal(url.searchParams.get('units'),'esriSRUnit_Meter');
   assert.equal(url.searchParams.get('geometryType'),'esriGeometryPoint');
   assert.equal(url.searchParams.get('returnGeometry'),'false');
-  assert.equal(url.searchParams.get('resultRecordCount'),'100');
+  assert.equal(url.searchParams.get('resultRecordCount'),'2000');
+  assert.equal(url.searchParams.get('returnDistinctValues'),'true');
+  assert.equal(url.searchParams.get('outFields'),'LINEA');
   assert.equal(url.searchParams.get('f'),'json');
   assert.ok(!url.searchParams.has('token'));
  }
@@ -32,12 +34,12 @@ test('only explicit route numbers are surfaced; map traces are never called bus 
   parseAmbaBusLineFeatures({features:[
    {attributes:{LINEA:33,RAMAL:1}},
    {attributes:{LINEA:33,RAMAL:2}},
-   {attributes:{LINEA:0}}, // ignored by filtering below
+   {attributes:{LINEA:0}}, // route number zero is invalid
    {attributes:{LINEA:'-4'}},
    {attributes:{linea:'85'}},
    {attributes:{linea:'unknown'}},
    {attributes:{REF:'line 55'}}
-  ]},'Provincial').filter(x=>x.line!=='0')
+  ]},'Provincial')
   .map(x=>({line:x.line,scope:x.scope,stops:x.stopVerified})),
   [{line:'33',scope:'Provincial',stops:false},
    {line:'85',scope:'Provincial',stops:false}]
