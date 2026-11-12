@@ -1,0 +1,73 @@
+name: APD account-home Cloudflare preflight (read-only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-account-home-live-preflight.yml'
+      - 'scripts/build-account-home-worker-candidate.mjs'
+      - 'worker-live/manifest.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WORKER_NAME: ancient-wildflower-cd37
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve Cloudflare account (read-only)
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Cloudflare token unavailable'; exit 2; }
+          mkdir -p tmp/apd-account-home
+          curl --fail --silent --show-error --retry 2 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            > tmp/apd-account-home/accounts.json
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const j=JSON.parse(fs.readFileSync('tmp/apd-account-home/accounts.json','utf8'));
+          const accounts=Array.isArray(j.result)?j.result:[];
+          const configured=String(process.env.CONFIGURED_ACCOUNT_ID||'').trim();
+          const selected=configured|| (accounts.length===1?accounts[0]?.id:'');
+          if(!j.success || !selected || !accounts.some(a=>a.id===selected))
+            throw Error('Cloudflare account ambiguous or inaccessible');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'CLOUDFLARE_ACCOUNT_ID='+selected+'\n');
+          NODE
+      - name: Inspect active production version ID without changing traffic
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments" \
+            > tmp/apd-account-home/deployments.json
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const j=JSON.parse(fs.readFileSync('tmp/apd-account-home/deployments.json','utf8'));
+          const active=j.result?.deployments?.[0]?.versions?.filter(v=>Number(v.percentage)>0)||[];
+          const expected=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8')).version_id;
+          if(!j.success||active.length!==1||Number(active[0].percentage)!==100)
+            throw Error('Production deployment not pinned to one 100% version; no upload permitted');
+          const current=active[0].version_id;
+          console.log('APD_ACCOUNT_HOME_BASELINE '+JSON.stringify({
+            source:'Cloudflare live deployment',
+            active_version:current,recorded_manifest_version:expected,
+            match:current===expected,production_traffic_percentage:100,
+            action:'read_only_preflight_no_deploy'
+          }));
+          // The 12/11 release is already promoted after the user's actual
+          // 200-HTTP authenticated QA and the guarded 11/11 production smoke.
+          // Its canonical snapshot must be refreshed in a follow-up audit PR.
+          const approved='3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2';
+          const knownOld='da0632dd-1b9e-4332-9c4a-75b5eade8d74';
+          if(current!==expected && !(current===approved&&expected===knownOld))
+            throw Error('STOP: unapproved live Worker version drift');
+          if(current===approved&&expected===knownOld)
+            console.log('APD_HOME_APPROVED_PRODUCTION_BUT_CANONICAL_REFRESH_REQUIRED '+current);
+          NODE

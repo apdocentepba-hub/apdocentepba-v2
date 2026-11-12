@@ -1,0 +1,40 @@
+name: APD account-home guarded zero-traffic stage
+# Release 2026-11-12 already promoted to production after real account QA.
+# Never auto-upload a second route candidate on subsequent PR changes.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: apd-home-zero-traffic-cloudflare
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline account security tests
+        run: |
+          set -euo pipefail
+          node --test scripts/test-apd-account-home.mjs
+          node --check scripts/inspect-account-home-active-worker.mjs
+          node --check scripts/stage-account-home-worker-candidate.mjs
+      - name: Read active Worker from Cloudflare (do not print source)
+        run: node scripts/inspect-account-home-active-worker.mjs
+      - name: Inject only new handler into captured active Worker
+        run: |
+          set -euo pipefail
+          APD_ACCOUNT_HOME_LIVE_SOURCE=tmp/apd-account-home/active-worker.mjs \
+            node scripts/build-account-home-worker-candidate.mjs
+          node --check tmp/apd-account-home/worker-home-candidate.mjs
+      - name: Install Cloudflare Wrangler tooling
+        run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - name: Upload zero-traffic version, verify unchanged deployment and smoke access control
+        run: node scripts/stage-account-home-worker-candidate.mjs

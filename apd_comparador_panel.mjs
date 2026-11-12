@@ -6,7 +6,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-dothour1';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-account-home1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -733,6 +733,12 @@ function reset() {
  if(root){root.hidden=true;root.replaceChildren();}
 }
 document.getElementById('btn-logout')?.addEventListener('click',clearPrivatePlanner,true);
+window.addEventListener('APD_accountHomeUpdated',()=>{
+ if(!state.enabled||!state.privatePlannerAllowed)return;
+ const modalOpen=!!document.getElementById('apd-comparison-dialog');
+ render();
+ if(modalOpen&&state.selected.size>=2)focusComparison();
+});
 window.APD_comparatorRefresh=refresh;
 window.APD_comparatorReset=reset;
 // Core app may have rendered before module import was completed.

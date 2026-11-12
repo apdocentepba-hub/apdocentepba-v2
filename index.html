@@ -299,6 +299,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   },true);
 });
+// Account home loads after the existing profile module without altering
+// the dashboard's protected external script order. No data is written by
+// module loading; reads only use a validated bearer token after login.
+document.addEventListener('DOMContentLoaded',function(){
+ void import('./account_home_reference_patch.js?v=20261112-account-home1').catch(()=>{});
+});
 // Candidate comparator loads only for a verified authenticated account.
 // The observer tracks replacement of the alert carousel's direct children;
 // comparator's own buttons cannot cause a MutationObserver refresh loop.
@@ -336,7 +342,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261112-dothour1')
+   import('./apd_comparador_panel.mjs?v=20261112-account-home1')
     .then(()=>{loading=false;sync();})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
