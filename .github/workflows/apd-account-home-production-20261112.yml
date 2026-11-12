@@ -33,3 +33,5 @@ jobs:
         run: node scripts/promote-apd-home-verified-version.mjs
 
 # Recheck pinned candidate UUID directly; pagination-safe release gate.
+
+# Pinned UUID and regex-scoped PR277 GitHub merge-SHA tag; all other gates unchanged.
