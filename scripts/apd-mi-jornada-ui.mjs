@@ -114,6 +114,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  details.open=false;
  const summary=element('summary','apd-work-summary',
   saved.jobs.length?'Mis jornadas · '+saved.jobs.length+' guardadas (Insigne)':
+   saved.domicile?'Domicilio recuperado de mi cuenta (Insigne)':
    'Configurar mis jornadas y domicilio (Insigne)');
  details.appendChild(summary);
  const form=element('form','apd-work-form');
