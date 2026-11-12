@@ -8,7 +8,7 @@ Fecha de diseño: 12/11/2026. Proyecto APDocentePBA; no modifica otros proyectos
 - Requerimiento: ingresar domicilio **una vez** en Datos personales y reutilizarlo para calcular distancias en el comparador sin escribirlo de nuevo tras cerrar sesión.
 
 ## Cambio preparado
-1. **SQL pendiente de aprobación**: \`sql/apd_account_home_reference_20261112.sql\`, tabla dedicada \`public.user_home_reference\`, relación a \`users.id\`, RLS activo y **sin privilegios públicos**; solo Service Role del Worker.
+1. **SQL pendiente de aprobación**: \`docs/sql/APD_ACCOUNT_HOME_REFERENCE_CANDIDATE_20261112.sql\`, tabla dedicada \`public.user_home_reference\`, relación a \`users.id\`, RLS activo y **sin privilegios públicos**; solo Service Role del Worker.
 2. **Backend pendiente de despliegue**: \`scripts/build-account-home-worker-candidate.mjs\` construye un Worker de prueba con GET/PUT/DELETE \`/api/account/home\`. Cada request resuelve \`user_id\` desde sesión Bearer validada; NO acepta IDs de terceros, no registra direcciones, no procesa jornadas de trabajo.
 3. **Frontend pendiente de despliegue**: \`account_home_reference_patch.js\` crea el campo **Domicilio de referencia** en Datos personales con guardar/borrar y sin persistencia del domicilio en localStorage. El comparador reutiliza la referencia de cuenta; las jornadas siguen siendo privadas de la pestaña.
 4. Se guarda \`georef\` únicamente si el usuario eligió/confirmó el punto aproximado mediante la interfaz, con validación estricta de estructura. No se presenta como ubicación GPS o exacta de la vivienda.
