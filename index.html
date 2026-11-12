@@ -278,6 +278,7 @@
 <script src="admin_preview_patch.js?v=2"></script>
 <script src="admin_payments_patch.js?v=3"></script>
 <script src="account_profile_patch.js?v=20261102-clean"></script>
+<script src="account_home_reference_patch.js?v=20261112-account-home1"></script>
 
 <script src="repositorio_patch.js?v=2"></script>
 <script src="frontend_easy_fixes_patch.js?v=finalvisual2"></script>
@@ -336,7 +337,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261112-dothour1')
+   import('./apd_comparador_panel.mjs?v=20261112-account-home1')
     .then(()=>{loading=false;sync();})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
