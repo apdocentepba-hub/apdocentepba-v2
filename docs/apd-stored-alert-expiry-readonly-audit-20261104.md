@@ -1,0 +1,47 @@
+# APDocentePBA — cierre de auditoría de ofertas guardadas (04/11/2026)
+
+## Evidencia leída de Supabase real (solo consultas)
+
+Proyecto APDocentePBA; consultas SQL **solo lectura**, sin obtener nombres, emails ni identificadores de usuarios en resultados.
+
+- `public.user_offer_state`: **19** filas con `is_active = true` para **7** usuarios.
+- En **6** filas de **3** usuarios, el `finoferta` original de ABC ya quedó en el pasado, aunque `is_active` persiste en `true`; ninguna de esas 6 filas fue vista nuevamente durante las últimas dos semanas.
+- Las otras **13** filas tienen cierre futuro; las 19 contienen hora original y estado original `Publicada`.
+- Para este contraste se interpretó el campo `finoferta=...Z` de esta fuente ABC como reloj argentino, igual que en el guard experimental. **La convención requiere confirmación en la interfaz humana del portal ABC para una oferta concreta.** Las 6 ofertas vencidas son antiguas y no dependen materialmente de la diferencia de 3 horas.
+- No se actualizaron las seis filas ni se alteró la base. Se trata de una discrepancia entre el indicador de caché y el plazo real, no de prueba de que se hayan enviado avisos incorrectos.
+
+## Corrección preparada y comprobada
+
+PR experimental [#245](https://github.com/apdocentepba-hub/apdocentepba-v2/pull/245); último Worker candidato **offline**, sin desplegar:
+
+- **SHA256 fuente:** `dee977aea3c1370b744f4a75a910c7429a2ed7b661dfa84d4b74d231db4422db`.
+- **Artifact GitHub Actions:** `apd-stored-channel-deadline-safe-offline`, ID **13365647243**, ejecución [41918454231](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41918454231).
+- **CI resultado:** `SUCCESS`; pruebas de cierre, correos, sesiones, preferencias, rutas privadas, PID y circuito completo del Worker con cuentas sintéticas, sin acceso real a cuentas.
+- **Prueba de circuito final:** 2 ofertas compatibles esperadas en una simulación de ABC con 2 distritos; 7 búsquedas de PID simuladas; sesión acotada a cuenta sintética; ningún POST a Supabase real.
+
+Funciones protegidas por validación de cierre *fail-closed*:
+`fetchStoredOffers`, `sendPendingEmailDigests`, `loadTelegramStoredAlerts`, `waLoadStoredAlerts`, `handleTelegramWebhook`, `handleWhatsAppWebhook` y `runEmailAlertsSweep`.
+
+Garantías del código preparado:
+1. Las ofertas cacheadas vencidas, cerradas o con hora indeterminada no se muestran como vigentes a través de los canales indicados.
+2. Se vuelve a verificar el cierre luego de enriquecer datos en los canales, antes de responder o preparar un digest.
+3. Los IDs de ofertas registrados por el digest de email se calculan sobre la lista realmente renderizada, no sobre la lista previa al descarte.
+4. Las rutinas de la versión anterior conservan las validaciones de plan, preferencias y sesión. Pruebas simuladas aprobadas.
+
+## Estado de despliegue
+
+- **La corrección de canales es OFFLINE, no está subida ni sirve tráfico en Cloudflare.**
+- La última versión subida con 0 % fue `29ef1c70-3cc9-4ddc-ac05-31000546aad3`, que **no incluye** estos cambios.
+- En la última atestación de Cloudflare, la versión productiva `da0632dd-1b9e-4332-9c4a-75b5eade8d74` servía el 100 %. No inferir que esa proporción sigue idéntica si no se efectúa una nueva lectura.
+- La operación posterior para preparar otra subida quedó bloqueada por un control de la herramienta. No se forzó un bypass ni se ejecutó una subida posterior.
+- PR #246 aborda un fallo de un workflow de radar no relacionado: su CI rojo no significa que fallaron las pruebas de este Worker.
+
+## Pendiente de aceptación para lanzamiento
+
+1. Confirmar el reloj de cierre mediante un caso concreto en la interfaz de ABC y atender discrepancias con SAD.
+2. Subir el *exacto SHA de este Worker* mediante vía permitida con **0 % de tráfico** y verificar 29 bindings, 4 crons, rutas públicas y denegación de rutas privadas.
+3. Probar autenticación, planes, preferencias, ofertas y carrusel con sesión real autorizada, sin exponer credenciales.
+4. Validar escrituras de lotes PostgREST en entorno seguro o ensayo autorizado, su deduplicación y reversión, y una entrega de correo únicamente a destinatario de prueba autorizado.
+5. Solo después, solicitar autorización independiente para canary de tráfico y posterior producción. No prometer entrega instantánea de alertas: el sistema de correo tiene franjas horarias.
+
+**No se enviaron correos, mensajes de WhatsApp o Telegram, no se hicieron gastos, no se cambiaron planes, no se limpiaron datos de producción y no se activó esta versión.**
