@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -82,4 +82,12 @@ test('decision table reads only already visible applicant summaries with strict 
  assert.ok(read);
  assert.doesNotMatch(read,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|Authorization/);
  assert.doesNotMatch(app,/APD_readCachedApplicantsForComparison/);
+});
+
+test('ABC school-to-school distance is visibly distinct from the saved home distance',()=>{
+ assert.ok(ui.includes("Desde escuela de referencia ('+schoolOrigin+')"));
+ assert.ok(ui.includes("'0 km (misma escuela)'"));
+ assert.ok(ui.includes("schoolOrigin=state.anchor"));
+ assert.ok(ui.includes("Desde mi domicilio"));
+ assert.ok(!ui.includes("['Distancia desde referencia'"));
 });

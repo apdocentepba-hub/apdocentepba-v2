@@ -397,9 +397,15 @@ function renderSideBySide(items){
    ' (mismo listado indicado)':'No comparable'],
   ['Listado PID',x=>value(x.pid_listado)]
  ];
- if(items.some(x=>x.distancia_km!==null))
-  data.push(['Distancia desde referencia',x=>x.distancia_km===null?
-   'No verificada':x.distancia_km+' km en línea recta']);
+ if(items.some(x=>x.distancia_km!==null)){
+  // ABC distance is school-to-school. It is NOT from the saved domicile.
+  // Show the exact origin to make a legitimate 0 km self-distance clear.
+  const schoolOrigin=state.anchor;
+  data.push(['Desde escuela de referencia ('+schoolOrigin+')',x=>
+   x.distancia_km===null?'No verificada':
+   x.distancia_km===0&&String(x.escuela||'').trim().toUpperCase()===schoolOrigin?
+    '0 km (misma escuela)':x.distancia_km+' km en línea recta']);
+ }
  const privateProfile=state.privatePlannerAllowed?loadPrivatePlanner():null;
  if(privateProfile?.homeLocation){
   data.push(['Desde mi domicilio',x=>{
