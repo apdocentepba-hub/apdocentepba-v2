@@ -24,6 +24,6 @@ const target=path.join(root,'tmp/apd-account-home/worker-home-candidate.mjs');
 fs.mkdirSync(path.dirname(target),{recursive:true});
 fs.writeFileSync(target,result);
 console.log(JSON.stringify({ok:true,output:path.relative(root,target),
- schema:'sql/apd_account_home_reference_20261112.sql',
+ schema:'docs/sql/APD_ACCOUNT_HOME_REFERENCE_CANDIDATE_20261112.sql',
  route:'/api/account/home',methods:['GET','PUT','DELETE'],
  scope:'offline_candidate_no_deploy'}));
