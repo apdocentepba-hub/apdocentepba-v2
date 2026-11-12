@@ -18,6 +18,9 @@ on:
       - 'scripts/test-apd-comparador-ui-contract.mjs'
       - 'scripts/test-apd-comparador-browser.mjs'
       - 'scripts/apd-school-geodistance.mjs'
+      - 'scripts/apd-multimodal-transport.mjs'
+      - 'scripts/apd-mobility-ui.mjs'
+      - 'scripts/test-apd-multimodal-transport.mjs'
       - 'scripts/test-apd-school-geodistance.mjs'
       - 'mapa-escuelas-pba.html'
       - 'apd_comparador_panel.mjs'
@@ -45,11 +48,13 @@ jobs:
           node --check scripts/apd-mi-jornada-comparador.mjs
           node --check scripts/apd-home-georef.mjs
           node --check scripts/apd-mi-jornada-ui.mjs
+          node --check scripts/apd-multimodal-transport.mjs
+          node --check scripts/apd-mobility-ui.mjs
           node --check scripts/apd-account-home-write-policy.mjs
           node --check scripts/apd-insigne-planner-entitlement.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
           node --check scripts/apd-school-geodistance.mjs
-          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs scripts/test-apd-comparador-datos-evaluacion.mjs scripts/test-apd-mi-jornada-comparador.mjs scripts/test-apd-insigne-planner-entitlement.mjs
+          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs scripts/test-apd-comparador-datos-evaluacion.mjs scripts/test-apd-mi-jornada-comparador.mjs scripts/test-apd-insigne-planner-entitlement.mjs scripts/test-apd-multimodal-transport.mjs
       - name: 'Chromium QA: private access, safe offer selection and mobile layout'
         run: node scripts/test-apd-comparador-browser.mjs
       - name: Browser QA screenshots
