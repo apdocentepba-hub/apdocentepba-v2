@@ -1,0 +1,61 @@
+name: APD six AM clock audit read only
+on:
+  push:
+    branches: ['audit/apd-six-am-clock-readonly-20261112']
+    paths: ['.github/workflows/apd-six-am-clock-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  inspect-clock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Read current and historical Worker clock functions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'APD_CLOCK_READONLY_JS'
+          import crypto from 'node:crypto';
+          const worker='ancient-wildflower-cd37';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(!token) throw new Error('Read-only Cloudflare credential unavailable');
+          let account=process.env.CLOUDFLARE_ACCOUNT_ID||'';
+          async function get(uri){
+            if(!account){
+              const r=await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=50',{method:'GET',headers:{Authorization:'Bearer '+token}});
+              const j=await r.json();
+              if(!r.ok||!j.success||j.result?.length!==1) throw new Error('Account discovery failed closed');
+              account=j.result[0].id;
+            }
+            const allowed=uri.startsWith('/workers/scripts/'+worker+'/deployments')||uri.startsWith('/workers/workers/'+worker+'/versions/');
+            if(!allowed) throw new Error('Read path outside scoped Worker');
+            const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+account+uri,{method:'GET',headers:{Authorization:'Bearer '+token}});
+            const j=await r.json();
+            if(!r.ok||!j.success) throw new Error('Read-only Cloudflare GET failed: HTTP '+r.status);
+            return j.result;
+          }
+          const deployments=await get('/workers/scripts/'+worker+'/deployments');
+          const live=(deployments.deployments?.[0]?.versions||[]).filter(x=>Number(x.percentage)>0);
+          if(live.length!==1||Number(live[0].percentage)!==100) throw new Error('Expected one active production version');
+          const ids=[...new Set(['da0632dd-1b9e-4332-9c4a-75b5eade8d74','0b289fe2-e978-414a-a1ae-9f849d7354ae',live[0].version_id])];
+          for(const id of ids){
+            const v=await get('/workers/workers/'+worker+'/versions/'+id+'?include=modules');
+            const m=(v.modules||[]).find(x=>x.name===v.main_module);
+            if(!m?.content_base64) throw new Error('Main module unavailable');
+            const source=Buffer.from(m.content_base64,'base64').toString('utf8');
+            const meta={kind:'version',id,active:id===live[0].version_id,created_on:v.metadata?.created_on||v.created_on||null,message:v.annotations?.['workers/message']||null,bytes:Buffer.byteLength(source),sha256:crypto.createHash('sha256').update(source).digest('hex')};
+            console.log(JSON.stringify(meta));
+            for(const name of ['getArgentinaDigestSlotInfo','getMostRecentArgentinaDigestSlotInfo']){
+              const marker='function '+name+'(';
+              const start=source.indexOf(marker);
+              if(start<0){console.log(JSON.stringify({kind:'function',id,name,found:false}));continue;}
+              const end=source.indexOf('\n__name(',start);
+              if(end<0||end-start>5000) throw new Error('Function boundary unavailable: '+name);
+              console.log(JSON.stringify({kind:'function',id,name,source:source.slice(start,end)}));
+            }
+            const start=source.indexOf('async scheduled(event, env, ctx)');
+            console.log(JSON.stringify({kind:'scheduled_excerpt',id,found:start>=0,source:start<0?'':source.slice(start,start+7600)}));
+          }
+          console.log('READ_ONLY_CLOCK_AUDIT_COMPLETED');
+          APD_CLOCK_READONLY_JS
