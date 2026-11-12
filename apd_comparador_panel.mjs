@@ -2,11 +2,11 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
-import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261109-blocks1';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261111-qa2';
+import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261111-qa2';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-dothour1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -122,10 +122,22 @@ function focusComparison() {
  dialog.setAttribute('aria-label','Comparación de ofertas seleccionadas');
  const header=node('div','apd-comparator-modal-head');
  header.appendChild(node('h2','','Comparación de '+selected.length+' ofertas'));
+ const headerActions=node('div','apd-comparator-modal-actions');
+ if(state.privatePlannerAllowed&&selectedSchoolKeys().length&&!state.geoRequested){
+  headerActions.appendChild(button('Consultar ABC',()=>{
+   // Explicit click only. Keep control visible while the table scrolls.
+   void verifySchoolDistances().then(()=>{
+    if(state.enabled&&state.privatePlannerAllowed&&state.selected.size>=2&&
+       state.geoRequested&&!state.geoWorking&&
+       state.geoSignature===schoolGeoSignature())focusComparison();
+   });
+  },'btn btn-secondary apd-comparator-dialog-geobutton'));
+ }
  const close=button('Cerrar comparación',closeComparisonDialog,
   'apd-comparator-modal-close');
  close.id='apd-comparison-close';
- header.appendChild(close);
+ headerActions.appendChild(close);
+ header.appendChild(headerActions);
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
  if(state.privatePlannerAllowed)body.appendChild(
@@ -137,15 +149,7 @@ function focusComparison() {
  if(state.privatePlannerAllowed&&selectedSchoolKeys().length&&!state.geoRequested){
   body.appendChild(node('p','apd-comparator-hint',
    'Todavía no consultaste la ubicación oficial de estas escuelas en ABC. '+
-   'Podés verificarlas desde esta misma comparación.'));
-  body.appendChild(button('Consultar ubicaciones en ABC',()=>{
-   // Every official WFS request starts with this explicit click.
-   void verifySchoolDistances().then(()=>{
-    if(state.enabled&&state.privatePlannerAllowed&&state.selected.size>=2&&
-       state.geoRequested&&!state.geoWorking&&
-       state.geoSignature===schoolGeoSignature())focusComparison();
-   });
-  },'btn btn-secondary apd-comparator-dialog-geobutton'));
+   'Usá «Consultar ABC» en la cabecera de esta ventana.'));
  }else if(state.privatePlannerAllowed&&state.geoWorking){
   body.appendChild(node('p','apd-comparator-hint','Consultando ubicaciones en ABC...'));
  }
@@ -403,7 +407,7 @@ function renderSideBySide(items){
    const km=straightLineHomeSchoolKm(privateProfile.homeLocation,school);
    const origin=privateProfile.homeLocation;
    return !state.geoRequested?
-    'Pendiente de consulta: usá «Consultar ubicaciones en ABC» para medir la distancia':
+    'Pendiente de consulta: usá «Consultar ABC» arriba para medir la distancia':
     state.geoWorking?'Consultando ubicación oficial de la escuela...':
     km===null?'Ubicación de la escuela no verificada en ABC; revisá su clave o reintentá':
     km+' km en línea recta (no es distancia de viaje)'+

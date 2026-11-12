@@ -114,6 +114,10 @@
  align-items:center;gap:12px;flex-wrap:wrap;padding:17px 19px;
  background:#edf5ff;border-bottom:1px solid #d8e5f5}
 .apd-comparator-modal-head h2{margin:0;font-size:19px;line-height:1.3;color:#133656}
+.apd-comparator-modal-actions{display:flex;align-items:center;flex-wrap:wrap;
+ justify-content:flex-end;gap:8px;margin-left:auto}
+.apd-comparator-dialog-geobutton{min-height:39px;margin:0;padding:8px 11px;
+ font-size:13px;font-weight:750;white-space:normal}
 .apd-comparator-modal-close{border:1px solid #b1c5df;background:#fff;
  color:#133656;border-radius:9px;min-height:39px;padding:8px 12px;
  font:inherit;font-size:13px;font-weight:800;cursor:pointer}
@@ -121,9 +125,11 @@
  max-height:calc(100dvh - 130px);overflow-y:auto;overscroll-behavior:contain}
 .apd-comparator-dialog .apd-comparator-side-by-side{margin-top:0}
 @media(max-width:600px){
- .apd-comparator-modal-head{padding:12px}
+ .apd-comparator-modal-head{padding:12px;gap:8px}
  .apd-comparator-modal-head h2{font-size:16px}
- .apd-comparator-modal-body{padding:11px}
+ .apd-comparator-modal-actions{width:100%;justify-content:space-between}
+ .apd-comparator-dialog-geobutton{flex:1;min-width:0}
+ .apd-comparator-modal-body{padding:11px;max-height:calc(100dvh - 180px)}
 }
 
 /* Decision-focused comparator: show relevant facts and actual differences first. */

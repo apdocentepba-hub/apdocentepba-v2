@@ -50,17 +50,19 @@ function parseFromString(raw){
  // Exactly two explicit 24-hour times; no guessing based on Turno.
  const found=[...text.matchAll(/(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)/g)];
  if(found.length!==2){
-  // ABC sometimes writes a complete starting time and a whole end hour:
-  // "Lunes a Viernes: 7:30 A 12". The explicit 12 means 12:00, not unknown.
-  // Require the days, exactly one HH:MM timestamp, a connector and a
-  // standalone end hour. Do not guess from "Turno", dates or free text.
-  if(found.length!==1)return null;
-  const wholeHour=text.match(/^(.+?):\s*([01]?\d|2[0-3]):([0-5]\d)\s*(?:hs?\.?)?\s*(?:a|hasta)\s*([01]?\d|2[0-3])\s*(?:hs?\.?)?$/);
-  if(!wholeHour)return null;
-  const days=parseDays(wholeHour[1]);
+  // ABC sometimes uses integral hours and dot-separated minute notation,
+  // e.g. "Lunes: 14 A 18.30", or "7:30 A 12". Both are explicit clock
+  // intervals, not dates or inferred times from a shift label.
+  // Require a full, bounded block, an explicit weekday and a known connector.
+  if(found.length>1)return null;
+  const explicit=text.match(/^(.+?):\s*([01]?\d|2[0-3])(?:(?:[:.])([0-5]\d))?\s*(?:hs?\.?)?\s*(?:a|hasta)\s*([01]?\d|2[0-3])(?:(?:[:.])([0-5]\d))?\s*(?:hs?\.?)?$/);
+  if(!explicit||(!explicit[3]&&!explicit[5]))return null;
+  // Both endpoints as plain hours alone are too easy to confuse with an
+  // incomplete number range; require minute precision in at least one.
+  const days=parseDays(explicit[1]);
   if(!days)return null;
-  const start=Number(wholeHour[2])*60+Number(wholeHour[3]);
-  const end=Number(wholeHour[4])*60;
+  const start=Number(explicit[2])*60+Number(explicit[3]??0);
+  const end=Number(explicit[4])*60+Number(explicit[5]??0);
   return start<end?{days,start,end}:null;
  }
  const start=Number(found[0][1])*60+Number(found[0][2]);

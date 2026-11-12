@@ -47,15 +47,58 @@ test('whole-hour ABC fallback requires explicit weekdays, minute precision and b
   '7:30 A 12',
   'Lunes a Viernes: 7 A 12',
   'Lunes a Viernes: 7:30 A 24',
-  'Lunes a Viernes: 7:30 A 12.30',
+  
   'Lunes a Viernes: 7:30 A 12/11/2026',
   'Lunes a Viernes: 7:30 A 12 y 15:00',
   'Lunes a Viernes: 7:30 A 12 remoto',
   'Lunes a Viernes: 12:30 A 12'
  ])assert.equal(parseOfferWeeklySchedule(raw),null,raw);
  assert.equal(parseOfferWeeklySchedule('Lunes a Viernes: 7:30 hs A 12 hs').end,720);
+ assert.equal(parseOfferWeeklySchedule('Lunes a Viernes: 7:30 A 12.30').end,750);
 });
 
+test('real screenshot: Costa 14 A 18.30 repeated by weekday is explicit time, not unavailable',()=>{
+ const morning='Lunes a viernes: 07:30 a 12:00';
+ const afternoon=['Lunes','Martes','Miércoles','Jueves','Viernes']
+  .map(day=>day+': 14 A 18.30').join('; ');
+ const blocks=parseOfferWeeklySegments(afternoon);
+ assert.equal(blocks.length,5);
+ assert.deepEqual(blocks.map(b=>[b.start,b.end]),Array(5).fill([840,1110]));
+ assert.match(formatWeeklySchedule(afternoon),/Lunes: 14:00 a 18:30/);
+ assert.match(formatWeeklySchedule(afternoon),/Viernes: 14:00 a 18:30/);
+ assert.equal(assessComparatorCriterion('Días y horarios',[morning,afternoon]).status,'different');
+ const result=compareSelectedOfferSchedules([
+  {horario:morning,supl_desde:'10/11/2026',supl_hasta:'17/11/2026'},
+  {horario:afternoon,supl_desde:'12/11/2026',supl_hasta:'09/12/2026'}
+ ]);
+ assert.equal(result.length,1);
+ assert.equal(result[0].status,'no-time-overlap');
+ assert.equal(checkScheduleOverlap(afternoon,{
+  jobs:[{school:'Escuela A',days:[1,2,3,4,5],start:'07:30',end:'12:00'}]
+ }).status,'no-overlap');
+});
+test('ABC hour-dot notation accepts explicit times but rejects malformed or guessed blocks',()=>{
+ for(const [raw,start,end] of [
+  ['Lunes: 14 A 18.30',840,1110],
+  ['Lunes: 14 A 18:30',840,1110],
+  ['Lunes: 14.30 A 18:30',870,1110],
+  ['Lunes: 14:30 A 18.30',870,1110],
+  ['Lunes: 14 hs a 18.30 hs',840,1110],
+  ['Lunes a Viernes: 7:30 A 12',450,720]
+ ]){
+  const parsed=parseOfferWeeklySchedule(raw);
+  assert.ok(parsed,raw);
+  assert.equal(parsed.start,start,raw);
+  assert.equal(parsed.end,end,raw);
+ }
+ for(const raw of [
+  '14 A 18.30','Turno tarde','Lunes: 14 A 18',
+  'Lunes: 14 A 18.3',
+  'Lunes: 14 A 18.60','Lunes: 14 A 25.30',
+  'Lunes: 18 A 14.30','Lunes: 14 A 18.30 remoto',
+  'Lunes: 14 A 18.30 y 20.00','Lunes: 14 A 18/11/2026'
+ ])assert.equal(parseOfferWeeklySchedule(raw),null,raw);
+});
 test('real time/day differences remain different',()=>{
  assert.equal(schedulesEquivalent(first,'Lunes a Viernes: 14:00 a 18:30'),false);
  assert.equal(schedulesEquivalent(first,'Lunes a Jueves: 07:20 a 11:50'),false);
