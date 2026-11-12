@@ -4,7 +4,7 @@
  * Browser access is confirmed by CORS preflight, not a Node GET alone.
  */
 import {
- verifiedMobilityPair,valhallaRouteRequest,nearbyStopsQuery
+ verifiedMobilityPair,valhallaRouteRequest
 } from './apd-multimodal-transport.mjs';
 const origin={source:'GEOREF_AR_V2',lat:-34.604,lon:-58.386,
  scope:'exacta',reviewed:true};
@@ -14,9 +14,7 @@ const pair=verifiedMobilityPair(origin,school);
 if(!pair)throw Error('Synthetic pair validation failed');
 const originHeader='https://alertasapd.com.ar';
 const services=[
- {name:'VALHALLA',url:valhallaRouteRequest(pair,'auto'),headers:'x-client-id'},
- {name:'OVERPASS',url:'https://overpass-api.de/api/interpreter?data='+
-  encodeURIComponent(nearbyStopsQuery(origin)),headers:''}
+ {name:'VALHALLA',url:valhallaRouteRequest(pair,'auto'),headers:'x-client-id'}
 ];
 for(const item of services){
  try{
