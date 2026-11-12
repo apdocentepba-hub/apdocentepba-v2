@@ -9,7 +9,9 @@
  let ownerToken='',loaded=false,loading=false,home=null,problem='',epoch=0;
  const getToken=()=>String(
   typeof window.obtenerAuthBearer==='function'?window.obtenerAuthBearer():
-  typeof window.obtenerSessionToken==='function'?window.obtenerSessionToken():''
+  typeof window.obtenerSessionToken==='function'?window.obtenerSessionToken():
+  typeof window.obtenerToken==='function'?window.obtenerToken():
+  (window.localStorage?.getItem('apd_session_token_v1')||'')
  ).trim();
  function reScope(){
   const token=getToken();
@@ -69,7 +71,8 @@
   if(epoch!==current)throw Error('La sesión cambió');
   home=null;loaded=true;problem='';broadcast();
  }
- window.APD_accountHome=Object.freeze({peek,reload,persist,erase});
+ window.APD_accountHome=Object.freeze({peek,reload,persist,erase,
+  ready:()=>!!reScope()&&loaded});
  function paint(){
   const box=document.getElementById('panel-datos-docente');
   if(!box)return;
