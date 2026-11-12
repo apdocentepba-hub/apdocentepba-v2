@@ -101,7 +101,7 @@ function fixture({holdFirstGet=false}={}){
 function controls(box){
  const form=box.querySelector('#apd-account-home');
  const input=box.querySelector('#mi-cuenta-domicilio');
- const status=form.querySelector('[role=status]');
+ const status=form.querySelector('#apd-account-home-status');
  const buttons=form.querySelectorAll('button');
  return {form,input,status,buttons,
   save:buttons.find(b=>b.textContent==='Guardar domicilio en mi cuenta'),
