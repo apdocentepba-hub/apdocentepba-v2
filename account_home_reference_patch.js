@@ -82,6 +82,15 @@
   if(existing){
    const status=existing.querySelector('[role=status]');
    const field=existing.querySelector('input');
+   // A different login must never inherit the former account's DOM field,
+   // including unsaved edits (dataset.dirty).
+   if(existing.dataset.ownerEpoch!==String(epoch)){
+    existing.dataset.ownerEpoch=String(epoch);
+    delete existing.dataset.dirty;
+    if(field)field.value='';
+    if(status)status.textContent='Cargando domicilio de esta cuenta...';
+    void reload();
+   }
    if(status&&problem)status.textContent='El domicilio no está disponible: '+problem;
    if(field&&document.activeElement!==field&&!existing.dataset.dirty)
     field.value=home?.address_text||'';
@@ -89,6 +98,7 @@
   }
   const section=document.createElement('section');
   section.id='apd-account-home';
+  section.dataset.ownerEpoch=String(epoch);
   section.style.cssText='margin-top:16px;padding:14px;border:1px solid #cbd8ee;border-radius:12px';
   const heading=document.createElement('h3');
   heading.textContent='Domicilio de referencia';
