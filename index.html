@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if(offers.length&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261112-account-home1')
+   import('./apd_comparador_panel.mjs?v=20261112-georef-safe1')
     .then(()=>{loading=false;sync();})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
