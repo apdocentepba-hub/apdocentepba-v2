@@ -75,7 +75,7 @@ window.fetch=async (target,opts={})=>{
   if(u.hostname==='valhalla1.openstreetmap.de'){
    payload={trip:{summary:{length:12.4,time:1520}}};
   }else{
-   const layer=Number(u.pathname.match(/\/(\d+)\/query$/)?.[1]);
+   const layer=Number(u.pathname.split('/').filter(Boolean).at(-2));
    payload={features:layer===2?[{attributes:{LINEA:'33'}}]:[]};
   }
   const bytes=new TextEncoder().encode(JSON.stringify(payload));
