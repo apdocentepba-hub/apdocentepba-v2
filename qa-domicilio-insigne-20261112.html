@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>Prueba privada del domicilio — APDocentePBA</title>
+<style>
+:root{font-family:system-ui,Segoe UI,Arial,sans-serif;color-scheme:light dark}
+body{max-width:700px;margin:5vh auto;padding:16px;line-height:1.55}
+main{border:1px solid #9eb4cb;border-radius:14px;padding:22px}
+h1{font-size:1.5rem}p{margin:10px 0 18px}
+button,a{display:inline-block;padding:12px 15px;border:1px solid #8ba9c8;border-radius:8px;font-weight:700}
+button{background:#124d89;color:white;cursor:pointer}button:disabled{opacity:.6}
+a{color:inherit;text-decoration:none}
+[role=status]{padding:12px 0;font-weight:650;min-height:3em}
+small{color:inherit;opacity:.7}
+</style>
+</head>
+<body>
+<main>
+<h1>Verificación de domicilio de cuenta</h1>
+<p>Esta página comprueba si tu sesión de APDocentePBA puede consultar el servicio nuevo en la versión de prueba de Cloudflare.</p>
+<p>Solo realiza consultas <strong>GET</strong>. No guarda, modifica ni muestra direcciones, identificadores, credenciales o información privada. Es una prueba anterior a la publicación definitiva.</p>
+<button type="button" id="run">Comprobar mi sesión</button>
+<a href="./">Volver a AlertasAPD</a>
+<p id="status" role="status" aria-live="polite">Iniciá sesión en AlertasAPD y luego pulsá «Comprobar mi sesión».</p>
+<small>No compartas contraseñas ni códigos. Si falla, informá únicamente el mensaje o código HTTP mostrado.</small>
+</main>
+<script>
+(()=>{
+'use strict';
+const endpoint='https://apd-home-pr277-ancient-wildflower-cd37.apdocentepba.workers.dev/api/account/home';
+const b=document.getElementById('run');
+const status=document.getElementById('status');
+b.addEventListener('click',async()=>{
+ b.disabled=true;
+ status.textContent='Comprobando sin modificar datos...';
+ try{
+  // Read only the session token already held locally by the authenticated app.
+  // Do not display, store in new keys, transmit to any other destination or log.
+  const token=String(localStorage.getItem('apd_session_token_v1')||'').trim();
+  if(!token){status.textContent='No detecté una sesión activa. Volvé al panel e iniciá sesión.';return;}
+  const unauth=await fetch(endpoint,{method:'GET',credentials:'omit',cache:'no-store',
+    redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(15000)});
+  if(unauth.status!==401){
+   status.textContent='No pasó el control de seguridad sin sesión. HTTP '+unauth.status+'.';
+   return;
+  }
+  const own=await fetch(endpoint,{method:'GET',credentials:'omit',cache:'no-store',
+    redirect:'error',referrerPolicy:'no-referrer',
+    headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+  // Do not print, store, inspect, or present response fields containing PII.
+  if(own.status===200){
+   status.textContent='PASS: el servicio validó tu sesión. HTTP 200. La cuenta ya puede consultar su propio domicilio cuando se publique el formulario.';
+  }else if(own.status===401){
+   status.textContent='La versión de prueba rechazó la sesión. HTTP 401. Volvé a iniciar sesión y reintentá.';
+  }else{
+   status.textContent='La prueba devolvió HTTP '+own.status+'. Todavía no se considera aprobada.';
+  }
+ }catch(_){
+  status.textContent='No se pudo completar la comprobación (red o permiso CORS). No se guardó ni modificó ningún dato.';
+ }finally{b.disabled=false;}
+});
+})();
+</script>
+</body>
+</html>
