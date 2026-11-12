@@ -1,10 +1,8 @@
 name: APD account-home guarded zero-traffic stage
+# Release 2026-11-12 already promoted to production after real account QA.
+# Never auto-upload a second route candidate on subsequent PR changes.
 on:
-  pull_request:
-    paths:
-      - 'scripts/inspect-account-home-active-worker.mjs'
-      - 'scripts/stage-account-home-worker-candidate.mjs'
-      - '.github/workflows/apd-account-home-zero-traffic.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
