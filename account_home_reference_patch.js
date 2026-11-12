@@ -72,6 +72,18 @@
   if(epoch!==current||request!==requestNumber)throw Error('La sesión cambió');
   if(!confirmed||confirmed.address_text!==updated?.address_text)
    throw Error('El servidor no confirmó el domicilio guardado. Volvé a comprobarlo.');
+  // Text persistence alone does not establish that a chosen Georef point
+  // survived. Verify all geographic fields against the authenticated GET.
+  if(payload.georef){
+   const expected=payload.georef,point=confirmed.georef;
+   if(!point||point.source!=='GEOREF_AR_V2'||
+      point.label!==expected.label||Number(point.height)!==Number(expected.height)||
+      Number(point.lat)!==Number(expected.lat)||
+      Number(point.lon)!==Number(expected.lon)||
+      (point.scope||'exacta')!==(expected.scope||'exacta')||
+      (expected.reviewed===true&&point.reviewed!==true))
+    throw Error('El domicilio se guardó, pero no se confirmó la ubicación del mapa. Elegí la dirección nuevamente.');
+  }
   home=confirmed;loaded=true;problem='';broadcast();
   return confirmed;
  }
@@ -112,7 +124,8 @@
    if(status&&existing.dataset.busy!=='1'&&existing.dataset.dirty!=='1'){
     status.textContent=problem?'Error al cargar: '+problem:
      loading?'Cargando domicilio de tu cuenta...':
-     loaded?(home?'Domicilio recuperado de tu cuenta.':
+     loaded?(home?(home.georef?'Domicilio y ubicación recuperados de tu cuenta.':
+     'Domicilio guardado. Falta seleccionar una ubicación para calcular distancias.'):
        'Todavía no hay un domicilio guardado. Escribí tu dirección y tocá Guardar.'):
      'Comprobando domicilio...';
    }
@@ -253,7 +266,8 @@
   status.setAttribute('role','status');status.style.fontSize='13px';
   status.textContent=problem?'Error al cargar: '+problem:
    loading?'Cargando domicilio de tu cuenta...':
-   loaded?(home?'Domicilio recuperado de tu cuenta.':
+   loaded?(home?(home.georef?'Domicilio y ubicación recuperados de tu cuenta.':
+     'Domicilio guardado. Falta seleccionar una ubicación para calcular distancias.'):
     'Todavía no hay un domicilio guardado. Escribí tu dirección y tocá Guardar.'):
    'Comprobando domicilio...';
   const retry=document.createElement('button');
@@ -278,9 +292,14 @@
     const geo=chosenGeo?.label===address_text?
      {...chosenGeo,...(geoReview.checked?{reviewed:true}:{})}:
      home?.address_text===address_text?home.georef||null:null;
-    await persist({address_text,georef:geo});
+    const savedHome=await persist({address_text,georef:geo});
     delete section.dataset.dirty;
-    status.textContent='Domicilio guardado en tu cuenta.';
+    status.textContent=savedHome?.georef?
+     'Domicilio y ubicación guardados en tu cuenta.':
+     'Domicilio guardado en tu cuenta. Falta elegir la ubicación para calcular distancias.';
+    geoStatus.textContent=savedHome?.georef?
+     'Punto geográfico guardado y recuperado del servidor.':
+     'No hay coordenadas guardadas. Podés buscar calle y localidad cuando quieras.';
    }catch(e){status.textContent=String(e.message||'No se pudo guardar');}
    finally{busy(false);}
   });

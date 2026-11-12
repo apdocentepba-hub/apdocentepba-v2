@@ -129,7 +129,7 @@ test('save waits for authenticated PUT then GET confirmation and reports real st
  assert.deepEqual(f.calls,['GET','PUT','GET']);
  assert.equal(f.rows.get('account-a').address_text,c.input.value);
  assert.equal(f.bridge.peek().address_text,c.input.value);
- assert.equal(c.status.textContent,'Domicilio guardado en tu cuenta.');
+ assert.equal(c.status.textContent,'Domicilio guardado en tu cuenta. Falta elegir la ubicación para calcular distancias.');
  assert.equal(c.form.dataset.dirty,undefined);
 });
 test('new login clears a dirty address from old account even when no address is saved',async()=>{
@@ -151,7 +151,7 @@ test('late initial GET cannot erase a later verified save',async()=>{
  assert.equal(f.bridge.peek().address_text,c.input.value);
  f.releaseGet();await flush();
  assert.equal(f.bridge.peek().address_text,c.input.value);
- assert.equal(c.status.textContent,'Domicilio guardado en tu cuenta.');
+ assert.equal(c.status.textContent,'Domicilio guardado en tu cuenta. Falta elegir la ubicación para calcular distancias.');
 });
 test('delete is acknowledged only after GET confirms absence',async()=>{
  const f=fixture();await flush();

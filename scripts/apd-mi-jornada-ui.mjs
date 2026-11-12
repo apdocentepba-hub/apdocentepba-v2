@@ -4,6 +4,7 @@
  */
 import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
+import {resolvePlannerAccountHomeWrite} from './apd-account-home-write-policy.mjs?v=20261112-keepgeo1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
 let ephemeral=null;
 // Revokes old forms, including autocomplete timers not fired before logout.
@@ -331,22 +332,33 @@ export function createPrivatePlannerForm({onChanged}={}){
     throw Error('Revisá el punto en Maps y marcá la confirmación antes de guardar.');
    const reviewedHome=homeLocation&&reviewCheck.checked?
     {...homeLocation,reviewed:true}:homeLocation;
-   savePrivatePlanner({domicile:domicile.value,jobs,
-    travelGapMinutes:Number(travelGap.value),homeLocation:reviewedHome});
    const bridge=window.APD_accountHome;
-   if(bridge?.ready?.()&&domicile.value.trim()){
+   const accountLoaded=!!bridge?.ready?.();
+   const currentAccountHome=accountLoaded?bridge.peek():null;
+   const targetHome=resolvePlannerAccountHomeWrite(
+    currentAccountHome,domicile.value,reviewedHome);
+   // A schedule-only save must not replace an already verified location
+   // with null. A different typed address can still clear the old point.
+   savePrivatePlanner({domicile:domicile.value,jobs,
+    travelGapMinutes:Number(travelGap.value),homeLocation:targetHome.georef});
+   if(accountLoaded&&targetHome.address_text){
     try{
-     await bridge.persist({address_text:domicile.value.trim(),
-      georef:reviewedHome});
-     if(!isCurrent())return;
-     status.textContent='Domicilio guardado en tu cuenta. Jornadas guardadas en esta pestaña.';
+     if(targetHome.needsWrite){
+      await bridge.persist({address_text:targetHome.address_text,
+       georef:targetHome.georef});
+      if(!isCurrent())return;
+      status.textContent='Domicilio actualizado en tu cuenta. Jornadas guardadas en esta pestaña.';
+     }else{
+      status.textContent='Domicilio ya guardado en tu cuenta, sin cambios. '+
+       'Jornadas guardadas en esta pestaña.';
+     }
     }catch(error){
      status.textContent='Jornadas guardadas en la pestaña, pero no el domicilio en la cuenta: '+
       String(error.message||'Servicio no disponible');
     }
    }else{
     status.textContent='Jornadas guardadas en esta pestaña. '+
-     (bridge?.ready?.()?'Para borrar el domicilio de tu cuenta, usá Datos personales.':
+     (accountLoaded?'Para borrar el domicilio de tu cuenta, usá Datos personales.':
       'La cuenta todavía no confirmó su domicilio.');
    }
    if(isCurrent())onChanged?.();
