@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -90,4 +90,21 @@ test('ABC school-to-school distance is visibly distinct from the saved home dist
  assert.ok(ui.includes("schoolOrigin=state.anchor"));
  assert.ok(ui.includes("Desde mi domicilio"));
  assert.ok(!ui.includes("['Distancia desde referencia'"));
+});
+
+test('Insigne mobility feature is gated by official ABC schools and never reads device GPS',()=>{
+ assert.match(ui,/createMobilitySection/);
+ assert.match(ui,/state.privatePlannerAllowed&&state.geoRequested&&!state.geoWorking/);
+ assert.doesNotMatch(ui,/navigator.geolocation|getCurrentPosition/);
+ const mobility=fs.readFileSync(new URL('./apd-mobility-ui.mjs',import.meta.url),'utf8');
+ const api=fs.readFileSync(new URL('./apd-multimodal-transport.mjs',import.meta.url),'utf8');
+ assert.match(api,/verifiedMobilityPair/);
+ assert.match(api,/school.exact_key_match!==true/);
+ assert.match(api,/home\?\.source!=='GEOREF_AR_V2'/);
+ assert.match(api,/mapsDirectionsUrl/);
+ assert.match(api,/Valhalla \/ OpenStreetMap/);
+ assert.match(mobility,/Transporte público/);
+ assert.match(mobility,/Calcular km en auto/);
+ assert.match(mobility,/Consultar paradas y líneas cercanas/);
+ assert.doesNotMatch(mobility,/localStorage|sessionStorage|navigator\.geolocation|innerHTML/);
 });
