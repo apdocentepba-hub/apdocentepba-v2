@@ -1,4 +1,4 @@
-import {parseOfferWeeklySegments,formatWeeklySchedule} from './apd-mi-jornada-comparador.mjs?v=20261111-qa2';
+import {parseOfferWeeklySegments,formatWeeklySchedule} from './apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 /**
  * APD comparator presentation-only checks. No network, auth or persistence.
  * Prevent false highlights from superficial ABC formatting differences.
