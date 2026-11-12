@@ -1,10 +1,8 @@
 name: APD home scoped CORS - zero traffic Cloudflare candidate
+# Scoped CORS release is already in production. Never auto-upload a second
+# candidate from a baseline that has become intentionally historical.
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/apd-home-cors-zero-traffic.yml'
-      - 'scripts/build-apd-home-cors-version.mjs'
-      - 'scripts/stage-apd-home-cors-version.mjs'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
