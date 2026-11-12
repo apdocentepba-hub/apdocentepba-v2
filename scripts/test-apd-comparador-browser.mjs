@@ -37,6 +37,7 @@ window.__testToken=null;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
 window.__homeGeoRequests=[];
+window.__mobilityExternalRequests=[];
 window.__geoNetworkDown=false;
 window.__holdWFS=false;
 window.__heldWFS=[];
@@ -64,6 +65,20 @@ window.fetch=async (target,opts={})=>{
   const bytes=new TextEncoder().encode(JSON.stringify({
    direcciones:matches,cantidad:matches.length
   }));
+  return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
+   arrayBuffer:async()=>bytes.buffer};
+ }
+ if(['valhalla1.openstreetmap.de','services1.arcgis.com'].includes(u.hostname)){
+  window.__mobilityExternalRequests.push({host:u.hostname,path:u.pathname,
+   method:opts.method,credentials:opts.credentials});
+  let payload;
+  if(u.hostname==='valhalla1.openstreetmap.de'){
+   payload={trip:{summary:{length:12.4,time:1520}}};
+  }else{
+   const layer=Number(u.pathname.match(/\/(\d+)\/query$/)?.[1]);
+   payload={features:layer===2?[{attributes:{LINEA:'33'}}]:[]};
+  }
+  const bytes=new TextEncoder().encode(JSON.stringify(payload));
   return {ok:true,status:200,headers:{get:()=>String(bytes.byteLength)},
    arrayBuffer:async()=>bytes.buffer};
  }
@@ -575,6 +590,45 @@ try{
   assert.match(homeFacts.domicile,/RONDEAU 319, Wilde/);
   assert.ok(homeFacts.distances.every(x=>/km en línea recta/.test(x)));
   assert.equal(await js('document.querySelectorAll(".apd-comparator-home-map").length'),5);
+  // Mobility actions must never call routing or bus-layer APIs automatically.
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.querySelectorAll("#apd-comparison-dialog .apd-mobility-card").length===2');
+  const mobility=await js(`(()=>({
+   routes:[...document.querySelectorAll('#apd-comparison-dialog .apd-mobility-card .apd-mobility-map-link')]
+     .slice(0,4).map(a=>({mode:new URL(a.href).searchParams.get('travelmode'),
+       origin:new URL(a.href).searchParams.get('origin'),
+       target:new URL(a.href).searchParams.get('destination')})),
+   count:document.querySelectorAll('#apd-comparison-dialog .apd-mobility-card').length,
+   externalCalls:window.__mobilityExternalRequests.length
+  }))()`);
+  assert.equal(mobility.count,2);
+  assert.deepEqual(new Set(mobility.routes.map(x=>x.mode)),
+   new Set(['driving','bicycling','transit','walking']));
+  assert.ok(mobility.routes.every(x=>x.origin==='-34.7,-58.32'));
+  assert.ok(mobility.routes.every(x=>x.target==='-34.69,-58.33'));
+  assert.equal(mobility.externalCalls,0,'No routes or bus layers without a click');
+  await js(`(()=>{
+   const card=document.querySelector('#apd-comparison-dialog .apd-mobility-card');
+   [...card.querySelectorAll('button')].find(b=>b.textContent.includes('Calcular km en auto')).click();
+   return true;
+  })()`);
+  await until('document.querySelector(".apd-mobility-estimate")?.textContent.includes("12.4 km")');
+  assert.match(await js('document.querySelector(".apd-mobility-estimate").textContent'),/25 min aproximados/);
+  assert.equal(await js('window.__mobilityExternalRequests.length'),1,
+   'Only a single user-triggered road query should be sent');
+  await js(`(()=>{
+   const area=document.querySelector('#apd-comparison-dialog .apd-mobility-home-stops');
+   area.open=true;
+   [...area.querySelectorAll('button')].find(b=>b.textContent.includes('Ver líneas')).click();
+   return true;
+  })()`);
+  await until('document.querySelector(".apd-mobility-home-stops .apd-mobility-stops li")?.textContent.includes("Línea 33")');
+  assert.match(await js('document.querySelector(".apd-mobility-home-stops .apd-mobility-stops li").textContent'),
+   /Jurisdicción Nacional.*sin parada confirmada/i);
+  assert.equal(await js('window.__mobilityExternalRequests.length'),5,
+   'Four jurisdiction layers queried only after explicit bus-route click');
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
   // Opted-in autocomplete: no request until the user enables the switch,
   // then a single debounced lookup after typing a complete street+height.
   await js(`(()=>{
