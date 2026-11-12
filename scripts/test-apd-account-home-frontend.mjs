@@ -40,7 +40,7 @@ const make=()=>{
   }
   throw Error('Unexpected HTTP method');
  };
- vm.runInNewContext(script,{window,document,fetch,Event});
+ vm.runInNewContext(script,{window,document,fetch,Event,AbortSignal,AbortController});
  return {bridge:window.APD_accountHome,rows,calls,events,setToken:v=>{token=v}};
 };
 test('account home loads again after a new login without re-entering address',async()=>{
