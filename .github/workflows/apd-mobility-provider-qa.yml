@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/apd-mobility-provider-qa.yml'
       - 'scripts/audit-apd-mobility-demo-cors.mjs'
+      - 'scripts/apd-amba-bus-routes.mjs'
 permissions:
   contents: read
 jobs:
