@@ -75,3 +75,30 @@ for(const item of services){
   }));
  }
 }
+
+
+const {buildAmbaBusLayerUrl,parseAmbaBusLineFeatures}=await import('./apd-amba-bus-routes.mjs');
+for(let layer=0;layer<4;layer++){
+ try{
+  const url=buildAmbaBusLayerUrl(origin,layer);
+  const response=await fetch(url,{
+   method:'GET',headers:{Origin:originHeader,Accept:'application/json'},
+   signal:AbortSignal.timeout(16000)
+  });
+  const acao=response.headers.get('access-control-allow-origin');
+  const j=response.ok?await response.json():null;
+  const valid=j&&!j.error&&Array.isArray(j.features);
+  const scope=['CABA','Provincial','Nacional','Municipal'][layer];
+  const lines=valid?parseAmbaBusLineFeatures(j,scope):[];
+  console.log('APD_AMBA_BUS_LAYER '+JSON.stringify({
+   layer,scope,status:response.status,
+   browser_origin_allowed:acao==='*'||acao===originHeader,
+   valid:!!valid,features:j?.features?.length||0,lines:lines.length,
+   synthetic_coordinates_only:true
+  }));
+ }catch(error){
+  console.log('APD_AMBA_BUS_LAYER '+JSON.stringify({
+   layer,available:false,reason:String(error?.message||error).slice(0,120)
+  }));
+ }
+}
