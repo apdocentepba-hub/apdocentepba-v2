@@ -2,7 +2,7 @@ name: APD account home candidate - security (no deploy)
 on:
   pull_request:
     paths:
-      - 'sql/apd_account_home_reference_20261112.sql'
+      - 'docs/sql/APD_ACCOUNT_HOME_REFERENCE_CANDIDATE_20261112.sql'
       - 'scripts/apd-account-home-core.mjs'
       - 'scripts/build-account-home-worker-candidate.mjs'
       - 'scripts/test-apd-account-home.mjs'
