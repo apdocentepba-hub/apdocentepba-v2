@@ -95,7 +95,7 @@
   if(!token){box.querySelector('#apd-account-home')?.remove();return;}
   const existing=box.querySelector('#apd-account-home');
   if(existing){
-   const status=existing.querySelector('[role=status]');
+   const status=existing.querySelector('#apd-account-home-status');
    const field=existing.querySelector('input');
    // A different login must never inherit the former account's DOM field,
    // including unsaved edits (dataset.dirty).
@@ -249,6 +249,7 @@
   remove.type='button';remove.className='btn btn-secondary';remove.textContent='Eliminar domicilio';
   remove.style.marginLeft='8px';
   const status=document.createElement('p');
+  status.id='apd-account-home-status';
   status.setAttribute('role','status');status.style.fontSize='13px';
   status.textContent=problem?'Error al cargar: '+problem:
    loading?'Cargando domicilio de tu cuenta...':
