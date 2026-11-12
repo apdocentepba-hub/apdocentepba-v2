@@ -111,7 +111,7 @@ test('Worker endpoint scopes GET PUT DELETE to session user, not spoofed body us
  assert.ok(queries.every(q=>q.includes('user_id=eq.account-')));
 });
 test('database migration denies direct anon and authenticated table access',()=>{
- const sql=fs.readFileSync('sql/apd_account_home_reference_20261112.sql','utf8');
+ const sql=fs.readFileSync('docs/sql/APD_ACCOUNT_HOME_REFERENCE_CANDIDATE_20261112.sql','utf8');
  assert.match(sql,/ENABLE ROW LEVEL SECURITY/i);
  assert.match(sql,/REVOKE ALL .* FROM PUBLIC, anon, authenticated/i);
  assert.match(sql,/GRANT SELECT, INSERT, UPDATE, DELETE .* TO service_role/i);
