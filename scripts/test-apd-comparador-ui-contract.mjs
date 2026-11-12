@@ -84,10 +84,10 @@ test('decision table reads only already visible applicant summaries with strict 
  assert.doesNotMatch(app,/APD_readCachedApplicantsForComparison/);
 });
 
-test('ABC school-to-school distance uses an explicit school reference, never pretends to be home distance',()=>{
- assert.match(ui,/Desde escuela de referencia \\(.*schoolOrigin/);
- assert.match(ui,/0 km \\(misma escuela\\)/);
- assert.match(ui,/Desde mi domicilio/);
- assert.doesNotMatch(ui,/\\['Distancia desde referencia'/);
- assert.match(ui,/schoolOrigin=state\\.anchor/);
+test('ABC school-to-school distance is visibly distinct from the saved home distance',()=>{
+ assert.ok(ui.includes("Desde escuela de referencia ('+schoolOrigin+')"));
+ assert.ok(ui.includes("'0 km (misma escuela)'"));
+ assert.ok(ui.includes("schoolOrigin=state.anchor"));
+ assert.ok(ui.includes("Desde mi domicilio"));
+ assert.ok(!ui.includes("['Distancia desde referencia'"));
 });
