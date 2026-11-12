@@ -19,4 +19,4 @@ jobs:
       - name: Check live OPTIONS and anonymous GET without writes or secrets
         run: |
           node --check scripts/audit-apd-home-cors.mjs
-          node scripts/audit-apd-home-cors.mjs
+          node scripts/audit-apd-home-cors.mjs --require-correct
