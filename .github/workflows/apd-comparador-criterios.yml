@@ -13,6 +13,8 @@ on:
       - 'scripts/apd-insigne-planner-entitlement.mjs'
       - 'scripts/test-apd-insigne-planner-entitlement.mjs'
       - 'scripts/apd-mi-jornada-ui.mjs'
+      - 'scripts/apd-account-home-write-policy.mjs'
+      - 'scripts/test-apd-account-home-write-policy.mjs'
       - 'scripts/test-apd-comparador-ui-contract.mjs'
       - 'scripts/test-apd-comparador-browser.mjs'
       - 'scripts/apd-school-geodistance.mjs'
@@ -43,6 +45,7 @@ jobs:
           node --check scripts/apd-mi-jornada-comparador.mjs
           node --check scripts/apd-home-georef.mjs
           node --check scripts/apd-mi-jornada-ui.mjs
+          node --check scripts/apd-account-home-write-policy.mjs
           node --check scripts/apd-insigne-planner-entitlement.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
           node --check scripts/apd-school-geodistance.mjs
