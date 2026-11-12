@@ -56,7 +56,9 @@ function parseFromString(raw){
   // Require a full, bounded block, an explicit weekday and a known connector.
   if(found.length>1)return null;
   const explicit=text.match(/^(.+?):\s*([01]?\d|2[0-3])(?:(?:[:.])([0-5]\d))?\s*(?:hs?\.?)?\s*(?:a|hasta)\s*([01]?\d|2[0-3])(?:(?:[:.])([0-5]\d))?\s*(?:hs?\.?)?$/);
-  if(!explicit)return null;
+  if(!explicit||(!explicit[3]&&!explicit[5]))return null;
+  // Both endpoints as plain hours alone are too easy to confuse with an
+  // incomplete number range; require minute precision in at least one.
   const days=parseDays(explicit[1]);
   if(!days)return null;
   const start=Number(explicit[2])*60+Number(explicit[3]??0);
