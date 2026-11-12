@@ -25,9 +25,11 @@ export function buildAmbaBusLayerUrl(point,layer){
   spatialRel:'esriSpatialRelIntersects',
   distance:String(M),
   units:'esriSRUnit_Meter',
-  outFields:'*',
+  // Query distinct route numbers, not every duplicated branch/direction.
+  outFields:'LINEA',
+  returnDistinctValues:'true',
   returnGeometry:'false',
-  resultRecordCount:'100',
+  resultRecordCount:'2000',
   f:'json'
  }).toString();
 }
@@ -35,7 +37,7 @@ export function parseAmbaBusLineFeatures(json,scope){
  if(!Array.isArray(json?.features)||json.error||json.exceededTransferLimit)
   throw Error('La capa no pudo confirmar todas las líneas cercanas');
  const lines=new Map();
- for(const {attributes:a} of json.features.slice(0,100)){
+ for(const {attributes:a} of json.features.slice(0,500)){
   const value=a?.LINEA??a?.linea;
   const line=String(value??'').trim();
   if(!/^[0-9]{1,3}[A-Z]?$/.test(line)||!Number(line.replace(/[A-Z]$/,'')))continue;
