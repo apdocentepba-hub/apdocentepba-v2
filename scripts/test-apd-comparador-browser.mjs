@@ -176,7 +176,7 @@ async function until(code){
   if(await js(code))return;
   await sleep(100);
  }
- throw Error('Page did not load expected comparator module');
+ throw Error('Browser condition not reached after 10s: '+String(code).slice(0,220));
 }
 async function screenshot(name){
  const shot=await cdp('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false});
