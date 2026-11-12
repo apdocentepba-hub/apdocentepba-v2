@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "worker": "ancient-wildflower-cd37",
+  "active_version": "3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2",
+  "rollback_version": "c36834b1-0a35-4a3f-9a5e-0cc117a00bd7",
+  "production_traffic_percent": 100,
+  "module": {
+    "name": "worker-home-candidate.js",
+    "bytes": 708902,
+    "sha256": "948448bd7ec3db8fa8d30225de58610a2d94f495167e553b8699dbbe7ab36a9b"
+  },
+  "expected_binding_count": 29,
+  "approved_crons": [
+    "0 01 * * *",
+    "0 17 * * *",
+    "0 21 * * *",
+    "1-59/2 * * * *"
+  ],
+  "verified_utc": "2026-11-12T14:41:05Z",
+  "evidence": "https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/43239713801",
+  "scope": "cloudflare_production_metadata_only_no_module_source_no_binding_values",
+  "canonical_source_note": "worker-live/worker_hotfix.js remains an older snapshot; never deploy it without re-capture and exact live verification"
+}
