@@ -292,6 +292,8 @@ try{
     assert.match(bodyText,/Diferencias detectadas/);
     assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-dialog-geobutton").length'),1,
      'Insigne must be able to request official locations directly from the comparison modal');
+    assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-dialog-geobutton")?.closest(".apd-comparator-modal-head")!==null'),true,
+     'ABC location action stays in the visible header during table scrolling');
     assert.match(bodyText,/Todavía no consultaste la ubicación oficial/,
      'A missing consultation must not be misrepresented as an ABC verification failure');
     const scrollLayout=await js(`(()=>{
@@ -770,6 +772,44 @@ try{
   assert.equal(actualScreenshotCheck.status,'unverified');
   assert.ok(actualScreenshotCheck.cells.some(x=>x.includes('07:30 a 12:00')));
   assert.match(actualScreenshotCheck.match,/Cruce de días, horas y vigencias informadas/);
+  await js('document.getElementById("apd-comparison-close").click();true');
+  await until('!document.getElementById("apd-comparison-dialog")');
+  // Second real screenshot: complete Avellaneda morning versus Costa weekday
+  // afternoon blocks spelled "14 A 18.30", which must be comparable.
+  await js(`(()=>{
+   const afternoon=['Lunes','Martes','Miércoles','Jueves','Viernes']
+    .map(day=>day+': 14 A 18.30').join('; ');
+   window.__offers=window.__offers.map((offer,i)=>({
+    ...offer,dias_horarios:i===1?afternoon:'Lunes a Viernes: 07:30 a 12:00',
+    supl_desde:'2035-11-10',supl_hasta:'2035-12-10'
+   }));
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until(`(()=>{
+   const table=document.querySelector('#apd-comparador-panel .apd-comparator-table');
+   const row=[...(table?.querySelectorAll('tbody tr')||[])]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return row?.textContent.includes('Viernes: 14:00 a 18:30')??false;
+  })()`);
+  await js('document.getElementById("apd-ver-comparacion").click();true');
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  const costaScreenshotCheck=await js(`(()=>{
+   const dialog=document.getElementById('apd-comparison-dialog');
+   const row=[...dialog.querySelectorAll('.apd-comparator-table tbody tr')]
+    .find(x=>x.querySelector('th')?.textContent==='Días y horarios');
+   return {status:row?.dataset.comparisonStatus,
+    cells:[...(row?.querySelectorAll('td')||[])].map(x=>x.textContent),
+    noCollision:[...dialog.querySelectorAll('.apd-comparator-schedule-item')]
+     .some(x=>x.textContent.includes('Sin cruces de días y horas declarados'))};
+  })()`);
+  assert.equal(costaScreenshotCheck.status,'different',
+   'Complete morning and afternoon blocks must highlight an actual difference');
+  assert.ok(costaScreenshotCheck.cells.some(x=>x.includes('Lunes: 14:00 a 18:30')));
+  assert.equal(costaScreenshotCheck.noCollision,true,
+   'Morning and afternoon offers do not collide; this never certifies travel');
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
   await js(`(()=>{
