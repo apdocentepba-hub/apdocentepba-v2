@@ -38,7 +38,7 @@ export function parseAmbaBusLineFeatures(json,scope){
  for(const {attributes:a} of json.features.slice(0,100)){
   const value=a?.LINEA??a?.linea;
   const line=String(value??'').trim();
-  if(!/^[0-9]{1,3}[A-Z]?$/.test(line))continue;
+  if(!/^[0-9]{1,3}[A-Z]?$/.test(line)||!Number(line.replace(/[A-Z]$/,'')))continue;
   const key=scope+':'+line;
   if(!lines.has(key))lines.set(key,{
    line,scope,source:'ARCGIS_AMBA_ROUTE_LAYER',
