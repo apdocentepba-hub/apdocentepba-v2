@@ -33,9 +33,11 @@ for(const item of services){
   const h=res.headers.get('access-control-allow-headers')||'';
   console.log('APD_MOBILITY_DEMO_CORS '+JSON.stringify({
    service:item.name,options_status:res.status,
+   allow_origin:allow,
+   allow_headers:h.slice(0,140),
    allows_browser_origin:allow==='*'||allow===originHeader,
    allows_identifier_header:!item.headers||
-    h.includes('x-client-id')||h.includes('*')
+    h.toLowerCase().includes('x-client-id')||h.includes('*')
   }));
   await res.body?.cancel();
  }catch(error){
@@ -46,3 +48,30 @@ for(const item of services){
 }
 // Informational only: demo availability must never become an uptime dependency
 // for APDocentePBA core authenticated comparator or alerts.
+
+for(const item of services){
+ try{
+  const res=await fetch(item.url,{
+   method:'GET',
+   headers:{Origin:originHeader,Accept:'application/json',
+    ...(item.name==='VALHALLA'?{'X-Client-Id':'alertasapd.com.ar'}:{})},
+   signal:AbortSignal.timeout(20000)
+  });
+  const acao=res.headers.get('access-control-allow-origin');
+  const data=res.ok?await res.json():null;
+  const usable=item.name==='VALHALLA'?
+   Number.isFinite(Number(data?.trip?.summary?.length))&&
+    Number.isFinite(Number(data?.trip?.summary?.time)):
+   Array.isArray(data?.elements);
+  console.log('APD_MOBILITY_DEMO_GET '+JSON.stringify({
+   service:item.name,status:res.status,
+   browser_origin_allowed:acao==='*'||acao===originHeader,
+   valid_route_or_stops:usable,
+   note:'synthetic_coordinates_only'
+  }));
+ }catch(error){
+  console.log('APD_MOBILITY_DEMO_GET '+JSON.stringify({
+   service:item.name,available:false,error:String(error?.name||'network_error')
+  }));
+ }
+}
