@@ -104,7 +104,9 @@
     delete existing.dataset.dirty;
     if(field)field.value='';
     if(status)status.textContent='Cargando domicilio de esta cuenta...';
-    existing.querySelectorAll('[role=group] button').forEach(b=>b.remove());
+    existing._resetGeo?.();
+    const geoInfo=existing.querySelector('#apd-account-home-georef-status');
+    if(geoInfo)geoInfo.textContent='La dirección pertenece a la cuenta actual. Buscá su ubicación solo si querés calcular distancias.';
     void reload();
    }
    if(status&&existing.dataset.busy!=='1'&&existing.dataset.dirty!=='1'){
@@ -116,6 +118,9 @@
    }
    const retry=existing.querySelector('#apd-account-home-retry');
    if(retry)retry.hidden=!problem||loading;
+   const map=existing.querySelector('#apd-account-home-map');
+   if(map&&!existing.dataset.dirty)
+    map.hidden=!(home?.georef||existing._getSelectedGeo?.());
    if(field&&document.activeElement!==field&&!existing.dataset.dirty)
     field.value=home?.address_text||'';
    return;
@@ -143,6 +148,7 @@
   geoLookup.textContent='Buscar calle y localidad';
   geoLookup.style.cssText='margin:0 0 8px';
   const geoStatus=document.createElement('p');
+  geoStatus.id='apd-account-home-georef-status';
   geoStatus.setAttribute('role','status');
   geoStatus.style.fontSize='13px';
   geoStatus.textContent='Para calcular distancias, buscá y elegí una ubicación. La consulta a Georef es opcional.';
@@ -157,6 +163,7 @@
    ' Revisé la ubicación aproximada en el mapa y acepto usarla para las distancias.'));
   geoReviewLabel.hidden=true;
   const geoMap=document.createElement('button');
+  geoMap.id='apd-account-home-map';
   geoMap.type='button';geoMap.className='btn btn-secondary';
   geoMap.textContent='Ver ubicación en el mapa';
   geoMap.hidden=true;geoMap.style.margin='4px 0 8px';
@@ -172,6 +179,8 @@
    chosenGeo=null;geoReview.checked=false;geoReviewLabel.hidden=true;
    geoMap.hidden=true;geoCandidates.replaceChildren();
   };
+  section._resetGeo=clearGeo;
+  section._getSelectedGeo=()=>chosenGeo;
   input.addEventListener('input',()=>{
    section.dataset.dirty='1';
    clearGeo();
