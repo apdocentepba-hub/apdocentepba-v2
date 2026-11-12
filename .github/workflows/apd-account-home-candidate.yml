@@ -6,6 +6,7 @@ on:
       - 'scripts/apd-account-home-core.mjs'
       - 'scripts/build-account-home-worker-candidate.mjs'
       - 'scripts/test-apd-account-home.mjs'
+      - 'scripts/test-apd-account-home-frontend.mjs'
       - 'scripts/apd-mi-jornada-ui.mjs'
       - 'account_home_reference_patch.js'
       - 'index.html'
@@ -31,7 +32,7 @@ jobs:
           node --check scripts/apd-mi-jornada-ui.mjs
           node --check apd_comparador_panel.mjs
       - name: Account model and Worker sandbox regression (no network)
-        run: node --test scripts/test-apd-account-home.mjs
+        run: node --test scripts/test-apd-account-home.mjs scripts/test-apd-account-home-frontend.mjs
       - name: Guard that no production artifacts changed
         run: |
           if git diff --name-only origin/main...HEAD | grep -E '^(worker-live/|worker\.js$|wrangler\.toml$|\.github/workflows/deploy-worker)'; then
