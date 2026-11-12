@@ -83,7 +83,8 @@ test('nearby bus parsing only accepts tagged actual mapped stops within 400m',()
    tags:{highway:'residential',route_ref:'10'}}
  ]};
  const stops=parseMappedBusStops(data,home);
- assert.deepEqual(stops.map(s=>s.id),[3,1]);
+ assert.deepEqual(stops.map(s=>s.id),[3,1,2],
+  'distinct stop nodes may have identical coordinates; dedupe only identical OSM ids');
  assert.deepEqual(stops[1].lines,['17','85']);
  assert.deepEqual(stops[0].lines,[],'stop ref is not a bus line');
  assert.ok(stops.every(s=>s.meters<=400));
