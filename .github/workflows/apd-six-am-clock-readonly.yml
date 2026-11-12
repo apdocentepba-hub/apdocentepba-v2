@@ -46,6 +46,17 @@ jobs:
             const source=Buffer.from(m.content_base64,'base64').toString('utf8');
             const meta={kind:'version',id,active:id===live[0].version_id,created_on:v.metadata?.created_on||v.created_on||null,message:v.annotations?.['workers/message']||null,bytes:Buffer.byteLength(source),sha256:crypto.createHash('sha256').update(source).digest('hex')};
             console.log(JSON.stringify(meta));
+            const rationalePattern=/morning|matutin|nocturn|night|madrug|06:00|6:00|05:59|5:59|07:30|7:30|before.*clos|antes.*cierre/i;
+            const rationaleLines=source.split('\n');
+            const comments=rationaleLines.map((line,index)=>({line:index+1,text:line.trim()})).filter(x=>/^(\/\/|\/\*|\*)/.test(x.text)&&rationalePattern.test(x.text)).slice(0,40);
+            console.log(JSON.stringify({kind:'rationale_comments',id,comments}));
+            for(const name of ['shouldRunProvinciaCurrentAuto','maybeRunProvinciaCurrentCron']){
+              const start=source.indexOf('function '+name+'(');
+              const end=start<0?-1:source.indexOf('\n__name(',start);
+              console.log(JSON.stringify({kind:'night_scan_function',id,name,found:start>=0,source:start<0?'':source.slice(start,end>=0&&end-start<6000?end:start+2200)}));
+            }
+            const windows=rationaleLines.map((line,index)=>({line:index+1,text:line.trim()})).filter(x=>/auto_window|isMorningKickoff/.test(x.text)).slice(0,12);
+            console.log(JSON.stringify({kind:'scan_windows',id,windows}));
             for(const name of ['getArgentinaDigestSlotInfo','getMostRecentArgentinaDigestSlotInfo']){
               const marker='function '+name+'(';
               const start=source.indexOf(marker);
