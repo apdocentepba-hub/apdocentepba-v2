@@ -4,9 +4,9 @@
  * No GPS, user credentials, permanent storage, or background network calls.
  */
 import {
- verifiedMobilityPair,mapsDirectionsUrl,nearbyStopsMapUrl,
- walkingToStopUrl,estimateRoadRoute,fetchNearbyBusStops
+ verifiedMobilityPair,mapsDirectionsUrl,nearbyStopsMapUrl,estimateRoadRoute
 } from './apd-multimodal-transport.mjs?v=20261112-mobility1';
+import {fetchAmbaBusLinesNear} from './apd-amba-bus-routes.mjs?v=20261112-mobility1';
 
 const node=(tag,className,text)=>{
  const el=document.createElement(tag);
@@ -83,50 +83,43 @@ function addRoadEstimates(card,pair){
  box.append(status,actions);
  card.appendChild(box);
 }
-function listStops(host,point,scope){
+function listRoutes(host,point,scope){
  const wrap=node('section','apd-mobility-stop-group');
  wrap.appendChild(node('h5','',scope));
  const status=node('p','apd-mobility-status',
-  'Consultá paradas registradas en OpenStreetMap dentro de 400 metros. '+
-  'No implica que haya servicio vigente ni conexión directa a la escuela.');
+  'Consultá los recorridos de colectivos que atraviesan la zona de 400 m. '+
+  'No confirma que haya parada ni que el servicio esté funcionando.');
  status.setAttribute('role','status');
  const results=node('div','apd-mobility-stop-results');
  const actions=node('div','apd-mobility-actions');
  const maps=nearbyStopsMapUrl(point);
- if(maps)actions.appendChild(link('Ver paradas en Google Maps',maps));
- const search=btn('Consultar paradas y líneas cercanas',async()=>{
-  search.disabled=true;status.textContent='Buscando paradas mapeadas (hasta 400 m)...';
-  const controller=new AbortController();
-  const abort=()=>controller.abort();
-  wrap.addEventListener('apd:remove',abort,{once:true});
+ if(maps)actions.appendChild(link('Buscar paradas cercanas en Google Maps',maps));
+ const search=btn('Ver líneas de colectivo cercanas',async()=>{
+  search.disabled=true;status.textContent='Consultando las capas de recorridos del AMBA...';
   try{
-   const stops=await fetchNearbyBusStops(point,{signal:controller.signal});
-   if(!wrap.isConnected||controller.signal.aborted)return;
+   const lines=await fetchAmbaBusLinesNear(point);
+   if(!wrap.isConnected)return;
    results.replaceChildren();
-   status.textContent=stops.length?
-    stops.length+' paradas registradas cerca de este punto. '+
-     'Distancias en línea recta, no caminando por calles.':
-    'No se encontraron paradas mapeadas en el área. '+
-     'Podría haber otras sin registrar; comprobalo en Maps.';
+   status.textContent=lines.length?
+    lines.length+' líneas representadas en mapas dentro de 400 m de este punto. '+
+      'Son trazas aproximadas, NO paradas verificadas ni horarios actualizados.':
+    'El mapa consultado no contiene recorridos a menos de 400 m. '+
+      'Puede haber servicios no registrados; verificá Google Maps.';
    const list=node('ul','apd-mobility-stops');
-   for(const stop of stops){
+   for(const route of lines){
     const item=node('li','');
+    item.appendChild(node('strong','',
+     'Línea '+route.line+' · Jurisdicción '+route.scope));
     item.appendChild(node('span','',
-     stop.name+' · aprox. '+stop.meters+' m'+
-     (stop.lines.length?' · Líneas indicadas en OSM: '+stop.lines.join(', '):
-      ' · Línea no informada en OSM')));
-    const walk=walkingToStopUrl(point,stop);
-    if(walk)item.appendChild(link('Cómo llegar caminando',walk));
+     ' · Recorre la zona (base cartográfica, sin parada confirmada).'));
     list.appendChild(item);
    }
-   if(stops.length)results.appendChild(list);
+   if(lines.length)results.appendChild(list);
   }catch(_){
-   if(wrap.isConnected&&!controller.signal.aborted){
-    status.textContent='Paradas no disponibles desde OpenStreetMap ahora. '+
-     'Abrí Google Maps para consultar alternativas.';
-   }
+   if(wrap.isConnected)
+    status.textContent='Las capas de recorridos AMBA no están disponibles ahora. '+
+     'Consultá paradas y combinaciones en Google Maps.';
   }finally{
-   wrap.removeEventListener('apd:remove',abort);
    if(wrap.isConnected)search.disabled=false;
   }
  });
@@ -154,15 +147,15 @@ export function createMobilitySection({home,offers=[],verifiedBySchool={}}={}){
  }
  section.appendChild(node('p','apd-mobility-privacy',
   'Privacidad: las coordenadas guardadas se envían a Google Maps solo al abrir '+
-  'un enlace. Los cálculos OpenStreetMap y las consultas de paradas solo se '+
+  'un enlace. Los cálculos OpenStreetMap y las consultas de líneas solo se '+
   'realizan si pulsás el botón. No se usa el GPS del dispositivo ni se guardan '+
-  'tus viajes. Fuente OSM: © colaboradores de OpenStreetMap, licencia ODbL.'));
+  'tus viajes. Fuentes: OpenStreetMap (ODbL) y capa pública de recorridos AMBA (mayo de 2026).'));
  section.appendChild(node('p','apd-mobility-explainer',transportSourceMessage()));
  const homeStops=node('details','apd-mobility-home-stops');
- const homeSummary=node('summary','','Paradas de colectivo cercanas a mi domicilio');
+ const homeSummary=node('summary','','Líneas de colectivo cerca de mi domicilio');
  homeStops.appendChild(homeSummary);
  // Creating the click-only search does not itself request any data.
- listStops(homeStops,eligible[0].pair.origin,'Cerca de tu domicilio');
+ listRoutes(homeStops,eligible[0].pair.origin,'Recorridos mapeados cerca de tu domicilio');
  section.appendChild(homeStops);
  for(const {offer,school,pair,code} of eligible){
   const card=node('article','apd-mobility-card');
@@ -176,8 +169,8 @@ export function createMobilitySection({home,offers=[],verifiedBySchool={}}={}){
   addRoadEstimates(card,pair);
   const schoolStops=node('details','apd-mobility-school-stops');
   schoolStops.appendChild(node('summary','',
-   'Paradas de colectivo cerca de esta escuela'));
-  listStops(schoolStops,pair.destination,'Cerca de '+(school.nombre||code));
+   'Líneas de colectivo cerca de esta escuela'));
+  listRoutes(schoolStops,pair.destination,'Recorridos mapeados cerca de '+(school.nombre||code));
   card.appendChild(schoolStops);
   section.appendChild(card);
  }
