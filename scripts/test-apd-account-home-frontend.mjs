@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
 const script=fs.readFileSync('account_home_reference_patch.js','utf8');
-const make=()=>{
+const make=({dropGeorefOnPut=false}={})=>{
  let token='session-a';
  const rows=new Map([
   ['session-a',{address_text:'Calle Ficticia 123',georef:null}],
@@ -31,7 +31,7 @@ const make=()=>{
   if(opts.method==='GET')return {ok:true,status:200,json:async()=>({ok:true,home:rows.get(bearer)||null})};
   if(opts.method==='PUT'){
    const row=JSON.parse(opts.body);
-   rows.set(bearer,row);
+   rows.set(bearer,dropGeorefOnPut?{...row,georef:null}:row);
    return {ok:true,status:200,json:async()=>({ok:true,home:row})};
   }
   if(opts.method==='DELETE'){
@@ -78,4 +78,26 @@ test('bridge does not perform any automatic network request before session check
  assert.equal(bridge.ready(),false);
  assert.equal(bridge.peek(),null);
  assert.equal(calls.length,0);
+});
+
+test('account confirms the chosen map point only after GET returns its coordinates',async()=>{
+ const address='Calle Ficticia 319, Wilde, Buenos Aires';
+ const point={source:'GEOREF_AR_V2',label:address,height:319,
+  lat:-34.7,lon:-58.32,scope:'partido',reviewed:true};
+ const {bridge,rows}=make();
+ await bridge.reload();
+ const saved=await bridge.persist({address_text:address,georef:point});
+ assert.deepEqual(saved.georef,point);
+ assert.deepEqual(rows.get('session-a').georef,point);
+});
+test('never show a successful georeferenced save if GET returned text but no point',async()=>{
+ const address='Calle Ficticia 319, Wilde, Buenos Aires';
+ const point={source:'GEOREF_AR_V2',label:address,height:319,
+  lat:-34.7,lon:-58.32,scope:'partido',reviewed:true};
+ const {bridge,rows}=make({dropGeorefOnPut:true});
+ await bridge.reload();
+ await assert.rejects(()=>bridge.persist({address_text:address,georef:point}),
+  /no se confirmó la ubicación/);
+ assert.equal(rows.get('session-a').georef,null);
+ assert.equal(bridge.peek().georef,null);
 });
