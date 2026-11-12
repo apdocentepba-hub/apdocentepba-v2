@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 
 const WORKER='ancient-wildflower-cd37';
-const PINNED_VERSION='3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2';
-const ROLLBACK_VERSION='c36834b1-0a35-4a3f-9a5e-0cc117a00bd7';
+const PINNED_VERSION='8d0d65d9-a338-45d2-b7e9-68879f35b6d8';
+const ROLLBACK_VERSION='3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2';
 const ROOT='tmp/apd-worker-baseline-audit';
 const HASH=b=>crypto.createHash('sha256').update(b).digest('hex');
 const header=(token)=>({Authorization:'Bearer '+token});
@@ -57,6 +57,7 @@ function safeCode(module,manifest,details){
     !code.includes('getSessionUserByBearer')||
     !code.includes('handleAccountHomeSecureV1')||
     !code.includes('user_home_reference?user_id=eq.')||
+    !code.includes('cors["Access-Control-Allow-Methods"] = "GET, PUT, DELETE, OPTIONS"')||
     !code.includes('handleAccountProfileSecureV1')||
     !code.includes('handleAccountPreferencesSecureV1')||
     !code.includes('async fetch(request, env, ctx)')||

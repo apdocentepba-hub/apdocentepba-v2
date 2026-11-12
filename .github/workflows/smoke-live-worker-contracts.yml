@@ -169,8 +169,8 @@ jobs:
           // The account-home release used a new Wrangler bundle entrypoint.
           // Accept ONLY the exact approved version with that known module.
           if (r.main_module !== 'worker_hotfix.js') {
-            if (process.env.ACTIVE_VERSION !== '3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2' ||
-                r.main_module !== 'worker-home-candidate.js') {
+            if (process.env.ACTIVE_VERSION !== '8d0d65d9-a338-45d2-b7e9-68879f35b6d8' ||
+                r.main_module !== 'worker-cors-candidate.js') {
               throw new Error('Unapproved active Worker entrypoint/version combination');
             }
           }
@@ -228,7 +228,7 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=tmp/live-worker-contract-smoke
-          if [ "$ACTIVE_VERSION" = "3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2" ]; then
+          if [ "$ACTIVE_VERSION" = "8d0d65d9-a338-45d2-b7e9-68879f35b6d8" ]; then
             # The immutable, actively running release has a different module name
             # from the older canonical source. Verify its independently pinned
             # full SHA-256 and every binding. No fallback to a stale source.
