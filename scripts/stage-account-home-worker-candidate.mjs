@@ -71,8 +71,14 @@ const expected=JSON.parse(read('active-binding-keys.json'));
 const actual=(details.bindings||[]).map(x=>x.name+':'+x.type);
 if(expected.some(key=>!actual.includes(key)))
  throw Error('Staged version is missing active Worker bindings');
-if(details.modules?.length!==1||details.modules[0]?.name!=='worker_hotfix.js')
+// Wrangler bundles the generated entry point under its candidate filename,
+// not the original captured worker_hotfix.js name.
+if(details.modules?.length!==1||typeof details.modules[0]?.content_base64!=='string')
  throw Error('Unexpected staged Worker module shape');
+const compiled=Buffer.from(details.modules[0].content_base64,'base64').toString('utf8');
+if(!compiled.includes('handleAccountHomeSecureV1')||
+   !compiled.includes('/account/home'))
+ throw Error('Compiled Worker is missing the new account route');
 // Use no valid bearer tokens; never write an account in the live database.
 const preview='https://apd-home-pr277-ancient-wildflower-cd37.apdocentepba.workers.dev';
 const checks=[
