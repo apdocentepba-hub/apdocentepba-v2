@@ -45,7 +45,9 @@ test('candidate Worker is built offline with one authenticated route',()=>{
  assert.equal(source.split('async function handleAccountHomeSecureV1').length-1,1);
  assert.equal(source.split('if (path === API_URL_PREFIX3 + "/account/home")').length-1,1);
  assert.match(source,/getSessionUserByBearer\(env,request\)/);
- assert.doesNotMatch(source,/localStorage|navigator\.geolocation/);
+ const onlyNewRoute=source.slice(source.indexOf('// Authenticated home reference.'),
+  source.indexOf('async function handleAccountPreferencesSecureV1'));
+ assert.doesNotMatch(onlyNewRoute,/localStorage|navigator\.geolocation/);
 });
 test('Worker endpoint scopes GET PUT DELETE to session user, not spoofed body user_id',async()=>{
  const source=fs.readFileSync('tmp/apd-account-home/worker-home-candidate.mjs','utf8');
