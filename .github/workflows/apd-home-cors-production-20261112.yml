@@ -1,0 +1,33 @@
+name: APD home CORS guarded production promotion
+on:
+  push:
+    branches:
+      - release/apd-home-cors-20261112
+    paths:
+      - '.github/workflows/apd-home-cors-production-20261112.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-home-cors-production
+  cancel-in-progress: false
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      APD_HOME_CORS_GO: APPROVED_FIX_WITH_ROLLBACK
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify pinned guard syntax and release procedure
+        run: |
+          set -euo pipefail
+          node --check scripts/promote-apd-home-cors-verified-version.mjs
+          node --test scripts/test-apd-account-home.mjs scripts/test-apd-account-home-panel-dom.mjs
+      - name: Promote exact approved candidate and rollback if any real HTTP check fails
+        run: node scripts/promote-apd-home-cors-verified-version.mjs
