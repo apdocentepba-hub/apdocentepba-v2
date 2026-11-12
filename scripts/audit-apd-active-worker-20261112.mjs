@@ -111,6 +111,14 @@ async function main(){
   throw Error('Active version details unexpectedly changed');
  const previous=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
  const modules=safeCode(live.modules[0],previous,live);
+ // Independently attested and committed after a successful readonly audit.
+ const pinned=JSON.parse(fs.readFileSync(
+  'docs/APD_WORKER_APPROVED_LIVE_BASELINE_20261112.json','utf8'));
+ if(pinned.active_version!==PINNED_VERSION||
+    modules.name!==pinned.module.name||
+    modules.bytes!==pinned.module.bytes||
+    modules.sha256!==pinned.module.sha256)
+  throw Error('Cloudflare active code diverges from independently pinned release');
  const bindings=safeBindings(live.bindings,previous);
  const crons=safeCron(await api(token,base+'scripts/'+WORKER+'/schedules'));
  const checks=[
