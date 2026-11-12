@@ -14,6 +14,9 @@ on:
       - scripts/test-live-resource-binding-capture.mjs
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-live-source-equivalence.mjs
+      - scripts/verify-apd-approved-worker-20261112.mjs
+      - scripts/test-verify-apd-approved-worker-20261112.mjs
+      - docs/APD_WORKER_APPROVED_LIVE_BASELINE_20261112.json
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -32,6 +35,9 @@ on:
       - scripts/test-live-resource-binding-capture.mjs
       - scripts/test-pr-production-baseline.mjs
       - scripts/test-live-source-equivalence.mjs
+      - scripts/verify-apd-approved-worker-20261112.mjs
+      - scripts/test-verify-apd-approved-worker-20261112.mjs
+      - docs/APD_WORKER_APPROVED_LIVE_BASELINE_20261112.json
       - scripts/test-live-manual-email-dedupe.mjs
       - scripts/test-live-offer-identity-bundle.mjs
       - scripts/test-live-email-observability.mjs
@@ -105,6 +111,9 @@ jobs:
       - name: Verify live resource binding capture contract
         run: node scripts/test-live-resource-binding-capture.mjs
 
+      - name: Reject changed pinned release and incomplete binding metadata
+        run: node --test scripts/test-verify-apd-approved-worker-20261112.mjs
+
       - name: Download current active Worker bundle
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -157,7 +166,16 @@ jobs:
           const j = JSON.parse(fs.readFileSync(`${root}/active.json`, 'utf8'));
           const r = j.result;
           if (!j.success || !r?.id) throw new Error('active version detail missing');
-          if (r.main_module !== 'worker_hotfix.js') throw new Error(`main module drift: ${r.main_module}`);
+          // The account-home release used a new Wrangler bundle entrypoint.
+          // Accept ONLY the exact approved version with that known module.
+          if (r.main_module !== 'worker_hotfix.js') {
+            if (process.env.ACTIVE_VERSION !== '3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2' ||
+                r.main_module !== 'worker-home-candidate.js') {
+              throw new Error('Unapproved active Worker entrypoint/version combination');
+            }
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            'ACTIVE_MAIN_MODULE='+r.main_module+'\n');
 
           const modules = r.modules || [];
           const names = modules.map(m => m.name);
@@ -210,7 +228,14 @@ jobs:
         run: |
           set -euo pipefail
           ROOT=tmp/live-worker-contract-smoke
-          node scripts/test-live-source-equivalence.mjs "$ROOT" "$PRODUCTION_CANONICAL_DIR"
+          if [ "$ACTIVE_VERSION" = "3bbc9f42-9f65-4eda-83d1-2a0cf7ff25b2" ]; then
+            # The immutable, actively running release has a different module name
+            # from the older canonical source. Verify its independently pinned
+            # full SHA-256 and every binding. No fallback to a stale source.
+            node scripts/verify-apd-approved-worker-20261112.mjs "$ROOT" "$PRODUCTION_CANONICAL_DIR"
+          else
+            node scripts/test-live-source-equivalence.mjs "$ROOT" "$PRODUCTION_CANONICAL_DIR"
+          fi
 
       - name: Upload sanitized active Worker capture
         uses: actions/upload-artifact@v4
@@ -218,7 +243,8 @@ jobs:
           name: live-worker-canonical-capture
           path: |
             tmp/live-worker-contract-smoke/manifest.json
-            tmp/live-worker-contract-smoke/*.js
+            # Metadata only; do not publish executable Worker source to
+            # artifacts on this public repository.
           if-no-files-found: error
           retention-days: 7
 
@@ -229,10 +255,12 @@ jobs:
           for file in "$ROOT"/*.js; do
             node --check "$file"
           done
-          node scripts/test-live-email-cron-isolation.mjs "$ROOT/worker_hotfix.js"
-          node scripts/test-live-email-observability.mjs "$ROOT/worker_hotfix.js"
-          node scripts/test-live-manual-email-dedupe.mjs "$ROOT/worker_hotfix.js"
-          node scripts/test-live-offer-identity-bundle.mjs "$ROOT/worker_hotfix.js"
+          test -n "$ACTIVE_MAIN_MODULE"
+          test -f "$ROOT/$ACTIVE_MAIN_MODULE"
+          node scripts/test-live-email-cron-isolation.mjs "$ROOT/$ACTIVE_MAIN_MODULE"
+          node scripts/test-live-email-observability.mjs "$ROOT/$ACTIVE_MAIN_MODULE"
+          node scripts/test-live-manual-email-dedupe.mjs "$ROOT/$ACTIVE_MAIN_MODULE"
+          node scripts/test-live-offer-identity-bundle.mjs "$ROOT/$ACTIVE_MAIN_MODULE"
 
       - name: Run read-only production HTTP smoke
         run: |
