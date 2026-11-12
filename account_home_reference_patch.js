@@ -6,7 +6,7 @@
 (()=>{
  'use strict';
  const API=window.API_URL||'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
- let ownerToken='',loaded=false,loading=false,home=null,problem='',epoch=0;
+ let ownerToken='',loaded=false,loading=false,home=null,problem='',epoch=0,requestNumber=0;
  const getToken=()=>String(
   typeof window.obtenerAuthBearer==='function'?window.obtenerAuthBearer():
   typeof window.obtenerSessionToken==='function'?window.obtenerSessionToken():
@@ -16,7 +16,7 @@
  function reScope(){
   const token=getToken();
   if(token!==ownerToken){
-   ownerToken=token;loaded=false;loading=false;home=null;problem='';epoch++;
+   ownerToken=token;loaded=false;loading=false;home=null;problem='';epoch++;requestNumber++;
   }
   return token;
  }
@@ -30,6 +30,7 @@
   const requestId=epoch;
   const response=await fetch(API+'/api/account/home',{
    method,mode:'cors',credentials:'omit',cache:'no-store',
+   signal:AbortSignal.timeout(15000),
    headers:{Authorization:'Bearer '+token,...(payload!==undefined?{'Content-Type':'application/json'}:{})},
    ...(payload!==undefined?{body:JSON.stringify(payload)}:{})
   });
@@ -42,15 +43,20 @@
  async function reload(){
   const token=reScope();
   if(!token||loading||loaded)return;
-  loading=true;const current=epoch;
+  loading=true;problem='';
+  const current=epoch,request=++requestNumber;
+  broadcast();
   try{
    const next=await call('GET');
-   if(epoch!==current)return;
+   if(epoch!==current||request!==requestNumber)return;
    home=next;loaded=true;problem='';
   }catch(error){
-   if(epoch===current){problem=String(error.message||'No disponible');}
+   if(epoch===current&&request===requestNumber)
+    problem=String(error.message||'No disponible');
   }finally{
-   if(epoch===current){loading=false;broadcast();}
+   if(epoch===current&&request===requestNumber){
+    loading=false;broadcast();
+   }
   }
  }
  function peek(){
@@ -58,17 +64,26 @@
  }
  async function persist(payload){
   reScope();
-  const current=epoch;
+  const current=epoch,request=++requestNumber;
+  loading=false;
   const updated=await call('PUT',payload);
-  if(epoch!==current)throw Error('La sesión cambió');
-  home=updated;loaded=true;problem='';broadcast();
-  return updated;
+  // Confirm storage by reading it from the same authenticated account.
+  const confirmed=await call('GET');
+  if(epoch!==current||request!==requestNumber)throw Error('La sesión cambió');
+  if(!confirmed||confirmed.address_text!==updated?.address_text)
+   throw Error('El servidor no confirmó el domicilio guardado. Volvé a comprobarlo.');
+  home=confirmed;loaded=true;problem='';broadcast();
+  return confirmed;
  }
  async function erase(){
   reScope();
-  const current=epoch;
+  const current=epoch,request=++requestNumber;
+  loading=false;
   await call('DELETE');
-  if(epoch!==current)throw Error('La sesión cambió');
+  const confirmed=await call('GET');
+  if(epoch!==current||request!==requestNumber)throw Error('La sesión cambió');
+  if(confirmed!==null)
+   throw Error('El servidor no confirmó que el domicilio se eliminó.');
   home=null;loaded=true;problem='';broadcast();
  }
  window.APD_accountHome=Object.freeze({peek,reload,persist,erase,
@@ -91,7 +106,15 @@
     if(status)status.textContent='Cargando domicilio de esta cuenta...';
     void reload();
    }
-   if(status&&problem)status.textContent='El domicilio no está disponible: '+problem;
+   if(status&&existing.dataset.busy!=='1'&&existing.dataset.dirty!=='1'){
+    status.textContent=problem?'Error al cargar: '+problem:
+     loading?'Cargando domicilio de tu cuenta...':
+     loaded?(home?'Domicilio recuperado de tu cuenta.':
+       'Todavía no hay un domicilio guardado. Escribí tu dirección y tocá Guardar.'):
+     'Comprobando domicilio...';
+   }
+   const retry=existing.querySelector('#apd-account-home-retry');
+   if(retry)retry.hidden=!problem||loading;
    if(field&&document.activeElement!==field&&!existing.dataset.dirty)
     field.value=home?.address_text||'';
    return;
@@ -113,7 +136,10 @@
   input.autocomplete='street-address';
   input.style.cssText='box-sizing:border-box;width:100%;padding:10px;margin:4px 0 10px;border:1px solid #aac4df;border-radius:8px';
   input.value=home?.address_text||'';
-  input.addEventListener('input',()=>{section.dataset.dirty='1'});
+  input.addEventListener('input',()=>{
+   section.dataset.dirty='1';
+   status.textContent='Dirección sin guardar. Tocá «Guardar domicilio en mi cuenta».';
+  });
   const save=document.createElement('button');
   save.type='button';save.className='btn btn-primary';save.textContent='Guardar domicilio en mi cuenta';
   const remove=document.createElement('button');
@@ -121,10 +147,23 @@
   remove.style.marginLeft='8px';
   const status=document.createElement('p');
   status.setAttribute('role','status');status.style.fontSize='13px';
-  status.textContent=problem?'El domicilio no está disponible: '+problem:
+  status.textContent=problem?'Error al cargar: '+problem:
    loading?'Cargando domicilio de tu cuenta...':
-   loaded?'Podés editarlo cuando cambies de dirección.':'Preparando domicilio...';
-  const busy=value=>{save.disabled=value;remove.disabled=value;};
+   loaded?(home?'Domicilio recuperado de tu cuenta.':
+    'Todavía no hay un domicilio guardado. Escribí tu dirección y tocá Guardar.'):
+   'Comprobando domicilio...';
+  const retry=document.createElement('button');
+  retry.type='button';retry.id='apd-account-home-retry';
+  retry.className='btn btn-secondary';retry.textContent='Reintentar carga';
+  retry.hidden=!problem;retry.style.marginLeft='8px';
+  retry.addEventListener('click',()=>{
+   if(!reScope()||loading)return;
+   loaded=false;problem='';void reload();
+  });
+  const busy=value=>{
+   if(value)section.dataset.busy='1';else delete section.dataset.busy;
+   save.disabled=value;remove.disabled=value;retry.disabled=value;
+  };
   save.addEventListener('click',async()=>{
    if(!reScope())return;
    const address_text=input.value.trim();
@@ -146,7 +185,7 @@
    }catch(e){status.textContent=String(e.message||'No se pudo eliminar');}
    finally{busy(false);}
   });
-  section.append(heading,hint,input,save,remove,status);
+  section.append(heading,hint,input,save,remove,retry,status);
   box.appendChild(section);
   void reload();
  }
@@ -160,6 +199,7 @@
   document.addEventListener('DOMContentLoaded',observe,{once:true});
  else observe();
  document.getElementById('btn-logout')?.addEventListener('click',()=>{
-  ownerToken='';epoch++;loaded=false;loading=false;home=null;problem='';
+  ownerToken='';epoch++;requestNumber++;
+  loaded=false;loading=false;home=null;problem='';
  },true);
 })();
