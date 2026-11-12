@@ -133,10 +133,19 @@ export function createMobilitySection({home,offers=[],verifiedBySchool={}}={}){
   'Compará recorridos en auto, bicicleta, transporte público y a pie. '+
   'Los enlaces de Google Maps muestran los kilómetros, duración y, cuando '+
   'existan, colectivos y combinaciones para el horario que elijas.'));
- const eligible=Array.isArray(offers)?offers.slice(0,5).map(o=>{
-  const code=String(o?.escuela||'').trim().toUpperCase();
-  return {offer:o,school:verifiedBySchool?.[code],code};
- }).map(x=>({...x,pair:verifiedMobilityPair(home,x.school)})).filter(x=>x.pair):[];
+ // Several offers may belong to the same verified school. A route is a
+ // property of its location, not of each job posting; suppress duplicates.
+ const seenSchools=new Set();
+ const eligible=[];
+ for(const offer of Array.isArray(offers)?offers.slice(0,5):[]){
+  const code=String(offer?.escuela||'').trim().toUpperCase();
+  if(seenSchools.has(code))continue;
+  const school=verifiedBySchool?.[code];
+  const pair=verifiedMobilityPair(home,school);
+  if(!pair)continue;
+  seenSchools.add(code);
+  eligible.push({offer,school,code,pair});
+ }
  if(!eligible.length){
   section.appendChild(node('p','apd-mobility-notice',
    !home?.lat?
