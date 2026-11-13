@@ -1086,6 +1086,16 @@ try{
    document.getElementById('panel-datos-docente').appendChild(document.createElement('span'));
    return true;
   })()`);
+  await sleep(350);
+  console.log('APD_HOME_RELOAD_DIAG '+JSON.stringify({
+   calls:accountRequests,
+   page:await js(`(()=>({
+    ready:window.APD_accountHome?.ready(),
+    token:window.__testToken,
+    status:document.getElementById('apd-account-home-status')?.textContent,
+    box:document.getElementById('panel-datos-docente')?.textContent.slice(0,150)
+   }))()`)
+  }));
   await until('window.APD_accountHome.ready()');
   assert.equal(await js('window.APD_accountHome.peek()?.address_text'),
    'Calle de prueba 456, Quilmes, Buenos Aires',
