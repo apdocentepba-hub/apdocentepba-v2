@@ -1102,7 +1102,59 @@ try{
   assert.equal(accountRequests.filter(x=>x.bearer==='SYNTHETIC_HOME_B').length,2);
   assert.equal(accountRequests.some(x=>!accountHomes.has(x.bearer)),false,
    'No account endpoint requests may run without a synthetic valid session');
+
+  // New Insigne behavior: saved georeferenced account home + selecting one
+  // offer automatically performs school-key-only ABC verification, then
+  // renders the available mobility links directly UNDER that offer.
+  await js(`(()=>{
+   window.__offers=${JSON.stringify(synthetic.slice(0,2))};
+   window.alertasState={items:window.__offers,index:0};
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.getElementById("apd-comparar-oferta")');
+  const wfsBeforeAuto=await js('window.__wfsRequests.length');
+  await js('document.getElementById("apd-comparar-oferta").click();true');
+  await until('document.querySelectorAll("#apd-comparador-panel .apd-mobility-inline .apd-mobility-card").length===1');
+  assert.match(await js('document.querySelector(".apd-comparator-geo-status")?.textContent||""'),
+   /1 de 1 escuelas de ofertas verificadas/);
+  assert.equal(await js('window.__wfsRequests.length')-wfsBeforeAuto,1,
+   'One selected offer should trigger exactly one school-key-only ABC request');
+  const inline=await js(`(()=>({
+   section:!!document.querySelector('#apd-comparador-panel .apd-mobility-inline'),
+   labels:[...document.querySelectorAll('#apd-comparador-panel .apd-mobility-inline .apd-mobility-map-link')]
+     .map(a=>new URL(a.href).searchParams.get('travelmode')),
+   authLeak:window.__wfsRequests.some(x=>x.filter.includes('Calle de prueba')),
+   externalRequests:window.__mobilityExternalRequests.length
+  }))()`);
+  assert.equal(inline.section,true);
+  assert.deepEqual(new Set(inline.labels),
+   new Set(['driving','bicycling','walking','transit']));
+  assert.equal(inline.authLeak,false,'Saved home text must never be sent to ABC');
+  assert.equal(inline.externalRequests,0,
+   'No home coordinates may be transmitted automatically to routing or bus providers');
+
+  // A second selected offer automatically refreshes ABC without touching
+  // the official query button, preserving the first comparison modal.
+  await js(`(()=>{
+   window.alertasState.index=1;
+   document.getElementById('panel-alertas').innerHTML=
+    '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+   return true;
+  })()`);
+  await until('!!document.getElementById("apd-comparar-oferta")');
+  await js('document.getElementById("apd-comparar-oferta").click();true');
+  await until('document.querySelectorAll("#apd-comparador-panel .apd-mobility-inline .apd-mobility-card").length===2');
+  assert.match(await js('document.querySelector(".apd-comparator-geo-status")?.textContent||""'),
+   /2 de 2 escuelas de ofertas verificadas/);
+  await until('document.getElementById("apd-comparison-dialog")?.open===true');
+  assert.equal(await js('window.__mobilityExternalRequests.length'),0,
+   'Selecting two offers must not automatically send the saved home outside ABC');
+  await js('document.getElementById("apd-comparison-close").click();true');
+
   results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
+   auto_home_school_abc:true,inline_mobility:true,external_location_opt_in:true,
    account_home_reload:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
