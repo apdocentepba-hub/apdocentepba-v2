@@ -6,7 +6,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
-import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261112-mobility1';
+import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261112-mobility2';
 import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-georef-safe1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
