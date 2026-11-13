@@ -28,6 +28,7 @@ jobs:
   public-smoke:
     # A candidate PR is not deployed yet. Never compare it with production.
     # Run this job manually only after the approved deployment has completed.
+    # PR changes run only the offline contract test above.
     if: github.event_name == 'workflow_dispatch'
     needs: smoke-contract
     runs-on: ubuntu-latest
