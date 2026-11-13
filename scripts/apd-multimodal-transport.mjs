@@ -82,14 +82,21 @@ export async function estimateRoadRoute(pair,mode,{fetchImpl=fetch,signal}={}){
  const data=await cappedJson(response,450_000);
  const length=data?.trip?.summary?.length;
  const seconds=data?.trip?.summary?.time;
+ // A zero-length journey is credible only when its two reference points
+ // coincide. In particular, two different schools must never display 0 km.
+ const samePoint=pair.origin.lat===pair.destination.lat&&
+  pair.origin.lon===pair.destination.lon;
  // Never coerce null/false/empty provider fields into a fabricated 0 km route.
  if(typeof length!=='number'||typeof seconds!=='number'||
     !Number.isFinite(length)||!Number.isFinite(seconds)||
-    length<0||length>2000||seconds<0||seconds>86400)
+    length<0||length>2000||seconds<0||seconds>86400||
+    (!samePoint&&(length===0||seconds===0))||
+    (samePoint&&((length===0)!==(seconds===0))))
   throw Error('El proveedor no devolvió una ruta verificable');
  return Object.freeze({
-  mode,km:Math.round(length*10)/10,
-  minutes:Math.max(1,Math.round(seconds/60)),
+  // Preserve nonzero short routes: rounding 0.03 km to 0.0 is misleading.
+  mode,km:length>0&&length<0.1?length:Math.round(length*10)/10,
+  minutes:samePoint&&seconds===0?0:Math.max(1,Math.round(seconds/60)),
   source:'Valhalla / OpenStreetMap',
   estimated:true,
   includesLiveTraffic:false,
