@@ -12,13 +12,25 @@ import {createHash} from 'node:crypto';
 
 const ORIGIN = 'https://alertasapd.com.ar';
 const FILES = Object.freeze([
+ // Entry point, comparator UI and authenticated home reference.
  'index.html',
  'apd_comparador_panel.mjs',
  'apd_comparador_panel.css',
+ 'account_home_reference_patch.js',
+ // School map overlay and all private planner/comparator dependencies.
+ 'apd_offer_school_map_overlay.mjs',
+ 'scripts/apd-comparador-criterios.mjs',
+ 'scripts/apd-comparador-datos-evaluacion.mjs',
+ 'scripts/apd-mi-jornada-comparador.mjs',
  'scripts/apd-home-georef.mjs',
  'scripts/apd-mi-jornada-ui.mjs',
- 'scripts/apd-mi-jornada-comparador.mjs',
- 'scripts/apd-school-geodistance.mjs'
+ 'scripts/apd-account-home-write-policy.mjs',
+ 'scripts/apd-insigne-planner-entitlement.mjs',
+ 'scripts/apd-school-geodistance.mjs',
+ // Multimodal routes and opt-in AMBA mapped bus-route layers.
+ 'scripts/apd-mobility-ui.mjs',
+ 'scripts/apd-multimodal-transport.mjs',
+ 'scripts/apd-amba-bus-routes.mjs'
 ]);
 const MAX_BYTES = 2_000_000;
 const sha256 = buffer => createHash('sha256').update(buffer).digest('hex');
