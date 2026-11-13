@@ -7,12 +7,15 @@
  'use strict';
  const API=window.API_URL||'https://ancient-wildflower-cd37.apdocentepba.workers.dev';
  let ownerToken='',loaded=false,loading=false,home=null,problem='',epoch=0,requestNumber=0;
- const getToken=()=>String(
-  typeof window.obtenerAuthBearer==='function'?window.obtenerAuthBearer():
-  typeof window.obtenerSessionToken==='function'?window.obtenerSessionToken():
-  typeof window.obtenerToken==='function'?window.obtenerToken():
-  (window.localStorage?.getItem('apd_session_token_v1')||'')
- ).trim();
+ const getToken=()=>{
+  const raw=typeof window.obtenerAuthBearer==='function'?window.obtenerAuthBearer():
+   typeof window.obtenerSessionToken==='function'?window.obtenerSessionToken():
+   typeof window.obtenerToken==='function'?window.obtenerToken():
+   window.localStorage?.getItem('apd_session_token_v1');
+  // A session helper may return null/undefined before login or after logout.
+  // String(null) and String(undefined) are not authorization credentials.
+  return typeof raw==='string'?raw.trim():'';
+ };
  function reScope(){
   const token=getToken();
   if(token!==ownerToken){
