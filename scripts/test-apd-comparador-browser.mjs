@@ -617,6 +617,15 @@ try{
   assert.equal(await js('window.__mobilityExternalRequests.length'),1,
    'Only a single user-triggered road query should be sent');
   await js(`(()=>{
+   const card=document.querySelector('#apd-comparison-dialog .apd-mobility-card');
+   [...card.querySelectorAll('button')].find(b=>b.textContent.includes('Calcular km a pie')).click();
+   return true;
+  })()`);
+  await until('document.querySelectorAll(".apd-mobility-estimate").length===2');
+  assert.match(await js('document.querySelectorAll(".apd-mobility-estimate")[1].textContent'),/Caminata: 12.4 km/);
+  assert.equal(await js('window.__mobilityExternalRequests.length'),2,
+   'Walking estimates also require an explicit user click');
+  await js(`(()=>{
    const area=document.querySelector('#apd-comparison-dialog .apd-mobility-home-stops');
    area.open=true;
    [...area.querySelectorAll('button')].find(b=>b.textContent.includes('Ver líneas')).click();
@@ -625,7 +634,7 @@ try{
   await until('document.querySelector(".apd-mobility-home-stops .apd-mobility-stops li")?.textContent.includes("Línea 33")');
   assert.match(await js('document.querySelector(".apd-mobility-home-stops .apd-mobility-stops li").textContent'),
    /Jurisdicción Nacional.*sin parada confirmada/i);
-  assert.equal(await js('window.__mobilityExternalRequests.length'),5,
+  assert.equal(await js('window.__mobilityExternalRequests.length'),6,
    'Four jurisdiction layers queried only after explicit bus-route click');
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
