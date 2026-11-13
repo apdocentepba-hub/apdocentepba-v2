@@ -112,8 +112,7 @@ window.fetch=async (target,opts={})=>{
  return reply;
 };
 </script>
-<script>${bootstrap}</script>
-<script src="/account_home_reference_patch.js"></script></body></html>`;
+<script>${bootstrap}</script></body></html>`;
 const accountHomes=new Map([
  ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
   georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 123, Wilde, Buenos Aires',
@@ -1086,16 +1085,6 @@ try{
    document.getElementById('panel-datos-docente').appendChild(document.createElement('span'));
    return true;
   })()`);
-  await sleep(350);
-  console.log('APD_HOME_RELOAD_DIAG '+JSON.stringify({
-   calls:accountRequests,
-   page:await js(`(()=>({
-    ready:window.APD_accountHome?.ready(),
-    token:window.__testToken,
-    status:document.getElementById('apd-account-home-status')?.textContent,
-    box:document.getElementById('panel-datos-docente')?.textContent.slice(0,150)
-   }))()`)
-  }));
   await until('window.APD_accountHome.ready()');
   assert.equal(await js('window.APD_accountHome.peek()?.address_text'),
    'Calle de prueba 456, Quilmes, Buenos Aires',
