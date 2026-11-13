@@ -61,12 +61,12 @@ const cappedJson=async(res,max)=>{
  return JSON.parse(new TextDecoder().decode(bytes));
 };
 export function valhallaRouteRequest(pair,mode){
- if(!pair||!['auto','bici'].includes(mode))return null;
+ if(!pair||!['auto','bici','pie'].includes(mode))return null;
  const origin=safePoint(pair.origin),destination=safePoint(pair.destination);
  if(!origin||!destination)return null;
  const payload={
   locations:[origin,destination],
-  costing:mode==='auto'?'auto':'bicycle',
+  costing:mode==='auto'?'auto':mode==='bici'?'bicycle':'pedestrian',
   units:'kilometers',language:'es-ES'
  };
  return VALHALLA+'?json='+encodeURIComponent(JSON.stringify(payload));
@@ -80,9 +80,11 @@ export async function estimateRoadRoute(pair,mode,{fetchImpl=fetch,signal}={}){
   signal:boundedSignal(signal,16000)
  });
  const data=await cappedJson(response,450_000);
- const length=Number(data?.trip?.summary?.length);
- const seconds=Number(data?.trip?.summary?.time);
- if(!Number.isFinite(length)||!Number.isFinite(seconds)||
+ const length=data?.trip?.summary?.length;
+ const seconds=data?.trip?.summary?.time;
+ // Never coerce null/false/empty provider fields into a fabricated 0 km route.
+ if(typeof length!=='number'||typeof seconds!=='number'||
+    !Number.isFinite(length)||!Number.isFinite(seconds)||
     length<0||length>2000||seconds<0||seconds>86400)
   throw Error('El proveedor no devolvió una ruta verificable');
  return Object.freeze({
