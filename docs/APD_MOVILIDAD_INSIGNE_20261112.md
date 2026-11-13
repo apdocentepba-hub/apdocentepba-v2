@@ -23,3 +23,11 @@ Fecha: 12 de noviembre de 2026. Alcance: frontend público; sin claves ni gastos
 - La ejecución real de Chrome usa exclusivamente un servidor local y coordenadas sintéticas.
 - La cobertura de transporte colectivo depende de la completitud de la cartografía. El cálculo exacto de trayecto de transporte dentro de APD, con transbordos, requiere un planificador GTFS (no instalado ni pagado).
 - No se modificaron Cloudflare Worker, Supabase, sesiones, usuarios, suscripciones ni alertas.
+
+## Revisión de resiliencia propuesta (rama `fix/insigne-movilidad-resiliente-20261112`)
+- Se rechazan respuestas de ruta cuyo largo o duración no sean números JSON reales. Un `null`, booleano o texto vacío no se interpreta como **0 km**.
+- Se incorpora la caminata estimada por calles con el modelo `pedestrian` de Valhalla, también solo al pulsar el botón.
+- La consulta de las cuatro jurisdicciones AMBA pasa a ser paralela: si una capa no responde, las otras siguen siendo útiles, pero la UI avisa exactamente cuáles faltan. Si ninguna responde, se muestra indisponibilidad.
+- El servidor puede entregar más de 500 registros: se procesan hasta los 2000 autorizados por la consulta. La UI limita el listado a 80 para legibilidad, indicando el total si hubo truncamiento.
+- Pruebas sintéticas: rechazo de distancias fabricadas, respuesta parcial, simultaneidad de consultas, más de 500 recorridos y control peatonal en Chromium.
+- Esta revisión no incorpora datos GTFS ni confirma paradas, ramales ni frecuencias. Tampoco modifica backend, precios ni usuarios. **No publicar sin validación CI y autorización.**
