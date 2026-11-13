@@ -11,6 +11,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 
 const ORIGIN = 'https://alertasapd.com.ar';
+// Keep this list aligned with the complete authenticated Insigne static import graph.
 const FILES = Object.freeze([
  // Entry point, comparator UI and authenticated home reference.
  'index.html',
