@@ -5,21 +5,37 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-public-deployment-smoke.mjs'
+      - 'scripts/test-apd-public-deployment-smoke.mjs'
       - '.github/workflows/apd-public-deployment-smoke.yml'
 
 permissions:
   contents: read
 
 jobs:
-  public-smoke:
+  smoke-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify live domain serves the checked-out Insigne assets
+      - name: Validate complete asset coverage and privacy of the post-deploy smoke
         run: |
           node --check scripts/apd-public-deployment-smoke.mjs
-          node scripts/apd-public-deployment-smoke.mjs
+          node --test scripts/test-apd-public-deployment-smoke.mjs
+
+  public-smoke:
+    # A candidate PR is not deployed yet. Never compare it with production.
+    # Run this job manually only after the approved deployment has completed.
+    if: github.event_name == 'workflow_dispatch'
+    needs: smoke-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify live domain serves the exact checked-out Insigne assets
+        run: node scripts/apd-public-deployment-smoke.mjs
