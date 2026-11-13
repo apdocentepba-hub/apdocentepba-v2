@@ -1,6 +1,8 @@
 /*
- * APD optional home/work schedule form. User chooses to save to sessionStorage
- * (same browser tab only); never fetches, uploads, geocodes or logs these values.
+ * Insigne work schedules and a temporary address copy remain in sessionStorage.
+ * After an explicit save with an authenticated account, a changed home reference
+ * (text and optional Georef point) is persisted via APD_accountHome.
+ * Address suggestions contact Georef Argentina only by user action/opt-in.
  */
 import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
@@ -262,11 +264,11 @@ export function createPrivatePlannerForm({onChanged}={}){
  showChosen();
  form.append(homeAutoLabel,homeLookup,homeStatus,homeCandidates,homeCheck,homeMap,reviewRow);
  form.appendChild(element('p','apd-comparator-hint',
-  'El domicilio solo se consulta si pulsás «Buscar direcciones» o activás '+
-  '«Sugerir mientras escribo». Si hay varias opciones, agregá localidad, '+
-  'partido y provincia separados por comas. Georef recibe el texto ingresado; nunca usamos '+
-  'tu GPS ni enviamos el domicilio al servidor '+
-  'de AlertasAPD. La distancia estimada será en línea recta entre puntos.' ));
+  'Georef Argentina recibe la dirección si elegís buscar coincidencias o activás '+
+  '«Sugerir mientras escribo». Con tu sesión activa, «Guardar jornadas y domicilio» '+
+  'envía la dirección y la ubicación aproximada elegida (si existe) al servidor '+
+  'de AlertasAPD para guardarlas en tu cuenta. Tus horarios quedan solo en esta '+
+  'pestaña. No usamos GPS. Las distancias geográficas son en línea recta.' ));
  const travelGap=element('select','apd-work-input');
  for(const minutes of TRAVEL_GAP_OPTIONS){
   const option=element('option','',minutes?minutes+' minutos':'Desactivado');
@@ -293,7 +295,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  const buttons=element('div','apd-work-actions');
  const save=element('button','btn btn-primary','Guardar jornadas y domicilio');
  save.type='submit';
- const erase=element('button','btn btn-secondary','Borrar mis datos');
+ const erase=element('button','btn btn-secondary','Borrar datos de esta pestaña');
  erase.type='button';
  erase.addEventListener('click',()=>{
   if(!isCurrent())return;
@@ -315,7 +317,9 @@ export function createPrivatePlannerForm({onChanged}={}){
   onChanged?.();
  });
  buttons.append(save,erase);
- form.append(buttons,status);
+ form.append(buttons,element('p','apd-comparator-hint',
+  'Borrar datos de esta pestaña no elimina el domicilio guardado en tu cuenta. '+
+  'Para eliminarlo de forma permanente, ingresá a Datos personales.'),status);
  form.addEventListener('submit',async event=>{
   event.preventDefault();
   if(!isCurrent())return;
