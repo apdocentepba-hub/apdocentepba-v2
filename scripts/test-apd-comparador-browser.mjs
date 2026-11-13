@@ -26,6 +26,7 @@ const html=`<!doctype html><html lang="es"><head>
 .btn{border:1px solid #99b1db;border-radius:9px;padding:8px;background:white}
 </style></head><body><div id="fixture">
 <h2>Panel de Alertas APD — laboratorio</h2>
+<div id="panel-datos-docente"></div>
 <div id="panel-alertas"><article class="alerta-main-card"><div class="alerta-actions"></div></article></div>
 <section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section>
 </div>
@@ -34,6 +35,7 @@ let dashboardLoadedOwner=null;
 let planActual={access_active:false};
 window.alertasState={items:[],index:0};
 window.__testToken=null;
+window.API_URL=location.origin;
 function obtenerToken(){return window.__testToken;}
 window.__wfsRequests=[];
 window.__homeGeoRequests=[];
@@ -110,11 +112,33 @@ window.fetch=async (target,opts={})=>{
  return reply;
 };
 </script>
-<script>${bootstrap}</script></body></html>`;
+<script>${bootstrap}</script>
+<script src="/account_home_reference_patch.js"></script></body></html>`;
+const accountHomes=new Map([
+ ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
+  georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 123, Wilde, Buenos Aires',
+   height:123,lat:-34.7,lon:-58.32,scope:'partido',reviewed:true}}],
+ ['SYNTHETIC_HOME_B',{address_text:'Calle de prueba 456, Quilmes, Buenos Aires',
+  georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 456, Quilmes, Buenos Aires',
+   height:456,lat:-34.74,lon:-58.27,scope:'partido',reviewed:true}}]
+]);
+const accountRequests=[];
 const server=createServer((req,res)=>{
  const pathname=new URL(req.url,'http://localhost').pathname;
+ if(pathname==='/api/account/home'){
+  // No real user/session address is ever involved: synthetic in-process backend.
+  const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  accountRequests.push({method:req.method,bearer});
+  const home=accountHomes.get(bearer);
+  res.setHeader('Content-Type','application/json; charset=utf-8');
+  res.setHeader('Cache-Control','no-store');
+  res.writeHead(req.method==='GET'&&home?200:401);
+  res.end(JSON.stringify(home?{ok:true,home}:{ok:false,message:'Session not authorized'}));
+  return;
+ }
  const paths={
   '/':{type:'text/html',body:html},
+  '/account_home_reference_patch.js':{type:'text/javascript',body:readFileSync('account_home_reference_patch.js')},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
@@ -217,6 +241,11 @@ try{
   assert.equal(await js('document.getElementById("apd-comparador-panel").hidden'),true);
   assert.equal(await js('typeof window.APD_comparatorRefresh'),'undefined',
    'Anonymous pages must not load comparator modules');
+  await until('typeof window.APD_accountHome==="object"');
+  assert.equal(await js('window.APD_accountHome.ready()'),false,
+   'Logged-out account home must not be marked ready');
+  assert.equal(accountRequests.length,0,
+   'A null token must not trigger GET /api/account/home');
   assert.equal(await js('typeof window.APD_offerSchoolMapRefresh'),'undefined',
    'Anonymous pages must not load school mapping modules');
   await js(`(()=>{
@@ -1007,7 +1036,64 @@ try{
   assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-side-by-side")'),null);
   await js('document.getElementById("apd-comparison-close").click();true');
   await until('!document.getElementById("apd-comparison-dialog")');
+
+  // Integration: the actual account-home bridge feeds the actual planner.
+  // Synthetic in-process account rows survive a browser document reload.
+  for(const [owner,expected] of [
+   ['SYNTHETIC_HOME_A','Calle de prueba 123, Wilde, Buenos Aires'],
+   ['SYNTHETIC_HOME_B','Calle de prueba 456, Quilmes, Buenos Aires']
+  ]){
+   await js(`(()=>{
+    window.__testToken=${JSON.stringify(owner)};
+    dashboardLoadedOwner=${JSON.stringify(owner)};
+    planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+     subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+    window.alertasState={items:window.__offers.slice(0,2),index:0};
+    document.getElementById('panel-alertas').innerHTML=
+     '<article class="alerta-main-card"><div class="alerta-actions"></div></article>';
+    document.getElementById('panel-datos-docente').appendChild(document.createElement('span'));
+    return true;
+   })()`);
+   await until('window.APD_accountHome.ready()');
+   assert.equal(await js('window.APD_accountHome.peek()?.address_text'),expected);
+   const retrieved=await js(`(async()=>{
+    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261112-georef-safe1');
+    const profile=loadPrivatePlanner();
+    return {address:profile.domicile,source:profile.homeLocation?.source,
+      reviewed:profile.homeLocation?.reviewed};
+   })()`);
+   assert.equal(retrieved.address,expected,'Planner must use the authenticated server address');
+   assert.equal(retrieved.source,'GEOREF_AR_V2');
+   assert.equal(retrieved.reviewed,true);
+   await until('!!document.querySelector("#apd-comparador-panel .apd-work-planner")');
+   assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-work-planner input.apd-work-input[type=text]")?.value'),expected,
+    'The visible Insigne form must prefill from the authenticated account');
+  }
+  // Exercise a fresh browser document; only a new login reload may fetch B's
+  // address again. No address is stored in persistent browser storage.
+  await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/'});
+  await until('document.readyState==="complete" && !!window.APD_accountHome');
+  assert.equal(await js('window.APD_accountHome.peek()'),null,
+   'Signed-out page must not inherit previous account home');
+  await js(`(()=>{
+   window.__testToken='SYNTHETIC_HOME_B';
+   dashboardLoadedOwner='SYNTHETIC_HOME_B';
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},
+    subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+   window.alertasState={items:window.__offers||[],index:0};
+   document.getElementById('panel-datos-docente').appendChild(document.createElement('span'));
+   return true;
+  })()`);
+  await until('window.APD_accountHome.ready()');
+  assert.equal(await js('window.APD_accountHome.peek()?.address_text'),
+   'Calle de prueba 456, Quilmes, Buenos Aires',
+   'Real document reload must recover the same saved account address');
+  assert.equal(accountRequests.filter(x=>x.bearer==='SYNTHETIC_HOME_A').length,1);
+  assert.equal(accountRequests.filter(x=>x.bearer==='SYNTHETIC_HOME_B').length,2);
+  assert.equal(accountRequests.some(x=>!accountHomes.has(x.bearer)),false,
+   'No account endpoint requests may run without a synthetic valid session');
   results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
+   account_home_reload:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
