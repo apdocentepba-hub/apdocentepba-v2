@@ -59,8 +59,9 @@ function addRoadEstimates(card,pair){
     const result=await estimateRoadRoute(pair,mode,{signal:controller.signal});
     if(!card.isConnected||controller.signal.aborted)return;
     const details=node('p','apd-mobility-estimate',
-     (mode==='auto'?'Auto':mode==='bici'?'Bicicleta':'Caminata')+': '+result.km.toFixed(1)+
-     ' km por calles · '+result.minutes+' min aproximados. '+
+     (mode==='auto'?'Auto':mode==='bici'?'Bicicleta':'Caminata')+': '+
+     (result.km>0&&result.km<0.1?'menos de 0,1 km':result.km.toFixed(1)+' km')+
+     ' por calles · '+result.minutes+' min aproximados. '+
      'Fuente: Valhalla / OpenStreetMap (demo comunitaria). '+ 
      'No incluye tránsito real, demoras ni cortes.');
     const existing=box.querySelector('[data-apd-route="'+mode+'"]');
