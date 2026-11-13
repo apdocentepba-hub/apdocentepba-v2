@@ -282,3 +282,58 @@ html:has(dialog.apd-comparator-dialog[open]),
 body:has(dialog.apd-comparator-dialog[open]){
  overflow:hidden;
 }
+
+
+/* Insigne multimodal transport: no paid map key, no ambient location reads. */
+.apd-mobility-section{
+ margin:20px 0 4px;padding:16px;border:1px solid #a8c3df;
+ border-radius:14px;background:#f4f8fd;color:#143452;
+}
+.apd-mobility-section *{box-sizing:border-box}
+.apd-mobility-section h3{font-size:17px;margin:0 0 9px;color:#17385c}
+.apd-mobility-section h4{font-size:15px;margin:0 0 5px;color:#153657}
+.apd-mobility-section h5{font-size:13px;margin:0 0 5px;color:#173657}
+.apd-mobility-explainer,.apd-mobility-privacy,.apd-mobility-meta,
+.apd-mobility-notice,.apd-mobility-status{
+ font-size:12px;line-height:1.55;color:#365572;margin:6px 0 11px;
+ overflow-wrap:anywhere
+}
+.apd-mobility-privacy{background:#e5f1fc;padding:9px 11px;border-radius:10px}
+.apd-mobility-notice{color:#734523;background:#fff8e9;padding:9px 10px;border-radius:9px}
+.apd-mobility-card,.apd-mobility-home-stops{
+ padding:13px;border:1px solid #ceddeb;border-radius:12px;
+ margin:12px 0;background:#fff;min-width:0;
+}
+.apd-mobility-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.apd-mobility-map-link,.apd-mobility-button{
+ display:inline-flex;align-items:center;min-height:38px;
+ font-size:12px;font-weight:750;line-height:1.3;
+ text-decoration:none;border-radius:9px;padding:9px 11px;
+ overflow-wrap:anywhere;white-space:normal;cursor:pointer;
+}
+.apd-mobility-map-link{
+ color:#18517d;background:#e7f1fb;border:1px solid #bcd3e8
+}
+.apd-mobility-map-link:hover,.apd-mobility-map-link:focus-visible{
+ text-decoration:underline;outline:2px solid #4c83b0;outline-offset:1px
+}
+.apd-mobility-button{border:1px solid #c4d6e8;background:#f5f8ff;color:#184b73}
+.apd-mobility-button:disabled{opacity:.6;cursor:wait}
+.apd-mobility-estimate{
+ padding:8px 10px;background:#e5f5f0;border-left:3px solid #2e8571;
+ font-weight:650;line-height:1.5;font-size:13px;color:#174c43;
+}
+.apd-mobility-school-stops,.apd-mobility-home-stops{margin-top:12px}
+.apd-mobility-school-stops summary,.apd-mobility-home-stops summary{
+ cursor:pointer;font-size:13px;font-weight:750;color:#15527e;padding:4px 0
+}
+.apd-mobility-stops{margin:8px 0 4px;padding-left:22px;font-size:12px}
+.apd-mobility-stops li{padding:7px 0;border-bottom:1px solid #ecf0f7;line-height:1.5}
+.apd-mobility-stops li:last-child{border-bottom:0}
+.apd-mobility-stops li a{margin-left:8px;display:inline}
+@media(max-width:680px){
+ .apd-mobility-section{padding:10px}
+ .apd-mobility-card,.apd-mobility-home-stops{padding:10px}
+ .apd-mobility-actions{flex-direction:column;gap:6px}
+ .apd-mobility-map-link,.apd-mobility-button{width:100%;justify-content:flex-start}
+}
