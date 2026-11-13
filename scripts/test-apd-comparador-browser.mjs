@@ -1124,7 +1124,7 @@ try{
   const inline=await js(`(()=>({
    section:!!document.querySelector('#apd-comparador-panel .apd-mobility-inline'),
    labels:[...document.querySelectorAll('#apd-comparador-panel .apd-mobility-inline .apd-mobility-map-link')]
-     .map(a=>new URL(a.href).searchParams.get('travelmode')),
+     .map(a=>new URL(a.href).searchParams.get('travelmode')).filter(Boolean),
    authLeak:window.__wfsRequests.some(x=>x.filter.includes('Calle de prueba')),
    externalRequests:window.__mobilityExternalRequests.length
   }))()`);
