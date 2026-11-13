@@ -109,3 +109,14 @@ test('Insigne mobility feature is gated by official ABC schools and never reads 
  assert.match(mobility,/fetchAmbaBusLinesNear/);
  assert.doesNotMatch(mobility,/localStorage|sessionStorage|navigator\.geolocation|innerHTML/);
 });
+
+test('home privacy copy explains account persistence and tab-only deletion',()=>{
+ const planner=fs.readFileSync(new URL('./apd-mi-jornada-ui.mjs',import.meta.url),'utf8');
+ assert.match(planner,/Georef Argentina recibe la dirección/);
+ assert.match(planner,/al servidor /);
+ assert.match(planner,/de AlertasAPD para guardarlas en tu cuenta/);
+ assert.match(planner,/Borrar datos de esta pestaña no elimina el domicilio/);
+ assert.match(planner,/ingresá a Datos personales/);
+ assert.doesNotMatch(planner,/ni enviamos el domicilio al servidor/);
+ assert.match(planner,/await bridge\.persist\(/);
+});
