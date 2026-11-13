@@ -44,8 +44,8 @@ test('Google Maps route links use both exact points and all four supported modes
  assert.equal(stop.pathname,'/maps/search/');
  assert.match(stop.searchParams.get('query'),/paradas de colectivo/);
 });
-test('Valhalla car and bike estimates are used only when source returns numbers',async()=>{
- for(const [mode,costing] of [['auto','auto'],['bici','bicycle']]){
+test('Valhalla car, bike and walking estimates require numeric provider fields',async()=>{
+ for(const [mode,costing] of [['auto','auto'],['bici','bicycle'],['pie','pedestrian']]){
   const req=new URL(valhallaRouteRequest(pair,mode));
   assert.equal(req.hostname,'valhalla1.openstreetmap.de');
   assert.equal(JSON.parse(req.searchParams.get('json')).costing,costing);
@@ -63,9 +63,15 @@ test('Valhalla car and bike estimates are used only when source returns numbers'
  }
  await assert.rejects(()=>estimateRoadRoute(pair,'auto',{
   fetchImpl:async()=>response({trip:{summary:{}}})}),/ruta verificable/);
+ for(const invalid of [null,false,'', '0']){
+  await assert.rejects(()=>estimateRoadRoute(pair,'pie',{
+   fetchImpl:async()=>response({trip:{summary:{length:invalid,time:600}}})
+  }),/ruta verificable/);
+ }
  await assert.rejects(()=>estimateRoadRoute(pair,'auto',{
   fetchImpl:async()=>response({error:'rate limited'},{status:429})}),/no disponible/);
  assert.equal(valhallaRouteRequest(null,'auto'),null);
  assert.equal(valhallaRouteRequest(pair,'transporte'),null,
   'transit route has no supported free GTFS engine; use Google Maps');
+ assert.ok(valhallaRouteRequest(pair,'pie'), 'pedestrian route has its own Valhalla costing');
 });
