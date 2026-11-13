@@ -65,15 +65,40 @@ test('fetch checks each AMBA jurisdiction and returns distinct route numbers, no
   }
  });
  assert.equal(calls.length,4);
- assert.deepEqual(items.map(x=>x.line+':'+x.scope),[
+ assert.deepEqual(items.lines.map(x=>x.line+':'+x.scope),[
   '12:Municipal','33:CABA','33:Nacional','85:CABA','333:Provincial'
  ]);
- assert.ok(items.every(x=>x.serviceVerified===false&&x.stopVerified===false));
+ assert.ok(items.lines.every(x=>x.serviceVerified===false&&x.stopVerified===false));
+  assert.equal(items.complete,true);
+  assert.deepEqual(items.unavailableScopes,[]);
+  assert.equal(items.totalLines,5);
  assert.ok(calls.every(x=>x.opts.credentials==='omit'&&x.opts.method==='GET'));
+});
+test('one jurisdiction outage returns partial, explicitly labelled coverage',async()=>{
+  let concurrent=0,peak=0;
+  const result=await fetchAmbaBusLinesNear(point,{
+   fetchImpl:async(url)=>{
+    concurrent++;peak=Math.max(peak,concurrent);
+    await Promise.resolve();
+    concurrent--;
+    if(url.includes('/1/query'))throw Error('Provider unavailable');
+    return response({features:[{attributes:{LINEA:'33'}}]});
+   }
+  });
+  assert.equal(peak,4, 'independent layer calls must run in parallel');
+  assert.equal(result.complete,false);
+  assert.deepEqual(result.unavailableScopes,['Provincial']);
+  assert.deepEqual(result.checkedScopes,['CABA','Nacional','Municipal']);
+  assert.deepEqual(result.lines.map(x=>x.scope),['CABA','Municipal','Nacional']);
+  assert.equal(result.totalLines,3);
+});
+test('do not silently lose mapped routes beyond 500 records',()=>{
+ const features=Array.from({length:501},(_,i)=>({attributes:{LINEA:i+1}}));
+ assert.equal(parseAmbaBusLineFeatures({features},'CABA').length,501);
 });
 test('bad upstream features fail closed, never assign line codes from arbitrary tags',async()=>{
  await assert.rejects(()=>fetchAmbaBusLinesNear(point,{
   fetchImpl:async()=>response({error:{code:400}})}),/capa/);
  await assert.rejects(()=>fetchAmbaBusLinesNear(point,{
-  fetchImpl:async()=>response({features:[]},429)}),/HTTP 429/);
+  fetchImpl:async()=>response({features:[]},429)}),/No respondió ninguna capa/);
 });

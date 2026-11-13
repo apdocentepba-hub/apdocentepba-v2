@@ -5,8 +5,8 @@
  */
 import {
  verifiedMobilityPair,mapsDirectionsUrl,nearbyStopsMapUrl,estimateRoadRoute
-} from './apd-multimodal-transport.mjs?v=20261112-mobility1';
-import {fetchAmbaBusLinesNear} from './apd-amba-bus-routes.mjs?v=20261112-mobility1';
+} from './apd-multimodal-transport.mjs?v=20261112-mobility2';
+import {fetchAmbaBusLinesNear} from './apd-amba-bus-routes.mjs?v=20261112-mobility2';
 
 const node=(tag,className,text)=>{
  const el=document.createElement(tag);
@@ -38,19 +38,19 @@ function transportSourceMessage(){
  return 'Los recorridos y tiempos de Google Maps se consultan allí, '+
   'con origen y destino explícitos. El transporte público puede combinar '+
   'colectivo, tren, subte y caminata; la disponibilidad y frecuencia dependen '+
-  'del día y horario. Las estimaciones de auto y bicicleta, cuando estén '+
+  'del día y horario. Las estimaciones de auto, bicicleta y caminata, cuando estén '+
   'disponibles aquí, provienen de rutas OpenStreetMap y no incluyen tránsito en vivo.';
 }
 function addRoadEstimates(card,pair){
  const box=node('div','apd-mobility-road');
  const status=node('p','apd-mobility-status',
-  'Kilómetros y duración por calles: calculalos a pedido (auto o bicicleta).');
+  'Kilómetros y duración por calles: calculalos a pedido (auto, bicicleta o a pie).');
  status.setAttribute('role','status');
  const actions=node('div','apd-mobility-actions');
- for(const [mode,label] of [['auto','Calcular km en auto'],['bici','Calcular km en bici']]){
+ for(const [mode,label] of [['auto','Calcular km en auto'],['bici','Calcular km en bici'],['pie','Calcular km a pie']]){
   const control=btn(label,async()=>{
    control.disabled=true;
-   status.textContent='Consultando ruta '+(mode==='auto'?'en auto':'en bicicleta')+
+   status.textContent='Consultando ruta '+(mode==='auto'?'en auto':mode==='bici'?'en bicicleta':'a pie')+
     ' con OpenStreetMap/Valhalla...';
    const controller=new AbortController();
    const abort=()=>controller.abort();
@@ -59,8 +59,9 @@ function addRoadEstimates(card,pair){
     const result=await estimateRoadRoute(pair,mode,{signal:controller.signal});
     if(!card.isConnected||controller.signal.aborted)return;
     const details=node('p','apd-mobility-estimate',
-     (mode==='auto'?'Auto':'Bicicleta')+': '+result.km.toFixed(1)+
-     ' km por calles · '+result.minutes+' min aproximados. '+
+     (mode==='auto'?'Auto':mode==='bici'?'Bicicleta':'Caminata')+': '+
+     (result.km>0&&result.km<0.1?'menos de 0,1 km':result.km.toFixed(1)+' km')+
+     ' por calles · '+result.minutes+' min aproximados. '+
      'Fuente: Valhalla / OpenStreetMap (demo comunitaria). '+ 
      'No incluye tránsito real, demoras ni cortes.');
     const existing=box.querySelector('[data-apd-route="'+mode+'"]');
@@ -97,14 +98,20 @@ function listRoutes(host,point,scope){
  const search=btn('Ver líneas de colectivo cercanas',async()=>{
   search.disabled=true;status.textContent='Consultando las capas de recorridos del AMBA...';
   try{
-   const lines=await fetchAmbaBusLinesNear(point);
+   const {lines,totalLines,unavailableScopes,complete}=await fetchAmbaBusLinesNear(point);
    if(!wrap.isConnected)return;
    results.replaceChildren();
-   status.textContent=lines.length?
-    lines.length+' líneas representadas en mapas dentro de 400 m de este punto. '+
-      'Son trazas aproximadas, NO paradas verificadas ni horarios actualizados.':
-    'El mapa consultado no contiene recorridos a menos de 400 m. '+
-      'Puede haber servicios no registrados; verificá Google Maps.';
+   const coverage=complete?'':
+    ' Cobertura incompleta: no respondieron las capas '+unavailableScopes.join(', ')+'.';
+   const truncated=totalLines>lines.length?
+    ' Se muestran las primeras '+lines.length+' de '+totalLines+' entradas.':'';
+   status.textContent=totalLines?
+    totalLines+' registros de líneas representados dentro de 400 m. '+
+      'Son trazas aproximadas, NO paradas ni horarios confirmados.'+
+      truncated+coverage:
+    (complete?'Las capas consultadas no registran recorridos a menos de 400 m.':
+      'Las capas disponibles no registran recorridos a menos de 400 m.')+
+      ' Puede haber servicios no registrados; verificá Google Maps.'+coverage;
    const list=node('ul','apd-mobility-stops');
    for(const route of lines){
     const item=node('li','');

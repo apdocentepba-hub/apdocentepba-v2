@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -105,7 +105,19 @@ test('Insigne mobility feature is gated by official ABC schools and never reads 
  assert.match(api,/Valhalla \/ OpenStreetMap/);
  assert.match(mobility,/Transporte público/);
  assert.match(mobility,/Calcular km en auto/);
+ assert.match(mobility,/Calcular km a pie/);
  assert.match(mobility,/Ver líneas de colectivo cercanas/);
  assert.match(mobility,/fetchAmbaBusLinesNear/);
  assert.doesNotMatch(mobility,/localStorage|sessionStorage|navigator\.geolocation|innerHTML/);
+});
+
+test('home privacy copy explains account persistence and tab-only deletion',()=>{
+ const planner=fs.readFileSync(new URL('./apd-mi-jornada-ui.mjs',import.meta.url),'utf8');
+ assert.match(planner,/Georef Argentina recibe la dirección/);
+ assert.match(planner,/al servidor /);
+ assert.match(planner,/de AlertasAPD para guardarlas en tu cuenta/);
+ assert.match(planner,/Borrar datos de esta pestaña no elimina el domicilio/);
+ assert.match(planner,/ingresá a Datos personales/);
+ assert.doesNotMatch(planner,/ni enviamos el domicilio al servidor/);
+ assert.match(planner,/await bridge\.persist\(/);
 });

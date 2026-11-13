@@ -37,7 +37,9 @@ export function parseAmbaBusLineFeatures(json,scope){
  if(!Array.isArray(json?.features)||json.error||json.exceededTransferLimit)
   throw Error('La capa no pudo confirmar todas las líneas cercanas');
  const lines=new Map();
- for(const {attributes:a} of json.features.slice(0,500)){
+ // Do not silently discard valid routes from a large provider response.
+ if(json.features.length>2000)throw Error('La capa superó el máximo previsto de registros');
+ for(const {attributes:a} of json.features){
   const value=a?.LINEA??a?.linea;
   const line=String(value??'').trim();
   if(!/^[0-9]{1,3}[A-Z]?$/.test(line)||!Number(line.replace(/[A-Z]$/,'')))continue;
@@ -59,23 +61,40 @@ const readBounded=async(res)=>{
 };
 export async function fetchAmbaBusLinesNear(point,{fetchImpl=fetch,signal}={}){
  if(!buildAmbaBusLayerUrl(point,0))throw Error('Ubicación fuera de la zona');
- const results=[];
- for(const layer of LAYERS){
+ // Jurisdiction layers are independent: check them concurrently and disclose
+ // missing coverage instead of hiding all successful results when one fails.
+ const results=await Promise.all(LAYERS.map(async layer=>{
   const url=buildAmbaBusLayerUrl(point,layer.id);
   const timeout=AbortSignal.timeout(14000);
   const combined=signal?AbortSignal.any([signal,timeout]):timeout;
-  const response=await fetchImpl(url,{
-   method:'GET',mode:'cors',credentials:'omit',redirect:'error',
-   headers:{Accept:'application/json'},
-   signal:combined
-  });
-  const data=await readBounded(response);
-  results.push(...parseAmbaBusLineFeatures(data,layer.scope));
- }
+  try{
+   const response=await fetchImpl(url,{
+    method:'GET',mode:'cors',credentials:'omit',redirect:'error',
+    headers:{Accept:'application/json'},
+    signal:combined
+   });
+   const data=await readBounded(response);
+   return {layer,lines:parseAmbaBusLineFeatures(data,layer.scope)};
+  }catch(error){
+   if(signal?.aborted)throw error;
+   return {layer,error:true};
+  }
+ }));
+ const healthy=results.filter(item=>!item.error);
+ const unavailable=results.filter(item=>item.error);
+ if(!healthy.length)throw Error('No respondió ninguna capa de colectivos del AMBA');
  const seen=new Map();
- for(const line of results)seen.set(line.line+':'+line.scope,line);
- const deduped=[...seen.values()];
+ for(const item of healthy){
+  for(const line of item.lines)seen.set(line.line+':'+line.scope,line);
+ }
  const numeric=line=>Number(line.line.replace(/[A-Z]$/,''));
- return deduped.sort((a,b)=>numeric(a)-numeric(b)||a.scope.localeCompare(b.scope))
-  .slice(0,80);
+ const all=[...seen.values()]
+  .sort((a,b)=>numeric(a)-numeric(b)||a.scope.localeCompare(b.scope));
+ return Object.freeze({
+  lines:all.slice(0,80),
+  totalLines:all.length,
+  checkedScopes:healthy.map(item=>item.layer.scope),
+  unavailableScopes:unavailable.map(item=>item.layer.scope),
+  complete:unavailable.length===0
+ });
 }
