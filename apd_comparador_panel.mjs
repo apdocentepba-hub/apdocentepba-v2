@@ -228,7 +228,8 @@ function syncCurrentButton() {
  btn.setAttribute('aria-pressed',String(!!selected));
  btn.setAttribute('aria-controls','apd-comparador-panel');
  actions.appendChild(btn);
- if(state.selected.size){
+ // The compare dialog requires at least two offers. Never show a dead CTA for one.
+ if(state.selected.size>=2){
   const view=button('Ver comparación ('+state.selected.size+')',focusComparison,
    'btn btn-secondary apd-compare-view');
   view.id='apd-ver-comparacion';
