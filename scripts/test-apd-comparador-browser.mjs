@@ -235,6 +235,8 @@ try{
  await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
  await cdp('Page.enable');await cdp('Runtime.enable');
  for(const width of [390,1280]){
+  // Reset synthetic endpoint observations between independent viewport sessions.
+  accountRequests.length=0;
   await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
   await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/'});
   await until('document.readyState==="complete"');
