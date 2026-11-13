@@ -100,5 +100,5 @@ test('bad upstream features fail closed, never assign line codes from arbitrary 
  await assert.rejects(()=>fetchAmbaBusLinesNear(point,{
   fetchImpl:async()=>response({error:{code:400}})}),/capa/);
  await assert.rejects(()=>fetchAmbaBusLinesNear(point,{
-  fetchImpl:async()=>response({features:[]},429)}),/HTTP 429/);
+  fetchImpl:async()=>response({features:[]},429)}),/No respondió ninguna capa/);
 });
