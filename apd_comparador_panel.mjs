@@ -17,7 +17,8 @@ const state={
  privatePlannerAllowed:false,
  sort:'cierre',district:'',turn:'',
  geoByKey:Object.create(null),geoRequested:false,geoWorking:false,
- geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:''
+ geoStatus:'',geoRunId:0,geoAbort:null,geoSignature:'',anchor:'',
+ autoGeoSignature:''
 };
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
@@ -149,8 +150,10 @@ function focusComparison() {
   'La comparación básica de ofertas sigue disponible.'));
  if(state.privatePlannerAllowed&&selectedSchoolKeys().length&&!state.geoRequested){
   body.appendChild(node('p','apd-comparator-hint',
-   'Todavía no consultaste la ubicación oficial de estas escuelas en ABC. '+
-   'Usá «Consultar ABC» en la cabecera de esta ventana.'));
+   hasSavedVerifiedHome()?
+    'Insigne consulta automáticamente en ABC la ubicación oficial de estas escuelas.':
+    'Todavía no consultaste la ubicación oficial de estas escuelas en ABC. '+
+    'Usá «Consultar ABC» en la cabecera de esta ventana.'));
  }else if(state.privatePlannerAllowed&&state.geoWorking){
   body.appendChild(node('p','apd-comparator-hint','Consultando ubicaciones en ABC...'));
  }
@@ -263,15 +266,37 @@ function currentWorkSchoolKeys(){
 function schoolGeoSignature(){
  return JSON.stringify({selected:selectedSchoolKeys(),current:currentWorkSchoolKeys()});
 }
+// ABC receives only public school keys, never the saved home coordinates.
+function hasSavedVerifiedHome(){
+ if(!window.APD_accountHome?.ready?.())return false;
+ const home=loadPrivatePlanner().homeLocation;
+ return home?.source==='GEOREF_AR_V2'&&
+  (home.reviewed===true||home.scope==='exacta');
+}
+function maybeAutoVerifySchools(){
+ if(!state.enabled||!state.privatePlannerAllowed||!state.selected.size||
+    state.geoWorking||state.geoRequested||!hasSavedVerifiedHome()||
+    !selectedSchoolKeys().length)return;
+ const signature=schoolGeoSignature();
+ if(signature===state.autoGeoSignature)return;
+ state.autoGeoSignature=signature;
+ queueMicrotask(()=>{
+  if(state.enabled&&state.privatePlannerAllowed&&
+     state.autoGeoSignature===signature&&!state.geoWorking&&!state.geoRequested&&
+     schoolGeoSignature()===signature&&hasSavedVerifiedHome()){
+   void verifySchoolDistances({automatic:true});
+  }
+ });
+}
 function invalidateGeo(){
  state.geoRunId++;
  state.geoAbort?.abort();
  state.geoAbort=null;state.geoWorking=false;state.geoRequested=false;
  state.geoStatus='';state.geoByKey=Object.create(null);state.anchor='';
- state.geoSignature='';
+ state.geoSignature='';state.autoGeoSignature='';
  if(state.sort==='distancia')state.sort='cierre';
 }
-async function verifySchoolDistances(){
+async function verifySchoolDistances({automatic=false}={}){
  if(!state.enabled||state.geoWorking)return;
  const codes=selectedSchoolKeys();
  const workCodes=currentWorkSchoolKeys();
@@ -279,7 +304,12 @@ async function verifySchoolDistances(){
   state.geoStatus='Seleccioná una escuela con clave provincial válida.';
   render();return;
  }
+ const reopenAutomaticModal=automatic&&
+  !!document.getElementById('apd-comparison-dialog');
  invalidateGeo();
+ // Do not repeat an automatic request after partial/failed ABC responses.
+ // The manual official retry button remains available.
+ state.autoGeoSignature=schoolGeoSignature();
  const run=state.geoRunId;
  const controller=new AbortController();
  state.geoAbort=controller;
@@ -287,6 +317,8 @@ async function verifySchoolDistances(){
  state.geoStatus='Consultando el Mapa Escolar ABC...';
  state.geoSignature=schoolGeoSignature();
  render();
+ if(reopenAutomaticModal&&state.enabled&&state.selected.size>=2)
+  focusComparison();
  try{
   // Explicit click only; at most 5 offers + 5 current jobs.
   // Deduplicate keys and respect the WFS resolver cap of 5 per batch.
@@ -308,7 +340,11 @@ async function verifySchoolDistances(){
   if(run===state.geoRunId)state.geoStatus='No se pudieron verificar las escuelas.';
  }finally{
   if(run===state.geoRunId){
+   const modalStillOpen=automatic&&
+    !!document.getElementById('apd-comparison-dialog');
    state.geoWorking=false;state.geoAbort=null;render();
+   if(modalStillOpen&&state.enabled&&state.selected.size>=2)
+    focusComparison();
   }
  }
 }
@@ -553,6 +589,10 @@ function render(){
    geoButton.disabled=state.geoWorking;
    root.appendChild(geoButton);
   }
+  if(hasSavedVerifiedHome()&&!state.geoRequested&&codes.length)
+   root.appendChild(node('p','apd-comparator-hint',
+    'Con tu domicilio guardado, Insigne consulta automáticamente en ABC '+
+    'la ubicación de las escuelas seleccionadas. No envía tu domicilio a ABC.'));
   if(state.geoStatus){
    const hint=node('p','apd-comparator-geo-status',state.geoStatus);
    hint.setAttribute('role','status');root.appendChild(hint);
@@ -670,6 +710,18 @@ function render(){
    list.appendChild(entry);
   }
   root.appendChild(list);
+  // Display the available travel options directly below the offers.
+  // External third-party services still require an explicit button/link.
+  if(state.privatePlannerAllowed){
+   const profile=loadPrivatePlanner();
+   if(profile.domicile||profile.homeLocation){
+    const mobility=createMobilitySection({
+     home:profile.homeLocation,offers:result.items,verifiedBySchool:state.geoByKey
+    });
+    mobility.classList.add('apd-mobility-inline');
+    root.appendChild(mobility);
+   }
+  }
   if(verifiedCount>=2){
    const pairs=pairSchoolDistances(state.geoByKey,codes);
    if(pairs.length){
@@ -696,6 +748,7 @@ function render(){
  root.appendChild(status);
  root.appendChild(node('p','apd-comparator-disclaimer',
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
+ maybeAutoVerifySchools();
 }
 function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
@@ -744,6 +797,7 @@ function reset() {
  state.enabled=false;state.privatePlannerAllowed=false;
  state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
+ state.autoGeoSignature='';
  document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
