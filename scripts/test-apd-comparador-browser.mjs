@@ -323,6 +323,12 @@ try{
     assert.match(await js('document.getElementById("apd-comparison-dialog")?.textContent||""'),/Comparación de 2 ofertas/);
     const bodyText=await js('document.getElementById("apd-comparison-dialog")?.textContent||""');
     assert.match(bodyText,/Diferencias detectadas/);
+    assert.match(bodyText,/Georef Argentina recibe la dirección/,
+     'Privacy notice must disclose the external address lookup');
+    assert.match(bodyText,/al servidor de AlertasAPD/,
+     'Privacy notice must disclose persistent account storage');
+    assert.match(bodyText,/Borrar datos de esta pestaña no elimina el domicilio/,
+     'Tab-only deletion must not be confused with account deletion');
     assert.equal(await js('document.querySelectorAll("#apd-comparison-dialog .apd-comparator-dialog-geobutton").length'),1,
      'Insigne must be able to request official locations directly from the comparison modal');
     assert.equal(await js('document.querySelector("#apd-comparison-dialog .apd-comparator-dialog-geobutton")?.closest(".apd-comparator-modal-head")!==null'),true,
@@ -445,7 +451,7 @@ try{
     await js(`(()=>{
       const dialog=document.getElementById('apd-comparison-dialog');
       const details=dialog.querySelector('.apd-work-planner');details.open=true;
-      [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar mis datos')).click();
+      [...details.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar datos de esta pestaña')).click();
       return true;
     })()`);
     await until('!sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")');
@@ -744,7 +750,7 @@ try{
   // Clear private profile so subsequent account-switch QA uses the two offers.
   await js(`(()=>{
    const planner=document.querySelector('#apd-comparador-panel .apd-work-planner');
-   [...planner.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar mis datos')).click();
+   [...planner.querySelectorAll('button')].find(x=>x.textContent.includes('Borrar datos de esta pestaña')).click();
    return true;
   })()`);
   await until('document.querySelectorAll(".apd-comparator-work-distance").length===0');
