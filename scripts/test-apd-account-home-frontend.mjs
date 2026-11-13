@@ -71,6 +71,16 @@ test('save, reload, delete remain restricted to the current authenticated user',
  assert.equal(bridge.peek(),null);
  assert.equal(rows.get('session-a').address_text,edited.address_text);
 });
+test('null and undefined auth helpers do not turn into Bearer null/undefined',async()=>{
+ const {bridge,calls,setToken}=make();
+ for(const empty of [null,undefined,'',false]){
+  setToken(empty);
+  assert.equal(bridge.ready(),false);
+  assert.equal(bridge.peek(),null);
+  await bridge.reload();
+ }
+ assert.deepEqual(calls,[],'No account request must run without a real token');
+});
 test('bridge does not perform any automatic network request before session check',()=>{
  const {bridge,calls,setToken}=make();
  assert.equal(calls.length,0);
