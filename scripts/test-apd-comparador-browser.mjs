@@ -293,6 +293,15 @@ try{
     return true;
    })()`);
    await js('document.getElementById("apd-comparar-oferta").click();true');
+   if(i===0){
+    assert.equal(await js('document.getElementById("apd-ver-comparacion")===null'),true,
+     'The view-comparison control must not appear before two offers are selected');
+    assert.equal(await js('document.getElementById("apd-comparison-dialog")===null'),true,
+     'A one-offer selection must never open an empty comparison dialog');
+    assert.match(await js('document.getElementById("apd-comparador-panel")?.textContent||""'),
+     /Seleccionaste una oferta/,
+     'The user must be told to select a second offer');
+   }
    if(i===1){
     await until('!!document.querySelector(".apd-comparator-side-by-side")');
     assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-comparator-table thead th").length'),3);
