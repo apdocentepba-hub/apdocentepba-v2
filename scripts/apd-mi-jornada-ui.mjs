@@ -319,7 +319,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  buttons.append(save,erase);
  form.append(buttons,element('p','apd-comparator-hint',
   'Borrar datos de esta pestaña no elimina el domicilio guardado en tu cuenta. '+
-  'Para eliminarlo de forma permanente, ingresá a Datos personales.'),status);
+  'Para eliminarlo de tu cuenta, ingresá a Datos personales.'),status);
  form.addEventListener('submit',async event=>{
   event.preventDefault();
   if(!isCurrent())return;
