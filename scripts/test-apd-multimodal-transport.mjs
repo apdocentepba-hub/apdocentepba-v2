@@ -68,6 +68,23 @@ test('Valhalla car, bike and walking estimates require numeric provider fields',
    fetchImpl:async()=>response({trip:{summary:{length:invalid,time:600}}})
   }),/ruta verificable/);
  }
+ // Zero values are numeric but are not plausible when the endpoints differ.
+ for(const badSummary of [{length:0,time:0},{length:0,time:600},{length:1,time:0}]){
+  await assert.rejects(()=>estimateRoadRoute(pair,'auto',{
+   fetchImpl:async()=>response({trip:{summary:badSummary}})
+  }),/ruta verificable/);
+ }
+ const short=await estimateRoadRoute(pair,'pie',{
+  fetchImpl:async()=>response({trip:{summary:{length:0.035,time:45}}})
+ });
+ assert.equal(short.km,0.035,'Keep positive sub-100m paths from rounding to 0 km');
+ assert.equal(short.minutes,1);
+ const sameLocation={...pair,destination:{...pair.origin}};
+ const stationary=await estimateRoadRoute(sameLocation,'pie',{
+  fetchImpl:async()=>response({trip:{summary:{length:0,time:0}}})
+ });
+ assert.equal(stationary.km,0);
+ assert.equal(stationary.minutes,0,'Do not invent one minute for identical points');
  await assert.rejects(()=>estimateRoadRoute(pair,'auto',{
   fetchImpl:async()=>response({error:'rate limited'},{status:429})}),/no disponible/);
  assert.equal(valhallaRouteRequest(null,'auto'),null);
