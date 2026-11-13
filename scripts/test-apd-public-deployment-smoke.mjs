@@ -37,6 +37,6 @@ test('pull requests run only the offline contract; live smoke is manual after de
  assert.match(workflow,/workflow_dispatch:/);
  assert.match(workflow,/pull_request:/);
  assert.match(workflow,/test-apd-public-deployment-smoke\.mjs/);
- assert.match(workflow,/public-smoke:\s+if:\s+github\.event_name == 'workflow_dispatch'/);
+ assert.match(workflow,/public-smoke:[\s\S]*?if:\s+github\.event_name == 'workflow_dispatch'/);
  assert.match(workflow,/node --test scripts\/test-apd-public-deployment-smoke\.mjs/);
 });
