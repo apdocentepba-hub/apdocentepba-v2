@@ -77,11 +77,6 @@
  /* Keep 2-3 cards worth of useful data above the fold without hiding details. */
  #panel-alertas .alerta-stage{padding-inline:64px}
  #panel-alertas .alerta-floating{padding:13px 14px;border-radius:17px}
- #panel-alertas .alerta-windowbar{margin-bottom:6px}
- #panel-alertas .alerta-topbar{margin-bottom:8px}
- #panel-alertas .alerta-progress{margin-bottom:10px}
- #panel-alertas .alerta-tags{margin-bottom:7px}
- #panel-alertas .alerta-title{font-size:18px;margin:7px 0 5px}
  #panel-alertas .alerta-subtitle{margin-bottom:8px}
  #panel-alertas .alerta-grid{gap:7px 9px}
  #panel-alertas .alerta-row{padding:7px 10px;border-radius:10px;gap:2px}
@@ -90,7 +85,6 @@
  #panel-alertas .alerta-meta-grid{gap:7px}
  #panel-alertas .alerta-meta-item{padding:7px 10px;border-radius:10px}
  #panel-alertas .alerta-meta-k{margin-bottom:3px}
- #panel-alertas .alerta-actions{margin-top:10px}
  #panel-alertas .alerta-dots{margin-top:10px}
 }
 @media(max-width:600px){
