@@ -2,6 +2,8 @@ name: APD Insigne decision signals candidate (no deploy)
 on:
   pull_request:
     paths:
+      - 'scripts/check-apd-visual-change-boundaries.mjs'
+      - 'scripts/test-apd-visual-change-boundaries.mjs'
       - 'apd_comparador_panel.mjs'
       - 'apd_comparador_panel.css'
       - 'scripts/apd-offer-decision-signals.mjs'
