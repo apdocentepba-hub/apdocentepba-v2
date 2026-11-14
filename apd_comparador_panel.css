@@ -514,3 +514,9 @@ body.apd-dark #panel-alertas .alerta-tags .tag-nivel{
  #panel-alertas .alerta-location-item{padding:10px 11px}
  #panel-alertas .alerta-feature-grid>.alerta-row{padding:10px 11px!important}
 }
+
+/* Exact-key public school identity sourced from ABC WFS; no inferred location. */
+#panel-alertas .apd-official-school-address{
+ display:block;color:var(--apd-muted,#526c83);font-size:12px;
+ font-weight:650;line-height:1.4;overflow-wrap:anywhere;
+}
