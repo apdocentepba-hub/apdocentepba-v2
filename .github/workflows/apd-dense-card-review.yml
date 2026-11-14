@@ -2,6 +2,8 @@ name: APD dense card design review (no deploy)
 on:
   pull_request:
     paths:
+      - 'scripts/check-apd-visual-change-boundaries.mjs'
+      - 'scripts/test-apd-visual-change-boundaries.mjs'
       - 'app_v2.js'
       - 'apd_comparador_panel.css'
       - 'scripts/apd-official-school-identity.mjs'
