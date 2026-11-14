@@ -37,7 +37,8 @@ export function robotsPolicy(txt,pathname){
   const field=m[1].toLowerCase(),value=m[2].trim();
   if(field==='user-agent'){
    applies=value==='*';
-   hasGroup=true;continue;
+   if(applies)hasGroup=true;
+   continue;
   }
   if(!applies)continue;
   if(field!=='allow'&&field!=='disallow')continue;
