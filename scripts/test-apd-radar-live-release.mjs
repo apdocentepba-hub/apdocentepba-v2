@@ -31,9 +31,16 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const proposed=scriptReferences(newHtml);
  const count=proposed.filter(tag=>tag===added).length;
  assert.ok(count<=1,"Only one approved first-alert UI script is allowed");
- // The first-alert UI script is already in main. Normalize this sole
- // approved exception on BOTH sides; keep strict equality for all other tags.
- assert.deepEqual(proposed.filter(tag=>tag!==added),oldScripts.filter(tag=>tag!==added),
+ // An exact visual release is allowed to bump ONLY the already audited
+ // app_v2.js URL. The actual JS is separately audited by PR #290.
+ // Do not allow any change to other script URLs, membership or order.
+ const oldApp='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
+ const newApp='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
+ const approvedTransition=oldScripts.includes(oldApp)&&proposed.includes(newApp);
+ if(approvedTransition)
+  assert.equal(proposed.filter(tag=>tag===newApp).length,1,"Exactly one approved visual release");
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:tag);
+ assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
   assert.ok(newHtml.indexOf(added)>newHtml.indexOf('<script src="apd_ui_v21.js?v=20261102-clean"></script>'),
@@ -74,6 +81,10 @@ test("a visual redesign cannot change radar code, script order or radar card",()
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace("Refrescar radar</button>","Reemplazar radar</button>")),
    /radar card/);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace('auth_session_patch.js?v=3','auth_session_patch.js?v=4')),
+   /script tags\/order/);
+
  }
 });
 test("new radar uses the existing panel and anonymous, read-only scan-state API",()=>{
