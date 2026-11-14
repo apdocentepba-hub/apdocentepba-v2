@@ -2,6 +2,8 @@ name: APD official school identity candidate (no deploy)
 on:
   pull_request:
     paths:
+      - 'scripts/check-apd-visual-change-boundaries.mjs'
+      - 'scripts/test-apd-visual-change-boundaries.mjs'
       - 'apd_offer_school_map_overlay.mjs'
       - 'scripts/apd-official-school-identity.mjs'
       - 'scripts/test-apd-official-school-identity.mjs'
