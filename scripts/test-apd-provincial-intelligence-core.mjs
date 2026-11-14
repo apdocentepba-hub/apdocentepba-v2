@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
  publicUrl,validateSources,extractPublicNotices,diffConfirmedSnapshots,
- sharedThemes,topicsFor
+ sharedThemes,topicsFor,discoverSourceCandidates
 } from './apd-provincial-intelligence-core.mjs';
 
 const catalog=JSON.parse(readFileSync(
@@ -134,4 +134,30 @@ test('Topics only propose tools for human review, never generate documents',()=>
   .some(t=>t.id==='decreto_900'));
  assert.equal(topicsFor('Normativa general').length,0);
  assert.ok(!topicsFor('PAD 2026')[0].tool.includes('reclamo enviado'));
+});
+
+test('Quilmes external SAD news link is discovered but NOT followed or trusted',()=>{
+ const source=catalog.sources.find(x=>x.id==='sad-quilmes');
+ const body=`<main>COMUNICADOS SAD:
+ <a href="https://sites.google.com/view/comunicados-de-sad-quilmes/comunicados-abc">
+ Comunicados oficiales SAD Quilmes</a><h3>Novedades</h3>
+ <h5><a href="/sad/quilmes/circular">Circular</a></h5>
+ <footer>PLATAFORMA ABC</footer></main>`;
+ const links=discoverSourceCandidates(body,source);
+ assert.equal(links.length,1);
+ assert.match(links[0].candidate_url,/sites\.google\.com/);
+ assert.equal(links[0].status,'external_channel_requires_verification');
+ assert.match(links[0].note,/Not crawled/);
+ assert.deepEqual(discoverSourceCandidates(body,catalog.sources.find(s=>s.kind==='abc_novedades')),[]);
+});
+test('External links are not blindly accepted or crawled',()=>{
+ const source=catalog.sources.find(s=>s.id==='sad-quilmes');
+ const body=`<a href="javascript:alert(1)">SAD Comunicados</a>
+ <a href="http://insecure.example.com/comunicados">SAD Comunicados</a>
+ <a href="https://evil.example.com@abc.gob.ar/login">SAD Comunicados</a>
+ <a href="https://evil.example.com/comunicados">Comunicados SAD</a>`;
+ const leads=discoverSourceCandidates(body,source);
+ assert.equal(leads.length,1);
+ assert.equal(leads[0].status,'external_channel_requires_verification');
+ assert.equal(leads[0].candidate_url,'https://evil.example.com/comunicados');
 });
