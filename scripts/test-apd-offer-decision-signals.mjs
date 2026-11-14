@@ -16,7 +16,7 @@ test('only concrete positive signals with known closure and schedule can be favo
   district_preferred:true,turn_preferred:true,horas_hasta_cierre:50,
   horario:'Lunes 7:30 a 9:30'});
  assert.equal(r.kind,'positive');
- assert.match(r.label,/Señales favorables/);
+ assert.match(r.label,/Coincide con filtros observados/);
  assert.doesNotMatch(r.label,/adjudicad|apto|compatible normativo/i);
  assert.equal(r.reasons.some(x=>/probabilidad|ganar|salario/i.test(x)),false);
 });
