@@ -43,13 +43,14 @@ export function assessOfferDecisionSignals(row){
 
  // Don't invent legal compatibility, road travel, wages or probability from
  // unrelated positive indicators. Warnings always take precedence.
+ const hasUserPreferenceMatch=row.district_preferred===true||row.turn_preferred===true;
  const kind=flags.length?'review':
   missing.length?'unknown':
-  positive.length>=2?'positive':'unknown';
+  hasUserPreferenceMatch&&positive.length>=2?'positive':'unknown';
  const label=kind==='review'?'Revisar antes de postularte':
-  kind==='positive'?'Señales favorables en los datos disponibles':
+  kind==='positive'?'Coincide con filtros observados':
    'Datos por confirmar';
  const reasons=[...(kind==='review'?flags:positive),...missing].slice(0,5);
  return Object.freeze({kind,label,reasons:Object.freeze(reasons),note:NOTE});
 }
-const NOTE='Orientación informativa. No determina compatibilidad normativa, adjudicación, salario ni tiempo real de traslado. Verificá ABC/SerVaDo.';
+const NOTE='Orientación informativa. No evalúa superposición con tus jornadas ni traslados reales. No determina compatibilidad normativa, adjudicación ni salario. Verificá ABC/SerVaDo.';
