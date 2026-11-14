@@ -16,7 +16,7 @@ function once(s,needle,label){
 export function buildRadarFrontendRelease(originalHtml,oldJs,newJs){
   once(originalHtml,OLD_TAG,"Current radar script");
   if(originalHtml.includes(NEW_TAG))throw Error("Already enabled");
-  const appTag='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
+  const appTag='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
   once(originalHtml,appTag,"Canonical dashboard API source");
   if(originalHtml.indexOf(appTag)>originalHtml.indexOf(OLD_TAG)){
     throw Error("Dashboard API must be loaded before radar");
