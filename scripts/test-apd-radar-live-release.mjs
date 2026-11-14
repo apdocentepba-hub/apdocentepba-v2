@@ -61,7 +61,7 @@ test("radar release transition OR unchanged already-live radar on public redesig
  }
  assert.equal(source.split(NEW).length-1,1,"Exactly one v2 radar script required");
  assert.equal(source.split(OLD).length-1,0,"Legacy radar script must not load");
- assert.ok(source.indexOf("app_v2.js?v=20&rev=20261102-unverified-plan")<
+ assert.ok(source.indexOf("app_v2.js?v=20&rev=20261114-compact1")<
    source.indexOf(NEW),"Canonical API must load before radar");
  assert.equal(source.split('id="panel-radar-provincia"').length-1,1);
  assert.equal(source.split('id="btn-refresh-provincia"').length-1,1);
