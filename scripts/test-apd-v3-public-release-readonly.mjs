@@ -8,7 +8,14 @@ const after=readFileSync("index.html","utf8");
 test("anonymous source baseline recognizes whether V3 has already shipped",()=>{
  const v3AlreadyPresent=before.includes('public-landing-v3.css?v=20261103') &&
   before.includes('apd_panel_priority_v3.js?v=1');
- const result=checkHtml(before,v3AlreadyPresent?"after":"before");
+ // V3 has already shipped. Only normalize the exact old app asset tag in
+ // the historical main baseline; the candidate and live gate require NEW.
+ const priorApp='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
+ const approvedApp='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
+ assert.ok(before.includes(priorApp)||before.includes(approvedApp),
+  "Baseline must carry one known canonical app source");
+ const normalizedBefore=before.replace(priorApp,approvedApp);
+ const result=checkHtml(normalizedBefore,v3AlreadyPresent?"after":"before");
  assert.equal(result.new_asset_links,v3AlreadyPresent?2:0);
  assert.equal(result.forms_preserved,true);
 });
