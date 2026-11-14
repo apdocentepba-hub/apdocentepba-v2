@@ -111,11 +111,11 @@ function dateNear(prefix){
 export function discoverSourceCandidates(html,source){
  if(source?.kind!=='sad_novedades'||typeof html!=='string')return [];
  const results=[],seen=new Set();
- const head=html.split(/<footer\\b|PLATAFORMA\\s*ABC/i)[0].slice(0,300_000);
- const anchors=/<a\\b([^>]*?)>([\\s\\S]{1,450}?)<\\/a>/gi;
+ const head=html.split(/<footer\b|PLATAFORMA\s*ABC/i)[0].slice(0,300_000);
+ const anchors=/<a\b([^>]*?)>([\s\S]{1,450}?)<\/a>/gi;
  let m;
  while((m=anchors.exec(head))!==null&&results.length<15){
-  const href=m[1].match(/\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)')/i);
+  const href=m[1].match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
   if(!href)continue;
   try{
    const u=new URL(entities(href[1]||href[2]),source.url);
