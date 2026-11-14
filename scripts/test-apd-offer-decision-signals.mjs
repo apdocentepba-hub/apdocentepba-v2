@@ -20,6 +20,12 @@ test('only concrete positive signals with known closure and schedule can be favo
  assert.doesNotMatch(r.label,/adjudicad|apto|compatible normativo/i);
  assert.equal(r.reasons.some(x=>/probabilidad|ganar|salario/i.test(x)),false);
 });
+test('PID and distant deadline alone never certify a preference match',()=>{
+ const result=assess({...baseline,pid_compatible_panel:true,
+  horas_hasta_cierre:72,horario:'Lunes 8 a 10'});
+ assert.equal(result.kind,'unknown');
+ assert.match(result.note,/No evalúa superposición/);
+});
 test('PID mismatch takes precedence over all positive signals',()=>{
  const r=assess({...baseline,pid_match_verified:false,
   pid_compatible_panel:true,district_preferred:true,turn_preferred:true,
