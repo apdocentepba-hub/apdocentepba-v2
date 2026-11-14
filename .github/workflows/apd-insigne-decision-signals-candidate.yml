@@ -1,0 +1,35 @@
+name: APD Insigne decision signals candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'apd_comparador_panel.mjs'
+      - 'apd_comparador_panel.css'
+      - 'scripts/apd-offer-decision-signals.mjs'
+      - 'scripts/test-apd-offer-decision-signals.mjs'
+      - 'scripts/test-apd-comparador-browser.mjs'
+      - 'index.html'
+      - '.github/workflows/apd-insigne-decision-signals-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  safe-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and deterministic decision evidence
+        run: |
+          node --check apd_comparador_panel.mjs
+          node --check scripts/apd-offer-decision-signals.mjs
+          node --test scripts/test-apd-offer-decision-signals.mjs
+      - name: Real Chromium browser, synthetic accounts and offers
+        run: node scripts/test-apd-comparador-browser.mjs
+      - name: Protect authenticated alerts, backend and subscriptions
+        run: |
+          git diff --exit-code origin/main -- app_v2.js worker-live worker.js auth_session_patch.js supabase sql

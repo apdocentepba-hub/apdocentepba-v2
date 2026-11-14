@@ -141,6 +141,7 @@ const server=createServer((req,res)=>{
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
   '/scripts/apd-comparador-criterios.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-criterios.mjs')},
+  '/scripts/apd-offer-decision-signals.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-decision-signals.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
@@ -1118,6 +1119,12 @@ try{
   const wfsBeforeAuto=await js('window.__wfsRequests.length');
   await js('document.getElementById("apd-comparar-oferta").click();true');
   await until('document.querySelectorAll("#apd-comparador-panel .apd-mobility-inline .apd-mobility-card").length===1');
+  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-offer-fit").length'),1,
+   'One selected offer must have exactly one transparent decision panel');
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-offer-fit-title")?.textContent||""'),
+   /Coincide con filtros observados|Datos por confirmar|Revisar antes/);
+  assert.match(await js('document.querySelector("#apd-comparador-panel .apd-offer-fit-note")?.textContent||""'),
+   /No evalúa superposición con tus jornadas/);
   assert.match(await js('document.querySelector(".apd-comparator-geo-status")?.textContent||""'),
    /1 de 1 escuelas de ofertas verificadas/);
   assert.equal(await js('window.__wfsRequests.length')-wfsBeforeAuto,1,
@@ -1147,6 +1154,8 @@ try{
   await until('!!document.getElementById("apd-comparar-oferta")');
   await js('document.getElementById("apd-comparar-oferta").click();true');
   await until('document.querySelectorAll("#apd-comparador-panel .apd-mobility-inline .apd-mobility-card").length===2');
+  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-offer-fit").length'),2,
+   'Two selected offers must have independent evidence signals');
   assert.match(await js('document.querySelector(".apd-comparator-geo-status")?.textContent||""'),
    /2 de 2 escuelas de ofertas verificadas/);
   await until('document.getElementById("apd-comparison-dialog")?.open===true');
