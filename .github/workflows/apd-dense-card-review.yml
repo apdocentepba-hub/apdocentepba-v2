@@ -2,6 +2,10 @@ name: APD dense card design review (no deploy)
 on:
   pull_request:
     paths:
+      - 'frontend_easy_fixes_patch.js'
+      - 'scripts/check-apd-legacy-style-scope.mjs'
+      - 'scripts/test-apd-legacy-style-scope.mjs'
+      - 'scripts/test-apd-offer-card-browser.mjs'
       - 'scripts/check-apd-visual-change-boundaries.mjs'
       - 'scripts/test-apd-visual-change-boundaries.mjs'
       - 'app_v2.js'
@@ -33,6 +37,8 @@ jobs:
           node --test scripts/test-apd-editorial-dense-card.mjs scripts/test-apd-offer-card-compact.mjs scripts/test-apd-official-school-identity.mjs
           node --test scripts/test-apd-visual-change-boundaries.mjs
           node scripts/check-apd-visual-change-boundaries.mjs
+          node --test scripts/test-apd-legacy-style-scope.mjs
+          node scripts/check-apd-legacy-style-scope.mjs
       - name: Chromium layout desktop, mobile and dark mode
         run: node scripts/test-apd-offer-card-browser.mjs
       - name: Chromium authenticated comparator and school identity
