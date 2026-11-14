@@ -157,8 +157,9 @@ export function createMobilitySection({home,offers=[],verifiedBySchool={}}={}){
   section.appendChild(node('p','apd-mobility-notice',
    !home?.lat?
     'Primero confirmá la ubicación de tu domicilio en Datos personales.':
-    'Para ver recorridos necesitás confirmar el domicilio y pulsar «Consultar ABC» '+
-    'para verificar la ubicación oficial de las escuelas.'));
+    'La ubicación oficial de estas escuelas todavía no está verificada en ABC. '+
+    'Si la consulta automática no respondió, usá «Consultar distancias oficiales» '+
+    'para reintentar.'));
   return section;
  }
  section.appendChild(node('p','apd-mobility-privacy',
