@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -44,4 +44,4 @@ jobs:
         run: node scripts/apd-provincial-monitor.mjs --offline --out tmp/apd-provincial-pilot.json
       - name: Protect the production app and backend
         run: |
-          git diff --exit-code HEAD^ HEAD -- worker-live worker.js app_v2.js index.html supabase sql auth_session_patch.js || true
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html supabase sql auth_session_patch.js
