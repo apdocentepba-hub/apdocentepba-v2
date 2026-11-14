@@ -18,7 +18,7 @@ test('Legacy CSS patch is unchanged except for the two targeted overrides',()=>{
 });
 test('Any unrelated styling or runtime mutation is denied',()=>{
  assert.throws(()=>verifyLegacyPatchScope(
-  baseline,candidate.replace('setTimeout(function()', 'setTimeout(function(){return;}'))),
+  baseline,candidate.replace('setTimeout(function()', 'setTimeout(function(){return;}')),
   /changed beyond/);
  assert.throws(()=>verifyLegacyPatchScope(
   baseline,candidate.replace('html,body{scroll-padding-top:92px!important}',
