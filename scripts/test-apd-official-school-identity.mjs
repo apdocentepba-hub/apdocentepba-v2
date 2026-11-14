@@ -18,7 +18,7 @@ function mockSchoolCard(value=key,code=''){
  if(code)nodes.set('alerta-location-code',make('alerta-location-code',code));
  const container={
   ownerDocument:{createElement:()=>make('')},
-  querySelector(selector){return nodes.get(selector.slice(1))||null},
+  querySelector(selector){const name=selector.slice(1);return [...nodes.values()].find(n=>n.className.split(/\s+/).includes(name))||null},
   appendChild(node){nodes.set(node.className,node);}
  };
  return {container,nodes};
@@ -29,9 +29,10 @@ test('Exact public ABC identity is labelled with source and saved official key',
  assert.equal(candidate.source,'Mapa Escolar ABC / WFS');
  const {container,nodes}=mockSchoolCard();
  assert.equal(applyOfficialSchoolIdentity(container,candidate),true);
- assert.equal(nodes.get('alerta-location-value').textContent,'Escuela Secundaria N° 4');
- assert.equal(nodes.get('alerta-location-label').textContent,'Escuela · Mapa Escolar ABC');
- assert.equal(nodes.get('alerta-location-code').textContent,'Clave ABC: '+key);
+ assert.equal(nodes.get('alerta-location-value').textContent,key);
+ assert.equal(container.querySelector('.apd-official-school-name')?.textContent,'Escuela Secundaria N° 4');
+ assert.equal(nodes.get('alerta-location-label').textContent,'Escuela · clave ABC');
+ assert.equal(container.querySelector('.apd-official-school-name')?.textContent,'Escuela Secundaria N° 4');
  assert.equal(nodes.get('apd-official-school-address').textContent,
   'Dirección registrada: Mitre 123');
 });
@@ -57,7 +58,8 @@ test('Current card with a feed name and separate key can be enhanced',()=>{
  const {container,nodes}=mockSchoolCard('Nombre informado','Clave: '+key);
  assert.equal(applyOfficialSchoolIdentity(container,
   officialSchoolPresentation(key,verified({domicilio:''}))),true);
- assert.equal(nodes.get('alerta-location-value').textContent,'Escuela Secundaria N° 4');
+ assert.equal(nodes.get('alerta-location-value').textContent,key);
+ assert.equal(container.querySelector('.apd-official-school-name')?.textContent,'Escuela Secundaria N° 4');
  assert.equal(nodes.has('apd-official-school-address'),false);
 });
 test('Potentially malicious official strings are text only, never HTML',()=>{
@@ -67,7 +69,8 @@ test('Potentially malicious official strings are text only, never HTML',()=>{
  }));
  const {container,nodes}=mockSchoolCard();
  assert.equal(applyOfficialSchoolIdentity(container,p),true);
- assert.equal(nodes.get('alerta-location-value').textContent,'<img src=x onerror=alert(1)>');
+ assert.equal(nodes.get('alerta-location-value').textContent,key);
+ assert.equal(container.querySelector('.apd-official-school-name')?.textContent,'<img src=x onerror=alert(1)>');
  assert.equal(nodes.get('apd-official-school-address').textContent,
   'Dirección registrada: <svg onload=alert(1)>');
  const source=readFileSync('scripts/apd-official-school-identity.mjs','utf8');

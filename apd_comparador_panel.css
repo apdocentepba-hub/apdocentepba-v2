@@ -77,11 +77,6 @@
  /* Keep 2-3 cards worth of useful data above the fold without hiding details. */
  #panel-alertas .alerta-stage{padding-inline:64px}
  #panel-alertas .alerta-floating{padding:13px 14px;border-radius:17px}
- #panel-alertas .alerta-windowbar{margin-bottom:6px}
- #panel-alertas .alerta-topbar{margin-bottom:8px}
- #panel-alertas .alerta-progress{margin-bottom:10px}
- #panel-alertas .alerta-tags{margin-bottom:7px}
- #panel-alertas .alerta-title{font-size:18px;margin:7px 0 5px}
  #panel-alertas .alerta-subtitle{margin-bottom:8px}
  #panel-alertas .alerta-grid{gap:7px 9px}
  #panel-alertas .alerta-row{padding:7px 10px;border-radius:10px;gap:2px}
@@ -90,7 +85,6 @@
  #panel-alertas .alerta-meta-grid{gap:7px}
  #panel-alertas .alerta-meta-item{padding:7px 10px;border-radius:10px}
  #panel-alertas .alerta-meta-k{margin-bottom:3px}
- #panel-alertas .alerta-actions{margin-top:10px}
  #panel-alertas .alerta-dots{margin-top:10px}
 }
 @media(max-width:600px){
@@ -542,3 +536,186 @@ body.apd-dark .apd-offer-fit-title{color:#eaf2ff}
 body.apd-dark .apd-offer-fit-reasons,body.apd-dark .apd-offer-fit-note{
  color:#d7e5f6!important}
 @media(max-width:600px){.apd-offer-fit{padding:10px 11px}}
+
+
+/* APD design study 2026-11-14: information-dense editorial card (draft).
+   Same fields, less visual furniture. School key above public full name. */
+#panel-alertas .alerta-carousel-shell{max-width:720px}
+#panel-alertas .alerta-main-card{
+ max-width:720px;padding:14px 16px!important;border-radius:17px!important;
+ box-shadow:0 10px 26px rgba(20,44,72,.09),0 2px 5px rgba(20,44,72,.04)!important;
+}
+#panel-alertas .alerta-windowbar{margin-bottom:1px!important}
+#panel-alertas .alerta-windowdot{width:7px;height:7px}
+#panel-alertas .alerta-topbar{margin-bottom:6px!important}
+#panel-alertas .alerta-nav{width:38px;height:38px}
+#panel-alertas .alerta-progress{height:4px;margin:7px 0 10px!important}
+#panel-alertas .alerta-tags{gap:6px;margin-bottom:7px!important}
+#panel-alertas .alerta-tags .tag{
+ min-height:27px;padding:5px 9px;font-size:10px;border-radius:8px;
+}
+#panel-alertas .alerta-title{
+ font-size:19px!important;line-height:1.28;letter-spacing:-.018em;
+ margin:6px 0 10px!important;
+}
+#panel-alertas .alerta-location{
+ grid-template-columns:minmax(0,1.5fr) minmax(0,.9fr);
+ align-items:start;gap:8px;margin-bottom:10px;
+}
+#panel-alertas .alerta-location-item{
+ gap:3px;padding:9px 11px;border-radius:10px;
+ background:var(--apd-surface-2,#f8fbff);
+}
+#panel-alertas .alerta-location-label{
+ font-size:10px;letter-spacing:.06em;line-height:1.3;
+}
+#panel-alertas .alerta-location-value{
+ font-size:15px;line-height:1.25;font-weight:800;
+}
+#panel-alertas .alerta-location-value.alerta-school-key{
+ font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+ font-size:15px;letter-spacing:.035em;
+}
+#panel-alertas .alerta-location-code,
+#panel-alertas .apd-official-school-name,
+#panel-alertas .apd-official-school-address{
+ font-size:11.5px;line-height:1.45;font-weight:500;
+ color:var(--apd-muted,#526c83);
+}
+#panel-alertas .apd-official-school-name{
+ display:block;overflow-wrap:anywhere;
+}
+#panel-alertas .apd-official-school-address{
+ display:block;font-weight:550;
+}
+#panel-alertas .alerta-feature-grid{
+ display:grid;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+ gap:7px!important;margin:0!important;
+}
+#panel-alertas .alerta-feature-grid>.alerta-row{
+ grid-column:span 2!important;border-radius:10px!important;
+ padding:8px 10px!important;gap:3px!important;
+}
+#panel-alertas .alerta-feature-grid>.alerta-row-horarios{
+ grid-column:1/-1!important;padding:10px 12px!important;
+ border-left-width:3px!important;
+}
+#panel-alertas .alerta-feature-grid>.alerta-row-observaciones{
+ grid-column:1/-1!important;
+}
+#panel-alertas .alerta-feature-grid .alerta-key{
+ font-size:10px!important;font-weight:800;
+ display:flex;align-items:center;gap:6px;
+}
+#panel-alertas .alerta-row-horarios .alerta-key::before{
+ content:"◷";font-size:16px;color:var(--offer-accent);
+}
+#panel-alertas .alerta-row-vigencia .alerta-key::before{content:"▣";font-size:12px}
+#panel-alertas .alerta-row-cierre .alerta-key::before{content:"◴";font-size:14px}
+#panel-alertas .alerta-row-curso .alerta-key::before{content:"▤";font-size:13px}
+#panel-alertas .alerta-row-modulos .alerta-key::before{content:"▥";font-size:13px}
+#panel-alertas .alerta-feature-grid .alerta-val{
+ font-size:13px;line-height:1.38;font-weight:730;
+}
+#panel-alertas .alerta-feature-grid .alerta-row-horarios .alerta-val{
+ font-size:16px;font-weight:800;line-height:1.42;
+}
+#panel-alertas .alerta-feature-grid .alerta-row-curso .alerta-val,
+#panel-alertas .alerta-feature-grid .alerta-row-modulos .alerta-val{
+ font-size:15px;font-weight:800;
+}
+#panel-alertas .alerta-pid-card{
+ margin-top:9px!important;padding:9px 11px!important;border-radius:11px;
+}
+#panel-alertas .alerta-pid-summary{
+ display:flex;align-items:center;gap:7px;
+}
+#panel-alertas .alerta-pid-marker{font-size:11px;opacity:.85}
+#panel-alertas .alerta-pid-status{
+ font-size:12px;font-weight:850;line-height:1.35;
+ text-transform:uppercase;letter-spacing:.02em;
+}
+#panel-alertas .alerta-pid-brief{
+ margin:4px 0 3px;font-size:12px;line-height:1.43;
+}
+#panel-alertas .alerta-pid-disclosure summary{
+ width:max-content;min-height:30px;max-width:100%;
+ display:flex;align-items:center;gap:6px;
+ padding:4px 3px;cursor:pointer;
+ font-size:12px;font-weight:750;color:#194f83;
+}
+#panel-alertas .alerta-pid-disclosure summary:focus-visible{
+ outline:2px solid var(--offer-accent);outline-offset:2px;border-radius:5px;
+}
+#panel-alertas .alerta-pid-disclosure[open] .alerta-meta-grid{
+ margin-top:7px;gap:6px;
+}
+#panel-alertas .alerta-pid-disclosure .alerta-row{
+ background:rgba(255,255,255,.83);padding:7px 9px;
+ border-radius:8px;
+}
+#panel-alertas #alerta-postulantes-meta{
+ margin-top:9px!important;padding:9px 11px!important;border-radius:11px;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-head{
+ margin-bottom:5px;font-size:10px;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-grid{
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-item{
+ min-width:0;padding:7px 9px;border-radius:8px;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-item-wide{
+ grid-column:auto;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-k{
+ font-size:10px;margin-bottom:3px;
+}
+#panel-alertas #alerta-postulantes-meta .alerta-meta-v{
+ font-size:13px;line-height:1.3;overflow-wrap:anywhere;
+}
+#panel-alertas .alerta-actions{margin-top:9px!important;gap:7px}
+#panel-alertas .alerta-actions .btn{
+ font-size:12px;padding:8px 10px;min-height:38px;
+}
+#panel-alertas .alerta-actions .alerta-link{
+ min-width:0;
+}
+#panel-alertas .alerta-dots{margin-top:8px!important}
+body.apd-dark #panel-alertas .alerta-pid-disclosure summary{color:#b6d9ff}
+body.apd-dark #panel-alertas .alerta-pid-disclosure .alerta-row{
+ background:#102a42;border-color:#34536d;
+}
+@media(max-width:600px){
+ #panel-alertas .alerta-main-card{padding:12px!important}
+ #panel-alertas .alerta-location{
+  grid-template-columns:minmax(0,1fr);gap:7px;
+ }
+ #panel-alertas .alerta-feature-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ }
+ #panel-alertas .alerta-feature-grid>.alerta-row{
+  grid-column:span 1!important;
+ }
+ #panel-alertas .alerta-feature-grid>.alerta-row-horarios,
+ #panel-alertas .alerta-feature-grid>.alerta-row-vigencia,
+ #panel-alertas .alerta-feature-grid>.alerta-row-cierre,
+ #panel-alertas .alerta-feature-grid>.alerta-row-observaciones{
+  grid-column:1/-1!important;
+ }
+ #panel-alertas #alerta-postulantes-meta .alerta-meta-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+ }
+ #panel-alertas #alerta-postulantes-meta .alerta-meta-item-wide{
+  grid-column:1/-1;
+ }
+ #panel-alertas .alerta-actions .btn{flex:1 1 145px}
+}
+@media(max-width:380px){
+ #panel-alertas .alerta-feature-grid .alerta-row-curso,
+ #panel-alertas .alerta-feature-grid .alerta-row-modulos{
+  grid-column:span 1!important;
+ }
+ #panel-alertas .alerta-feature-grid>.alerta-row{padding:8px!important}
+}

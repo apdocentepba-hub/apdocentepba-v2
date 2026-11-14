@@ -2,6 +2,8 @@ name: APD Insigne decision signals candidate (no deploy)
 on:
   pull_request:
     paths:
+      - 'scripts/check-apd-visual-change-boundaries.mjs'
+      - 'scripts/test-apd-visual-change-boundaries.mjs'
       - 'apd_comparador_panel.mjs'
       - 'apd_comparador_panel.css'
       - 'scripts/apd-offer-decision-signals.mjs'
@@ -32,4 +34,6 @@ jobs:
         run: node scripts/test-apd-comparador-browser.mjs
       - name: Protect authenticated alerts, backend and subscriptions
         run: |
-          git diff --exit-code origin/main -- app_v2.js worker-live worker.js auth_session_patch.js supabase sql
+          git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js supabase sql
+          node --test scripts/test-apd-visual-change-boundaries.mjs
+          node scripts/check-apd-visual-change-boundaries.mjs

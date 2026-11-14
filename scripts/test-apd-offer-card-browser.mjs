@@ -16,9 +16,23 @@ assert.ok(bin,'Chromium browser required for real layout QA');
 const tmp=mkdtempSync(path.join(tmpdir(),'apd-card-'));
 const output=path.resolve('tmp/apd-offer-card-browser');
 mkdirSync(output,{recursive:true});
-const css=['styles.css','mobile_optimizations.css',
- 'mobile_overrides_v2.css','visual_contrast_patch.css','apd_comparador_panel.css']
- .map(name=>readFileSync(name,'utf8')).join('\n');
+// Match the real index.html cascade, including style tags injected at
+// runtime by legacy UI patch scripts. These formerly escaped visual QA.
+const stylesheets=['styles.css','mobile_optimizations.css',
+ 'mobile_overrides_v2.css','visual_contrast_patch.css',
+ 'apd_comparador_panel.css','conversion-ux-2026.css',
+ 'apd_ui_v21.css','public-landing-v3.css'];
+const runtimePatches=['frontend_easy_fixes_patch.js',
+ 'mobile_visual_patch.js','visual_last_patch.js'];
+function injectedStyle(path){
+ const js=readFileSync(path,'utf8');
+ const m=js.match(/s\.textContent\s*=\s*`([\s\S]*?)`;/);
+ assert.ok(m,'Legacy patch style injection is missing: '+path);
+ assert.doesNotMatch(m[1],/\$\{/,'Expected static CSS only in '+path);
+ return m[1];
+}
+const css=[...stylesheets.map(name=>readFileSync(name,'utf8')),
+ ...runtimePatches.map(injectedStyle)].join('\n');
 const cases=[
  {name:'desktop-suplencia',width:1366,kind:'Suplencia',dark:false},
  {name:'desktop-provisional',width:1366,kind:'Provisionalidad',dark:false},
@@ -79,5 +93,7 @@ try{
  assert.notEqual(records[0].cardColor,records[1].cardColor,
   'Suplencia and provisionalidad must have distinct border colours');
  console.log('APD_OFFER_CARD_BROWSER '+JSON.stringify({success:true,records,
-  synthetic:true,network:'file_only'}));
+  synthetic:true,network:'file_only',style_stack:{
+  linked:stylesheets.length,injected:runtimePatches.length
+ }}));
 }finally{rmSync(tmp,{recursive:true,force:true});}
