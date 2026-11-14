@@ -12,7 +12,8 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
- validateSources,publicUrl,extractPublicNotices,diffConfirmedSnapshots,sharedThemes
+ validateSources,publicUrl,extractPublicNotices,diffConfirmedSnapshots,sharedThemes,
+ discoverSourceCandidates
 } from './apd-provincial-intelligence-core.mjs';
 
 const catalogPath=fileURLToPath(new URL('../data/apd-provincial-official-sources.json',import.meta.url));
@@ -109,7 +110,7 @@ export async function scanPublicSources({
     notices:[],note:'Offline-only: did not access source'
    });continue;
   }
-  let status='fetch_error',notices=[],note='',httpStatus=null;
+  let status='fetch_error',notices=[],note='',httpStatus=null,candidate_channels=[];
   const url=new URL(source.url),origin=url.origin;
   try{
    if(!robotsByHost.has(origin)){
@@ -143,6 +144,7 @@ export async function scanPublicSources({
        source,html:page.body,fetchedAt:stamp
       });
       status=extracted.status;notices=extracted.notices;note=extracted.note;
+      candidate_channels=discoverSourceCandidates(page.body,source);
      }else{
       status=page.status;note=page.reason;
      }
@@ -151,7 +153,8 @@ export async function scanPublicSources({
   }catch(error){status='fetch_error';note=errorMessage(error);}
   results.push({
    id:source.id,district:source.district,url:source.url,kind:source.kind,
-   status,observed_at:stamp,http_status:httpStatus,notices,note
+   status,observed_at:stamp,http_status:httpStatus,notices,note,
+   candidate_channels
   });
   await delayFn(1300);
  }
@@ -175,6 +178,7 @@ export async function scanPublicSources({
   district_coverage:results.filter(x=>x.kind==='sad_novedades'&&x.status==='ok')
    .map(x=>x.district),
   sources:results,
+  candidate_channels:results.flatMap(x=>x.candidate_channels||[]),
   changes,shared_themes:sharedThemes(results),
   caveats:[
    'Only the registered public pages were checked; no coverage claims for all SAD',
