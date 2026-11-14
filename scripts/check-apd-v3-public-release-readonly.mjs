@@ -12,7 +12,7 @@ const ORIGIN="https://alertasapd.com.ar";
 const TAG_CSS='<link rel="stylesheet" href="public-landing-v3.css?v=20261103" />';
 const TAG_JS='<script src="apd_panel_priority_v3.js?v=1"></script>';
 const RADAR='<script src="candidates/radar_provincia_live_20261102.js?v=2"></script>';
-const APP='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
+const APP='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
 const TABS='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
 const UI='<script src="apd_ui_v21.js?v=20261102-clean"></script>';
 const SHA=value=>createHash("sha256").update(value).digest("hex");
