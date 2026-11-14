@@ -2,6 +2,9 @@ name: APD alert offer card visual candidate (no deploy)
 on:
   pull_request:
     paths:
+      - 'frontend_easy_fixes_patch.js'
+      - 'scripts/check-apd-legacy-style-scope.mjs'
+      - 'scripts/test-apd-legacy-style-scope.mjs'
       - 'app_v2.js'
       - 'apd_comparador_panel.css'
       - 'scripts/test-apd-offer-card-compact.mjs'
@@ -27,6 +30,8 @@ jobs:
           node --check scripts/test-apd-offer-card-compact.mjs
           node --check scripts/test-apd-offer-card-browser.mjs
           node --test scripts/test-apd-offer-card-compact.mjs scripts/test-expired-plan-paywall.mjs
+          node --test scripts/test-apd-legacy-style-scope.mjs
+          node scripts/check-apd-legacy-style-scope.mjs
       - name: Real Chromium layout, responsive and appointment-type colours
         run: node scripts/test-apd-offer-card-browser.mjs
       - name: Protect backend source, auth and database
