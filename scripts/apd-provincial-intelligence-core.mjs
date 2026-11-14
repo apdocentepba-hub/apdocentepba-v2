@@ -154,14 +154,15 @@ export function extractPublicNotices({html,source,fetchedAt}){
  const cards=[],seen=new Set();
  // Finds link-wrapped public notice headings in Drupal SAD and ABC news.
  // No attempt to parse private pages, pagination, browser state or JS.
- const link=/<h[2-6]\b[^>]*>[\s\S]{0,600}?<a\b([^>]*?)>([\s\S]{1,900}?)<\/a>[\s\S]{0,250}?<\/h[2-6]>/gi;
+ // Closing heading must match opening tag: do not absorb <h3>Novedades</h3>.
+ const link=/<h([2-6])\b[^>]*>[\s\S]{0,600}?<a\b([^>]*?)>([\s\S]{1,900}?)<\/a>[\s\S]{0,250}?<\/h\1>/gi;
  let match;
  while((match=link.exec(section))!==null&&cards.length<60){
-  const href=match[1].match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+  const href=match[2].match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
   if(!href)continue;
   const url=articleUrl(href[1]||href[2],source.url);
   if(!url||seen.has(url))continue;
-  const title=strip(match[2]).slice(0,260);
+  const title=strip(match[3]).slice(0,260);
   if(title.length<12||GENERIC.test(title))continue;
   const date=dateNear(section.slice(Math.max(0,match.index-560),match.index));
   // Missing dates are carried as null, not fabricated or copied from scrape time.
