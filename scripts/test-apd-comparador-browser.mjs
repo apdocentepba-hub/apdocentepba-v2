@@ -148,6 +148,7 @@ const server=createServer((req,res)=>{
   '/scripts/apd-account-home-write-policy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-home-write-policy.mjs')},
   '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
+  '/scripts/apd-official-school-identity.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-official-school-identity.mjs')},
   '/scripts/apd-multimodal-transport.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-multimodal-transport.mjs')},
   '/scripts/apd-mobility-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mobility-ui.mjs')},
   '/scripts/apd-amba-bus-routes.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-amba-bus-routes.mjs')},
@@ -1153,7 +1154,32 @@ try{
    'Selecting two offers must not automatically send the saved home outside ABC');
   await js('document.getElementById("apd-comparison-close").click();true');
 
-  results.push({width,private_gating:true,up_to_five:true,xss_escaped:true,
+  // Official WFS enrichment: only the active card and only exact school key.
+  const priorSchoolRequests=await js('window.__wfsRequests.length');
+  await js(`(()=>{
+    window.alertasState.index=0;
+    document.getElementById('panel-alertas').innerHTML=
+     '<article class="alerta-main-card"><div class="alerta-location"><div class="alerta-location-school">'+
+     '<span class="alerta-location-label">Escuela · Clave ABC</span>'+
+     '<strong class="alerta-location-value">0005MS0004</strong></div></div>'+
+     '<div class="alerta-actions"></div></article>';
+    return true;
+   })()`);
+  await until('document.querySelector(".alerta-location-school .alerta-location-value")?.textContent==="Escuela de prueba 0005MS0004"');
+  assert.equal(await js('document.querySelector(".alerta-location-school .alerta-location-label")?.textContent'),
+   'Escuela · Mapa Escolar ABC');
+  assert.equal(await js('document.querySelector(".alerta-location-school .alerta-location-code")?.textContent'),
+   'Clave ABC: 0005MS0004');
+  assert.match(await js('document.querySelector(".apd-official-school-address")?.textContent||""'),
+   /Dirección registrada: Calle de prueba 100/);
+  assert.equal(await js('window.__wfsRequests.length')-priorSchoolRequests,1,
+   'Only one WFS request to identify the currently visible school');
+  assert.equal(await js('window.__wfsRequests.at(-1).filter'),"clave='0005MS0004'");
+  assert.equal(await js('window.__wfsRequests.at(-1).credentials'),'omit');
+  assert.equal(await js('window.__wfsRequests.some(x=>x.filter?.includes("Calle de prueba"))'),false,
+   'No private address must reach ABC during school identity lookup');
+
+  results.push({width,official_school_identity:true,private_gating:true,up_to_five:true,xss_escaped:true,
    auto_home_school_abc:true,inline_mobility:true,external_location_opt_in:true,
    account_home_reload:true,
    session_reset:true,limit_enforced:true,responsive:true});

@@ -48,7 +48,7 @@ test('map and comparator are lazy-loaded after confirmed plan in existing panel 
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
  assert.match(html,/planActual\?\.access_active===true/);
- assert.match(html,/import\('\.\/apd_offer_school_map_overlay\.mjs\?v=lab-20261107'\)/);
+ assert.match(html,/import\('\.\/apd_offer_school_map_overlay\.mjs\?v=20261114-identity1'\)/);
  assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=20261113-auto1'\)/);
  assert.doesNotMatch(html,/<script[^>]+src="apd_offer_school_map_overlay\.mjs/);
 });
