@@ -86,7 +86,9 @@ function articleUrl(href,base){
   const url=new URL(entities(href),base);
   const canonical=publicUrl(url.href,{allowCalendar:false});
   if(!canonical||url.hostname!==new URL(base).hostname)return null;
-  if(/\/(?:inicio|page)(?:\/|$)/i.test(url.pathname))return null;
+  // ABC notice URLs often live BELOW /inicio/, not at /inicio itself.
+  // Reject only pagination/home endpoints, never their notice children.
+  if(/\/inicio\/?$/i.test(url.pathname)||/\/page\/\d+\/?$/i.test(url.pathname))return null;
   return canonical;
  }catch{return null;}
 }
