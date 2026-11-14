@@ -1122,9 +1122,9 @@ try{
   assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-offer-fit").length'),1,
    'One selected offer must have exactly one transparent decision panel');
   assert.match(await js('document.querySelector("#apd-comparador-panel .apd-offer-fit-title")?.textContent||""'),
-   /Señales favorables|Datos por confirmar|Revisar antes/);
+   /Coincide con filtros observados|Datos por confirmar|Revisar antes/);
   assert.match(await js('document.querySelector("#apd-comparador-panel .apd-offer-fit-note")?.textContent||""'),
-   /No determina compatibilidad normativa/);
+   /No evalúa superposición con tus jornadas/);
   assert.match(await js('document.querySelector(".apd-comparator-geo-status")?.textContent||""'),
    /1 de 1 escuelas de ofertas verificadas/);
   assert.equal(await js('window.__wfsRequests.length')-wfsBeforeAuto,1,
