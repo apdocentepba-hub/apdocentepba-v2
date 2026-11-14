@@ -337,3 +337,180 @@ body:has(dialog.apd-comparator-dialog[open]){
  .apd-mobility-actions{flex-direction:column;gap:6px}
  .apd-mobility-map-link,.apd-mobility-button{width:100%;justify-content:flex-start}
 }
+
+
+/* APD compact offer card R290 — editorial hierarchy, not a wide billboard.
+   Scoped to the authenticated alert carousel; no pricing, backend or comparator changes.
+   Colours describe only the actual "revista" value. */
+#panel-alertas .alerta-carousel-shell{
+  width:100%;
+  max-width:760px;
+  margin-inline:auto;
+  min-width:0;
+}
+#panel-alertas .alerta-stage{padding-inline:0!important;min-width:0}
+#panel-alertas .alerta-window-preview{display:none!important}
+#panel-alertas .alerta-main-card{
+  --offer-accent:#215caa;
+  --offer-soft:#edf5ff;
+  --offer-border:#bdd6f5;
+  width:100%;max-width:760px;min-width:0;
+  box-sizing:border-box;
+  margin-inline:auto;
+  padding:18px 20px!important;
+  border:1px solid var(--offer-border)!important;
+  border-left:4px solid var(--offer-accent)!important;
+  border-radius:20px!important;
+  background:var(--apd-surface,#fff)!important;
+  box-shadow:0 16px 36px rgba(17,43,74,.10),0 3px 9px rgba(17,43,74,.04)!important;
+}
+#panel-alertas .alerta-main-card.alerta-revista-suplencia{
+  --offer-accent:#7c3aed;--offer-soft:#f5edff;--offer-border:#ddc6ff;
+}
+#panel-alertas .alerta-main-card.alerta-revista-provisional{
+  --offer-accent:#b45309;--offer-soft:#fff3e5;--offer-border:#f4d1a8;
+}
+#panel-alertas .alerta-main-card.alerta-revista-titular{
+  --offer-accent:#047857;--offer-soft:#eafaf3;--offer-border:#aae2ce;
+}
+#panel-alertas .alerta-windowbar{margin-bottom:8px!important}
+#panel-alertas .alerta-topbar{margin-bottom:9px!important}
+#panel-alertas .alerta-nav{width:42px;height:42px}
+#panel-alertas .alerta-counter{
+  padding:6px 12px;border-radius:999px;
+  background:var(--offer-soft);color:var(--offer-accent);
+  font-size:12px;font-weight:850;
+}
+#panel-alertas .alerta-progress{height:5px;margin-bottom:14px!important}
+#panel-alertas .alerta-progress-bar{
+  background:var(--offer-accent)!important;box-shadow:none;
+}
+#panel-alertas .alerta-tags{
+  display:flex;flex-wrap:wrap;gap:8px;
+  align-items:center;margin:0 0 10px!important;
+}
+#panel-alertas .alerta-tags .tag{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:7px 11px;min-height:32px;
+  border-radius:9px;font-size:11px;font-weight:850;
+  letter-spacing:.035em;line-height:1.3;
+}
+#panel-alertas .alerta-tags .tag-revista{
+  background:var(--offer-accent)!important;color:#fff!important;
+  border:1px solid var(--offer-accent)!important;
+  padding-inline:13px;
+}
+#panel-alertas .alerta-tags .tag-turno{
+  background:#123b70!important;color:#fff!important;
+}
+#panel-alertas .alerta-tags .tag-nivel{
+  background:#eaf3ff!important;color:#164c89!important;
+  border:1px solid #cfe2f6!important;
+}
+#panel-alertas .alerta-title{
+  font-size:clamp(19px,2vw,24px)!important;
+  line-height:1.22;font-weight:850;
+  letter-spacing:-.025em;
+  margin:6px 0 13px!important;
+  color:var(--apd-text,#102c52)!important;
+  overflow-wrap:anywhere;
+}
+#panel-alertas .alerta-location{
+  display:grid;grid-template-columns:1.2fr 1fr;gap:10px;
+  margin:0 0 12px;min-width:0;
+}
+#panel-alertas .alerta-location-item{
+  min-width:0;display:flex;flex-direction:column;gap:5px;
+  padding:12px 14px;border:1px solid var(--apd-border,#d7e2f1);
+  border-radius:12px;background:var(--apd-surface-2,#f8fbff);
+  overflow-wrap:anywhere;
+}
+#panel-alertas .alerta-location-school{
+  border-left:3px solid var(--offer-accent);
+}
+#panel-alertas .alerta-location-label{
+  color:var(--apd-muted,#58708b);font-size:11px;
+  text-transform:uppercase;letter-spacing:.05em;font-weight:850;
+}
+#panel-alertas .alerta-location-value{
+  display:block;color:var(--apd-text,#102c52);
+  font-size:clamp(15px,1.6vw,19px);font-weight:850;line-height:1.23;
+  overflow-wrap:anywhere;
+}
+#panel-alertas .alerta-location-code{
+  color:var(--apd-muted,#58708b);font-size:12px;line-height:1.35;
+}
+#panel-alertas .alerta-feature-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px!important;min-width:0;margin-top:0;
+}
+#panel-alertas .alerta-feature-grid>.alerta-row{
+  min-width:0;padding:12px 14px!important;
+  gap:6px!important;border-radius:12px!important;
+  border:1px solid var(--apd-border,#d7e2f1)!important;
+  background:var(--apd-surface,#fff)!important;
+}
+#panel-alertas .alerta-feature-grid .alerta-key{
+  font-size:11px!important;font-weight:850;
+  letter-spacing:.05em;color:var(--apd-muted,#58708b)!important;
+}
+#panel-alertas .alerta-feature-grid .alerta-val{
+  font-size:15px;line-height:1.4;font-weight:750;
+  overflow-wrap:anywhere;white-space:pre-line;
+  color:var(--apd-text,#102c52);
+}
+#panel-alertas .alerta-feature-grid>.alerta-row-horarios{
+  grid-column:1/-1;
+  background:var(--offer-soft)!important;
+  border:1px solid var(--offer-border)!important;
+  border-left:4px solid var(--offer-accent)!important;
+  padding:13px 16px!important;
+}
+#panel-alertas .alerta-row-horarios .alerta-key{
+  color:var(--offer-accent)!important;font-size:12px!important;
+}
+#panel-alertas .alerta-row-horarios .alerta-val{
+  font-size:clamp(16px,1.65vw,19px);
+  font-weight:850;line-height:1.5;
+}
+#panel-alertas .alerta-row-vigencia .alerta-val,
+#panel-alertas .alerta-row-cierre .alerta-val{font-size:15px;font-weight:800}
+#panel-alertas .alerta-row-curso .alerta-val,
+#panel-alertas .alerta-row-modulos .alerta-val{font-size:18px;font-weight:850}
+#panel-alertas .alerta-row-observaciones{grid-column:1/-1}
+#panel-alertas .alerta-meta-card{margin-top:12px}
+#panel-alertas .alerta-actions{margin-top:12px}
+#panel-alertas .alerta-tags .tag:focus-visible,
+#panel-alertas .alerta-nav:focus-visible{
+  outline:3px solid var(--offer-accent);outline-offset:3px;
+}
+body.apd-dark #panel-alertas .alerta-main-card{
+  --offer-soft:#172b49;--offer-border:#3a5170;
+  background:#10233a!important;color:#f8fbff!important;
+}
+body.apd-dark #panel-alertas .alerta-location-item,
+body.apd-dark #panel-alertas .alerta-feature-grid>.alerta-row:not(.alerta-row-horarios){
+  background:#0b1b2e!important;border-color:#31506f!important;
+}
+body.apd-dark #panel-alertas .alerta-row-horarios{
+  background:#172b49!important;border-color:var(--offer-border)!important;
+  border-left-color:var(--offer-accent)!important;
+}
+body.apd-dark #panel-alertas .alerta-tags .tag-nivel{
+  background:#173454!important;color:#eaf2ff!important;border-color:#31506f!important;
+}
+@media(max-width:760px){
+ #panel-alertas .alerta-carousel-shell{max-width:100%}
+ #panel-alertas .alerta-main-card{max-width:100%;padding:14px!important}
+ #panel-alertas .alerta-location{grid-template-columns:1fr;gap:8px}
+ #panel-alertas .alerta-feature-grid{grid-template-columns:minmax(0,1fr)!important;gap:8px!important}
+ #panel-alertas .alerta-feature-grid>.alerta-row{grid-column:1/-1}
+ #panel-alertas .alerta-title{font-size:19px!important}
+ #panel-alertas .alerta-row-horarios .alerta-val{font-size:17px}
+ #panel-alertas .alerta-tags .tag{min-height:30px;padding:6px 9px}
+}
+@media(max-width:380px){
+ #panel-alertas .alerta-main-card{padding:12px!important;border-radius:16px!important}
+ #panel-alertas .alerta-location-item{padding:10px 11px}
+ #panel-alertas .alerta-feature-grid>.alerta-row{padding:10px 11px!important}
+}

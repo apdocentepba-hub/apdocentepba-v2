@@ -1401,6 +1401,18 @@ function renderAlertaActual() {
       ? `${desdeLabel || "—"} → ${hastaLabel || "—"}`
       : (a.revista || "Sin fecha informada");
   const abcUrl = buildPostulantesUrl(a);
+  // Colour-code only actual appointment type, never infer from cargo text.
+  const revistaNormalizada = String(a.revista || "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const revistaVisual = revistaNormalizada.includes("suplen") ? "suplencia"
+    : revistaNormalizada.includes("provis") ? "provisional"
+    : revistaNormalizada.includes("titular") ? "titular" : "otra";
+  const schoolCode = String(a.escuela || "").trim();
+  const schoolIsCode = /^[0-9]{4}[A-Z]{2}[0-9]{4}$/i.test(schoolCode);
+  const schoolName = [a.nombreestablecimiento,a.nombre_establecimiento,a.nombre_escuela]
+    .map(value => String(value || "").trim())
+    .find(value => value && value.toUpperCase() !== schoolCode.toUpperCase()) || "";
+  const localidad = String(a.localidad || "").trim();
 
   const prevIndex = total > 1 ? (alertasState.index - 1 + total) % total : -1;
   const nextIndex = total > 1 ? (alertasState.index + 1) % total : -1;
@@ -1414,7 +1426,7 @@ function renderAlertaActual() {
         ${prev ? renderWindowPreview(prev, "left", prevIndex) : ""}
         ${next ? renderWindowPreview(next, "right", nextIndex) : ""}
 
-        <article class="alerta-floating alerta-main-card">
+        <article class="alerta-floating alerta-main-card alerta-revista-${revistaVisual}">
           <div class="alerta-windowbar">
             <span class="alerta-windowdot win-red"></span>
             <span class="alerta-windowdot win-yellow"></span>
@@ -1429,26 +1441,38 @@ function renderAlertaActual() {
 
           ${renderProgress(total, alertasState.index)}
 
-          <div class="alerta-tags">
-            ${a.escuela ? `<span class="tag tag-escuela">${esc(a.escuela)}</span>` : ""}
-            ${a.distrito ? `<span class="tag tag-distrito">${esc(a.distrito)}</span>` : ""}
-            ${a.turno ? `<span class="tag tag-turno">${esc(a.turno)}</span>` : ""}
-            ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
-            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+          <div class="alerta-tags" aria-label="Características de la oferta">
             ${a.revista ? `<span class="tag tag-revista">${esc(a.revista)}</span>` : ""}
+            ${a.turno ? `<span class="tag tag-turno">Turno · ${esc(turnoTexto(a.turno) || a.turno)}</span>` : ""}
+            ${a.nivel_modalidad ? `<span class="tag tag-nivel">${esc(a.nivel_modalidad)}</span>` : ""}
+            ${a.jornada ? `<span class="tag tag-jornada">${esc(a.jornada)}</span>` : ""}
             ${a.estado ? `<span class="tag tag-estado">${esc(a.estado)}</span>` : ""}
-            ${a.pid_match ? `<span class="tag tag-revista">MATCH PID</span>` : ""}
+            ${a.pid_match ? `<span class="tag tag-estado">MATCH PID</span>` : ""}
           </div>
 
           <div class="alerta-title">${esc(titulo)}</div>
 
-          <div class="alerta-grid alerta-grid-clean">
-            ${alertaRow("Curso / Div.", a.cursodivision || normalizarCursoDivision(a.curso_division))}
-            ${(a.hsmodulos || a.modulos) ? alertaRow("Módulos", a.hsmodulos || a.modulos) : ""}
-            ${horarioLabel ? alertaRow("Días / horarios", horarioLabel) : ""}
-            ${vigenciaLabel ? alertaRow("Vigencia", vigenciaLabel) : ""}
-            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime"))}
-            ${a.observaciones ? alertaRow("Observaciones", a.observaciones) : ""}
+          <div class="alerta-location" aria-label="Establecimiento y ubicación de la oferta">
+            <div class="alerta-location-item alerta-location-school">
+              <span class="alerta-location-label">${schoolIsCode ? "Escuela · Clave ABC" : "Escuela"}</span>
+              <strong class="alerta-location-value">${esc(schoolName || schoolCode || "Escuela no informada")}</strong>
+              ${schoolName && schoolCode ? `<span class="alerta-location-code">Clave: ${esc(schoolCode)}</span>` : ""}
+            </div>
+            <div class="alerta-location-item alerta-location-district">
+              <span class="alerta-location-label">Distrito</span>
+              <strong class="alerta-location-value">${esc(a.distrito || "No informado")}</strong>
+              ${localidad && localidad.toUpperCase() !== String(a.distrito || "").trim().toUpperCase()
+                ? `<span class="alerta-location-code">Localidad: ${esc(localidad)}</span>` : ""}
+            </div>
+          </div>
+
+          <div class="alerta-grid alerta-grid-clean alerta-feature-grid">
+            ${alertaRow("Días y horarios", horarioLabel || "No informados", "alerta-row-horarios")}
+            ${alertaRow("Vigencia", vigenciaLabel, "alerta-row-vigencia")}
+            ${alertaRow("Cierre", a.finoferta_label || fmtFechaABC(a.finoferta, "datetime") || "No informado", "alerta-row-cierre")}
+            ${alertaRow("Curso / Div.", a.cursodivision || normalizarCursoDivision(a.curso_division), "alerta-row-curso")}
+            ${alertaRow("Módulos", a.hsmodulos || a.modulos || "No informados", "alerta-row-modulos")}
+            ${a.observaciones ? alertaRow("Observaciones", a.observaciones, "alerta-row-observaciones") : ""}
           </div>
 
           <div id="alerta-pid-box">
@@ -1487,11 +1511,16 @@ function renderAlertaActual() {
 
   cargarResumenPostulantes(a);
 }
-function alertaRow(label, value) {
+function alertaRow(label, value, visualClass = "") {
   const v = String(value || "").trim();
   if (!v) return "";
+  // CSS class name comes from a closed allowlist, never an ABC payload.
+  const classes = new Set(["alerta-row-horarios","alerta-row-vigencia",
+    "alerta-row-cierre","alerta-row-curso","alerta-row-modulos",
+    "alerta-row-observaciones"]);
+  const className = classes.has(visualClass) ? " " + visualClass : "";
   return `
-    <div class="alerta-row">
+    <div class="alerta-row${className}">
       <span class="alerta-key">${esc(label)}</span>
       <span class="alerta-val">${esc(v)}</span>
     </div>

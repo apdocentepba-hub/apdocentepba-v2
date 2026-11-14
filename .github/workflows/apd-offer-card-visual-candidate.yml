@@ -1,0 +1,34 @@
+name: APD alert offer card visual candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'apd_comparador_panel.css'
+      - 'scripts/test-apd-offer-card-compact.mjs'
+      - 'scripts/test-apd-offer-card-browser.mjs'
+      - '.github/workflows/apd-offer-card-visual-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  visual-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and renderer regression
+        run: |
+          node --check app_v2.js
+          node --check scripts/test-apd-offer-card-compact.mjs
+          node --check scripts/test-apd-offer-card-browser.mjs
+          node --test scripts/test-apd-offer-card-compact.mjs scripts/test-expired-plan-paywall.mjs
+      - name: Real Chromium layout, responsive and appointment-type colours
+        run: node scripts/test-apd-offer-card-browser.mjs
+      - name: Protect backend source, auth and database
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js supabase sql auth_session_patch.js
