@@ -32,4 +32,5 @@ jobs:
       - name: Guard protected files and delivery channels
         run: |
           git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js supabase sql
-          git diff --exit-code origin/main -- app_v2.js
+          node --test scripts/test-apd-visual-change-boundaries.mjs
+          node scripts/check-apd-visual-change-boundaries.mjs
