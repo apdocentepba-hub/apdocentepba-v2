@@ -12,7 +12,7 @@ const renderer=source.slice(start,end);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({
  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
 }[c]));
-function renderOffer(input){
+export function renderOffer(input){
  const badge={textContent:'',classList:{remove(){},add(){}}};
  const box={
   innerHTML:'',querySelector(){return null;},querySelectorAll(){return [];}
