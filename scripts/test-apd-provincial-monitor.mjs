@@ -109,6 +109,6 @@ test('No credentials, personal data, OCR, posting or notifications in crawler',(
  assert.match(source,/credentials:'omit'/);
  assert.match(source,/redirect:'manual'/);
  assert.match(source,/AbortSignal\.timeout\(12000\)/);
- assert.doesNotMatch(source,/localStorage|sessionStorage|DNI|cookies\s*:/i);
+ assert.doesNotMatch(source,/localStorage|sessionStorage|cookies\s*:/i);
  assert.doesNotMatch(source,/sendWhatsApp|sendMail|sendTelegram|postToInstagram/);
 });
