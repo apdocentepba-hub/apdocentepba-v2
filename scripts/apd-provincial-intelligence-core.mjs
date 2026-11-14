@@ -103,6 +103,41 @@ function dateNear(prefix){
  return d.getUTCDate()===day&&d.getUTCMonth()===month-1&&
   d.getUTCFullYear()===year?iso:null;
 }
+/**
+ * Links to alternative public SAD channels are evidence for discovery,
+ * NOT permission to crawl them. An official landing page may point to a
+ * current Google Sites site even when its own ABC news list is outdated.
+ */
+export function discoverSourceCandidates(html,source){
+ if(source?.kind!=='sad_novedades'||typeof html!=='string')return [];
+ const results=[],seen=new Set();
+ const head=html.split(/<footer\\b|PLATAFORMA\\s*ABC/i)[0].slice(0,300_000);
+ const anchors=/<a\\b([^>]*?)>([\\s\\S]{1,450}?)<\\/a>/gi;
+ let m;
+ while((m=anchors.exec(head))!==null&&results.length<15){
+  const href=m[1].match(/\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)')/i);
+  if(!href)continue;
+  try{
+   const u=new URL(entities(href[1]||href[2]),source.url);
+   if(u.protocol!=='https:'||u.username||u.password||u.port||
+      HOSTS.has(u.hostname)||seen.has(u.href))continue;
+   const anchorText=strip(m[2]).slice(0,130);
+   const context=(u.pathname+' '+anchorText).toLowerCase();
+   if(!/(?:comunicad|novedad|\bsad\b|actos?.?p[uú]blicos?)/i.test(context))continue;
+   u.hash='';
+   if(u.searchParams.has('token')||u.searchParams.has('auth'))continue;
+   seen.add(u.href);
+   results.push(Object.freeze({
+    source_id:source.id,district:source.district,
+    candidate_url:u.href,link_label:anchorText,
+    status:'external_channel_requires_verification',
+    note:'Discovery only. Not crawled, verified, or approved as official content'
+   }));
+  }catch{/* ignore invalid external link */}
+ }
+ return Object.freeze(results);
+}
+
 export function topicsFor(title){
  return TOPIC_RULES.filter(([,regex])=>regex.test(title))
   .map(([id,,tool])=>Object.freeze({id,tool}));
