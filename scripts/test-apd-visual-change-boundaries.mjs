@@ -13,10 +13,10 @@ test('minor presentation copy inside allowed renderer is permitted',()=>{
  assert.notEqual(candidate,source);
  assert.equal(checkVisualOnly(source,candidate).non_visual_code_unchanged,true);
 });
-test('auth/plan code changes are rejected before the visual section',()=>{
+test('changes to PID scoring code before the renderers are rejected',()=>{
  const candidate=source.replace(
-  'planActual?.access_active === false',
-  'planActual?.access_active !== false');
+  'function buildPidChanceInfo(',
+  'function buildPidChanceInfoUnsafe(');
  assert.notEqual(candidate,source);
  assert.throws(()=>checkVisualOnly(source,candidate),/Non-card code changed before/);
 });
