@@ -2,6 +2,7 @@
  * No credentials, user data storage, outbound fetches or mutations.
  */
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
+import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.mjs?v=20261114-signals1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
@@ -645,6 +646,16 @@ function render(){
      'Cierra en '+row.horas_hasta_cierre+' h':'Cierre por verificar'
    ].join(' · '));
    entry.appendChild(meta);
+   const fit=assessOfferDecisionSignals(row);
+   const fitPanel=node('section','apd-offer-fit apd-offer-fit-'+fit.kind);
+   fitPanel.setAttribute('aria-label','Indicadores orientativos de esta oferta');
+   fitPanel.appendChild(node('strong','apd-offer-fit-title',fit.label));
+   const evidence=node('ul','apd-offer-fit-reasons');
+   for(const reason of fit.reasons)
+    evidence.appendChild(node('li','',reason));
+   fitPanel.appendChild(evidence);
+   fitPanel.appendChild(node('p','apd-offer-fit-note',fit.note));
+   entry.appendChild(fitPanel);
    if(state.geoRequested){
     const verified=state.geoByKey[row.escuela.toUpperCase()];
     const distance=state.anchor && verified && origin ?
