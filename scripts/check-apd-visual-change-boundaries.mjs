@@ -17,7 +17,7 @@ function sections(input){
  const c=input.indexOf('\nfunction alertaRow(',b);
  assert.ok(a>0&&b>a&&c>b,'Expected unmodified function boundaries in app_v2.js');
  assert.equal(input.indexOf('function renderPidMatchBlock(',a+1),-1);
- assert.equal(input.indexOf('function renderAlertaActual(',b+1),-1);
+ assert.equal(input.indexOf('function renderAlertaActual(',b+2),-1);
  return {
   protectedPrefix:input.slice(0,a),
   pid:input.slice(a,b),
