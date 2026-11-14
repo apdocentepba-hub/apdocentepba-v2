@@ -18,7 +18,7 @@ function mockSchoolCard(value=key,code=''){
  if(code)nodes.set('alerta-location-code',make('alerta-location-code',code));
  const container={
   ownerDocument:{createElement:()=>make('')},
-  querySelector(selector){const name=selector.slice(1);return [...nodes.values()].find(n=>n.className.split(/\\s+/).includes(name))||null},
+  querySelector(selector){const name=selector.slice(1);return [...nodes.values()].find(n=>n.className.split(/\s+/).includes(name))||null},
   appendChild(node){nodes.set(node.className,node);}
  };
  return {container,nodes};
