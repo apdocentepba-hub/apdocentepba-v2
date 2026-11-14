@@ -520,3 +520,25 @@ body.apd-dark #panel-alertas .alerta-tags .tag-nivel{
  display:block;color:var(--apd-muted,#526c83);font-size:12px;
  font-weight:650;line-height:1.4;overflow-wrap:anywhere;
 }
+
+/* Insigne decision indicators: evidence-based, never an eligibility verdict. */
+.apd-offer-fit{--fit-accent:#52718e;--fit-bg:#f5f8fc;
+ margin:10px 0 12px;padding:11px 13px;border-radius:12px;
+ border:1px solid #d6e1ed;border-left:4px solid var(--fit-accent);
+ background:var(--fit-bg);color:#142e48}
+.apd-offer-fit-positive{--fit-accent:#147d58;--fit-bg:#ebf8f2;border-color:#b6decf}
+.apd-offer-fit-review{--fit-accent:#a65a12;--fit-bg:#fff7eb;border-color:#ead0a9}
+.apd-offer-fit-title{display:block;color:#153557;font-size:13px;
+ line-height:1.4;font-weight:850}
+.apd-offer-fit-reasons{margin:6px 0 0;padding-left:20px;font-size:12px;line-height:1.5;
+ color:#2e4964}
+.apd-offer-fit-reasons li{margin:3px 0;overflow-wrap:anywhere}
+.apd-offer-fit-note{margin:8px 0 0!important;font-size:11px!important;
+ color:#415e77!important;line-height:1.4!important}
+body.apd-dark .apd-offer-fit{
+ --fit-bg:#102b43;background:#102b43;color:#e8f5ff;border-color:#315673;
+ border-left-color:var(--fit-accent)}
+body.apd-dark .apd-offer-fit-title{color:#eaf2ff}
+body.apd-dark .apd-offer-fit-reasons,body.apd-dark .apd-offer-fit-note{
+ color:#d7e5f6!important}
+@media(max-width:600px){.apd-offer-fit{padding:10px 11px}}
