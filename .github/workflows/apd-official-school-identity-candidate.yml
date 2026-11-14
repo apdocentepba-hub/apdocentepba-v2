@@ -1,0 +1,35 @@
+name: APD official school identity candidate (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'apd_offer_school_map_overlay.mjs'
+      - 'scripts/apd-official-school-identity.mjs'
+      - 'scripts/test-apd-official-school-identity.mjs'
+      - 'apd_comparador_panel.css'
+      - 'index.html'
+      - '.github/workflows/apd-official-school-identity-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  official-school-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and precise official-key identity contracts
+        run: |
+          node --check apd_offer_school_map_overlay.mjs
+          node --check scripts/apd-official-school-identity.mjs
+          node --test scripts/test-apd-official-school-identity.mjs scripts/test-apd-map-overlay-integration.mjs scripts/test-apd-school-wfs-mapping.mjs
+      - name: Existing private comparator browser regression
+        run: node scripts/test-apd-comparador-browser.mjs
+      - name: Guard protected files and delivery channels
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js supabase sql
+          git diff --exit-code origin/main -- app_v2.js
