@@ -1,14 +1,15 @@
 -- CANDIDATO, NO EJECUTAR EN PRODUCCION SIN APROBAR ESQUEMA, COSTO Y RETENCION.
 -- Base privada de investigación ABC/SAD bajo pedido del titular; no es un feed para todos los usuarios.
 -- Este SQL no publica datos ni crea rutas de lectura para usuarios; los originales permanecen en ABC/Drive privado.
--- Sin acceso anon. Lectura autenticada aislada por owner_user_id; escrituras solo service_role.
--- El service_role evita RLS: cualquier ruta backend debe validar y filtrar el owner antes de responder.
+-- Sin acceso anon/authenticated: APDocente usa sesiones propias en public.sessions, no Supabase Auth.
+-- El backend valida Bearer con getSessionUserByBearer y usa service_role; debe filtrar owner_user_id derivado de esa sesión.
+-- service_role evita RLS: nunca aceptar owner_user_id del cliente ni confiar en filtros provistos por el cliente.
 
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.knowledge_sources (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   source_key text NOT NULL,
   source_type text NOT NULL CHECK (source_type IN (
     'abc_central', 'sad_abc', 'sad_external', 'drive_archive'
@@ -157,51 +158,9 @@ ALTER TABLE public.knowledge_passages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_facts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relations ENABLE ROW LEVEL SECURITY;
 
--- Cada usuario solo puede leer su propia biblioteca. Al eliminarse su cuenta, la biblioteca se elimina en cascada. No hay políticas para anon.
-CREATE POLICY knowledge_sources_select_owner
-  ON public.knowledge_sources FOR SELECT TO authenticated
-  USING (owner_user_id = auth.uid());
-
-CREATE POLICY knowledge_documents_select_owner
-  ON public.knowledge_documents FOR SELECT TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.knowledge_sources s
-    WHERE s.id = source_id AND s.owner_user_id = auth.uid()
-  ));
-
-CREATE POLICY knowledge_passages_select_owner
-  ON public.knowledge_passages FOR SELECT TO authenticated
-  USING (EXISTS (
-    SELECT 1
-    FROM public.knowledge_documents d
-    JOIN public.knowledge_sources s ON s.id = d.source_id
-    WHERE d.id = document_id AND s.owner_user_id = auth.uid()
-  ));
-
-CREATE POLICY knowledge_facts_select_owner
-  ON public.knowledge_facts FOR SELECT TO authenticated
-  USING (EXISTS (
-    SELECT 1
-    FROM public.knowledge_documents d
-    JOIN public.knowledge_sources s ON s.id = d.source_id
-    WHERE d.id = document_id AND s.owner_user_id = auth.uid()
-  ));
-
-CREATE POLICY knowledge_relations_select_owner
-  ON public.knowledge_relations FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.knowledge_documents d
-      JOIN public.knowledge_sources s ON s.id = d.source_id
-      WHERE d.id = from_document_id AND s.owner_user_id = auth.uid()
-    )
-    AND EXISTS (
-      SELECT 1 FROM public.knowledge_documents d
-      JOIN public.knowledge_sources s ON s.id = d.source_id
-      WHERE d.id = to_document_id AND s.owner_user_id = auth.uid()
-    )
-  );
-
+-- APDocente autentica con Bearer propio en public.sessions; auth.uid() no representa esa sesión.
+-- RLS queda habilitado y sin políticas/grants para anon y authenticated (denegación por defecto).
+-- El Worker usa service_role únicamente después de resolver user_id desde el Bearer validado.
 REVOKE ALL ON TABLE public.knowledge_sources FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.knowledge_documents FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.knowledge_passages FROM PUBLIC, anon, authenticated;
@@ -214,15 +173,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_passages TO servi
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_facts TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_relations TO service_role;
 
--- Lectura autenticada solo dentro de la biblioteca propia, restringida por las políticas anteriores.
-GRANT SELECT ON TABLE public.knowledge_sources TO authenticated;
-GRANT SELECT ON TABLE public.knowledge_documents TO authenticated;
-GRANT SELECT ON TABLE public.knowledge_passages TO authenticated;
-GRANT SELECT ON TABLE public.knowledge_facts TO authenticated;
-GRANT SELECT ON TABLE public.knowledge_relations TO authenticated;
-
--- Búsqueda textual bajo RLS: el usuario solo obtiene pasajes de su propia biblioteca.
+-- RPC solo para el Worker autenticado: debe pasar el ID obtenido de la sesión validada.
 CREATE OR REPLACE FUNCTION public.search_private_knowledge(
+  p_owner_user_id uuid,
   p_query text,
   p_district_code text DEFAULT NULL,
   p_limit integer DEFAULT 10
@@ -265,7 +218,9 @@ AS $function$
     ) AS relevance
   FROM public.knowledge_passages p
   JOIN public.knowledge_documents d ON d.id = p.document_id
-  WHERE pg_catalog.length(pg_catalog.btrim(COALESCE(p_query, ''))) >= 2
+  JOIN public.knowledge_sources s ON s.id = d.source_id
+  WHERE s.owner_user_id = p_owner_user_id
+    AND pg_catalog.length(pg_catalog.btrim(COALESCE(p_query, ''))) >= 2
     AND p.search_vector @@ pg_catalog.websearch_to_tsquery(
       'pg_catalog.spanish'::pg_catalog.regconfig,
       pg_catalog.left(pg_catalog.btrim(COALESCE(p_query, '')), 500)
@@ -275,11 +230,10 @@ AS $function$
   LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 50);
 $function$;
 
-REVOKE ALL ON FUNCTION public.search_private_knowledge(text, text, integer)
+REVOKE ALL ON FUNCTION public.search_private_knowledge(uuid, text, text, integer)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.search_private_knowledge(text, text, integer)
-  TO authenticated;
-
+GRANT EXECUTE ON FUNCTION public.search_private_knowledge(uuid, text, text, integer)
+  TO service_role;
 COMMIT;
 
 -- Un trigger genera search_vector con pg_catalog.spanish al escribir/editar cada pasaje.
