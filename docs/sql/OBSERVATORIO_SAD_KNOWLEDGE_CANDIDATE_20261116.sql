@@ -1,7 +1,7 @@
 -- CANDIDATO, NO EJECUTAR EN PRODUCCION SIN APROBAR ESQUEMA, COSTO Y RETENCION.
--- Base de conocimiento pública ABC/SAD: metadatos, texto por página y hechos con evidencia.
--- Sin binarios en Postgres; los originales permanecen en ABC/Drive.
--- Acceso de aplicación solo a través del Worker autenticado. Nunca exponer service_role.
+-- Base privada de investigación ABC/SAD bajo pedido del titular; no es un feed para todos los usuarios.
+-- Este SQL no publica datos ni crea rutas de lectura para usuarios; los originales permanecen en ABC/Drive privado.
+-- Sin acceso anon/authenticated; el acceso backend requiere una ruta administrativa privada. Nunca exponer service_role.
 
 BEGIN;
 
