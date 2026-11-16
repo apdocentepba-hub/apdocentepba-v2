@@ -260,19 +260,19 @@ AS $function$
       p.search_vector,
       pg_catalog.websearch_to_tsquery(
         'pg_catalog.spanish'::pg_catalog.regconfig,
-        pg_catalog.left(pg_catalog.btrim(pg_catalog.coalesce(p_query, '')), 500)
+        pg_catalog.left(pg_catalog.btrim(COALESCE(p_query, '')), 500)
       )
     ) AS relevance
   FROM public.knowledge_passages p
   JOIN public.knowledge_documents d ON d.id = p.document_id
-  WHERE pg_catalog.length(pg_catalog.btrim(pg_catalog.coalesce(p_query, ''))) >= 2
+  WHERE pg_catalog.length(pg_catalog.btrim(COALESCE(p_query, ''))) >= 2
     AND p.search_vector @@ pg_catalog.websearch_to_tsquery(
       'pg_catalog.spanish'::pg_catalog.regconfig,
-      pg_catalog.left(pg_catalog.btrim(pg_catalog.coalesce(p_query, '')), 500)
+      pg_catalog.left(pg_catalog.btrim(COALESCE(p_query, '')), 500)
     )
     AND (p_district_code IS NULL OR d.district_code = p_district_code)
-  ORDER BY relevance DESC, pg_catalog.coalesce(d.published_at, d.captured_at) DESC
-  LIMIT LEAST(GREATEST(pg_catalog.coalesce(p_limit, 10), 1), 50);
+  ORDER BY relevance DESC, COALESCE(d.published_at, d.captured_at) DESC
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 50);
 $function$;
 
 REVOKE ALL ON FUNCTION public.search_private_knowledge(text, text, integer)
