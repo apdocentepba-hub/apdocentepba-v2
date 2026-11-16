@@ -840,6 +840,12 @@ async function syncUserOfferState(env, userId, offers) {
 }
 
 const OBS_SAD_MAX_BODY = 1024 * 1024;
+function observatorioJson(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store, max-age=0" }
+  });
+}
 function observatorioSameSecret(received, expected) {
   if (received.length !== expected.length || !expected.length) return false;
   let diff = 0;
@@ -851,15 +857,15 @@ async function observatorioOwner(request, env) {
   const expected = String(env.OBSERVATORIO_SAD_PRIVATE_TOKEN || "");
   const match = request.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerId) || expected.length < 32)
-    return { response: json({ ok: false }, 404) };
-  if (!match || !observatorioSameSecret(match[1], expected)) return { response: json({ ok: false }, 404) };
+    return { response: observatorioJson({ ok: false }, 404) };
+  if (!match || !observatorioSameSecret(match[1], expected)) return { response: observatorioJson({ ok: false }, 404) };
   return { user: { id: ownerId } };
 }
 async function observatorioBody(request) {
   const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > OBS_SAD_MAX_BODY) return { response: json({ ok: false, error: "Solicitud demasiado grande" }, 413) };
+  if (new TextEncoder().encode(raw).byteLength > OBS_SAD_MAX_BODY) return { response: observatorioJson({ ok: false, error: "Solicitud demasiado grande" }, 413) };
   try { return { body: JSON.parse(raw) }; }
-  catch { return { response: json({ ok: false, error: "JSON inválido" }, 400) }; }
+  catch { return { response: observatorioJson({ ok: false, error: "JSON inválido" }, 400) }; }
 }
 async function observatorioDb(env, path, rows, conflict) {
   const query = conflict ? `?on_conflict=${encodeURIComponent(conflict)}` : "";
@@ -878,15 +884,15 @@ async function observatorioDb(env, path, rows, conflict) {
   return text ? JSON.parse(text) : null;
 }
 async function handleObservatorioSadSearch(request, env) {
-  if (request.method !== "POST") return json({ ok: false, error: "Método no permitido" }, 405);
+  if (request.method !== "POST") return observatorioJson({ ok: false, error: "Método no permitido" }, 405);
   const auth = await observatorioOwner(request, env);
   if (auth.response) return auth.response;
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return json({ ok: false }, 503);
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return observatorioJson({ ok: false }, 503);
   const parsed = await observatorioBody(request);
   if (parsed.response) return parsed.response;
   const q = String(parsed.body?.query || "").trim();
   const district = parsed.body?.district_code == null ? null : String(parsed.body.district_code).slice(0, 32);
-  if (q.length < 2 || q.length > 500) return json({ ok: false, error: "Consulta inválida" }, 400);
+  if (q.length < 2 || q.length > 500) return observatorioJson({ ok: false, error: "Consulta inválida" }, 400);
   try {
     const rows = await observatorioDb(env, "rpc/search_private_knowledge", {
       p_owner_user_id: auth.user.id,
@@ -894,16 +900,16 @@ async function handleObservatorioSadSearch(request, env) {
       p_district_code: district,
       p_limit: Math.max(1, Math.min(50, Number(parsed.body?.limit) || 10))
     }, null);
-    return json({ ok: true, results: Array.isArray(rows) ? rows : [] });
+    return observatorioJson({ ok: true, results: Array.isArray(rows) ? rows : [] });
   } catch {
-    return json({ ok: false, error: "No se pudo consultar la biblioteca privada" }, 502);
+    return observatorioJson({ ok: false, error: "No se pudo consultar la biblioteca privada" }, 502);
   }
 }
 async function handleObservatorioSadIngest(request, env) {
-  if (request.method !== "POST") return json({ ok: false, error: "Método no permitido" }, 405);
+  if (request.method !== "POST") return observatorioJson({ ok: false, error: "Método no permitido" }, 405);
   const auth = await observatorioOwner(request, env);
   if (auth.response) return auth.response;
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return json({ ok: false }, 503);
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return observatorioJson({ ok: false }, 503);
   const parsed = await observatorioBody(request);
   if (parsed.response) return parsed.response;
   const { source = {}, document = {}, passages } = parsed.body || {};
@@ -912,18 +918,18 @@ async function handleObservatorioSadIngest(request, env) {
   const extraction = ["pending", "text_ready", "ocr_required", "partial", "failed", "reviewed"];
   const trim = (v, n) => String(v || "").trim().slice(0, n);
   if (!sourceTypes.includes(source.source_type) || !trim(source.source_key, 180) || !trim(source.name, 240))
-    return json({ ok: false, error: "Fuente inválida" }, 400);
+    return observatorioJson({ ok: false, error: "Fuente inválida" }, 400);
   if (!trim(document.stable_key, 500) || !/^[a-f0-9]{64}$/.test(String(document.version_hash || "")) ||
       !trim(document.title, 500) || !Array.isArray(passages) || passages.length > 200)
-    return json({ ok: false, error: "Documento inválido" }, 400);
+    return observatorioJson({ ok: false, error: "Documento inválido" }, 400);
   let bytes = 0;
   for (const p of passages) {
     const text = String(p?.passage_text || "");
     bytes += new TextEncoder().encode(text).byteLength;
     if (!text.trim() || text.length > 8000 || (p.page_number != null && (!Number.isInteger(p.page_number) || p.page_number < 1)))
-      return json({ ok: false, error: "Pasaje inválido" }, 400);
+      return observatorioJson({ ok: false, error: "Pasaje inválido" }, 400);
   }
-  if (bytes > 850000) return json({ ok: false, error: "Lote de texto demasiado grande" }, 413);
+  if (bytes > 850000) return observatorioJson({ ok: false, error: "Lote de texto demasiado grande" }, 413);
   try {
     const s = await observatorioDb(env, "knowledge_sources", {
       owner_user_id: auth.user.id, source_key: trim(source.source_key, 180), source_type: source.source_type,
@@ -959,9 +965,9 @@ async function handleObservatorioSadIngest(request, env) {
     }));
     for (let i = 0; i < rows.length; i += 100)
       await observatorioDb(env, "knowledge_passages", rows.slice(i, i + 100), "document_id,ordinal");
-    return json({ ok: true, document_id: d[0].id, passages_upserted: rows.length });
+    return observatorioJson({ ok: true, document_id: d[0].id, passages_upserted: rows.length });
   } catch {
-    return json({ ok: false, error: "No se pudo guardar el lote privado" }, 502);
+    return observatorioJson({ ok: false, error: "No se pudo guardar el lote privado" }, 502);
   }
 }
 
