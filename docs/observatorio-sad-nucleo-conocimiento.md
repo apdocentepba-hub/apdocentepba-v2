@@ -53,7 +53,7 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 
 ## Recuperación privada
 
-La función candidata `search_private_knowledge` busca pasajes con texto completo en español, devuelve título, fecha, distrito, página y cita, y ordena por relevancia. Es `SECURITY INVOKER`: la lectura pasa por las políticas RLS de la persona autenticada. Cada biblioteca pertenece a un `owner_user_id`; no hay lectura anónima ni endpoint para compartir resultados con todos los usuarios. El límite de resultados se acota a 50. El índice del pasaje se actualiza con un trigger para no depender de que el ingestor lo recuerde.
+La función candidata `search_private_knowledge` busca pasajes con texto completo en español, devuelve título, fecha, distrito, página y cita, y ordena por relevancia. APDocente autentica con tokens Bearer propios en `public.sessions`, no con Supabase Auth. Por eso las tablas quedan sin permisos para `anon` y `authenticated`; el Worker valida el token con `getSessionUserByBearer`, toma de allí el `user_id` y llama con `service_role` filtrando la biblioteca por ese propietario. Nunca debe aceptar el ID del propietario desde el cliente. El límite de resultados se acota a 50. El índice del pasaje se actualiza con un trigger.
 
 ## Comparación y respuesta
 
