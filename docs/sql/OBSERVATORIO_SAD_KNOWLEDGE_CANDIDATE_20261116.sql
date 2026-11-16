@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_sources (
 
 CREATE TABLE IF NOT EXISTS public.knowledge_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id uuid NOT NULL REFERENCES public.knowledge_sources(id) ON DELETE RESTRICT,
+  source_id uuid NOT NULL REFERENCES public.knowledge_sources(id) ON DELETE CASCADE,
   stable_key text NOT NULL,
   version_hash text NOT NULL CHECK (version_hash ~ '^[a-f0-9]{64}$'),
   title text NOT NULL,
@@ -133,7 +133,7 @@ ALTER TABLE public.knowledge_passages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_facts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relations ENABLE ROW LEVEL SECURITY;
 
--- Cada usuario solo puede leer su propia biblioteca. No hay políticas para anon.
+-- Cada usuario solo puede leer su propia biblioteca. Al eliminarse su cuenta, la biblioteca se elimina en cascada. No hay políticas para anon.
 CREATE POLICY knowledge_sources_select_owner
   ON public.knowledge_sources FOR SELECT TO authenticated
   USING (owner_user_id = auth.uid());
