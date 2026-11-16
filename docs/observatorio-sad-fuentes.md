@@ -1,12 +1,12 @@
-# Observatorio SAD: primer conector de fuentes
+# Observatorio SAD: catálogo y primer monitor
 
-El catálogo oficial de ABC se puede consultar en una sola llamada pública:
+El catálogo oficial de ABC se consulta en una llamada pública:
 
 `https://servicios3.abc.gob.ar/dti/api/sads.regional/select`
 
-El endpoint devuelve el nombre del distrito y la ruta de su página SAD. La consulta oficial informa 137 oficinas, incluidas las SAD I y II de La Plata y La Matanza. No se debe usar el directorio como prueba de que cada página tenga avisos recientes: cada ruta y sus canales externos necesitan verificación propia.
+La respuesta que se observó informó 137 oficinas, incluidas las SAD I y II de La Plata y La Matanza. El directorio confirma nombres y rutas; por sí solo no demuestra que cada página tenga avisos recientes ni descubre canales externos no vinculados desde ABC.
 
-## Generar el catálogo
+## Catálogo de oficinas
 
 Desde la raíz del repositorio:
 
@@ -14,16 +14,26 @@ Desde la raíz del repositorio:
 node scripts/observatorio-sad/discover-sources.mjs
 ```
 
-La salida queda en `tmp/observatorio-sad/source-directory.json`. Se puede indicar otra ruta como primer argumento. La consulta es GET pública, no usa credenciales, no envía formularios y falla si ABC devuelve filas incompletas o rutas no válidas.
+La salida queda en `tmp/observatorio-sad/source-directory.json`. La consulta es GET pública, no usa credenciales ni envía formularios. El script verifica filas completas, nombres y rutas únicas.
 
-## Qué cubre esta etapa
+## Primer barrido de páginas
 
-- Descubre las 137 entradas desde el catálogo oficial, sin mantenerlas a mano.
-- Guarda nombre, ruta ABC, URL absoluta, hora de captura y procedencia.
-- Comprueba que el total de filas coincida con el total declarado y que no haya nombres o rutas duplicados.
+```sh
+node scripts/observatorio-sad/scan-notices.mjs
+```
 
-## Qué falta para monitoreo de comunicados
+El barrido consulta las páginas ABC de las oficinas anunciadas por el catálogo, de forma secuencial y con una pausa de 500 ms entre páginas. Guarda el estado en `tmp/observatorio-sad/state.json` y el informe en `tmp/observatorio-sad/report.json`.
 
-Este primer conector aún no descarga las 137 páginas ni sus adjuntos. La etapa siguiente debe consultar cada página con límites de frecuencia, registrar por oficina el último chequeo y extraer vínculos/documentos publicados. Después hay que incorporar canales externos (por ejemplo, Google Sites, planillas o redes oficiales) solo cuando se verifiquen para cada SAD. Para detectar cambios entre chequeos se necesita persistencia de capturas e historial; los canales que no ofrezcan feed público verificable deben quedar marcados como cobertura manual o parcial.
+El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecución horaria. El estado se conserva mediante caché de GitHub Actions y cada informe se retiene 30 días como artefacto. Esto empieza a comparar cambios después del primer barrido exitoso; no genera avisos a usuarios ni modifica el sitio productivo.
 
-La cadencia razonable del MVP es horaria y escalonada. “Tiempo real” no es técnicamente garantizable cuando una SAD publica en un sitio externo o una plataforma sin notificaciones públicas.
+## Alcance y límites
+
+- Los enlaces a documentos y plataformas externas se registran por heurística; el script no descarga ni sigue esos destinos.
+- Un cambio de huella de la página se informa para revisión. No se presenta como un comunicado confirmado.
+- Un cambio en enlaces puede ser un alta, una baja o una rectificación; requiere revisar la página fuente.
+- No se archiva el texto de PDFs/Word ni se hace OCR.
+- La cobertura de Facebook, Google Sites, planillas u otros canales es parcial hasta verificar cada enlace oficial.
+- El estado usa caché de Actions; si la caché se pierde o vence, el próximo barrido vuelve a crear una línea de base.
+- La cadencia es horaria y escalonada, no tiempo real. No hay webhook universal para publicaciones en sitios o redes administradas por cada distrito.
+
+Esta etapa arma el inventario y una señal de cambio revisable. La capa siguiente debe extraer contenido y adjuntos con conectores específicos, conservar versiones en almacenamiento persistente y clasificar comunicados comunes, locales y rectificatorios.
