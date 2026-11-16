@@ -282,7 +282,7 @@ GRANT EXECUTE ON FUNCTION public.search_private_knowledge(text, text, integer)
 
 COMMIT;
 
--- El ingestor debe generar search_vector con configuración Spanish y texto normalizado.
+-- Un trigger genera search_vector con pg_catalog.spanish al escribir/editar cada pasaje.
 -- No hay vectores semánticos en esta etapa: la extensión vector no está instalada
 -- en el proyecto APDocente verificado. Se empieza con full-text y citas de página.
 -- Antes de una importación histórica se debe medir el tamaño real del texto extraído,
