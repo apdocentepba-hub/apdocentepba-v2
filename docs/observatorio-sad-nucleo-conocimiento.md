@@ -33,11 +33,12 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 
 ## Cobertura de fuentes
 
-1. Directorio oficial ABC: descubrimiento dinámico de las 137 oficinas SAD.
-2. Páginas ABC de cada SAD: comunicados, convocatorias, formularios y adjuntos.
-3. Canales externos enlazados por cada SAD: se agregan solo después de validar que sean oficiales y estén activos.
-4. Ecosistema ABC central: normativa, servicios, calendarios, instructivos, publicaciones y páginas institucionales.
-5. Archivo histórico aportado por el usuario: incorporación por lotes, conservando IDs y nombres originales; una carga en Drive no equivale a lectura o indexación.
+1. Directorio oficial ABC: descubrimiento dinámico de las oficinas SAD (la consulta observada devolvió 137).
+2. Páginas ABC centrales seleccionadas para el primer barrido: portada srv4, calendario de inscripciones SerVaDo y notificaciones SerVaDo.
+3. Páginas ABC de cada SAD: comunicados, convocatorias, formularios y adjuntos.
+4. Canales externos enlazados por cada SAD: se agregan solo después de validar que sean oficiales y estén activos.
+5. Resto del ecosistema ABC central: normativa, servicios, instructivos, publicaciones y páginas institucionales; todavía requiere conectores e inventario específicos.
+6. Archivo histórico aportado por el usuario: incorporación por lotes, conservando IDs y nombres originales; una carga en Drive no equivale a lectura o indexación.
 
 ## Ingesta y actualización
 
