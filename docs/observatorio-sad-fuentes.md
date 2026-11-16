@@ -22,9 +22,9 @@ La salida queda en `tmp/observatorio-sad/source-directory.json`. La consulta es 
 node scripts/observatorio-sad/scan-notices.mjs
 ```
 
-El barrido consulta las páginas ABC de las oficinas anunciadas por el catálogo, de forma secuencial y con una pausa de 500 ms entre páginas. Guarda el estado en `tmp/observatorio-sad/state.json` y el informe en `tmp/observatorio-sad/report.json`.
+El barrido consulta las páginas ABC de las oficinas anunciadas por el catálogo y tres páginas centrales públicas: portada ABC (srv4), calendario de inscripciones SerVaDo y notificaciones SerVaDo. Las consulta de forma secuencial y con una pausa de 500 ms entre páginas. Guarda el estado en `tmp/observatorio-sad/state.json` y el informe en `tmp/observatorio-sad/report.json`.
 
-El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecución horaria. El estado se conserva mediante caché de GitHub Actions y cada informe se retiene 30 días como artefacto. Esto empieza a comparar cambios después del primer barrido exitoso; no genera avisos a usuarios ni modifica el sitio productivo.
+El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecución horaria de estas 140 fuentes (137 entradas del directorio + 3 páginas centrales; el total del directorio se valida al ejecutar). El estado se conserva mediante caché de GitHub Actions y cada informe se retiene 30 días como artefacto. Esto empieza a comparar cambios después del primer barrido exitoso; no genera avisos a usuarios ni modifica el sitio productivo.
 
 ## Alcance y límites
 
@@ -32,8 +32,9 @@ El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecuci
 - Un cambio de huella de la página se informa para revisión. No se presenta como un comunicado confirmado.
 - Un cambio en enlaces puede ser un alta, una baja o una rectificación; requiere revisar la página fuente.
 - No se archiva el texto de PDFs/Word ni se hace OCR.
+- Las tres páginas centrales son un primer conector, no el portal ABC completo. Normativa, servicios y publicaciones restantes aún requieren inventario específico.
 - La cobertura de Facebook, Google Sites, planillas u otros canales es parcial hasta verificar cada enlace oficial.
 - El estado usa caché de Actions; si la caché se pierde o vence, el próximo barrido vuelve a crear una línea de base.
 - La cadencia es horaria y escalonada, no tiempo real. No hay webhook universal para publicaciones en sitios o redes administradas por cada distrito.
 
-Esta etapa arma el inventario y una señal de cambio revisable. La capa siguiente debe extraer contenido y adjuntos con conectores específicos, conservar versiones en almacenamiento persistente y clasificar comunicados comunes, locales y rectificatorios.
+Esta etapa arma el inventario y una señal de cambio revisable. La capa siguiente debe extraer contenido y adjuntos con conectores específicos, conservar versiones en almacenamiento persistente y clasificar comunicados comunes, locales y rectificatorios. El monitor todavía no constituye ingesta histórica ni una base consultable.
