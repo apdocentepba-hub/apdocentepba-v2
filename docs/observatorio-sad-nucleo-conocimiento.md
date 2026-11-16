@@ -51,6 +51,10 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 - No borrar una publicación al desaparecer de una página: marcarla como retirada y conservar la última captura.
 - Si una SAD republica una comunicación provincial, conservar la publicación local y su fecha como evidencia de difusión, pero vincular el cuerpo duplicado a la pieza provincial para no contarla como una política diferente.
 
+## Recuperación privada
+
+La función candidata `search_private_knowledge` busca pasajes con texto completo en español, devuelve título, fecha, distrito, página y cita, y ordena por relevancia. Es `SECURITY INVOKER`: la lectura pasa por las políticas RLS de la persona autenticada. Cada biblioteca pertenece a un `owner_user_id`; no hay lectura anónima ni endpoint para compartir resultados con todos los usuarios. El límite de resultados se acota a 50. El índice del pasaje se actualiza con un trigger para no depender de que el ingestor lo recuerde.
+
 ## Comparación y respuesta
 
 Para una pregunta, el recuperador debe buscar en el archivo completo y en publicaciones actuales, priorizar fuentes oficiales y devolver:
