@@ -24,7 +24,7 @@ node scripts/observatorio-sad/scan-notices.mjs
 
 El barrido consulta las páginas ABC de las oficinas anunciadas por el catálogo y tres páginas centrales públicas: portada ABC (srv4), calendario de inscripciones SerVaDo y notificaciones SerVaDo. Las consulta de forma secuencial y con una pausa de 500 ms entre páginas. Guarda el estado en `tmp/observatorio-sad/state.json` y el informe en `tmp/observatorio-sad/report.json`.
 
-El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecución horaria de estas 140 fuentes (137 entradas del directorio + 3 páginas centrales; el total del directorio se valida al ejecutar). El estado se conserva mediante caché de GitHub Actions y cada informe se retiene 30 días como artefacto. Esto empieza a comparar cambios después del primer barrido exitoso; no genera avisos a usuarios ni modifica el sitio productivo.
+El workflow `.github/workflows/observatorio-sad-monitor.yml` propone un barrido cada 15 minutos de estas fuentes (137 entradas del directorio + 3 páginas centrales, si el directorio mantiene ese tamaño; se valida al ejecutar). GitHub puede demorar la hora programada y no es tiempo real garantizado. El estado se conserva mediante caché de GitHub Actions y cada informe se retiene 30 días como artefacto. Esto empieza a comparar cambios después del primer barrido exitoso; no envía avisos a usuarios ni modifica el sitio productivo.
 
 ## Alcance y límites
 
@@ -35,6 +35,6 @@ El workflow `.github/workflows/observatorio-sad-monitor.yml` propone una ejecuci
 - Las tres páginas centrales son un primer conector, no el portal ABC completo. Normativa, servicios y publicaciones restantes aún requieren inventario específico.
 - La cobertura de Facebook, Google Sites, planillas u otros canales es parcial hasta verificar cada enlace oficial.
 - El estado usa caché de Actions; si la caché se pierde o vence, el próximo barrido vuelve a crear una línea de base.
-- La cadencia es horaria y escalonada, no tiempo real. No hay webhook universal para publicaciones en sitios o redes administradas por cada distrito.
+- La cadencia propuesta es cada 15 minutos y escalonada; depende del planificador de GitHub y no es tiempo real garantizado. No hay webhook universal para publicaciones en sitios o redes administradas por cada distrito.
 
 Esta etapa arma el inventario y una señal de cambio revisable. La capa siguiente debe extraer contenido y adjuntos con conectores específicos, conservar versiones en almacenamiento persistente y clasificar comunicados comunes, locales y rectificatorios. El monitor todavía no constituye ingesta histórica ni una base consultable.
