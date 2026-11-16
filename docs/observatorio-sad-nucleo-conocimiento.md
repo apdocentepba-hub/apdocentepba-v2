@@ -22,10 +22,12 @@ Campos mínimos por hecho o instrucción:
 
 - tema, población afectada y alcance territorial
 - trámite, pasos, canal de presentación y documentación requerida
-- plazos y condiciones de inicio/cierre
+- plazos y condiciones de inicio/cierre, clasificados por etapa
 - excepciones, restricciones y estados del trámite
 - norma citada y relación con documentos anteriores o posteriores
 - cita breve, página/sección, fuente y confianza de extracción
+
+Cada fecha debe tener un tipo explícito: inscripción, carga de antecedentes, exhibición, reclamo, notificación, segunda instancia u otro. Una fecha que determina quién puede reclamar no se debe convertir automáticamente en el vencimiento para presentar el reclamo. Si los documentos no coinciden, se preservan ambas fechas y sus fuentes hasta verificar la versión o rectificación aplicable.
 
 Si el documento no permite confirmar un campo, se registra como desconocido; no se completa por inferencia silenciosa.
 
@@ -46,6 +48,7 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 - Procesar primero catálogo y metadatos; después el texto completo; luego clasificar y relacionar.
 - Comparar fuentes en barridos escalonados. El MVP propone frecuencia horaria para las páginas ABC; los canales externos dependen de la plataforma.
 - No borrar una publicación al desaparecer de una página: marcarla como retirada y conservar la última captura.
+- Si una SAD republica una comunicación provincial, conservar la publicación local y su fecha como evidencia de difusión, pero vincular el cuerpo duplicado a la pieza provincial para no contarla como una política diferente.
 
 ## Comparación y respuesta
 
@@ -63,6 +66,7 @@ Cuando dos fuentes se contradigan, se muestran ambas y se explica cuál es poste
 ## Primer lote histórico: criterios
 
 El archivo compartido ya contiene documentos legibles desde Drive, pero la búsqueda/lista devuelve páginas de resultados. El trabajo debe paginar el inventario y registrar por separado:
+
 - encontrados en Drive
 - descargados y legibles
 - texto extraído correctamente
