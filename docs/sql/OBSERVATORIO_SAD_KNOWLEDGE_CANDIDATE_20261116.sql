@@ -1,13 +1,15 @@
 -- CANDIDATO, NO EJECUTAR EN PRODUCCION SIN APROBAR ESQUEMA, COSTO Y RETENCION.
 -- Base privada de investigación ABC/SAD bajo pedido del titular; no es un feed para todos los usuarios.
 -- Este SQL no publica datos ni crea rutas de lectura para usuarios; los originales permanecen en ABC/Drive privado.
--- Sin acceso anon/authenticated; el acceso backend requiere una ruta administrativa privada. Nunca exponer service_role.
+-- Sin acceso anon. Lectura autenticada aislada por owner_user_id; escrituras solo service_role.
+-- El service_role evita RLS: cualquier ruta backend debe validar y filtrar el owner antes de responder.
 
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.knowledge_sources (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_key text NOT NULL UNIQUE,
+  owner_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  source_key text NOT NULL,
   source_type text NOT NULL CHECK (source_type IN (
     'abc_central', 'sad_abc', 'sad_external', 'drive_archive'
   )),
@@ -19,16 +21,14 @@ CREATE TABLE IF NOT EXISTS public.knowledge_sources (
     officiality IN ('confirmed', 'candidate', 'manual')
   ),
   active boolean NOT NULL DEFAULT true,
-  poll_interval_minutes integer CHECK (
-    poll_interval_minutes IS NULL OR poll_interval_minutes >= 60
-  ),
   last_checked_at timestamptz,
   last_success_at timestamptz,
   last_http_status integer,
   last_error text,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (owner_user_id, source_key)
 );
 
 CREATE TABLE IF NOT EXISTS public.knowledge_documents (
@@ -112,8 +112,8 @@ CREATE TABLE IF NOT EXISTS public.knowledge_relations (
   CHECK (from_document_id <> to_document_id)
 );
 
-CREATE INDEX IF NOT EXISTS knowledge_sources_district_active_idx
-  ON public.knowledge_sources (district_code, active);
+CREATE INDEX IF NOT EXISTS knowledge_sources_owner_district_active_idx
+  ON public.knowledge_sources (owner_user_id, district_code, active);
 CREATE INDEX IF NOT EXISTS knowledge_documents_temporal_idx
   ON public.knowledge_documents (temporal_status, valid_from, valid_until);
 CREATE INDEX IF NOT EXISTS knowledge_documents_district_date_idx
@@ -133,6 +133,51 @@ ALTER TABLE public.knowledge_passages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_facts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relations ENABLE ROW LEVEL SECURITY;
 
+-- Cada usuario solo puede leer su propia biblioteca. No hay políticas para anon.
+CREATE POLICY knowledge_sources_select_owner
+  ON public.knowledge_sources FOR SELECT TO authenticated
+  USING (owner_user_id = auth.uid());
+
+CREATE POLICY knowledge_documents_select_owner
+  ON public.knowledge_documents FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.knowledge_sources s
+    WHERE s.id = source_id AND s.owner_user_id = auth.uid()
+  ));
+
+CREATE POLICY knowledge_passages_select_owner
+  ON public.knowledge_passages FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1
+    FROM public.knowledge_documents d
+    JOIN public.knowledge_sources s ON s.id = d.source_id
+    WHERE d.id = document_id AND s.owner_user_id = auth.uid()
+  ));
+
+CREATE POLICY knowledge_facts_select_owner
+  ON public.knowledge_facts FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1
+    FROM public.knowledge_documents d
+    JOIN public.knowledge_sources s ON s.id = d.source_id
+    WHERE d.id = document_id AND s.owner_user_id = auth.uid()
+  ));
+
+CREATE POLICY knowledge_relations_select_owner
+  ON public.knowledge_relations FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.knowledge_documents d
+      JOIN public.knowledge_sources s ON s.id = d.source_id
+      WHERE d.id = from_document_id AND s.owner_user_id = auth.uid()
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.knowledge_documents d
+      JOIN public.knowledge_sources s ON s.id = d.source_id
+      WHERE d.id = to_document_id AND s.owner_user_id = auth.uid()
+    )
+  );
+
 REVOKE ALL ON TABLE public.knowledge_sources FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.knowledge_documents FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.knowledge_passages FROM PUBLIC, anon, authenticated;
@@ -144,6 +189,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_documents TO serv
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_passages TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_facts TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.knowledge_relations TO service_role;
+
+-- Lectura autenticada solo dentro de la biblioteca propia, restringida por las políticas anteriores.
+GRANT SELECT ON TABLE public.knowledge_sources TO authenticated;
+GRANT SELECT ON TABLE public.knowledge_documents TO authenticated;
+GRANT SELECT ON TABLE public.knowledge_passages TO authenticated;
+GRANT SELECT ON TABLE public.knowledge_facts TO authenticated;
+GRANT SELECT ON TABLE public.knowledge_relations TO authenticated;
 
 COMMIT;
 
