@@ -53,7 +53,7 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 
 ## Recuperación privada
 
-La función candidata `search_private_knowledge` busca pasajes con texto completo en español, devuelve título, fecha, distrito, página y cita, y ordena por relevancia. APDocente autentica con tokens Bearer propios en `public.sessions`, no con Supabase Auth. Por eso las tablas quedan sin permisos para `anon` y `authenticated`; el Worker valida el token con `getSessionUserByBearer`, toma de allí el `user_id` y llama con `service_role` filtrando la biblioteca por ese propietario. Nunca debe aceptar el ID del propietario desde el cliente. El límite de resultados se acota a 50. El índice del pasaje se actualiza con un trigger.
+La migración `20261116_private_abc_sad_knowledge_owner_sessions` ya creó cinco tablas vacías y la función `search_private_knowledge` en Supabase APDocente. La función busca pasajes con texto completo en español, devuelve título, fecha, distrito, página y cita, y ordena por relevancia. APDocente autentica con tokens Bearer propios en `public.sessions`, no con Supabase Auth. Las tablas y la función no dan permisos a `anon` ni a `authenticated`. La ruta Worker de lectura/ingesta todavía debe implementarse: tendrá que validar el token con `getSessionUserByBearer`, tomar de allí el `user_id` y usar `service_role` filtrando la biblioteca por ese propietario. Nunca debe aceptar el ID del propietario desde el cliente. El límite de resultados se acota a 50. El índice del pasaje se actualiza con un trigger.
 
 ## Comparación y respuesta
 
