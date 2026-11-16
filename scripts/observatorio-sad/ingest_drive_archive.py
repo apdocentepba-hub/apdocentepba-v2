@@ -134,7 +134,11 @@ def batches(passages, max_count=100, max_bytes=600000):
 
 
 def init_db(path):
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, mode=0o700, exist_ok=True)
     db = sqlite3.connect(path)
+    if os.name != "nt":
+        os.chmod(path, 0o600)
     db.execute("CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, name TEXT, mime TEXT, md5 TEXT, size INTEGER, status TEXT NOT NULL DEFAULT 'pending', error TEXT, seen INTEGER NOT NULL DEFAULT 0)")
     if "seen" not in [row[1] for row in db.execute("PRAGMA table_info(files)")]:
         db.execute("ALTER TABLE files ADD COLUMN seen INTEGER NOT NULL DEFAULT 0")
@@ -191,7 +195,9 @@ def ingest_one(db, auth, file_id, name, mime, md5, worker_url, worker_token):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state", default="observatorio-sad-ingest.sqlite3")
+    private_base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share")
+    default_state = os.path.join(private_base, "apdocentepba", "observatorio-sad-ingest.sqlite3")
+    parser.add_argument("--state", default=default_state)
     parser.add_argument("--inventory-only", action="store_true")
     parser.add_argument("--limit", type=int, default=0, help="máximo de documentos por ejecución; 0 = todos")
     args = parser.parse_args()
