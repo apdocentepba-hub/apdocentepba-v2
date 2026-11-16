@@ -24,9 +24,14 @@ const POLITE_DELAY_MS = 500;
 const MATERIAL_TEXT = /comunic|convoc|acto|cobertura|designaci|listado|vacant|inscrip|notific|titular|acrecent|calific|reubic|mad\b|apd\b|proyecto|difusi|licencia|excus|concurso|recurso|interino|suplente|ofrecimiento|titulariz/i;
 const DOCUMENT_PATH = /\.(pdf|docx?|xlsx?|pptx?|odt|ods)(?:$|[?#])/i;
 const EXTERNAL_CHANNEL = /(^|\.)((drive|docs)\.google\.com|forms\.gle|sites\.google\.com|forms\.office\.com|facebook\.com|instagram\.com|t\.me)$/i;
+const CENTRAL_PAGES = [
+  {source_type: "abc_central", district: "ABC central", page: "https://srv4.abc.gob.ar/"},
+  {source_type: "abc_central", district: "SerVaDo - Calendario", page: "https://servado.abc.gob.ar/calendario-inscripciones"},
+  {source_type: "abc_central", district: "SerVaDo - Avisos públicos", page: "https://servado.abc.gob.ar/notificaciones"},
+];
 
 async function fetchText(url, accept) {
-  if (!["https://abc.gob.ar", "https://servicios3.abc.gob.ar"].includes(url.origin)) {
+  if (!["https://abc.gob.ar", "https://servicios3.abc.gob.ar", "https://servado.abc.gob.ar", "https://srv4.abc.gob.ar"].includes(url.origin)) {
     throw new Error("Blocked unexpected request destination");
   }
   const controller = new AbortController();
@@ -76,9 +81,9 @@ function extractMain(html) {
   return main?.[1] || withoutNoise;
 }
 
-function isNoticeLink(rawHref, label) {
+function isNoticeLink(rawHref, label, baseUrl) {
   let url;
-  try { url = new URL(rawHref, "https://abc.gob.ar"); } catch { return false; }
+  try { url = new URL(rawHref, baseUrl); } catch { return false; }
   if (!["http:", "https:"].includes(url.protocol)) return false;
   const hostname = url.hostname.toLowerCase();
   const external = hostname !== "abc.gob.ar" && hostname !== "www.abc.gob.ar";
@@ -88,15 +93,15 @@ function isNoticeLink(rawHref, label) {
     (external && MATERIAL_TEXT.test(url.href));
 }
 
-function extractNoticeLinks(mainHtml) {
+function extractNoticeLinks(mainHtml, baseUrl) {
   const links = new Map();
   const anchorRegex = /<a\b([^>]*?)href\s*=\s*(["'])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/gi;
   for (const match of mainHtml.matchAll(anchorRegex)) {
     const rawHref = decodeHtml(match[3]).trim();
     const label = plainText(match[5]).slice(0, 500);
-    if (!rawHref || !isNoticeLink(rawHref, label)) continue;
+    if (!rawHref || !isNoticeLink(rawHref, label, baseUrl)) continue;
     try {
-      const url = new URL(rawHref, "https://abc.gob.ar");
+      const url = new URL(rawHref, baseUrl);
       url.hash = "";
       const key = url.href;
       if (!links.has(key)) links.set(key, {title: label || key, url: key});
@@ -110,9 +115,9 @@ function digest(value) {
 }
 
 function safeReadState() {
-  if (!existsSync(STATE_PATH)) return {offices: {}};
+  if (!existsSync(STATE_PATH)) return {sources: {}};
   const parsed = JSON.parse(readFileSync(STATE_PATH, "utf8"));
-  if (!parsed || typeof parsed.offices !== "object" || Array.isArray(parsed.offices)) {
+  if (!parsed || (typeof parsed.sources !== "object" && typeof parsed.offices !== "object")) {
     throw new Error("Previous SAD state file has an invalid structure");
   }
   return parsed;
@@ -141,25 +146,31 @@ if (new Set(offices.map((office) => office.district)).size !== offices.length ||
 }
 
 const previous = safeReadState();
-const nextOffices = {...previous.offices};
+const previousSources = previous.sources || previous.offices || {};
+const nextSources = {...previousSources};
 const errors = [];
 const changes = [];
 let checked = 0;
+let checkedSads = 0;
+let checkedCentral = 0;
 
-for (const office of offices) {
+const sources = [...offices.map((office) => ({...office, source_type: "sad_abc"})), ...CENTRAL_PAGES];
+
+for (const office of sources) {
   try {
     const html = await fetchText(new URL(office.page), "text/html");
     const mainHtml = extractMain(html);
     const current = {
+      source_type: office.source_type,
       district: office.district,
       page: office.page,
       checked_at: new Date().toISOString(),
       main_content_sha256: digest(plainText(mainHtml)),
-      notice_links: extractNoticeLinks(mainHtml),
+      notice_links: extractNoticeLinks(mainHtml, office.page),
     };
-    const prior = previous.offices[office.page];
+    const prior = previousSources[office.page];
     if (!prior) {
-      changes.push({district: office.district, page: office.page, kind: "baseline_created", link_count: current.notice_links.length});
+      changes.push({source_type: office.source_type, district: office.district, page: office.page, kind: "baseline_created", link_count: current.notice_links.length});
     } else {
       const priorByUrl = new Map((prior.notice_links || []).map((link) => [link.url, link]));
       const currentByUrl = new Map(current.notice_links.map((link) => [link.url, link]));
@@ -168,6 +179,7 @@ for (const office of offices) {
       const relabeled = [...currentByUrl.values()].filter((link) => priorByUrl.has(link.url) && priorByUrl.get(link.url).title !== link.title);
       if (added.length || removed.length || relabeled.length) {
         changes.push({
+          source_type: office.source_type,
           district: office.district,
           page: office.page,
           kind: "notice_links_changed",
@@ -176,29 +188,35 @@ for (const office of offices) {
           relabeled,
         });
       } else if (prior.main_content_sha256 !== current.main_content_sha256) {
-        changes.push({district: office.district, page: office.page, kind: "page_content_changed_needs_review"});
+        changes.push({source_type: office.source_type, district: office.district, page: office.page, kind: "page_content_changed_needs_review"});
       }
     }
-    nextOffices[office.page] = current;
+    nextSources[office.page] = current;
     checked += 1;
+    if (office.source_type === "sad_abc") checkedSads += 1;
+    else checkedCentral += 1;
   } catch (error) {
-    errors.push({district: office.district, page: office.page, error: String(error?.message || error)});
+    errors.push({source_type: office.source_type, district: office.district, page: office.page, error: String(error?.message || error)});
   }
   await new Promise((resolveDelay) => setTimeout(resolveDelay, POLITE_DELAY_MS));
 }
 
 const capturedAt = new Date().toISOString();
 const state = {
-  source: "ABC official public SAD directory and district pages",
+  source: "ABC official public SAD directory, central public pages, and district pages",
   directory_count: declaredCount,
+  central_pages_count: CENTRAL_PAGES.length,
   captured_at: capturedAt,
-  offices: nextOffices,
+  sources: nextSources,
 };
 const report = {
-  source: "ABC official public SAD directory and district pages",
+  source: "ABC official public SAD directory, central public pages, and district pages",
   captured_at: capturedAt,
   directory_count: declaredCount,
+  central_pages_count: CENTRAL_PAGES.length,
   pages_checked: checked,
+  sad_pages_checked: checkedSads,
+  central_pages_checked: checkedCentral,
   pages_failed: errors.length,
   changes_count: changes.filter((change) => !change.kind.startsWith("baseline_")).length,
   changes,
@@ -213,7 +231,10 @@ writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + "\n", "utf8");
 console.log(JSON.stringify({
   captured_at: capturedAt,
   directory_count: declaredCount,
+  central_pages_count: CENTRAL_PAGES.length,
   pages_checked: checked,
+  sad_pages_checked: checkedSads,
+  central_pages_checked: checkedCentral,
   pages_failed: errors.length,
   changes_count: report.changes_count,
   report: REPORT_PATH,
