@@ -77,6 +77,30 @@ CREATE TABLE IF NOT EXISTS public.knowledge_passages (
   UNIQUE (document_id, ordinal)
 );
 
+-- Mantiene el vector de búsqueda a partir del texto guardado.
+CREATE OR REPLACE FUNCTION public.knowledge_passages_refresh_search_vector()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  NEW.search_vector :=
+    pg_catalog.to_tsvector(
+      'pg_catalog.spanish'::pg_catalog.regconfig,
+      pg_catalog.concat_ws(' ', NEW.section_title, NEW.passage_text)
+    );
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS knowledge_passages_refresh_search_vector_trg
+  ON public.knowledge_passages;
+CREATE TRIGGER knowledge_passages_refresh_search_vector_trg
+  BEFORE INSERT OR UPDATE OF section_title, passage_text
+  ON public.knowledge_passages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.knowledge_passages_refresh_search_vector();
+
 CREATE TABLE IF NOT EXISTS public.knowledge_facts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id uuid NOT NULL REFERENCES public.knowledge_documents(id) ON DELETE CASCADE,
@@ -196,6 +220,65 @@ GRANT SELECT ON TABLE public.knowledge_documents TO authenticated;
 GRANT SELECT ON TABLE public.knowledge_passages TO authenticated;
 GRANT SELECT ON TABLE public.knowledge_facts TO authenticated;
 GRANT SELECT ON TABLE public.knowledge_relations TO authenticated;
+
+-- Búsqueda textual bajo RLS: el usuario solo obtiene pasajes de su propia biblioteca.
+CREATE OR REPLACE FUNCTION public.search_private_knowledge(
+  p_query text,
+  p_district_code text DEFAULT NULL,
+  p_limit integer DEFAULT 10
+)
+RETURNS TABLE (
+  document_id uuid,
+  title text,
+  source_url text,
+  district_name text,
+  issued_at date,
+  published_at timestamptz,
+  temporal_status text,
+  page_number integer,
+  section_title text,
+  passage_text text,
+  relevance real
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT
+    d.id,
+    d.title,
+    d.source_url,
+    d.district_name,
+    d.issued_at,
+    d.published_at,
+    d.temporal_status,
+    p.page_number,
+    p.section_title,
+    p.passage_text,
+    pg_catalog.ts_rank_cd(
+      p.search_vector,
+      pg_catalog.websearch_to_tsquery(
+        'pg_catalog.spanish'::pg_catalog.regconfig,
+        pg_catalog.left(pg_catalog.btrim(pg_catalog.coalesce(p_query, '')), 500)
+      )
+    ) AS relevance
+  FROM public.knowledge_passages p
+  JOIN public.knowledge_documents d ON d.id = p.document_id
+  WHERE pg_catalog.length(pg_catalog.btrim(pg_catalog.coalesce(p_query, ''))) >= 2
+    AND p.search_vector @@ pg_catalog.websearch_to_tsquery(
+      'pg_catalog.spanish'::pg_catalog.regconfig,
+      pg_catalog.left(pg_catalog.btrim(pg_catalog.coalesce(p_query, '')), 500)
+    )
+    AND (p_district_code IS NULL OR d.district_code = p_district_code)
+  ORDER BY relevance DESC, pg_catalog.coalesce(d.published_at, d.captured_at) DESC
+  LIMIT LEAST(GREATEST(pg_catalog.coalesce(p_limit, 10), 1), 50);
+$function$;
+
+REVOKE ALL ON FUNCTION public.search_private_knowledge(text, text, integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.search_private_knowledge(text, text, integer)
+  TO authenticated;
 
 COMMIT;
 
