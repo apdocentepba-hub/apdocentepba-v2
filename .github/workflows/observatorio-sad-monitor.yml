@@ -28,7 +28,7 @@ jobs:
           key: ${{ runner.os }}-observatorio-sad-state-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-observatorio-sad-state-
-      - name: Check official directory and district pages
+      - name: Check official ABC central and district pages
         run: node scripts/observatorio-sad/scan-notices.mjs
       - name: Save state for the next hourly check
         if: success()
