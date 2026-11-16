@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Responder preguntas docentes combinando antecedentes históricos y publicaciones actuales. Cada respuesta debe distinguir qué regía antes, qué rige ahora, para quién, en qué territorio y cuál es la evidencia oficial que lo sostiene.
+Responder las consultas del titular combinando antecedentes históricos y publicaciones actuales. Es una herramienta privada bajo pedido, no un feed compartido con los usuarios de APDocente. Cada respuesta debe distinguir qué regía antes, qué rige ahora, para quién, en qué territorio y cuál es la evidencia oficial que lo sostiene.
 
 El sistema no debe contestar desde un resumen sin origen. Cada afirmación recuperable necesita una fuente, fecha y ubicación dentro del documento o página.
 
@@ -47,7 +47,7 @@ Si el documento no permite confirmar un campo, se registra como desconocido; no 
 - Extraer texto de PDF, DOC/DOCX y HTML; enviar a OCR únicamente las páginas escaneadas.
 - Mantener originales, texto extraído, segmentos con página y versiones rectificadas.
 - Procesar primero catálogo y metadatos; después el texto completo; luego clasificar y relacionar.
-- Comparar fuentes en barridos escalonados. El MVP propone frecuencia horaria para las páginas ABC; los canales externos dependen de la plataforma.
+- Comparar fuentes únicamente cuando el titular lo solicite. No hay sondeo programado; los canales externos dependen de la plataforma.
 - No borrar una publicación al desaparecer de una página: marcarla como retirada y conservar la última captura.
 - Si una SAD republica una comunicación provincial, conservar la publicación local y su fecha como evidencia de difusión, pero vincular el cuerpo duplicado a la pieza provincial para no contarla como una política diferente.
 
@@ -78,4 +78,4 @@ El nombre numérico de un archivo no sirve como título ni como fuente. El títu
 
 ## Límites actuales del piloto
 
-El conector SAD propuesto en la PR #296 descubre las oficinas y compara cambios en enlaces/huellas de páginas ABC. Aún no archiva ni lee adjuntos, no indexa documentos, no incorpora todo el portal central y no dispone de alertas a docentes. Esa separación permite mostrar progreso real sin presentar un catálogo o un contador de archivos como una base de conocimiento terminada.
+El conector SAD propuesto en la PR #296 descubre las oficinas y compara cambios en enlaces/huellas de páginas ABC bajo pedido. Aún no archiva ni lee adjuntos, no indexa documentos ni incorpora todo el portal central. No expone los resultados a usuarios de APDocente. El repositorio es público: no se deben subir el corpus histórico, reportes privados ni datos personales.
