@@ -883,6 +883,22 @@ async function observatorioDb(env, path, rows, conflict) {
   if (!res.ok) throw new Error("database request failed");
   return text ? JSON.parse(text) : null;
 }
+async function observatorioExistingDriveDocument(env, sourceId, driveId) {
+  const params = new URLSearchParams({
+    select: "id,extraction_status,metadata",
+    source_id: `eq.${sourceId}`,
+    drive_file_id: `eq.${driveId}`,
+    order: "captured_at.desc",
+    limit: "1"
+  });
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/knowledge_documents?${params}`, {
+    headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  if (!res.ok) throw new Error("existing document lookup failed");
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows[0] : null;
+}
 async function handleObservatorioSadSearch(request, env) {
   if (request.method !== "POST") return observatorioJson({ ok: false, error: "Método no permitido" }, 405);
   const auth = await observatorioOwner(request, env);
@@ -912,7 +928,7 @@ async function handleObservatorioSadIngest(request, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return observatorioJson({ ok: false }, 503);
   const parsed = await observatorioBody(request);
   if (parsed.response) return parsed.response;
-  const { source = {}, document = {}, passages } = parsed.body || {};
+  const { source = {}, document = {}, passages, ordinal_start = 0 } = parsed.body || {};
   const sourceTypes = ["abc_central", "sad_abc", "sad_external", "drive_archive"];
   const temporal = ["current", "historical", "superseded", "withdrawn", "uncertain"];
   const extraction = ["pending", "text_ready", "ocr_required", "partial", "failed", "reviewed"];
@@ -920,7 +936,8 @@ async function handleObservatorioSadIngest(request, env) {
   if (!sourceTypes.includes(source.source_type) || !trim(source.source_key, 180) || !trim(source.name, 240))
     return observatorioJson({ ok: false, error: "Fuente inválida" }, 400);
   if (!trim(document.stable_key, 500) || !/^[a-f0-9]{64}$/.test(String(document.version_hash || "")) ||
-      !trim(document.title, 500) || !Array.isArray(passages) || passages.length > 200)
+      !trim(document.title, 500) || !Array.isArray(passages) || passages.length > 200 ||
+      !Number.isInteger(ordinal_start) || ordinal_start < 0 || ordinal_start > 100000)
     return observatorioJson({ ok: false, error: "Documento inválido" }, 400);
   let bytes = 0;
   for (const p of passages) {
@@ -940,6 +957,13 @@ async function handleObservatorioSadIngest(request, env) {
       metadata: source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata) ? source.metadata : {}
     }, "owner_user_id,source_key");
     if (!Array.isArray(s) || !s[0]?.id) throw new Error("source upsert failed");
+    if (document.drive_file_id) {
+      const existing = await observatorioExistingDriveDocument(env, s[0].id, trim(document.drive_file_id, 200));
+      const oldMd5 = existing?.metadata?.drive_md5;
+      const newMd5 = document.metadata?.drive_md5;
+      if (existing && (oldMd5 ? oldMd5 === newMd5 : existing.extraction_status === "text_ready"))
+        return observatorioJson({ ok: true, skipped_existing: true, passages_upserted: 0 });
+    }
     const d = await observatorioDb(env, "knowledge_documents", {
       source_id: s[0].id, stable_key: trim(document.stable_key, 500), version_hash: document.version_hash,
       title: trim(document.title, 500), document_type: document.document_type ? trim(document.document_type, 120) : null,
@@ -958,7 +982,7 @@ async function handleObservatorioSadIngest(request, env) {
     }, "source_id,stable_key,version_hash");
     if (!Array.isArray(d) || !d[0]?.id) throw new Error("document upsert failed");
     const rows = passages.map((p, ordinal) => ({
-      document_id: d[0].id, ordinal, page_number: p.page_number ?? null,
+      document_id: d[0].id, ordinal: ordinal_start + ordinal, page_number: p.page_number ?? null,
       section_title: p.section_title ? trim(p.section_title, 300) : null,
       passage_text: String(p.passage_text),
       extraction_confidence: typeof p.extraction_confidence === "number" ? Math.max(0, Math.min(1, p.extraction_confidence)) : null
