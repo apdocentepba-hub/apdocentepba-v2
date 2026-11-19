@@ -76,6 +76,26 @@ assert.ok(
   css.includes('body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card'),
   'email layout must only change logged-in light-theme APD panel'
 );
+// Screenshot QA: the old alert-tab introduction must not visually duplicate
+// the alert feed header below the real offer card.
+assert.ok(css.includes('#panel-docente #apd-tab-intro-alertas {'), 'duplicate alert intro selector missing');
+assert.ok(css.includes('display:none!important;'), 'duplicate alert intro not hidden');
+assert.ok(css.includes('#panel-tab-pane-alertas .panel-card .card-lbl'), 'alert heading font normalization missing');
+// Screenshot regression: on desktop offer navigation is alongside the card;
+// at tablet/mobile sizes it is positioned before the title, not after PID.
+for (const contract of [
+  'Carousel navigation R3',
+  '@media (min-width:1200px)',
+  '@media (max-width:1199px)',
+  'top:175px!important',
+  '#alerta-prev {',
+  'left:-53px!important',
+  '#alerta-next {',
+  'right:-53px!important',
+  'order:0!important',
+  'justify-content:space-between!important',
+  'position:static!important'
+]) assert.ok(css.includes(contract), 'carousel navigation regression: ' + contract);
 assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'CSS braces');
 assert.ok(!/@import\s|url\s*\(/.test(css), 'external style dependency not allowed');
 console.log('PASS: APD email palette, fonts, panel scope, dark mode, renderer and page linkage');
