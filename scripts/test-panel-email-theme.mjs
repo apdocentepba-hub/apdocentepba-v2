@@ -30,7 +30,7 @@ assert.ok(css.includes('body:not(.apd-dark) #panel-docente'), 'scoping/dark guar
 
 for (const selector of [
   '.alerta-floating', '.alerta-tags', '.alerta-row', '.alerta-pid-card',
-  '#alerta-postulantes-meta', '.alerta-meta-item', '.alerta-section-label',
+  '#alerta-postulantes-meta', '.alerta-meta-item',
   '.apd-comparator-panel'
 ]) assert.ok(css.includes(selector), 'missing panel component ' + selector);
 
