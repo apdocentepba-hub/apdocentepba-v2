@@ -34,7 +34,9 @@ for (const selector of [
   '.apd-comparator-panel'
 ]) assert.ok(css.includes(selector), 'missing panel component ' + selector);
 
-assert.equal(app.split('<h3 class="alerta-section-label">DATOS DE LA OFERTA</h3>').length - 1, 1);
+assert.ok(css.includes('.alerta-feature-grid::before'), 'offer section label must be CSS-only');
+assert.ok(css.includes('content:"DATOS DE LA OFERTA"'), 'email section heading absent');
+assert.ok(!app.includes('class="alerta-section-label"'), 'protected renderer must not be changed');
 for (const keep of [
   'function renderAlertaActual()', 'function renderPidMatchBlock(', 'cargarResumenPostulantes(a);',
   'id="alerta-prev"', 'id="alerta-next"', 'id="apd-comparador-panel"'
