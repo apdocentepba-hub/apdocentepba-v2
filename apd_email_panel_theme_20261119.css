@@ -172,8 +172,12 @@ body:not(.apd-dark) #panel-docente #panel-alertas .tag-nivel {
   background:#fef3c7!important;
   color:#92400e!important;
 }
-body:not(.apd-dark) #panel-docente #panel-alertas .alerta-section-label {
-  margin:14px 0 10px!important;
+/* Etiqueta de sección visual, sin editar app_v2.js (archivo protegido por CI). */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid::before {
+  content:"DATOS DE LA OFERTA";
+  display:block;
+  grid-column:1/-1;
+  margin:12px 0 0;
   color:#5d7290!important;
   font-family:Arial,Helvetica,sans-serif!important;
   font-size:11px!important;
