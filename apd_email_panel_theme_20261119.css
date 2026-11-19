@@ -604,3 +604,45 @@ body:not(.apd-dark) #panel-docente #panel-tab-pane-alertas .panel-card .card-lbl
   font-weight:700!important;
   letter-spacing:.02em!important;
 }
+
+
+/* Carousel navigation R3 · after actual production screenshot feedback.
+ * Desktop: arrows immediately to the LEFT/RIGHT of the offer card, near
+ * its top, not buried after PID and applicant details.
+ * Tablet/phone: keep both arrows at the TOP of the card for safe hit targets.
+ * Existing #alerta-prev/#alerta-next click handlers remain untouched. */
+@media (min-width:1200px) {
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card {
+    overflow:visible!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-topbar .alerta-nav {
+    position:absolute!important;
+    top:175px!important;
+    z-index:5!important;
+    width:42px!important;
+    height:42px!important;
+    font-size:18px!important;
+    box-shadow:0 4px 12px rgba(15,52,96,.15)!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas #alerta-prev {
+    left:-53px!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas #alerta-next {
+    right:-53px!important;
+  }
+}
+@media (max-width:1199px) {
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-topbar {
+    order:0!important;
+    margin:0 0 12px!important;
+    justify-content:space-between!important;
+    gap:10px!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-topbar .alerta-nav {
+    position:static!important;
+    flex:0 0 36px!important;
+    width:36px!important;
+    height:36px!important;
+    font-size:17px!important;
+  }
+}
