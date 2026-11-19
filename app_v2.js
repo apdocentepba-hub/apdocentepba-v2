@@ -1466,6 +1466,7 @@ function renderAlertaActual() {
             </div>
           </div>
 
+          <h3 class="alerta-section-label">DATOS DE LA OFERTA</h3>
           <div class="alerta-grid alerta-grid-clean alerta-feature-grid">
             ${alertaRow("Días y horarios", horarioLabel || "No informados", "alerta-row-horarios")}
             ${alertaRow("Vigencia", vigenciaLabel, "alerta-row-vigencia")}
