@@ -1,0 +1,20 @@
+name: APD panel email visual guard
+on:
+  pull_request:
+    paths:
+      - index.html
+      - app_v2.js
+      - apd_email_panel_theme_20261119.css
+      - scripts/test-panel-email-theme.mjs
+      - .github/workflows/panel-email-visual-guard.yml
+permissions:
+  contents: read
+jobs:
+  visual-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/test-panel-email-theme.mjs

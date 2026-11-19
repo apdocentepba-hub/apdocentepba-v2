@@ -1,0 +1,591 @@
+/*
+ * APDocentePBA · Panel / correo: identidad visual compartida (2026-11-19).
+ * Referencia: correo real "Resumen APD" enviado el 19/11/2026 14:00 (Argentina).
+ * Solo presentación: sin cambios en autenticación, alertas, pagos, preferencias,
+ * comparador, datos de ABC, Worker, notificaciones ni comportamiento del panel.
+ * Reversión: quitar la referencia a este CSS desde index.html.
+ * El tema oscuro preexistente se respeta.
+ */
+body:not(.apd-dark) #panel-docente {
+  --apd-mail-navy:#0f3460;
+  --apd-mail-navy-2:#1a4f8a;
+  --apd-mail-action:#2563eb;
+  --apd-mail-action-alt:#163f7a;
+  --apd-mail-bg:#f0f2f7;
+  --apd-mail-panel:#ffffff;
+  --apd-mail-offer:#f8fbff;
+  --apd-mail-field:#f8fafc;
+  --apd-mail-border:#d6deea;
+  --apd-mail-text:#111827;
+  --apd-mail-muted:#6b7280;
+  --apd-bg:var(--apd-mail-bg);
+  --apd-surface:var(--apd-mail-panel);
+  --apd-surface-2:var(--apd-mail-offer);
+  --apd-text:var(--apd-mail-text);
+  --apd-muted:var(--apd-mail-muted);
+  --apd-border:var(--apd-mail-border);
+  --apd-primary:var(--apd-mail-action);
+  --azul:var(--apd-mail-navy);
+  --azul-claro:var(--apd-mail-action);
+  --gris-bg:var(--apd-mail-bg);
+  --gris-b:var(--apd-mail-border);
+  --gris-b2:#e5e7eb;
+  --texto:var(--apd-mail-text);
+  --texto-mid:#374151;
+  --texto-sub:var(--apd-mail-muted);
+  background:var(--apd-mail-bg)!important;
+  color:var(--apd-mail-text)!important;
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+body:not(.apd-dark) #panel-docente :is(button,input,textarea,select) {
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+/* Cabecera y barra lateral solo cuando el panel del usuario está visible. */
+body:not(.apd-dark):has(#panel-docente:not(.hidden)) .header,
+body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .header {
+  background:linear-gradient(135deg,#0f3460 0%,#1a4f8a 100%)!important;
+  border-color:#dbe3f0!important;
+}
+body:not(.apd-dark):has(#panel-docente:not(.hidden)) :is(.header,.apd-v21-sidebar,.apd-top-tab) {
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .apd-v21-sidebar {
+  background:linear-gradient(180deg,#0f3460 0%,#133e73 100%)!important;
+}
+body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .apd-v21-sidebar .apd-top-tab:not(.is-active) {
+  color:#eaf2ff!important;
+}
+body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .apd-v21-sidebar .apd-top-tab.is-active {
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+}
+body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .apd-v21-sidebar .apd-top-tab:hover:not(.is-active) {
+  background:#1a4f8a!important;
+}
+/* Superficies del panel: mismas capas y bordes que el correo HTML. */
+body:not(.apd-dark) #panel-docente .panel-card:not(.apd-panel-showcase):not(#apd-next-tools-card),
+body:not(.apd-dark).apd-ui-v21-live #panel-docente .panel-card:not(.apd-panel-showcase):not(#apd-next-tools-card):not(.apd-tab-intro):not(.apd-panel-benefits),
+body:not(.apd-dark) #panel-docente :is(.apd-panel-benefits,.apd-tab-intro,.apd-panel-showcase,.prefs-card,.historico-box,.radar-box,.backfill-box) {
+  background:#fff!important;
+  color:#111827!important;
+  border:1px solid #dbe3f0!important;
+  border-radius:16px!important;
+  box-shadow:0 5px 18px rgba(15,52,96,.07)!important;
+}
+body:not(.apd-dark) #panel-docente :is(.apd-hero-main,.apd-tab-intro) {
+  background:linear-gradient(135deg,#ffffff 0%,#f8fbff 100%)!important;
+}
+body:not(.apd-dark).apd-ui-v21-live #panel-docente .apd-hero-main {
+  background:linear-gradient(135deg,#ffffff 0%,#f8fbff 100%)!important;
+}
+body:not(.apd-dark) #panel-docente :is(.card-lbl,.apd-tab-intro h2,.panel-header h2,.apd-panel-showcase h2,.plan-title,.historico-offer-title) {
+  color:#0f3460!important;
+}
+body:not(.apd-dark) #panel-docente :is(.apd-panel-showcase h2 span,.apd-panel-quick em,.apd-panel-quick b) {
+  color:#1a4f8a!important;
+}
+body:not(.apd-dark) #panel-docente :is(.prefs-hint,.ph,.panel-sub,.apd-tab-intro p,.apd-panel-quick span,.historico-updated,.historico-note) {
+  color:#6b7280!important;
+}
+body:not(.apd-dark) #panel-docente :is(.apd-panel-quick a) {
+  border-color:#dbe3f0!important;
+}
+body:not(.apd-dark) #panel-docente :is(.apd-panel-quick i,.apd-benefit i,.apd-tab-kicker,.apd-tab-chip,.badge-num,.apd-channel-chip,.historico-chip) {
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+  border-color:#d6deea!important;
+}
+body:not(.apd-dark) #panel-docente :is(.btn-primary,.apd-panel-showcase-actions a.primary,.apd-tab-side a:first-child) {
+  background:#2563eb!important;
+  border-color:#2563eb!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+body:not(.apd-dark) #panel-docente :is(.btn-secondary,.mini-btn,.apd-comparator-clear,.apd-comparator-remove) {
+  background:#f6f9ff!important;
+  border:1px solid #c8d7ff!important;
+  color:#163f7a!important;
+}
+body:not(.apd-dark) #panel-docente :is(input,select,textarea) {
+  background:#fff!important;
+  border-color:#d6deea!important;
+  color:#111827!important;
+}
+/* Los avisos de ofertas replican la tarjeta azul pálida del resumen por mail. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-floating,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-window-preview {
+  background:#f8fbff!important;
+  border:1px solid #d6deea!important;
+  border-radius:18px!important;
+  box-shadow:0 8px 24px rgba(15,52,96,.08)!important;
+  color:#111827!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-windowbar {
+  display:none!important; /* Mac-style decoration absent from the email card. */
+}
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-title,.alerta-window-preview-title) {
+  color:#173a74!important;
+  font-size:15px!important;
+  font-weight:800!important;
+  letter-spacing:.03em!important;
+  line-height:1.3!important;
+  text-transform:uppercase;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-counter,.alerta-window-preview-side,.alerta-meta-head) {
+  color:#5d7290!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-nav {
+  background:#163f7a!important;
+  color:#fff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-progress-bar,.alerta-dot.is-active) {
+  background:#2563eb!important;
+  box-shadow:none!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-progress {
+  background:#eaf2ff!important;
+}
+/* Chips del correo: tipo violeta, turno verde, nivel ámbar y datos azules. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag {
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+  border:0!important;
+  padding:5px 10px!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  letter-spacing:.02em!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .tag-revista {
+  background:#f5f3ff!important;
+  color:#7c3aed!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .tag-turno,
+body:not(.apd-dark) #panel-docente #panel-alertas .tag-estado {
+  background:#ecfdf5!important;
+  color:#166534!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .tag-nivel {
+  background:#fef3c7!important;
+  color:#92400e!important;
+}
+/* Etiqueta de sección visual, sin editar app_v2.js (archivo protegido por CI). */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid::before {
+  content:"DATOS DE LA OFERTA";
+  display:block;
+  grid-column:1/-1;
+  margin:12px 0 0;
+  color:#5d7290!important;
+  font-family:Arial,Helvetica,sans-serif!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  letter-spacing:.08em!important;
+  line-height:1.3!important;
+  text-transform:uppercase;
+}
+/* Pares etiqueta/valor, localidad y escuela (plantilla de campos). */
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-row,.alerta-location-item,.alerta-meta-item) {
+  background:#f8fafc!important;
+  border:1px solid #d7dee9!important;
+  border-radius:12px!important;
+  color:#111827!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-key,.alerta-location-label,.alerta-meta-k) {
+  color:#6b7280!important;
+  font-size:10px!important;
+  font-weight:700!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-val,.alerta-location-value,.alerta-meta-v) {
+  color:#111827!important;
+  font-size:13px!important;
+  font-weight:600!important;
+  line-height:1.45!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-card {
+  border-radius:14px!important;
+  border:1px solid #d6deea!important;
+  background:#f8fbff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card.alerta-pid-ok {
+  background:#eefbf3!important;
+  border-color:#b7ebc6!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card.alerta-pid-info {
+  background:#f2f8ff!important;
+  border-color:#bfdcff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card.alerta-pid-warn {
+  background:#fff8e8!important;
+  border-color:#f0d39a!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-ok .alerta-meta-head {
+  color:#0b7a44!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-info .alerta-meta-head {
+  color:#2b5fb8!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-warn .alerta-meta-head {
+  color:#9a6700!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card .alerta-meta-item,
+body:not(.apd-dark) #panel-docente #panel-alertas #alerta-postulantes-meta .alerta-meta-item {
+  background:#fffdf8!important;
+  border-color:#e5dcc2!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas #alerta-postulantes-meta {
+  background:#f6f9ff!important;
+  border-color:#c8d7ff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas #alerta-postulantes-meta .alerta-meta-head {
+  color:#2b5fb8!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-note {
+  color:#4b5563!important;
+}
+/* Comparador y dialog de detalle: uniformidad sin alterar tamaños ni tablas. */
+body:not(.apd-dark) #panel-docente .apd-comparator-panel,
+body:not(.apd-dark):has(#panel-docente:not(.hidden)) .apd-comparator-dialog {
+  background:#f8fbff!important;
+  color:#111827!important;
+  border-color:#d6deea!important;
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+body:not(.apd-dark) #panel-docente :is(.apd-comparator-item,.apd-comparator-pairs,.apd-comparator-table-scroll) {
+  background:#fff!important;
+  border-color:#d6deea!important;
+}
+body:not(.apd-dark) #panel-docente .apd-comparator-table thead th {
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+}
+body:not(.apd-dark) #panel-docente .apd-compare-view {
+  background:#ecfdf5!important;
+  color:#166534!important;
+  border-color:#b7ebc6!important;
+}
+/* No se cambian display/position/overflow de controles funcionales o carrusel.
+ * Los elementos ocultos siguen usando las reglas .hidden y [hidden] originales. */
+@media (max-width:600px) {
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-floating {border-radius:14px!important;}
+  body:not(.apd-dark) #panel-docente #panel-alertas :is(.alerta-row,.alerta-meta-item) {border-radius:10px!important;}
+}
+
+
+/* Fidelity pass R2: mirror the EMAIL'S TYPOGRAPHY, FIELD ORDER AND CARD
+ * HIERARCHY, not just its palette. Screenshot comparison 2026-11-19:
+ * email = title → chips → compact context → 2-column facts → PID → applicants.
+ * Existing carousel remains operational, with its controls below the card.
+ * These selectors override the older R290 "large billboard" visual rules.
+ */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-carousel-shell {
+  width:100%!important;
+  max-width:700px!important;
+  min-width:0!important;
+  margin-inline:auto!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-stage {
+  padding:0!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-window-preview {
+  display:none!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card {
+  display:flex!important;
+  flex-direction:column!important;
+  gap:0!important;
+  width:100%!important;
+  max-width:700px!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+  margin:0 auto!important;
+  padding:16px 18px 18px!important;
+  background:#f8fbff!important;
+  color:#111827!important;
+  border:1px solid #d6deea!important;
+  border-left:1px solid #d6deea!important;
+  border-radius:18px!important;
+  box-shadow:0 5px 18px rgba(15,52,96,.05)!important;
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card *,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card *::before {
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-title {
+  order:1;
+  font-size:15px!important;
+  line-height:1.2!important;
+  font-weight:800!important;
+  letter-spacing:.03em!important;
+  text-transform:uppercase!important;
+  color:#173a74!important;
+  margin:0 0 12px!important;
+  overflow-wrap:anywhere;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-tags {
+  order:2;
+  gap:0!important;
+  margin:0 0 4px!important;
+  align-items:center!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag {
+  display:inline-flex!important;
+  align-items:center!important;
+  border-radius:999px!important;
+  border:0!important;
+  padding:5px 10px!important;
+  min-height:0!important;
+  margin:0 6px 6px 0!important;
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+  font-size:11px!important;
+  line-height:1.2!important;
+  font-weight:700!important;
+  letter-spacing:.02em!important;
+  text-transform:uppercase!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag-revista {
+  background:#f5f3ff!important;
+  color:#7c3aed!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag-turno,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag-estado {
+  background:#ecfdf5!important;
+  color:#166534!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag-nivel {
+  background:#fef3c7!important;
+  color:#92400e!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-tags .tag-jornada {
+  background:#f3f4f6!important;
+  color:#374151!important;
+}
+/* Location is extra information in the web app; keep it accessible, but compact
+ * so it doesn't turn into two enormous competing cards as in the screenshot. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-location {
+  order:3;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:10px!important;
+  min-width:0;
+  margin:0 0 8px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-location-item {
+  display:flex!important;
+  flex-direction:column!important;
+  gap:4px!important;
+  min-width:0;
+  padding:10px 12px!important;
+  border:1px solid #d7dee9!important;
+  border-radius:12px!important;
+  border-left:1px solid #d7dee9!important;
+  background:#f8fafc!important;
+  box-shadow:none!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-location-label {
+  font-size:9px!important;
+  letter-spacing:.10em!important;
+  line-height:1.2!important;
+  font-weight:700!important;
+  color:#6b7280!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-location-value {
+  font-size:12px!important;
+  line-height:1.35!important;
+  font-weight:700!important;
+  color:#111827!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-location-code {
+  font-size:10px!important;
+  line-height:1.3!important;
+  font-weight:400!important;
+  color:#6b7280!important;
+}
+/* Email fields: Curso, Módulos, Días, Vigencia, Cierre; regular equal cards.
+ * Do not promote "Días y horarios" into an oversized purple full-width banner. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-feature-grid {
+  order:4;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:6px 10px!important;
+  min-width:0!important;
+  margin:0!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid::before {
+  order:0;
+  grid-column:1/-1!important;
+  margin:4px 0 4px!important;
+  padding:0!important;
+  color:#5d7290!important;
+  font-size:11px!important;
+  line-height:1.3!important;
+  letter-spacing:.08em!important;
+  font-weight:800!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row {
+  min-width:0;
+  grid-column:auto!important;
+  gap:0!important;
+  padding:10px 12px!important;
+  background:#f8fafc!important;
+  border:1px solid #d7dee9!important;
+  border-left:1px solid #d7dee9!important;
+  border-radius:12px!important;
+  box-shadow:none!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-curso { order:1; }
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-modulos { order:2; }
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-horarios { order:3; }
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-vigencia { order:4; }
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-cierre { order:5; }
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row-observaciones {
+  order:6;
+  grid-column:1/-1!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid .alerta-key,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-horarios .alerta-key {
+  display:block!important;
+  margin:0 0 6px!important;
+  color:#6b7280!important;
+  font-size:9px!important;
+  line-height:1.2!important;
+  font-weight:700!important;
+  letter-spacing:.10em!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid .alerta-val,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-horarios .alerta-val,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-curso .alerta-val,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-modulos .alerta-val,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-vigencia .alerta-val,
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-row-cierre .alerta-val {
+  display:block!important;
+  font-size:12px!important;
+  line-height:1.35!important;
+  font-weight:700!important;
+  color:#111827!important;
+  white-space:pre-line;
+}
+/* PID and applicants copy the email's nested pastel panels. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > #alerta-pid-box {order:5;}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > #alerta-postulantes-meta {order:6;}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-card {
+  margin-top:12px!important;
+  padding:12px!important;
+  border-radius:12px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card.alerta-pid-ok {
+  background:#eefbf3!important;
+  border:1px solid #b7ebc6!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas #alerta-postulantes-meta {
+  background:#f6f9ff!important;
+  border:1px solid #c8d7ff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-pid-card .alerta-meta-head {
+  text-transform:none!important;
+  letter-spacing:0!important;
+  font-size:12px!important;
+  line-height:1.3!important;
+  font-weight:800!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas #alerta-postulantes-meta .alerta-meta-head {
+  text-transform:uppercase!important;
+  letter-spacing:.08em!important;
+  font-size:12px!important;
+  line-height:1.3!important;
+  font-weight:800!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-grid {
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:6px 10px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-item {
+  min-width:0;
+  padding:9px 10px!important;
+  border-radius:10px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-k {
+  font-size:8px!important;
+  line-height:1.2!important;
+  letter-spacing:.10em!important;
+  font-weight:700!important;
+  margin-bottom:5px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-v {
+  font-size:12px!important;
+  line-height:1.35!important;
+  font-weight:700!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-note {
+  font-size:11px!important;
+  line-height:1.4!important;
+}
+/* Keep the HTML email's small CTAs; move carousel navigation to the footer. */
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-actions {
+  order:7;
+  margin:14px 0 0!important;
+  gap:10px!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-actions .alerta-link {
+  min-width:0!important;
+  width:auto!important;
+  padding:8px 13px!important;
+  border-radius:7px!important;
+  font-size:12px!important;
+  font-weight:700!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-topbar {
+  order:8;
+  display:flex!important;
+  justify-content:center!important;
+  align-items:center!important;
+  gap:12px!important;
+  margin:14px 0 0!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-nav {
+  width:30px!important;
+  height:30px!important;
+  border-radius:999px!important;
+  font-size:14px!important;
+  background:#163f7a!important;
+  color:#fff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-counter {
+  padding:5px 10px!important;
+  background:#eaf2ff!important;
+  color:#0f3460!important;
+  border-radius:999px!important;
+  font-size:10px!important;
+  font-weight:700!important;
+  letter-spacing:.03em!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-progress {
+  order:9;
+  height:3px!important;
+  margin:10px 0 0!important;
+  background:#eaf2ff!important;
+}
+body:not(.apd-dark) #panel-docente #panel-alertas .alerta-progress-bar {
+  background:#2563eb!important;
+  box-shadow:none!important;
+}
+/* 2-up fields for tablets, one column only on small phones. */
+@media(max-width:520px) {
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card {
+    padding:14px 12px!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-location,
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card > .alerta-feature-grid,
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-meta-grid {
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  body:not(.apd-dark) #panel-docente #panel-alertas .alerta-feature-grid > .alerta-row {
+    grid-column:1/-1!important;
+  }
+}
