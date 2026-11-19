@@ -43,6 +43,39 @@ for (const keep of [
 ]) {
   assert.ok(app.includes(keep) || index.includes(keep), 'frontend contract missing: ' + keep);
 }
+// R2 layout contract: the 19/11 mail is compact, not the old R290 billboard.
+// We test structure and ordering without embedding PII or network-dependent data.
+for (const contract of [
+  'Fidelity pass R2',
+  'max-width:700px!important',
+  'flex-direction:column!important',
+  'font-size:15px!important',
+  'font-size:9px!important',
+  'font-size:12px!important',
+  'order:1;',
+  'order:2;',
+  'order:3;',
+  'order:4;',
+  'order:5;',
+  'order:6;',
+  'order:7;',
+  'order:8;',
+  'order:9;',
+  'grid-template-columns:repeat(2,minmax(0,1fr))!important',
+  '.alerta-row-curso { order:1; }',
+  '.alerta-row-modulos { order:2; }',
+  '.alerta-row-horarios { order:3; }',
+  '.alerta-row-vigencia { order:4; }',
+  '.alerta-row-cierre { order:5; }',
+  '.alerta-main-card > #alerta-pid-box {order:5;}',
+  '.alerta-main-card > #alerta-postulantes-meta {order:6;}',
+  '@media(max-width:520px)',
+  '.alerta-feature-grid > .alerta-row {'
+]) assert.ok(css.includes(contract), 'email layout missing ' + contract);
+assert.ok(
+  css.includes('body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card'),
+  'email layout must only change logged-in light-theme APD panel'
+);
 assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'CSS braces');
 assert.ok(!/@import\s|url\s*\(/.test(css), 'external style dependency not allowed');
 console.log('PASS: APD email palette, fonts, panel scope, dark mode, renderer and page linkage');
