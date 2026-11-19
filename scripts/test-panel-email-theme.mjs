@@ -76,6 +76,11 @@ assert.ok(
   css.includes('body:not(.apd-dark) #panel-docente #panel-alertas .alerta-main-card'),
   'email layout must only change logged-in light-theme APD panel'
 );
+// Screenshot QA: the old alert-tab introduction must not visually duplicate
+// the alert feed header below the real offer card.
+assert.ok(css.includes('#panel-docente #apd-tab-intro-alertas {'), 'duplicate alert intro selector missing');
+assert.ok(css.includes('display:none!important;'), 'duplicate alert intro not hidden');
+assert.ok(css.includes('#panel-tab-pane-alertas .panel-card .card-lbl'), 'alert heading font normalization missing');
 assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'CSS braces');
 assert.ok(!/@import\s|url\s*\(/.test(css), 'external style dependency not allowed');
 console.log('PASS: APD email palette, fonts, panel scope, dark mode, renderer and page linkage');
