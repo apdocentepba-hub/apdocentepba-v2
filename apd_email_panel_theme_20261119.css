@@ -63,8 +63,8 @@ body:not(.apd-dark).apd-ui-v21-live:has(#panel-docente:not(.hidden)) .apd-v21-si
   background:#1a4f8a!important;
 }
 /* Superficies del panel: mismas capas y bordes que el correo HTML. */
-body:not(.apd-dark) #panel-docente .panel-card:not(.apd-panel-showcase),
-body:not(.apd-dark).apd-ui-v21-live #panel-docente .panel-card:not(.apd-panel-showcase):not(.apd-tab-intro):not(.apd-panel-benefits),
+body:not(.apd-dark) #panel-docente .panel-card:not(.apd-panel-showcase):not(#apd-next-tools-card),
+body:not(.apd-dark).apd-ui-v21-live #panel-docente .panel-card:not(.apd-panel-showcase):not(#apd-next-tools-card):not(.apd-tab-intro):not(.apd-panel-benefits),
 body:not(.apd-dark) #panel-docente :is(.apd-panel-benefits,.apd-tab-intro,.apd-panel-showcase,.prefs-card,.historico-box,.radar-box,.backfill-box) {
   background:#fff!important;
   color:#111827!important;
@@ -87,7 +87,7 @@ body:not(.apd-dark) #panel-docente :is(.apd-panel-showcase h2 span,.apd-panel-qu
 body:not(.apd-dark) #panel-docente :is(.prefs-hint,.ph,.panel-sub,.apd-tab-intro p,.apd-panel-quick span,.historico-updated,.historico-note) {
   color:#6b7280!important;
 }
-body:not(.apd-dark) #panel-docente :is(.apd-panel-quick a,.apd-next-item:not(.apd-next-tools *)) {
+body:not(.apd-dark) #panel-docente :is(.apd-panel-quick a) {
   border-color:#dbe3f0!important;
 }
 body:not(.apd-dark) #panel-docente :is(.apd-panel-quick i,.apd-benefit i,.apd-tab-kicker,.apd-tab-chip,.badge-num,.apd-channel-chip,.historico-chip) {
