@@ -71,10 +71,12 @@ test('active plan including admin-approved exception does not see paywall',()=>{
   assert.doesNotMatch(h.box.innerHTML,/Tu plan ya no está vigente/);
 });
 
-test('unknown entitlement during network failure is not incorrectly marked expired',()=>{
-  const h=harness(undefined,[]);
-  assert.match(h.box.innerHTML,/No hay alertas compatibles todavía/);
-  assert.doesNotMatch(h.box.innerHTML,/Ver planes y activar mi cuenta/);
+test('unknown entitlement during network failure prompts retry, never says expired or zero matches',()=>{
+  const h=harness(undefined,[{id:'synthetic-private-offer'}]);
+  assert.match(h.box.innerHTML,/No pudimos verificar tu plan/);
+  assert.match(h.box.innerHTML,/Reintentar verificación/);
+  assert.doesNotMatch(h.box.innerHTML,/Tu plan ya no está vigente|Ver planes y activar mi cuenta/);
+  assert.doesNotMatch(h.box.innerHTML,/No hay alertas compatibles todavía|Oferta 1 de 1|synthetic-private-offer/);
 });
 
 test('expired status blocks even stale alerts already resident in memory',()=>{
