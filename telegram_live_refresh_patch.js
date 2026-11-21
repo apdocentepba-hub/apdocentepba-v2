@@ -152,7 +152,7 @@
 
     if (connected) {
       setPill(pill, isRequested ? 'Conectado y activo' : 'Conectado', isRequested ? '#ecfdf3' : '#eef4ff', isRequested ? '#166534' : '#0f3460', isRequested ? '#bbf7d0' : '#d6e4ff');
-      note.textContent = isRequested ? 'Telegram quedó listo para enviar alertas automáticas al chat vinculado.' : 'Telegram ya está vinculado, pero el canal está apagado en tus preferencias.';
+      note.textContent = isRequested ? 'Telegram está conectado. Para consultar tus ofertas, escribí ALERTAS en el bot (consulta manual).' : 'Telegram ya está vinculado, pero el canal está apagado en tus preferencias.';
       actions.innerHTML = botLink ? `<a class="btn btn-outline" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Abrir bot</a>` : '';
       mini.textContent = [planName ? `Plan: ${planName}` : '', masked ? `Chat: ${masked}` : '', user ? `Usuario: @${user}` : ''].filter(Boolean).join(' · ');
       setSummaryLine('Telegram', isRequested ? 'Conectado y activo' : 'Conectado');
@@ -161,7 +161,7 @@
     }
 
     setPill(pill, isRequested ? 'Pendiente de conexión' : 'Disponible', '#fff7ed', '#9a3412', '#fed7aa');
-    note.textContent = botUser ? `Abrí el bot @${botUser}, tocá Iniciar y después ya vas a poder recibir alertas en Telegram.` : 'Telegram está disponible. Abrí el bot y tocá Iniciar para vincular el chat.';
+    note.textContent = botUser ? `Abrí el bot @${botUser}, tocá Iniciar y después escribí ALERTAS para consultar tus ofertas. El enlace dura 10 minutos.` : 'Telegram está disponible. Abrí el enlace de conexión, tocá Iniciar y después escribí ALERTAS. El enlace dura 10 minutos.';
     actions.innerHTML = botLink ? `<a class="btn btn-primary" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Conectar Telegram</a>` : '';
     mini.textContent = `Incluido en ${planName || 'tu plan'}.`;
     setSummaryLine('Telegram', 'Incluido en Insigne');
