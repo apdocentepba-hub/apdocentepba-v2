@@ -1,0 +1,37 @@
+name: APD auth and real panel offline integration laboratory
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-apd-panel-auth-ui-offline-chromium.mjs'
+      - 'scripts/build-apd-panel-deferred-preferences-candidate.mjs'
+      - 'scripts/build-apd-panel-timing-candidate.mjs'
+      - '.github/workflows/apd-panel-auth-ui-integration-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-auth-panel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build instrumented temporary dashboard, never publish
+        run: |
+          node scripts/build-apd-panel-timing-candidate.mjs
+          node scripts/build-apd-panel-deferred-preferences-candidate.mjs
+          node --check tmp/apd-alerts-performance/app_v2_deferred_preferences_candidate.js
+      - name: Verify isolated dashboard and form guard contracts
+        run: |
+          node --test scripts/test-apd-panel-deferred-preferences.mjs
+      - name: Test real UI, auth session, profile and plans with synthetic responses in Chromium
+        run: |
+          node --check scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+          node scripts/test-apd-panel-auth-ui-offline-chromium.mjs
+      - name: Ensure no production file modifications
+        run: |
+          git diff --exit-code -- app_v2.js index.html auth_session_patch.js safe_dashboard_ui_patch.js app_v2_cargo_delegate_fix.js
