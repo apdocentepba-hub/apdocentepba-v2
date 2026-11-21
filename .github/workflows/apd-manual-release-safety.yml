@@ -1,0 +1,46 @@
+name: APD manual-release safety gate (offline only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'scripts/test-apd-manual-release-guards.mjs'
+      - 'scripts/test-live-messaging-status-auth-current.mjs'
+      - 'scripts/audit-apd-workflow-triggers.mjs'
+      - 'scripts/check-apd-workflow-risk-diff.mjs'
+      - 'scripts/test-apd-workflow-risk-diff.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-no-automatic-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check and negative-control tests (never deploy)
+        run: |
+          node --check scripts/test-apd-manual-release-guards.mjs
+          node --test scripts/test-apd-manual-release-guards.mjs
+          node --test scripts/test-live-messaging-status-auth-current.mjs
+      - name: Unit tests for new automatic workflow privilege escalations
+        run: |
+          node --check scripts/check-apd-workflow-risk-diff.mjs
+          node --test scripts/test-apd-workflow-risk-diff.mjs
+      - name: Reject added or changed automatic release/secret jobs versus main
+        if: github.event_name == 'pull_request'
+        env:
+          APD_CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          test -n "$APD_CI_BASE_SHA"
+          git fetch --no-tags origin "$APD_CI_BASE_SHA" --depth=1
+          node scripts/check-apd-workflow-risk-diff.mjs
+      - name: Report other auto-triggered workflows with write-capable steps (read only)
+        run: |
+          node --check scripts/audit-apd-workflow-triggers.mjs
+          node scripts/audit-apd-workflow-triggers.mjs

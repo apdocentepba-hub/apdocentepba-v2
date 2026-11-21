@@ -1,17 +1,23 @@
 name: Verify APD 681 live
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/verify-apd-681-live.yml
   workflow_dispatch:
+    inputs:
+      acknowledge_obsolete:
+        description: 'Obsolete verifier; read its code only, never trigger rollback'
+        required: true
+        type: choice
+        default: 'NO'
+        options: ['NO', 'VERIFICAR']
 
 permissions:
   contents: read
 
 jobs:
   verify:
+    # Disabled: hardcoded 2026 historical deployment IDs and an ERR rollback trap
+    # can move live traffic. Replace with fresh read-only verification if needed.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Verify production and rollback on failure

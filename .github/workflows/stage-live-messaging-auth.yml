@@ -6,12 +6,6 @@ on:
       - 'scripts/stage-live-messaging-auth.mjs'
       - 'scripts/test-stage-live-messaging-auth.mjs'
       - '.github/workflows/stage-live-messaging-auth.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/stage-live-messaging-auth.mjs'
-      - 'scripts/test-stage-live-messaging-auth.mjs'
-      - '.github/workflows/stage-live-messaging-auth.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,13 +24,16 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/stage-live-messaging-auth.mjs
-      - run: node --test scripts/test-stage-live-messaging-auth.mjs
-      - run: node scripts/create-messaging-status-auth-candidate.mjs
-      - run: node --check tmp/messaging-auth-candidate/worker_hotfix.js
-      - run: node --test scripts/test-messaging-status-auth-candidate.mjs
+      # Retired stage-builder tests target an intentionally absent vulnerable source.
+      # Test the current privacy contract and syntax without running the old builder.
+      - run: node --check scripts/stage-live-messaging-auth.mjs
+      # Canonical Worker already carries the privacy fix; do not construct obsolete patch.
+      - run: node --test scripts/test-live-messaging-status-auth-current.mjs
   stage-undeployed:
     needs: unit
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Disabled: old uploader expects push events and can create Cloudflare versions.
+    # A new reviewed, explicitly approved staging workflow is required.
+    if: false
     runs-on: ubuntu-latest
     environment: production
     steps:

@@ -1,21 +1,23 @@
 name: Build safe APD email format candidate
 
 on:
-  push:
-    branches:
-      - fix/email-template-unified-20260910
-    paths:
-      - .github/workflows/build-email-format-candidate.yml
-      - scripts/apply-email-format-live.py
-      - scripts/test-email-format-live.mjs
   workflow_dispatch:
+    inputs:
+      confirm_candidate:
+        description: "Manually approve Cloudflare version creation"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "CREAR"]
 
 permissions:
   contents: read
 
 jobs:
   candidate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_candidate == 'CREAR'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout feature branch
         uses: actions/checkout@v4

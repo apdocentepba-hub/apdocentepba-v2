@@ -2,15 +2,20 @@ name: Importar escuelas PBA
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/importar-escuelas-pba.yml'
+    inputs:
+      confirm_import:
+        description: "Import schools only on explicit request"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "IMPORTAR"]
 
 permissions:
   contents: write
 
 jobs:
   importar:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_import == 'IMPORTAR'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

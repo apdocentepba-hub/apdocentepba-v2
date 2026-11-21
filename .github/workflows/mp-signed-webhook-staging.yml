@@ -6,12 +6,6 @@ on:
       - 'scripts/stage-mp-signed-webhook.mjs'
       - 'scripts/test-mp-preview-staging.mjs'
       - '.github/workflows/mp-signed-webhook-staging.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/stage-mp-signed-webhook.mjs'
-      - 'scripts/test-mp-preview-staging.mjs'
-      - '.github/workflows/mp-signed-webhook-staging.yml'
   workflow_dispatch:
 
 permissions:
@@ -32,13 +26,15 @@ jobs:
       - run: node --check scripts/stage-mp-signed-webhook.mjs
       - run: node --test scripts/test-mp-preview-staging.mjs
       - run: node scripts/test-live-source-equivalence.mjs
-      - run: node scripts/create-mp-validation-candidate.mjs
-      - run: node --check tmp/mp-validation-candidate/worker_hotfix.js
-      - run: node --test scripts/test-mp-validation-candidate.mjs
+      # Historical builder is incompatible with current canonical Worker and
+      # must never be run just to try a version upload. Keep static syntax only.
+      - run: node --check scripts/create-mp-validation-candidate.mjs
 
   stage-to-version-url:
     needs: preview-contract
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Disabled: old uploader expects push events and can create Cloudflare versions.
+    # A new reviewed, explicitly approved staging workflow is required.
+    if: false
     runs-on: ubuntu-latest
     environment: production
     steps:

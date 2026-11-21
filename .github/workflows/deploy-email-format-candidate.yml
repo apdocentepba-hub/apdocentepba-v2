@@ -1,19 +1,23 @@
 name: Deploy APD email format candidate
 
 on:
-  push:
-    branches:
-      - fix/email-template-unified-20260910
-    paths:
-      - .github/workflows/deploy-email-format-candidate.yml
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Manual legacy candidate release approval"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "RELEASE"]
 
 permissions:
   contents: read
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Promote candidate with automatic rollback
         env:

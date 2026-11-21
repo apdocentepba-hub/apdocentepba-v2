@@ -1,10 +1,14 @@
 name: Release APD expiration safeguards
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/dispatch/trigger-apd-expiry-release.txt'
+  workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Manual release requires explicit confirmation"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "RELEASE"]
 
 permissions:
   contents: write
@@ -15,6 +19,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == 'RELEASE'
     runs-on: ubuntu-latest
     environment: production
     steps:

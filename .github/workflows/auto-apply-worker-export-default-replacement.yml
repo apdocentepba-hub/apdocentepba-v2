@@ -1,12 +1,14 @@
 name: Auto apply worker export default replacement
 
 on:
-  push:
-    branches:
-      - refactor/worker-base-20260401
-    paths:
-      - .github/dispatch/trigger-worker-export-default-apply.txt
-      - .github/workflows/auto-apply-worker-export-default-replacement.yml
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: "Manually approve Worker source-only update on refactor branch"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "APLICAR"]
 
 permissions:
   contents: write
@@ -17,6 +19,7 @@ concurrency:
 
 jobs:
   auto-apply-worker-export-default-replacement:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/refactor/worker-base-20260401' && inputs.confirm_apply == 'APLICAR'
     runs-on: ubuntu-latest
 
     steps:
