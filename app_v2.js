@@ -1322,8 +1322,14 @@ function renderPidMatchBlock(alerta, resumen) {
 
   return `
     <div class="alerta-meta-card alerta-pid-card ${toneClass}">
-      <div class="alerta-meta-head">${info.title}</div>
-      <div class="alerta-meta-grid">
+      <div class="alerta-pid-summary">
+        <span class="alerta-pid-marker" aria-hidden="true">◆</span>
+        <strong class="alerta-pid-status">${esc(info.title)}</strong>
+      </div>
+      <p class="alerta-pid-brief">${esc(info.text)}</p>
+      <details class="alerta-pid-disclosure">
+        <summary>Ver desglose PID <span aria-hidden="true">⌄</span></summary>
+        <div class="alerta-meta-grid">
         ${alertaRow("Motivo", alerta?.pid_reason || "-")}
         ${alertaRow("Área PID", alerta?.pid_area || "-")}
         ${alertaRow("Bloque PID", alerta?.pid_bloque || "-")}
@@ -1333,8 +1339,8 @@ function renderPidMatchBlock(alerta, resumen) {
         ${alertaRow("Tu puntaje total", Number.isFinite(puntajeFinal) ? formatPuntaje(puntajeFinal) : "-")}
         ${alertaRow("Listado PID", alerta?.pid_listado || "-")}
         ${alertaRow("Año PID", alerta?.pid_anio || "-")}
-      </div>
-      <div class="alerta-meta-note">${info.text}</div>
+        </div>
+      </details>
     </div>
   `;
 }
@@ -1455,8 +1461,8 @@ function renderAlertaActual() {
           <div class="alerta-location" aria-label="Establecimiento y ubicación de la oferta">
             <div class="alerta-location-item alerta-location-school">
               <span class="alerta-location-label">${schoolIsCode ? "Escuela · Clave ABC" : "Escuela"}</span>
-              <strong class="alerta-location-value">${esc(schoolName || schoolCode || "Escuela no informada")}</strong>
-              ${schoolName && schoolCode ? `<span class="alerta-location-code">Clave: ${esc(schoolCode)}</span>` : ""}
+              <strong class="alerta-location-value alerta-school-key">${esc(schoolCode || schoolName || "Escuela no informada")}</strong>
+              ${schoolName && schoolCode ? `<span class="alerta-location-code apd-official-school-name">${esc(schoolName)}</span>` : ""}
             </div>
             <div class="alerta-location-item alerta-location-district">
               <span class="alerta-location-label">Distrito</span>

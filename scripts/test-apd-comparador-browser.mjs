@@ -1174,11 +1174,11 @@ try{
      '<div class="alerta-actions"></div></article>';
     return true;
    })()`);
-  await until('document.querySelector(".alerta-location-school .alerta-location-value")?.textContent==="Escuela de prueba 0005MS0004"');
+  await until('document.querySelector(".alerta-location-school .apd-official-school-name")?.textContent==="Escuela de prueba 0005MS0004"');
   assert.equal(await js('document.querySelector(".alerta-location-school .alerta-location-label")?.textContent'),
-   'Escuela · Mapa Escolar ABC');
+   'Escuela · clave ABC');
   assert.equal(await js('document.querySelector(".alerta-location-school .alerta-location-code")?.textContent'),
-   'Clave ABC: 0005MS0004');
+   'Escuela de prueba 0005MS0004');
   assert.match(await js('document.querySelector(".apd-official-school-address")?.textContent||""'),
    /Dirección registrada: Calle de prueba 100/);
   assert.equal(await js('window.__wfsRequests.length')-priorSchoolRequests,1,

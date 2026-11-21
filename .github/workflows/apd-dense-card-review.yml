@@ -1,0 +1,47 @@
+name: APD dense card design review (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'frontend_easy_fixes_patch.js'
+      - 'scripts/check-apd-legacy-style-scope.mjs'
+      - 'scripts/test-apd-legacy-style-scope.mjs'
+      - 'scripts/test-apd-offer-card-browser.mjs'
+      - 'scripts/check-apd-visual-change-boundaries.mjs'
+      - 'scripts/test-apd-visual-change-boundaries.mjs'
+      - 'app_v2.js'
+      - 'apd_comparador_panel.css'
+      - 'scripts/apd-official-school-identity.mjs'
+      - 'scripts/test-apd-editorial-dense-card.mjs'
+      - 'scripts/test-apd-official-school-identity.mjs'
+      - 'scripts/test-apd-offer-card-compact.mjs'
+      - 'scripts/test-apd-comparador-browser.mjs'
+      - '.github/workflows/apd-dense-card-review.yml'
+permissions:
+  contents: read
+jobs:
+  ui-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax, school keys, PID and app renderer
+        run: |
+          node --check app_v2.js
+          node --check scripts/apd-official-school-identity.mjs
+          node --test scripts/test-apd-editorial-dense-card.mjs scripts/test-apd-offer-card-compact.mjs scripts/test-apd-official-school-identity.mjs
+          node --test scripts/test-apd-visual-change-boundaries.mjs
+          node scripts/check-apd-visual-change-boundaries.mjs
+          node --test scripts/test-apd-legacy-style-scope.mjs
+          node scripts/check-apd-legacy-style-scope.mjs
+      - name: Chromium layout desktop, mobile and dark mode
+        run: node scripts/test-apd-offer-card-browser.mjs
+      - name: Chromium authenticated comparator and school identity
+        run: node scripts/test-apd-comparador-browser.mjs
+      - name: No Worker, auth or database changes
+        run: git diff --exit-code origin/main -- worker-live worker.js supabase sql auth_session_patch.js

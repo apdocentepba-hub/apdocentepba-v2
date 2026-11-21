@@ -39,15 +39,17 @@ export function applyOfficialSchoolIdentity(container,presentation){
  if(displayedValue!==key&&!displayedCode.includes(key))return false;
  const doc=container.ownerDocument;
  if(!doc?.createElement)return false;
- label.textContent='Escuela · Mapa Escolar ABC';
- value.textContent=presentation.name;
- let codeLine=code;
- if(!codeLine){
-  codeLine=doc.createElement('span');
-  codeLine.className='alerta-location-code';
-  container.appendChild(codeLine);
+ // Teachers recognize the ABC establishment key at a glance; keep it
+ // prominent while the optional full name remains a quieter second line.
+ label.textContent='Escuela · clave ABC';
+ value.textContent=key;
+ let nameLine=container.querySelector?.('.apd-official-school-name')||code;
+ if(!nameLine){
+  nameLine=doc.createElement('span');
+  container.appendChild(nameLine);
  }
- codeLine.textContent='Clave ABC: '+key;
+ nameLine.className='alerta-location-code apd-official-school-name';
+ nameLine.textContent=presentation.name;
  if(presentation.address){
   let addressLine=container.querySelector?.('.apd-official-school-address');
   if(!addressLine){

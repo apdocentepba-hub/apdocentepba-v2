@@ -71,7 +71,8 @@ test('No invented school names or localities; real supplied name is highlighted'
  assert.doesNotMatch(html,/Localidad: General San Martín/);
  html=renderOffer({nombreestablecimiento:'ESCUELA SECUNDARIA 33',localidad:'Villa Ballester'});
  assert.match(html,/ESCUELA SECUNDARIA 33/);
- assert.match(html,/Clave: 0045MS0033/);
+ assert.match(html,/alerta-school-key[^>]*>0045MS0033/);
+ assert.match(html,/apd-official-school-name[^>]*>ESCUELA SECUNDARIA 33/);
  assert.match(html,/Localidad: Villa Ballester/);
 });
 test('All feed text escaped; no hidden sensitive content or network dependency',()=>{
