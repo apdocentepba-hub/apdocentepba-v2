@@ -1,0 +1,80 @@
+{
+  "schema_version": "0.1.0",
+  "project": "APDocentePBA Observatorio Provincial",
+  "verified_at": "2026-11-14",
+  "coverage_statement": "Piloto: cuatro SAD verificadas por URL pública, portal ABC y calendario SerVaDo. NO implica cobertura de los 135 distritos.",
+  "sources": [
+    {
+      "id": "sad-avellaneda",
+      "kind": "sad_novedades",
+      "district": "Avellaneda",
+      "url": "https://abc.gob.ar/sad/avellaneda/inicio",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Portada ABC; fuentes alternativas y vigencia aún por auditar"
+    },
+    {
+      "id": "sad-almirante-brown",
+      "kind": "sad_novedades",
+      "district": "Almirante Brown",
+      "url": "https://abc.gob.ar/sad/almirante-brown/inicio",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Portada ABC con comunicados recientes visibles"
+    },
+    {
+      "id": "sad-quilmes",
+      "kind": "sad_novedades",
+      "district": "Quilmes",
+      "url": "https://abc.gob.ar/sad/quilmes/inicio",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Portada ABC muestra 2024 y referencia a Google Sites; NO asumir fuente única activa"
+    },
+    {
+      "id": "sad-general-san-martin",
+      "kind": "sad_novedades",
+      "district": "General San Martín",
+      "url": "https://abc.gob.ar/sad/general-san-martin/inicio",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Portada ABC con publicaciones 2026"
+    },
+    {
+      "id": "abc-novedades",
+      "kind": "abc_novedades",
+      "district": null,
+      "url": "https://abc.gob.ar/",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Novedades centrales de DGCyE, distinto de comunicados SAD"
+    },
+    {
+      "id": "servado-calendario",
+      "kind": "calendar_index",
+      "district": null,
+      "url": "https://servado.abc.gob.ar/calendario-inscripciones",
+      "status": "verified_page",
+      "public_data_only": true,
+      "notes": "Solo calendario público; inscripciones y datos privados excluidos"
+    }
+  ],
+  "unverified_channels": [
+    {
+      "district": "Quilmes",
+      "source": "Google Sites difundido desde SAD Quilmes",
+      "status": "requires_exact_url_verification",
+      "notes": "No construir una URL externa a partir de un enlace abreviado"
+    },
+    {
+      "scope": "resto de SAD provinciales",
+      "status": "discovery_pending",
+      "notes": "No construir 135 URLs por suposición; validar origen y actividad uno a uno"
+    },
+    {
+      "scope": "ABC autenticado, SerVaDo privado",
+      "status": "excluded",
+      "notes": "Solo Work con sesión propia y consentimiento acotado; nunca crawler con credenciales"
+    }
+  ]
+}
