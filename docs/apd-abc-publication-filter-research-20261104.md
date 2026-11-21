@@ -1,0 +1,75 @@
+# APDocentePBA — investigación del filtro ABC «Publicada»
+
+Fecha: 04/11/2026. Estado: **LABORATORIO, NO SUBIDO A CLOUDFLARE**.
+
+## Causa identificada
+
+El lector que alimenta el carrusel de APD `traerOfertasAPDDeUnDistrito` consulta distritos sin restringir el estado en Solr, lee hasta **8 páginas de 200 registros** y solo luego descarta ofertas no publicadas. El lector de correos `fetchPublishedOffersForEmailDistrict` y el barrido provincial ya incluyen en la consulta de ABC el estado **Publicada**. Es un punto de optimización específico del panel, sin justificar cambios en correos ni cron.
+
+Los valores siguientes son **mediciones del origen público**, no de cuentas autenticadas.
+
+| Distrito | Todos los estados en ABC | Publicadas en ABC | Páginas del lector actual, límite 8 | Páginas filtradas por estado |
+| --- | ---: | ---: | ---: | ---: |
+| Tigre | 9.458 | 93 | 8 | 1 |
+| Berazategui | 8.987 | 50 | 8 | 1 |
+| Villarino | 4.938 | 57 | 8 | 1 |
+
+Se comprobó mediante consultas HTTP de solo lectura que un filtro Solr **fq=estado:"Publicada"** devuelve exclusivamente registros publicados en esos distritos, además de Avellaneda y Quilmes. Para Villarino, parte de los 57 registros con estado Publicada tenían fecha de cierre vencida, por lo que **el filtro por fecha posterior sigue siendo obligatorio**.
+
+## Riesgo de omisión por paginación
+
+La lectura actual puede omitir publicaciones si sus movimientos aparecen más allá de las primeras 1.600 filas de todos los estados de un distrito. No se ha probado que esto esté ocurriendo hoy para una cuenta real.
+
+Prueba de laboratorio con las funciones extraídas del Worker: ocho páginas iniciales con estados cerrados, una publicación en una posición posterior; el lector actual no llega a esa publicación, mientras que la consulta filtrada la recupera con un GET. También se comprobó el manejo de errores HTTP 429, sin simular resultados vacíos.
+
+## Desfase del inventario provincial
+
+En la consulta de auditoría, la tabla global mantenía **3.045 filas con estado Publicada**, pero solo **500** tenían un cierre posterior al momento de la comprobación; el resto tenía un plazo vencido.
+
+Para Tigre, comparación por ID a la misma fuente pública: **93 ofertas con plazo vigente en ABC, 85 en la caché global, 84 coincidencias, 9 en ABC pero no en caché, y 1 en caché que no figuraba en el conjunto actual**. Esa comparación es puntual y puede variar por publicación o retiro de ofertas entre barridos.
+
+**No afirmar que esas nueve ofertas faltan en el panel**: se inspeccionó el Worker y el panel y el motor de correos consultan ABC directamente. El inventario provincial sirve a otros procesos de resumen e historial; debe documentarse su frescura por separado.
+
+## Candidato adicional construido, distinto al ya subido
+
+El candidato en Cloudflare con **0 % de tráfico**, versión **97ff1908-768a-474e-a83d-6f0d35da40f0**, conserva SHA-256 de fuente **6ee13869ec0d6363806e1bfc8990d529f7386b956c7bd30530f5e0109c861b6e** y **NO** incluye este nuevo filtro.
+
+Un **segundo candidato experimental, solo local al CI**, conserva los cambios de concurrencia/PID del primero y agrega **un único filtro Solr fq=estado:"Publicada"** a `traerOfertasAPDDeUnDistrito`. Su SHA-256 de fuente es **19c8ab235ca8a07fee305797ad895d9e588535f754ded12470c58f1a83f3e870**. El proceso `scripts/build-apd-published-filter-research-candidate.mjs` lo genera sin modificar la fuente canónica ni la versión 0 % existente.
+
+Evidencia: [GitHub Actions #41832394209](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41832394209) completó **4/4 pruebas de investigación** y `wrangler@4.157.0 --dry-run` del segundo candidato. La suite completa también aprobó.
+
+## Criterios antes de considerar otro upload
+
+1. Comparar respuesta completa del lector original y la versión filtrada en distritos con ofertas publicadas, a igualdad de ventana temporal, con estado y fecha de cierre.
+2. Asegurar que la normalización de distritos y los identificadores se mantengan idénticos.
+3. Conservar la distinción entre ofertas publicadas y oportunidades con plazo todavía abierto.
+4. Validar los campos de PID, cargo, nivel, turno, deduplicación y orden del carrusel.
+5. Mantener control 429, publicación en versión **0 %** únicamente bajo nueva autorización y control de 29 bindings y cuatro crons.
+6. No alterar usuarios, planes, pagos ni notificaciones al ensayar.
+
+**No hacer merge ni deploy de esta variante por los resultados anteriores solamente.** Falta una prueba autenticada de usuario de ensayo, latencia end-to-end y autorización separada para otra carga Cloudflare.
+
+
+## Validación diferencial y contraste con ABC real — segunda ronda, 04/11/2026
+
+- [CI #41833439695](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41833439695): **SUCCESS**. Cuatro pruebas contra los **dos bundles generados reales**, no contra una recreación manual del parche: hash exacto, cambio único de filtro, paridad de campos/orden/deduplicación con más de 200 publicados, rescate de una publicación posterior a 1.600 registros previos y propagación de errores HTTP 429/503. **4/4 aprobadas**.
+- [CI #41833837482](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41833837482): **SUCCESS**. Ensayo **real, anónimo y de solo lectura** desde la función efectiva del segundo bundle. Se comparó la consulta Solr mediante filtro separado de estado Publicada frente a la consulta independiente que incorpora ese estado en la expresión principal (máximo 4 GET, dos distritos). **Quilmes: 6/6** y **Tigre: 93/93** publicados, con **idénticos identificadores y campos estables**. Estos conteos describen el estado «Publicada» de la fuente y **no prueban que todas esas ofertas sigan abiertas por fecha**.
+- No se usaron credenciales ni cuentas de usuarios. No hubo cambios de base de datos, notificaciones, versiones ni tráfico en Cloudflare.
+- La prueba real controla el **contrato de recuperación de publicaciones** en dos distritos y en ese momento; no valida el resultado final de la API autenticada, coincidencia de preferencias, PID, vigencia ni el carrusel renderizado. Tampoco demuestra paridad en todos los 137 distritos ni garantiza estabilidad ante actualizaciones simultáneas de ABC.
+- La variante con filtro sigue **SIN UPLOAD Y SIN DEPLOY**; el candidato previo almacenado con **0 % de tráfico** no incluye el filtro. Continúan pendientes una prueba con cuenta propia autenticada, la medición end-to-end y la autorización específica para subir una nueva versión o cambiar tráfico.
+
+
+## Cierre de regresiones esenciales en laboratorio — 04/11/2026
+
+**Pipeline [#41835675006](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41835675006) SUCCESS:**
+- Router del Worker **generado real**, sin red, con base de datos ficticia: **4/4** por cada bundle, **8/8** en total. Rechaza bearer ausente/vencido, cuenta inactiva y sustituye un ID de usuario solicitado por el ID de la sesión autorizada.
+- Contrato de API + preferencias + carrusel: **2/2** casos por bundle, tanto el anterior ya almacenado sin tráfico como el segundo con filtro de publicaciones. El caso de plan no vigente se probó mediante funciones reales con servicios simulados, no mediante sesión productiva.
+- Compilaciones y pruebas existentes también aprobadas. Ninguna modificación en datos reales ni tráfico productivo.
+
+**Pipeline [#41836101614](https://github.com/apdocentepba-hub/apdocentepba-v2/actions/runs/41836101614) SUCCESS:**
+- Ejecutado **el router completo compilado** de los dos candidatos con una cuenta ficticia de plan PLUS, sesión de prueba, dos distritos y seis ofertas inventadas. Ambos devolvieron **exactamente las dos ofertas compatibles** por cargo, nivel y turno, con dos lecturas ABC simuladas; no se usaron credenciales ni se consultó ABC real en este test.
+- Verificado que la identidad de la sesión prevalece frente a un user_id distinto provisto por el cliente.
+- La auditoría read-only de Cloudflare volvió a confirmar versión original 100 %, 29 bindings, cuatro cron y hash canónico. No hubo despliegue, subida ni cambios de usuarios.
+- Hallazgo de rendimiento **NO resuelto aún**: cuando no existe PID almacenado, el Worker prueba siete acciones de consulta PID **una detrás de otra**; ocurrió exactamente así en ambos tests completos. Puede sumar latencia a la carga; todavía no hay medición de duración real del servicio PID con una sesión autorizada. Evitar presentar la optimización ABC como garantía del tiempo total de panel.
+
+**Alcance y bloqueo:** El flujo real de producción con una cuenta autenticada de prueba, la latencia end-to-end, el comportamiento bajo cambios de ABC durante la consulta y una revisión de los siete fallback PID siguen pendientes. El segundo candidato filtrado está **solo en el repositorio**, no subido a Cloudflare. Ninguna asignación de tráfico está autorizada por estas pruebas.

@@ -1,0 +1,316 @@
+name: APD ABC bounded Worker optimization - candidate only
+# Research regression: verify published-state filtering without changing uploaded 0%-traffic bundle.
+on:
+  pull_request:
+    paths:
+      - 'worker-live/worker_hotfix.js'
+      - 'scripts/build-apd-bounded-abc-worker-release.mjs'
+      - 'scripts/test-apd-bounded-abc-worker-release.mjs'
+      - 'scripts/benchmark-apd-bounded-abc-synthetic.mjs'
+      - 'scripts/test-apd-worker-to-carousel-contract.mjs'
+      - 'scripts/probe-apd-abc-two-districts-live-readonly.mjs'
+      - 'scripts/probe-apd-abc-status-first-page-readonly.mjs'
+      - 'scripts/probe-apd-abc-published-filter-readonly.mjs'
+      - 'scripts/test-apd-published-state-filter-research.mjs'
+      - 'scripts/test-apd-generated-filter-candidate-differential.mjs'
+      - 'scripts/test-apd-generated-worker-auth-router.mjs'
+      - 'scripts/test-apd-generated-worker-full-alert-flow.mjs'
+      - 'scripts/build-apd-pid-bounded-research-candidate.mjs'
+      - 'scripts/test-apd-bounded-pid-fallback.mjs'
+      - 'scripts/build-apd-bulk-sync-research-candidate.mjs'
+      - 'scripts/test-apd-bulk-sync-research.mjs'
+      - 'scripts/lib/apd-offer-close-guard.mjs'
+      - 'scripts/test-apd-offer-close-guard.mjs'
+      - 'scripts/lib/apd-mail-close-proof.mjs'
+      - 'scripts/build-apd-mail-close-proof-candidate.mjs'
+      - 'scripts/test-apd-mail-close-proof.mjs'
+      - 'scripts/build-apd-stored-channels-safe-candidate.mjs'
+      - 'scripts/test-apd-stored-channel-deadline-gates.mjs'
+      - 'scripts/test-apd-close-email-queue.mjs'
+      - 'scripts/probe-apd-public-abc-close-format-readonly.mjs'
+      - 'scripts/build-apd-close-safe-research-candidate.mjs'
+      - 'scripts/build-apd-final-combined-worker-candidate.mjs'
+      - 'scripts/build-apd-morning-sweep-candidate.mjs'
+      - 'scripts/test-apd-morning-sweep-candidate.mjs'
+      - 'scripts/probe-apd-final-worker-live-abc-readonly.mjs'
+      - 'scripts/probe-apd-generated-filter-live-parity-readonly.mjs'
+      - 'scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs'
+      - 'scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs'
+      - 'scripts/build-apd-published-filter-research-candidate.mjs'
+      - 'scripts/attest-apd-worker-candidate.mjs'
+      - 'scripts/check-apd-worker-live-version-readonly.mjs'
+      - 'scripts/check-apd-pid-candidate-readiness-readonly.mjs'
+      - 'scripts/test-apd-worker-live-version-readonly.mjs'
+      - 'scripts/check-apd-worker-anonymous-http-readonly.mjs'
+      - 'scripts/build-apd-worker-zero-traffic-config.mjs'
+      - 'scripts/test-apd-worker-zero-traffic-config.mjs'
+      - 'scripts/upload-apd-worker-zero-traffic-once.mjs'
+      - 'scripts/test-apd-worker-anonymous-http-readonly.mjs'
+      - '.github/workflows/apd-bounded-abc-worker-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate isolated Worker candidate from the immutable production snapshot
+        run: |
+          node --check scripts/build-apd-bounded-abc-worker-release.mjs
+          node scripts/build-apd-bounded-abc-worker-release.mjs
+          node --check tmp/apd-bounded-abc-worker-release/worker_hotfix.js
+          node --check scripts/test-apd-bounded-abc-worker-release.mjs
+      - name: Check only two functions changed and ABC parity under errors and concurrency
+        run: |
+          node --test scripts/test-apd-bounded-abc-worker-release.mjs
+      - name: Benchmark six synthetic district reads against unchanged production Worker routine
+        run: |
+          node --check scripts/benchmark-apd-bounded-abc-synthetic.mjs
+          node scripts/benchmark-apd-bounded-abc-synthetic.mjs
+      - name: Test actual Worker matched offers through API JSON to production carousel
+        run: |
+          node --check scripts/test-apd-worker-to-carousel-contract.mjs
+          node --test scripts/test-apd-worker-to-carousel-contract.mjs
+      - name: Bundle candidate with pinned Wrangler in dry-run mode; no Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.20.3 deploy tmp/apd-bounded-abc-worker-release/worker_hotfix.js --dry-run --outdir tmp/apd-bounded-abc-wrangler-dryrun --name apd-abc-bounded-candidate-check --compatibility-date 2026-04-01
+          test -d tmp/apd-bounded-abc-wrangler-dryrun
+          BUNDLE=$(find tmp/apd-bounded-abc-wrangler-dryrun -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$BUNDLE"
+          node --check "$BUNDLE"
+      - name: Validate zero-traffic upload configuration against all four canonical crons
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/build-apd-worker-zero-traffic-config.mjs
+          node --check scripts/upload-apd-worker-zero-traffic-once.mjs
+          node --test scripts/test-apd-worker-zero-traffic-config.mjs
+          node scripts/build-apd-worker-zero-traffic-config.mjs
+          npx --yes wrangler@4.20.3 deploy tmp/apd-bounded-abc-worker-release/worker_hotfix.js --config tmp/apd-bounded-abc-worker-release/wrangler.zero-traffic.toml --dry-run --outdir tmp/apd-bounded-abc-upload-config-dryrun
+      - name: Verify canonical snapshot and attest candidate SHA-256 + rollback prerequisites
+        run: |
+          node --check scripts/attest-apd-worker-candidate.mjs
+          node scripts/test-live-source-equivalence.mjs
+          node scripts/attest-apd-worker-candidate.mjs
+      - name: Verify live Cloudflare 100-percent Worker version + bindings using read-only GETs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --check scripts/check-apd-worker-live-version-readonly.mjs
+          node --test scripts/test-apd-worker-live-version-readonly.mjs
+          node scripts/check-apd-worker-live-version-readonly.mjs
+      - name: Attest existing 0-percent PID candidate bytes, resources and rollback target using GET only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --check scripts/check-apd-pid-candidate-readiness-readonly.mjs
+          node scripts/check-apd-pid-candidate-readiness-readonly.mjs
+      - name: Check live Worker anonymous 401/200 HTTP contracts using GET and OPTIONS only
+        run: |
+          node --check scripts/check-apd-worker-anonymous-http-readonly.mjs
+          node --test scripts/test-apd-worker-anonymous-http-readonly.mjs
+          node scripts/check-apd-worker-anonymous-http-readonly.mjs
+      - name: Measure two live ABC district GETs sequential vs parallel (4 GETs only, no user data)
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/probe-apd-abc-two-districts-live-readonly.mjs
+          node scripts/probe-apd-abc-two-districts-live-readonly.mjs
+      - name: Check published vs non-published statuses from two live ABC pages
+        timeout-minutes: 2
+        run: |
+          node --check scripts/probe-apd-abc-status-first-page-readonly.mjs
+          node scripts/probe-apd-abc-status-first-page-readonly.mjs
+      - name: Probe ABC published-state Solr filtering (2 read-only requests)
+        timeout-minutes: 2
+        run: |
+          node --check scripts/probe-apd-abc-published-filter-readonly.mjs
+          node scripts/probe-apd-abc-published-filter-readonly.mjs
+      - name: "Research-only ABC state query: avoid closed offers, keep published, fail on 429"
+        run: |
+          node --check scripts/test-apd-published-state-filter-research.mjs
+          node --test scripts/test-apd-published-state-filter-research.mjs
+      - name: Compile separate published-only research candidate without deploying it
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          set -euo pipefail
+          node --check scripts/build-apd-published-filter-research-candidate.mjs
+          node scripts/build-apd-published-filter-research-candidate.mjs
+          node --check tmp/apd-published-query-research/worker_hotfix.js
+          node --test scripts/test-apd-published-state-filter-research.mjs
+          node --check scripts/test-apd-generated-filter-candidate-differential.mjs
+          node --test scripts/test-apd-generated-filter-candidate-differential.mjs
+          node --check scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=bounded node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=published node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=published node --test scripts/test-apd-worker-to-carousel-contract.mjs
+          node --check scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_WORKER_VARIANT=bounded node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_WORKER_VARIANT=published node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          node --check scripts/build-apd-pid-bounded-research-candidate.mjs
+          node scripts/build-apd-pid-bounded-research-candidate.mjs
+          node --check tmp/apd-published-pid-research/worker_hotfix.js
+          node --check scripts/test-apd-bounded-pid-fallback.mjs
+          node --test scripts/test-apd-bounded-pid-fallback.mjs
+          # Separate research candidate; uploaded 0-percent PID version remains immutable.
+          node --check scripts/build-apd-bulk-sync-research-candidate.mjs
+          node scripts/build-apd-bulk-sync-research-candidate.mjs
+          node --check tmp/apd-bulk-sync-research/worker_hotfix.js
+          node --check scripts/test-apd-bulk-sync-research.mjs
+          node --test scripts/test-apd-bulk-sync-research.mjs
+          node --check scripts/lib/apd-offer-close-guard.mjs
+          node --check scripts/test-apd-offer-close-guard.mjs
+          node --test scripts/test-apd-offer-close-guard.mjs
+          node --check scripts/probe-apd-public-abc-close-format-readonly.mjs
+          node scripts/probe-apd-public-abc-close-format-readonly.mjs
+
+          node --check scripts/build-apd-close-safe-research-candidate.mjs
+          node scripts/build-apd-close-safe-research-candidate.mjs
+          node --check tmp/apd-close-safe-research/worker_hotfix.js
+          APD_TEST_WORKER_VARIANT=close node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          node --check scripts/test-apd-close-email-queue.mjs
+          node --test scripts/test-apd-close-email-queue.mjs
+          # Required release gate: same codebase must pass BOTH deadline and bulk tests.
+          node --check scripts/build-apd-final-combined-worker-candidate.mjs
+          node scripts/build-apd-final-combined-worker-candidate.mjs
+          node --check tmp/apd-ready-worker/worker_hotfix.js
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-bulk-sync-research.mjs
+          APD_TEST_FINAL_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          APD_TEST_WORKER_VARIANT=final node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          # This dry-run has no Cloudflare credentials or live traffic.
+          npx --yes wrangler@4.157.0 deploy tmp/apd-ready-worker/worker_hotfix.js --dry-run --outdir tmp/apd-ready-worker/compiled --name apd-final-all-in-one-check --compatibility-date 2026-04-01
+          BUNDLE=$(find tmp/apd-ready-worker/compiled -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$BUNDLE"
+          node --check "$BUNDLE"
+          node --check scripts/build-apd-morning-sweep-candidate.mjs
+          node scripts/build-apd-morning-sweep-candidate.mjs
+          node --check tmp/apd-morning-worker/worker_hotfix.js
+          node --check scripts/test-apd-morning-sweep-candidate.mjs
+          node --test scripts/test-apd-morning-sweep-candidate.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_MORNING_WORKER=1 node --test scripts/test-apd-close-email-queue.mjs
+          # Presentation-only safer email template, separate from the uploaded 0% Worker
+          node --check scripts/build-apd-mail-close-proof-candidate.mjs
+          node scripts/build-apd-mail-close-proof-candidate.mjs
+          node --check tmp/apd-mail-verified-worker/worker_hotfix.js
+          node --test scripts/test-apd-mail-close-proof.mjs
+          node --check scripts/build-apd-stored-channels-safe-candidate.mjs
+          node scripts/build-apd-stored-channels-safe-candidate.mjs
+          node --check tmp/apd-channel-deadline-safe-worker/worker_hotfix.js
+          node --test scripts/test-apd-stored-channel-deadline-gates.mjs
+          APD_TEST_WORKER_VARIANT=stored node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=stored node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          APD_TEST_WORKER_VARIANT=morning node --test scripts/test-apd-generated-worker-auth-router.mjs
+          node --check scripts/probe-apd-final-worker-live-abc-readonly.mjs
+          node scripts/probe-apd-final-worker-live-abc-readonly.mjs
+
+          npx --yes wrangler@4.157.0 deploy tmp/apd-morning-worker/worker_hotfix.js --dry-run --outdir tmp/apd-morning-worker/compiled --name apd-morning-offline-review --compatibility-date 2026-04-01
+          MORNING_BUNDLE=$(find tmp/apd-morning-worker/compiled -type f \( -name '*.js' -o -name '*.mjs' \) -print -quit)
+          test -n "$MORNING_BUNDLE"
+          node --check "$MORNING_BUNDLE"
+
+
+
+
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-auth-router.mjs
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-worker-to-carousel-contract.mjs
+          APD_TEST_WORKER_VARIANT=pid node --test scripts/test-apd-generated-worker-full-alert-flow.mjs
+          npx --yes wrangler@4.157.0 deploy tmp/apd-published-pid-research/worker_hotfix.js --dry-run --outdir tmp/apd-published-pid-dryrun --name apd-pid-bounded-research --compatibility-date 2026-04-01
+          npx --yes wrangler@4.157.0 deploy tmp/apd-published-query-research/worker_hotfix.js --dry-run --outdir tmp/apd-published-research-dryrun --name apd-published-state-research --compatibility-date 2026-04-01
+      - name: Confirm actual generated reader and independent ABC published query match (4 GETs max)
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/probe-apd-generated-filter-live-parity-readonly.mjs
+          node scripts/probe-apd-generated-filter-live-parity-readonly.mjs
+      - name: Confirm uploaded PID candidate source parity across six live ABC districts (12 public GETs max)
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs
+          node scripts/probe-apd-pid-candidate-live-district-parity-readonly.mjs
+      - name: Exercise final Worker alert API with real public ABC and fake in-process account
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+        run: |
+          node --check scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs
+          node scripts/probe-apd-pid-worker-live-abc-with-fake-account.mjs
+      - name: Preserve Worker source, frontend, login, plans, and database exactly
+        run: |
+          git diff --exit-code origin/main -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql
+          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js index.html auth_session_patch.js supabase sql)"
+      - name: Verify release has no direct deployment or additional secrets
+        run: |
+          node -e "const p=require('./package.json');if(!String(p.scripts['deploy:worker']).includes('direct repository deploy disabled'))process.exit(1)"
+      - name: Archive candidate code for later independent, authorized deploy review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-abc-bounded-worker-release-candidate
+          path: |
+            tmp/apd-bounded-abc-worker-release/worker_hotfix.js
+            tmp/apd-bounded-abc-worker-release/attestation.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Archive unified Worker candidate for separate release review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-final-combined-worker-candidate-offline
+          path: tmp/apd-ready-worker/worker_hotfix.js
+          if-no-files-found: error
+      - name: Archive stored-channel deadline-safe Worker with its SHA (OFFLINE only)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-stored-channel-deadline-safe-offline
+          path: |
+            tmp/apd-channel-deadline-safe-worker/worker_hotfix.js
+            tmp/apd-channel-deadline-safe-worker/attestation.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Archive safer deadline email Worker with its source SHA (OFFLINE, no deployment)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-email-deadline-verification-offline
+          path: |
+            tmp/apd-mail-verified-worker/worker_hotfix.js
+            tmp/apd-mail-verified-worker/attestation.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Archive morning-alert Worker (existing 4 crons, no deployment)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apd-morning-urgent-digest-candidate-offline
+          path: |
+            tmp/apd-morning-worker/worker_hotfix.js
+            tmp/apd-morning-worker/attestation.json
+          if-no-files-found: error
