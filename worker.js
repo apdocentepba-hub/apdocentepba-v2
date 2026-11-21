@@ -838,6 +838,163 @@ async function syncUserOfferState(env, userId, offers) {
     total_disabled: toDisable.length
   };
 }
+
+const OBS_SAD_MAX_BODY = 1024 * 1024;
+function observatorioJson(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store, max-age=0" }
+  });
+}
+function observatorioSameSecret(received, expected) {
+  if (received.length !== expected.length || !expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= received.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+async function observatorioOwner(request, env) {
+  const ownerId = String(env.OBSERVATORIO_SAD_OWNER_USER_ID || "").trim();
+  const expected = String(env.OBSERVATORIO_SAD_PRIVATE_TOKEN || "");
+  const match = request.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerId) || expected.length < 32)
+    return { response: observatorioJson({ ok: false }, 404) };
+  if (!match || !observatorioSameSecret(match[1], expected)) return { response: observatorioJson({ ok: false }, 404) };
+  return { user: { id: ownerId } };
+}
+async function observatorioBody(request) {
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > OBS_SAD_MAX_BODY) return { response: observatorioJson({ ok: false, error: "Solicitud demasiado grande" }, 413) };
+  try { return { body: JSON.parse(raw) }; }
+  catch { return { response: observatorioJson({ ok: false, error: "JSON inválido" }, 400) }; }
+}
+async function observatorioDb(env, path, rows, conflict) {
+  const query = conflict ? `?on_conflict=${encodeURIComponent(conflict)}` : "";
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}${query}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: conflict ? "resolution=merge-duplicates,return=representation" : "return=representation"
+    },
+    body: JSON.stringify(rows)
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error("database request failed");
+  return text ? JSON.parse(text) : null;
+}
+async function observatorioExistingDriveDocument(env, sourceId, driveId) {
+  const params = new URLSearchParams({
+    select: "id,extraction_status,metadata",
+    source_id: `eq.${sourceId}`,
+    drive_file_id: `eq.${driveId}`,
+    order: "captured_at.desc",
+    limit: "1"
+  });
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/knowledge_documents?${params}`, {
+    headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  if (!res.ok) throw new Error("existing document lookup failed");
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows[0] : null;
+}
+async function handleObservatorioSadSearch(request, env) {
+  if (request.method !== "POST") return observatorioJson({ ok: false, error: "Método no permitido" }, 405);
+  const auth = await observatorioOwner(request, env);
+  if (auth.response) return auth.response;
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return observatorioJson({ ok: false }, 503);
+  const parsed = await observatorioBody(request);
+  if (parsed.response) return parsed.response;
+  const q = String(parsed.body?.query || "").trim();
+  const district = parsed.body?.district_code == null ? null : String(parsed.body.district_code).slice(0, 32);
+  if (q.length < 2 || q.length > 500) return observatorioJson({ ok: false, error: "Consulta inválida" }, 400);
+  try {
+    const rows = await observatorioDb(env, "rpc/search_private_knowledge", {
+      p_owner_user_id: auth.user.id,
+      p_query: q,
+      p_district_code: district,
+      p_limit: Math.max(1, Math.min(50, Number(parsed.body?.limit) || 10))
+    }, null);
+    return observatorioJson({ ok: true, results: Array.isArray(rows) ? rows : [] });
+  } catch {
+    return observatorioJson({ ok: false, error: "No se pudo consultar la biblioteca privada" }, 502);
+  }
+}
+async function handleObservatorioSadIngest(request, env) {
+  if (request.method !== "POST") return observatorioJson({ ok: false, error: "Método no permitido" }, 405);
+  const auth = await observatorioOwner(request, env);
+  if (auth.response) return auth.response;
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return observatorioJson({ ok: false }, 503);
+  const parsed = await observatorioBody(request);
+  if (parsed.response) return parsed.response;
+  const { source = {}, document = {}, passages, ordinal_start = 0 } = parsed.body || {};
+  const sourceTypes = ["abc_central", "sad_abc", "sad_external", "drive_archive"];
+  const temporal = ["current", "historical", "superseded", "withdrawn", "uncertain"];
+  const extraction = ["pending", "text_ready", "ocr_required", "partial", "failed", "reviewed"];
+  const trim = (v, n) => String(v || "").trim().slice(0, n);
+  if (!sourceTypes.includes(source.source_type) || !trim(source.source_key, 180) || !trim(source.name, 240))
+    return observatorioJson({ ok: false, error: "Fuente inválida" }, 400);
+  if (!trim(document.stable_key, 500) || !/^[a-f0-9]{64}$/.test(String(document.version_hash || "")) ||
+      !trim(document.title, 500) || !Array.isArray(passages) || passages.length > 200 ||
+      !Number.isInteger(ordinal_start) || ordinal_start < 0 || ordinal_start > 100000)
+    return observatorioJson({ ok: false, error: "Documento inválido" }, 400);
+  let bytes = 0;
+  for (const p of passages) {
+    const text = String(p?.passage_text || "");
+    bytes += new TextEncoder().encode(text).byteLength;
+    if (!text.trim() || text.length > 8000 || (p.page_number != null && (!Number.isInteger(p.page_number) || p.page_number < 1)))
+      return observatorioJson({ ok: false, error: "Pasaje inválido" }, 400);
+  }
+  if (bytes > 850000) return observatorioJson({ ok: false, error: "Lote de texto demasiado grande" }, 413);
+  try {
+    const s = await observatorioDb(env, "knowledge_sources", {
+      owner_user_id: auth.user.id, source_key: trim(source.source_key, 180), source_type: source.source_type,
+      name: trim(source.name, 240), canonical_url: source.canonical_url ? trim(source.canonical_url, 2000) : null,
+      district_code: source.district_code ? trim(source.district_code, 32) : null,
+      district_name: source.district_name ? trim(source.district_name, 160) : null,
+      officiality: ["confirmed", "candidate", "manual"].includes(source.officiality) ? source.officiality : "candidate",
+      metadata: source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata) ? source.metadata : {}
+    }, "owner_user_id,source_key");
+    if (!Array.isArray(s) || !s[0]?.id) throw new Error("source upsert failed");
+    if (document.drive_file_id) {
+      const existing = await observatorioExistingDriveDocument(env, s[0].id, trim(document.drive_file_id, 200));
+      const oldMd5 = existing?.metadata?.drive_md5;
+      const newMd5 = document.metadata?.drive_md5;
+      if (existing && (oldMd5 ? oldMd5 === newMd5 : existing.extraction_status === "text_ready"))
+        return observatorioJson({ ok: true, skipped_existing: true, passages_upserted: 0 });
+    }
+    const d = await observatorioDb(env, "knowledge_documents", {
+      source_id: s[0].id, stable_key: trim(document.stable_key, 500), version_hash: document.version_hash,
+      title: trim(document.title, 500), document_type: document.document_type ? trim(document.document_type, 120) : null,
+      source_url: document.source_url ? trim(document.source_url, 2000) : null,
+      drive_file_id: document.drive_file_id ? trim(document.drive_file_id, 200) : null,
+      mime_type: document.mime_type ? trim(document.mime_type, 160) : null,
+      district_code: document.district_code ? trim(document.district_code, 32) : s[0].district_code,
+      district_name: document.district_name ? trim(document.district_name, 160) : s[0].district_name,
+      issuer: document.issuer ? trim(document.issuer, 240) : null,
+      issued_at: document.issued_at || null, published_at: document.published_at || null,
+      valid_from: document.valid_from || null, valid_until: document.valid_until || null,
+      temporal_status: temporal.includes(document.temporal_status) ? document.temporal_status : "uncertain",
+      extraction_status: extraction.includes(document.extraction_status) ? document.extraction_status : "text_ready",
+      page_count: Number.isInteger(document.page_count) && document.page_count > 0 ? document.page_count : null,
+      metadata: document.metadata && typeof document.metadata === "object" && !Array.isArray(document.metadata) ? document.metadata : {}
+    }, "source_id,stable_key,version_hash");
+    if (!Array.isArray(d) || !d[0]?.id) throw new Error("document upsert failed");
+    const rows = passages.map((p, ordinal) => ({
+      document_id: d[0].id, ordinal: ordinal_start + ordinal, page_number: p.page_number ?? null,
+      section_title: p.section_title ? trim(p.section_title, 300) : null,
+      passage_text: String(p.passage_text),
+      extraction_confidence: typeof p.extraction_confidence === "number" ? Math.max(0, Math.min(1, p.extraction_confidence)) : null
+    }));
+    for (let i = 0; i < rows.length; i += 100)
+      await observatorioDb(env, "knowledge_passages", rows.slice(i, i + 100), "document_id,ordinal");
+    return observatorioJson({ ok: true, document_id: d[0].id, passages_upserted: rows.length });
+  } catch {
+    return observatorioJson({ ok: false, error: "No se pudo guardar el lote privado" }, 502);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -847,6 +1004,9 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
+      if (path === `${API_URL_PREFIX}/observatorio-sad/search`) return await handleObservatorioSadSearch(request, env);
+      if (path === `${API_URL_PREFIX}/observatorio-sad/ingest`) return await handleObservatorioSadIngest(request, env);
+
 
       // ===============================
       // TESTS Y UTILIDADES
