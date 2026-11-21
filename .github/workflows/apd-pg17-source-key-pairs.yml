@@ -1,0 +1,460 @@
+name: APD PG17 Solr-id to Worker-key pair manifest (isolated)
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/apd_identity_source_key_pairs_pg17.sql'
+      - 'tests/sql/apd_server_staged_content_guard_pg17.sql'
+      - 'tests/sql/apd_executor_role_isolation_pg17.sql'
+      - 'scripts/apd-pg17-restore-fingerprints.sql'
+      - 'scripts/test-apd-restored-pg17-http.mjs'
+      - 'scripts/test-apd-pg17-backup-restore-ci.sh'
+      - 'scripts/test-apd-executor-role-pg17-http.mjs'
+      - 'scripts/test-apd-server-staged-content-pg17-http.mjs'
+      - 'scripts/test-apd-source-key-pairs-http.mjs'
+      - 'scripts/apd-global-source-pair-stage-gate.mjs'
+      - 'scripts/apd-global-projected-content-preflight-lab.mjs'
+      - 'scripts/test-apd-global-projected-content-preflight-lab.mjs'
+      - 'scripts/test-apd-worker-stage-parity-lab.mjs'
+      - 'scripts/test-apd-global-source-pair-stage-gate.mjs'
+      - 'scripts/test-apd-global-source-pairs-pg17-http.mjs'
+      - 'scripts/test-apd-pg17-concurrent-districts-http.mjs'
+      - 'tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql'
+      - 'tests/sql/apd_ci_capture_status_readonly_pg17.sql'
+      - 'scripts/test-apd-capture-response-loss-http.mjs'
+      - 'scripts/test-apd-pg17-process-restart-http.mjs'
+      - 'tests/sql/apd_ci_midflight_sleep_pg17.sql'
+      - 'scripts/test-apd-pg17-midflight-http.mjs'
+      - '.github/workflows/apd-pg17-source-key-pairs.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pair-identity-no-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: apd_ci
+          POSTGRES_PASSWORD: fake_pg17_pairs_ci_only
+          POSTGRES_DB: apd_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apd_ci -d apd_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: apd_ci
+      PGPASSWORD: fake_pg17_pairs_ci_only
+      PGDATABASE: apd_ci
+      APD_CI_FAKE_JWT_SECRET: "CI-only-identity-pairs-test-key-0123456789"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install only disposable PG17 private pilot objects
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_district_pilot_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_stage_pages_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_full_24col_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_private_rpc_gateway_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_atomic_concurrency_fence_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_identity_double_pass_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_identity_source_key_pairs_pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_ci_capture_status_readonly_pg17.sql
+      - name: Start isolated PostgREST on localhost, no Supabase credentials
+        run: |
+          docker run -d --rm --name apd-pairs-postgrest --network host \
+            -e PGRST_DB_URI="postgres://apd_ci:fake_pg17_pairs_ci_only@127.0.0.1:5432/apd_ci" \
+            -e PGRST_DB_SCHEMAS="apd_scanner_api" \
+            -e PGRST_DB_ANON_ROLE="apd_api_anon" \
+            -e PGRST_JWT_SECRET="$APD_CI_FAKE_JWT_SECRET" \
+            -e PGRST_SERVER_PORT="3300" \
+            postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
+      - name: Verify pair identity contracts, source drift, and foreign-district collision
+        run: |
+          node --check scripts/test-apd-source-key-pairs-http.mjs
+          node scripts/test-apd-source-key-pairs-http.mjs
+      - name: Verify records and permissions after foreign-district rollback
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full)<>2
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers)<>2
+              OR (SELECT count(*) FROM apd_scanner_pilot.source_id_key_pairs)<>2
+              OR (SELECT count(*) FROM apd_scanner_pilot.district_commit_fence)<>1
+              OR EXISTS (
+                SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                WHERE distrito<>'LA MATANZA')
+              OR NOT EXISTS (
+                SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                WHERE source_offer_key='D_1001' AND distrito='LA MATANZA'
+                  AND raw->>'solr_id'='SOLR_ABC_1001')
+              OR EXISTS (
+                SELECT 1 FROM apd_scanner_pilot.runs
+                WHERE run_id='00000000-0000-0000-0000-000000001252'
+                  AND status='finalized')
+              OR EXISTS (
+                SELECT 1 FROM apd_scanner_pilot.source_id_key_pairs
+                WHERE run_id='00000000-0000-0000-0000-000000001252'
+                  AND verified_at IS NULL)
+            THEN RAISE EXCEPTION 'Pair identity/cross-district atomic safety regression'; END IF;
+          END$$;
+          SELECT 'PASS: two original mapped rows preserved, zero cross-district overwrites' AS result;
+          SQL
+      - name: Inject one controlled full-row upsert failure (only disposable PG17)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_ci_cross_district_failure_trigger_pg17.sql
+      - name: Concurrent HTTP commits and cross-district collision under real PG17 locks
+        run: |
+          node --check scripts/test-apd-pg17-concurrent-districts-http.mjs
+          node scripts/test-apd-pg17-concurrent-districts-http.mjs
+      - name: Verify atomic durability of both races, with zero partial writes
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_verify$
+          DECLARE
+            v_full text;
+            v_min text;
+          BEGIN
+            SELECT distrito INTO v_full FROM apd_scanner_pilot.current_offers_full
+             WHERE source_offer_key='D_8001';
+            SELECT distrito INTO v_min FROM apd_scanner_pilot.current_offers
+             WHERE source_offer_key='D_8001';
+            IF v_full IS NULL OR v_min IS DISTINCT FROM v_full
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full)<>4
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers)<>4
+              OR (SELECT count(*) FROM apd_scanner_pilot.source_id_key_pairs)<>6
+              OR (SELECT count(*) FROM apd_scanner_pilot.runs
+                  WHERE status='finalized')<>3
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_8001')<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_8001')<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_7002' AND distrito='LA MATANZA')<>1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_7001')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_7001')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.runs
+                  WHERE run_id='00000000-0000-0000-0000-000000003001'
+                    AND status<>'ready')
+              OR (SELECT count(*) FROM apd_scanner_pilot.runs
+                  WHERE run_id IN ('00000000-0000-0000-0000-000000003003',
+                                   '00000000-0000-0000-0000-000000003004')
+                    AND status='finalized')<>1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.district_commit_fence
+                  WHERE run_id='00000000-0000-0000-0000-000000003001')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_1001' AND distrito<>'LA MATANZA')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_1001' AND distrito<>'LA MATANZA')
+            THEN
+              RAISE EXCEPTION 'Parallel district abort or same-key race caused partial/foreign writes';
+            END IF;
+          END$apd_verify$;
+          SELECT 'PASS: fault-injected run rolled back, unrelated run committed, exactly one same-key winner; no pruning' AS result;
+          SQL
+      - name: Simulate lost HTTP commit acknowledgment; inspect run without retry
+        run: |
+          node --check scripts/test-apd-capture-response-loss-http.mjs
+          node scripts/test-apd-capture-response-loss-http.mjs
+      - name: Confirm commit response-loss reconciliation preserved one durable row
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -At -c "
+          SELECT CASE
+            WHEN (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                   WHERE source_offer_key='D_9001' AND distrito='QUILMES')=1
+             AND (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                   WHERE source_offer_key='D_9001' AND distrito='QUILMES')=1
+             AND (SELECT count(*) FROM apd_scanner_pilot.current_offers_full)=5
+             AND (SELECT count(*) FROM apd_scanner_pilot.runs
+                   WHERE run_id='00000000-0000-0000-0000-000000003005'
+                     AND status='finalized')=1
+             AND (SELECT count(*) FROM apd_scanner_pilot.district_commit_fence
+                   WHERE distrito='QUILMES')=1
+             AND NOT has_function_privilege('apd_api_anon',
+                   'apd_scanner_api.capture_status(uuid)','EXECUTE')
+             THEN 'PASS' ELSE 'FAIL' END" | grep -qx PASS
+      - name: Kill actual Node worker after committed HTTP headers; restart separate process
+        run: |
+          node --check scripts/test-apd-pg17-process-restart-http.mjs
+          node scripts/test-apd-pg17-process-restart-http.mjs prepare-committing
+          set +e
+          node scripts/test-apd-pg17-process-restart-http.mjs commit-then-sigkill
+          rc=$?
+          set -e
+          if [ "$rc" -ne 137 ]; then
+            echo "Expected SIGKILL exit 137; got $rc" >&2
+            exit 1
+          fi
+          node scripts/test-apd-pg17-process-restart-http.mjs recover-finalized
+      - name: Kill actual Node worker before commit; restart must leave pending run untouched
+        run: |
+          node scripts/test-apd-pg17-process-restart-http.mjs prepare-uncommitted
+          set +e
+          node scripts/test-apd-pg17-process-restart-http.mjs sigkill-before-commit
+          rc=$?
+          set -e
+          if [ "$rc" -ne 137 ]; then
+            echo "Expected SIGKILL exit 137; got $rc" >&2
+            exit 1
+          fi
+          node scripts/test-apd-pg17-process-restart-http.mjs recover-pending
+      - name: Assert durable outcome and zero writes from interrupted pending run
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_process_restart$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full) <> 6
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers) <> 6
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9101' AND distrito='FLORENCIO VARELA') <> 1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9101' AND distrito='FLORENCIO VARELA') <> 1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9102')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9102')
+              OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.runs
+                  WHERE run_id='00000000-0000-0000-0000-000000003006'
+                    AND status='finalized')
+              OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.runs
+                  WHERE run_id='00000000-0000-0000-0000-000000003007'
+                    AND status='ready')
+              OR (SELECT count(*) FROM apd_scanner_pilot.district_commit_fence
+                  WHERE distrito='FLORENCIO VARELA')<>1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.district_commit_fence
+                  WHERE distrito='BERAZATEGUI')
+            THEN RAISE EXCEPTION 'Restart reconciliation changed durability or pending run'; END IF;
+          END
+          $apd_process_restart$;
+          SELECT 'PASS: SIGKILL process restart; finalized run once, pending run untouched, zero commit retries' AS result;
+          SQL
+      - name: Observe real PostgreSQL PgSleep, kill HTTP client during in-flight commit
+        run: |
+          node --check scripts/test-apd-pg17-midflight-http.mjs
+          node scripts/test-apd-pg17-midflight-http.mjs prepare
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_ci_midflight_sleep_pg17.sql
+          node scripts/test-apd-pg17-midflight-http.mjs send > /tmp/apd-midflight-client.log 2>&1 &
+          child=$!
+          active=0
+          for i in $(seq 1 80); do
+            if psql -X -At -c "SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+              WHERE datname=current_database() AND state='active'
+                AND wait_event='PgSleep')" | grep -qx t; then
+              active=1
+              break
+            fi
+            sleep 0.1
+          done
+          if [ "$active" -ne 1 ]; then
+            kill -9 "$child" 2>/dev/null || true
+            wait "$child" 2>/dev/null || true
+            echo "Never observed in-flight server-side PgSleep; aborting test" >&2
+            exit 1
+          fi
+          kill -9 "$child"
+          set +e
+          wait "$child"
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -ne 137 ]; then
+            echo "Child not killed via SIGKILL; exit code: $exit_code" >&2
+            exit 1
+          fi
+          echo "PASS: killed the request client while PG17 was actively processing its INSERT"
+          # Connection cancellation may rollback OR finish the server commit.
+          # Poll until the deliberately sleeping query is no longer active.
+          for i in $(seq 1 120); do
+            if psql -X -At -c "SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+              WHERE datname=current_database() AND state='active'
+                AND wait_event='PgSleep')" | grep -qx f; then break; fi
+            sleep 0.1
+          done
+          node scripts/test-apd-pg17-midflight-http.mjs recover
+      - name: Verify mid-flight kill caused either atomic rollback OR exactly one durable commit
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_midflight_verify$
+          DECLARE
+            state text;
+            a integer;
+            b integer;
+          BEGIN
+            SELECT status INTO state FROM apd_scanner_pilot.runs
+             WHERE run_id='00000000-0000-0000-0000-000000003008';
+            SELECT count(*) INTO a FROM apd_scanner_pilot.current_offers
+             WHERE source_offer_key='D_9201' AND distrito='HURLINGHAM';
+            SELECT count(*) INTO b FROM apd_scanner_pilot.current_offers_full
+             WHERE source_offer_key='D_9201' AND distrito='HURLINGHAM';
+            IF NOT ((state='ready' AND a=0 AND b=0)
+                OR (state='finalized' AND a=1 AND b=1))
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9201' AND distrito<>'HURLINGHAM')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9201' AND distrito<>'HURLINGHAM')
+            THEN RAISE EXCEPTION 'In-flight SIGKILL left partial or foreign-district write'; END IF;
+          END
+          $apd_midflight_verify$;
+          SELECT 'PASS: in-flight client SIGKILL; state reconciles with atomic row counts' AS result;
+          SQL
+      - name: Test cross-district two-pass source pair gate with no network
+        run: |
+          node --check scripts/apd-global-source-pair-stage-gate.mjs
+          node --check scripts/test-apd-global-source-pair-stage-gate.mjs
+          node --test scripts/test-apd-global-source-pair-stage-gate.mjs
+      - name: Verify projected content hashes, source identity and cross-district isolation
+        run: |
+          node --check scripts/apd-global-projected-content-preflight-lab.mjs
+          node --check scripts/test-apd-global-projected-content-preflight-lab.mjs
+          node --test scripts/test-apd-global-projected-content-preflight-lab.mjs
+      - name: Compare staging projections with actual bundled Worker functions
+        run: |
+          node --check scripts/test-apd-worker-stage-parity-lab.mjs
+          node --test scripts/test-apd-worker-stage-parity-lab.mjs
+      - name: Stage and commit globally audited fictitious source pairs via disposable PostgREST
+        run: |
+          node --check scripts/test-apd-global-source-pairs-pg17-http.mjs
+          node scripts/test-apd-global-source-pairs-pg17-http.mjs
+      - name: Verify the two globally gated commits are atomic, district-safe and non-pruning
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_global_keys$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402'))<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key IN ('D_9401','D_9402'))<>2
+               OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9401' AND distrito='MORENO')
+               OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9402' AND distrito='TIGRE')
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                    AND (idoferta IS DISTINCT FROM 'FAKE_'||source_offer_key
+                         OR cargo IS DISTINCT FROM 'INFORMATICA'
+                         OR area IS DISTINCT FROM 'LABORATORIO'
+                         OR nivel_modalidad IS DISTINCT FROM 'TECNICA'
+                         OR escuela IS DISTINCT FROM 'ESCUELA FICTICIA'
+                         OR turno IS DISTINCT FROM 'TM' OR (raw IS NOT NULL AND raw IS DISTINCT FROM 'null'::jsonb)))<>0
+               OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                    AND estado='Publicada')<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.runs
+                  WHERE run_id IN ('00000000-0000-0000-0000-000000009401',
+                                   '00000000-0000-0000-0000-000000009402')
+                  AND status='finalized')<>2
+               OR (SELECT count(*) FROM apd_scanner_pilot.source_id_key_pairs
+                  WHERE run_id IN ('00000000-0000-0000-0000-000000009401',
+                                   '00000000-0000-0000-0000-000000009402')
+                  AND verified_at IS NOT NULL)<>2
+               OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key IN ('D_9401','D_9402')
+                  AND (distrito NOT IN ('MORENO','TIGRE')
+                       OR (source_offer_key='D_9401' AND distrito<>'MORENO')
+                       OR (source_offer_key='D_9402' AND distrito<>'TIGRE')))
+            THEN RAISE EXCEPTION 'Global preflight to atomic PG17 staging failed'; END IF;
+          END
+          $apd_global_keys$;
+          SELECT 'PASS: global pairs staged across two districts, twice verified, no collision or prune' AS result;
+          SQL
+      - name: Enable mandatory server-side content guard after baseline legacy scenarios
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_server_staged_content_guard_pg17.sql
+          sleep 2
+      - name: Prove direct PostgREST bypass and tampering cannot commit
+        run: |
+          node --check scripts/test-apd-server-staged-content-pg17-http.mjs
+          node scripts/test-apd-server-staged-content-pg17-http.mjs
+      - name: Verify durable rows and rejected attempts after server-side guard
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_server_guard$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009601'
+                    AND verified_at IS NOT NULL)<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9601' AND distrito='PERGAMINO'
+                    AND cargo='INFORMATICA' AND escuela='ESCUELA DE PRUEBA'
+                    AND turno='MANANA'
+                    AND (raw IS NULL OR raw='null'::jsonb))<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9601' AND distrito='PERGAMINO')<>1
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9602')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9602')
+              OR NOT EXISTS (SELECT 1 FROM apd_scanner_pilot.runs
+                  WHERE run_id='00000000-0000-0000-0000-000000009602'
+                    AND status='ready')
+              OR EXISTS (SELECT 1 FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009602')
+              OR has_function_privilege('apd_api_anon',
+                  'apd_scanner_api.register_staged_content(uuid,jsonb)','EXECUTE')
+              OR has_function_privilege('apd_api_authenticated',
+                  'apd_scanner_api.revalidate_staged_content(uuid,jsonb)','EXECUTE')
+            THEN RAISE EXCEPTION 'Server staged-content guard rollback or privileges failed'; END IF;
+          END
+          $apd_server_guard$;
+          SELECT 'PASS: guarded PG17 commit preserved only verified sanitized row, bypass rejected' AS result;
+          SQL
+      - name: Remove direct private SQL access from scanner JWT role
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/apd_executor_role_isolation_pg17.sql
+          sleep 2
+      - name: Verify hardened PostgREST RPC remains functional and rejects bypass
+        run: |
+          node --check scripts/test-apd-executor-role-pg17-http.mjs
+          node scripts/test-apd-executor-role-pg17-http.mjs
+      - name: Assert role-isolated durable row and zero foreign writes
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $apd_executor$
+          BEGIN
+            IF (SELECT count(*) FROM apd_scanner_pilot.current_offers_full
+                  WHERE source_offer_key='D_9701' AND distrito='AZUL'
+                    AND cargo='INFORMATICA' AND turno='TARDE'
+                    AND (raw IS NULL OR raw='null'::jsonb))<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.current_offers
+                  WHERE source_offer_key='D_9701' AND distrito='AZUL')<>1
+              OR (SELECT count(*) FROM apd_scanner_pilot.source_payload_manifests
+                  WHERE run_id='00000000-0000-0000-0000-000000009701'
+                    AND verified_at IS NOT NULL)<>1
+              OR has_table_privilege('apd_api_scanner',
+                  'apd_scanner_pilot.full_staged_payloads','UPDATE')
+              OR has_table_privilege('apd_api_scanner',
+                  'apd_scanner_pilot.source_payload_manifests','SELECT')
+              OR has_schema_privilege('apd_api_scanner',
+                  'apd_scanner_pilot','USAGE')
+              OR pg_has_role('apd_api_scanner','apd_ci_executor','MEMBER')
+            THEN RAISE EXCEPTION 'Isolated executor privilege or durable row failed'; END IF;
+          END
+          $apd_executor$;
+          SELECT 'PASS: scanner has no direct SQL access, only restricted RPC, atomic result preserved' AS result;
+          SQL
+      - name: Create custom PG17 backup, restore separate DB, compare every table and exercise guarded RPC
+        run: |
+          bash -n scripts/test-apd-pg17-backup-restore-ci.sh
+          bash scripts/test-apd-pg17-backup-restore-ci.sh
+      - name: Assert no production source, frontend, SQL or Supabase changes
+        run: git diff --exit-code origin/main -- worker-live/worker_hotfix.js index.html app_v2.js sql supabase
+      - name: Stop disposable PostgREST
+        if: always()
+        run: docker rm -f apd-pairs-postgrest || true
