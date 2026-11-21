@@ -1,0 +1,35 @@
+name: APD ABC exact-key LIVE read-only lab (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-mobile-abc-exact-lookup-readonly-lab.mjs'
+      - 'scripts/test-apd-mobile-abc-exact-lookup-readonly-lab.mjs'
+      - 'scripts/run-apd-mobile-abc-exact-lookup-readonly.mjs'
+      - '.github/workflows/apd-mobile-abc-live-readonly-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public code without persisting GitHub authentication
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify synthetic ABC audit privacy and bounded reads first
+        run: |
+          node --check scripts/apd-mobile-abc-exact-lookup-readonly-lab.mjs
+          node --check scripts/run-apd-mobile-abc-exact-lookup-readonly.mjs
+          node --test scripts/test-apd-mobile-abc-exact-lookup-readonly-lab.mjs
+      - name: Verify a single published ABC sample and exact-key lookup
+        env:
+          CI: '1'
+        run: node scripts/run-apd-mobile-abc-exact-lookup-readonly.mjs
+      - name: Prevent any edits to the deployed Worker and web files
+        run: |
+          git diff --exit-code -- worker.js index.html app_v2.js auth_session_patch.js
