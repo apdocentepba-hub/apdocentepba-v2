@@ -320,7 +320,7 @@ document.addEventListener('DOMContentLoaded',function(){
  let accountScheduleClient=null,scheduleLoading=false;
  // Career candidate: do not connect to production before storage and authenticated QA.
  const accountCareerReleaseEnabled=false;
- let accountCareerClient=null,careerCoordinator=null,careerLoading=false;
+ let accountCareerClient=null,careerCoordinator=null,careerLoading=false,careerSchoolCatalog=null;
  const resetCareer=()=>{careerCoordinator?.reset();accountCareerClient=null;const host=document.getElementById('apd-perfil-carrera');if(host){host.hidden=true;host.replaceChildren();}};
  const accountFavoritesReleaseEnabled=true;
  let accountFavoriteClient=null,favoriteLoading=false;
@@ -367,7 +367,8 @@ document.addEventListener('DOMContentLoaded',function(){
   }
   if(accountCareerReleaseEnabled&&!accountCareerClient&&!careerLoading){
    careerLoading=true;
-   Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261124-career2'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261124-career2')]).then(([{createCareerClient},{createCareerPanelCoordinator}])=>{
+   Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261124-career2'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261124-career2'),import('./scripts/apd-career-school-loader.mjs?v=20261124-career2'),import('./scripts/apd-career-school-manifest.mjs?v=20261124-career2')]).then(async ([{createCareerClient},{createCareerPanelCoordinator},{loadReviewedSchoolCatalog},{CAREER_SCHOOL_MANIFEST}])=>{
+    try{careerSchoolCatalog=await loadReviewedSchoolCatalog({manifest:CAREER_SCHOOL_MANIFEST,origin:window.location.origin});}catch(_){careerSchoolCatalog=null;}
     careerLoading=false;
     if(dashboardLoadedOwner!==owner||obtenerToken()!==owner||readBearer()!==bearer||planActual?.access_active!==true){sync();return;}
     careerCoordinator=createCareerPanelCoordinator();
@@ -375,7 +376,7 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{careerLoading=false;});
   }
-  if(accountCareerReleaseEnabled&&careerCoordinator){careerCoordinator.sync({enabled:true,host:document.getElementById('apd-perfil-carrera'),plan:planActual,client:accountCareerClient,scheduleClient:accountScheduleClient,getPlan:()=>planActual,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true});}
+  if(accountCareerReleaseEnabled&&careerCoordinator){careerCoordinator.sync({enabled:true,host:document.getElementById('apd-perfil-carrera'),plan:planActual,client:accountCareerClient,scheduleClient:accountScheduleClient,schoolCatalog:careerSchoolCatalog,getPlan:()=>planActual,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true});}
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
   if(typeof window.APD_offerSchoolMapRefresh==='function'){
