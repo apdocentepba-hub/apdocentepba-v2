@@ -4,7 +4,7 @@ import {hasInsignePlannerAccess} from './apd-insigne-planner-entitlement.mjs';
 export function createCareerPanelCoordinator(){
  let mounted=null;
  function reset(){mounted?.dispose();if(mounted)mounted.host.hidden=true;mounted=null;}
- function sync({enabled,host,plan,client,scheduleClient,isCurrent,getPlan=()=>plan}){
+ function sync({enabled,host,plan,client,scheduleClient,schoolCatalog=null,isCurrent,getPlan=()=>plan}){
   if(!enabled||!host||!hasInsignePlannerAccess(plan)||!client||!scheduleClient||!isCurrent()){
    reset();if(host){host.hidden=true;host.replaceChildren();}return;
   }
@@ -19,7 +19,7 @@ export function createCareerPanelCoordinator(){
   }
   host.hidden=false;
   const valid=()=>current()&&isCurrent()&&hasInsignePlannerAccess(getPlan());
-  const dispose=mountCareerEditor(host,{client,legacyModules:schedule.modules,isCurrent:valid});
+  const dispose=mountCareerEditor(host,{client,legacyModules:schedule.modules,schoolCatalog,isCurrent:valid});
   mounted={host,client,current:valid,dispose,signature:JSON.stringify(schedule.modules),root:host.firstElementChild};
  }
  return Object.freeze({sync,reset});
