@@ -1546,7 +1546,17 @@ try{
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
  for(const p of pending.values()){clearTimeout(p.t);p.reject(Error('Browser stopping'));}
- pending.clear();ws?.close();browser.kill('SIGTERM');
+ pending.clear();ws?.close();
+ // Chrome may still be flushing its profile when the parent receives SIGTERM.
+ // Wait for actual child termination, then retry only transient filesystem errors.
+ if(browser.exitCode===null&&browser.signalCode===null){
+  await new Promise(resolve=>{
+   const finish=()=>{clearTimeout(timer);resolve();};
+   browser.once('close',finish);
+   const timer=setTimeout(()=>{browser.kill('SIGKILL');},5000);
+   browser.kill('SIGTERM');
+  });
+ }
  await new Promise(resolve=>server.close(resolve));
- await sleep(200);rmSync(profile,{recursive:true,force:true});
+ rmSync(profile,{recursive:true,force:true,maxRetries:10,retryDelay:200});
 }
