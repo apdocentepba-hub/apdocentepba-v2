@@ -32,4 +32,14 @@ function demoCounters(offers,saved){
  return {matching:Array.isArray(offers)?offers.length:0,
  saved:new Set(Array.isArray(saved)?saved:[]).size,pushReceived:0};
 }
-module.exports={DEMO_OFFERS,DISTRICTS,SHIFTS,filterDemoOffers,toggleSaved,demoCounters};
+const SCHOOLS=Object.freeze([...new Set(DEMO_OFFERS.map(o=>o.escuela))]);
+function toggleDemoSchool(schools,school){
+ const set=new Set(Array.isArray(schools)?schools.filter(x=>SCHOOLS.includes(x)):[]);
+ if(SCHOOLS.includes(school)){if(set.has(school))set.delete(school);else set.add(school);}
+ return [...set];
+}
+function prioritizeDemoOffers(offers,schools,only=false){
+ const fav=new Set(Array.isArray(schools)?schools.filter(x=>SCHOOLS.includes(x)):[]);
+ return (Array.isArray(offers)?offers:[]).filter(o=>o&&(!only||fav.has(o.escuela))).map((offer,index)=>({offer,index,priority:fav.has(offer.escuela)?1:0})).sort((a,b)=>b.priority-a.priority||a.index-b.index).map(x=>x.offer);
+}
+module.exports={DEMO_OFFERS,DISTRICTS,SHIFTS,SCHOOLS,filterDemoOffers,toggleSaved,demoCounters,toggleDemoSchool,prioritizeDemoOffers};
