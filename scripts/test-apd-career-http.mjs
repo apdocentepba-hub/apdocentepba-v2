@@ -127,13 +127,26 @@ try{
    calls:diaryContractCalls
   }));
   diaryContractCalls=null;
-  if(write.ok){
+  assert.equal(write.status,200,'The deployed diary must accept the fixture write');
+  {
    const browserFetch=(url,init)=>invoke(url,{...init,headers:{...init.headers,Origin:trustedOrigin}});
    const diaryFor=token=>createApplicationDiaryClient({base:workerOrigin,getToken:()=>token,fetcher:browserFetch});
    const restored=await diaryFor(newTokenA).reload();
    assert.equal(restored.entries.find(entry=>entry.key===set.key)?.status,set.status);
    assert.deepEqual((await diaryFor(tokenB).reload()).entries,[]);
-   const removed=await diaryFor(newTokenA).mutate({action:'remove',key:set.key,revision:restored.revision});
+   const unauthenticatedWrite=await diaryRequest(null,set);
+   assert.equal(unauthenticatedWrite.status,401);
+   const contest=await Promise.all([
+    diaryRequest(tokenA,{...set,status:'en_evaluacion',revision:restored.revision}),
+    diaryRequest(newTokenA,{...set,status:'retirada',revision:restored.revision})
+   ]);
+   const statuses=contest.map(response=>response.status).sort();
+   console.log('APD_DEPLOYED_DIARY_CONCURRENT_WRITE '+JSON.stringify(statuses));
+   assert.deepEqual(statuses,[200,409],'The active route must reject a stale concurrent write');
+   const winner=(await contest.find(response=>response.ok).json()).diary;
+   const current=await diaryFor(newTokenA).reload();
+   assert.deepEqual(current,winner);
+   const removed=await diaryFor(newTokenA).mutate({action:'remove',key:set.key,revision:current.revision});
    assert.deepEqual(removed.entries,[]);
    console.log('APD_DEPLOYED_DIARY_BROWSER_CLIENT_PASS_WITH_FIXTURE');
   }
