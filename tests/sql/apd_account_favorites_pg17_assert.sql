@@ -22,7 +22,7 @@ BEGIN
  UPDATE public.user_favorite_offers SET keys=ARRAY['D_3'],revision=2 WHERE user_id=a AND revision=1;
  GET DIAGNOSTICS n=ROW_COUNT; IF n<>0 THEN RAISE EXCEPTION 'Stale CAS accepted'; END IF;
  IF EXISTS(SELECT FROM public.user_favorite_offers WHERE user_id=b) THEN RAISE EXCEPTION 'Wrong owner'; END IF;
- FOR bad IN SELECT v FROM (VALUES (ARRAY['x','x']), (ARRAY['x',NULL]), (ARRAY['']), (ARRAY[E'x\n']), (ARRAY['../x/']), (ARRAY[repeat('x',161)]), (array_fill('x',ARRAY[51])), ('[0:0]={x}'::text[]), (ARRAY[['a','b'],['c','d']])) AS q(v) LOOP
+ FOR bad IN SELECT v FROM (VALUES (ARRAY['x','x']), (ARRAY['x',NULL]), (ARRAY['']), (ARRAY[E'x\n']), (ARRAY['../x/']), (ARRAY[repeat('x',161)]), (array_fill('x'::text,ARRAY[51])), ('[0:0]={x}'::text[]), (ARRAY[['a','b'],['c','d']])) AS q(v) LOOP
   BEGIN
    INSERT INTO public.user_favorite_offers(user_id,keys,revision) VALUES(b,bad,1);
    RAISE EXCEPTION 'Invalid keys accepted';
