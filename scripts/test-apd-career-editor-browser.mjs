@@ -4,6 +4,7 @@ import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {spawn,spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {once} from 'node:events';
 const chrome=['google-chrome','chromium','chromium-browser'].find(x=>spawnSync('which',[x]).status===0);
 assert.ok(chrome,'Chromium required');
 const page=`<!doctype html><meta charset="utf-8"><div id="host"></div><pre id="result">RUNNING</pre><script type="module">
@@ -75,9 +76,23 @@ try{
  check(!Object.hasOwn(rows.get('A').profile.positions[0],'classification'),'classification not stored as personal data or legal confirmation');
  coordinator.reset();
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
-}catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}</script>`;
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}
+await fetch('/__career_result',{method:'POST',body:document.querySelector('#result').textContent});
+</script>`;
 import {CAREER_SCHOOL_MANIFEST} from './apd-career-school-manifest.mjs';
-const server=createServer((req,res)=>{
+let report;
+const resultPromise=new Promise(resolve=>{report=resolve;});
+const server=createServer(async (req,res)=>{
+ if(req.method==='POST'&&req.url==='/__career_result'){
+  let result='';
+  for await(const chunk of req){
+   result+=chunk;
+   if(result.length>2000){res.writeHead(413);return res.end();}
+  }
+  res.writeHead(204);res.end();
+  report(result);
+  return;
+ }
  if(req.url==='/'+CAREER_SCHOOL_MANIFEST.path){
   res.writeHead(200,{'Content-Type':'application/json'});
   return res.end(readFileSync(CAREER_SCHOOL_MANIFEST.path));
@@ -88,14 +103,25 @@ const server=createServer((req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const profile=mkdtempSync(join(tmpdir(),'apd-career-browser-'));
+const child=spawn(chrome,[
+ '--headless','--no-sandbox','--disable-dev-shm-usage','--disable-gpu',
+ '--no-first-run','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+'/'
+],{stdio:['ignore','ignore','pipe']});
+let stderr='';
+child.stderr.on('data',chunk=>{stderr=(stderr+chunk).slice(-1500);});
+const closed=once(child,'close');
+let timer;
 try{
- const output=await new Promise((resolve,reject)=>{
-  const child=spawn(chrome,['--headless','--no-sandbox','--disable-dev-shm-usage','--disable-gpu','--no-first-run','--virtual-time-budget=12000','--dump-dom','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+'/'],{stdio:['ignore','pipe','pipe']});
-  let out='',err='';child.stdout.on('data',x=>out+=x);child.stderr.on('data',x=>err+=x);
-  const timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error('Chromium timeout'));},45000);
-  child.on('error',e=>{clearTimeout(timer);reject(e);});
-  child.on('close',code=>{clearTimeout(timer);if(code!==0)reject(Error(err.slice(-1500)));else resolve(out);});
- });
- const result=output.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
+ const result=await Promise.race([
+  resultPromise,
+  closed.then(([code])=>{throw Error('Chromium closed before reporting ('+code+'): '+stderr);}),
+  new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Chromium did not report within 45 seconds: '+stderr)),45000);})
+ ]);
  assert.equal(result,'APD_CAREER_CHROMIUM_PASS');console.log(result);
-}finally{server.close();rmSync(profile,{recursive:true,force:true,maxRetries:10,retryDelay:200});}
+}finally{
+ clearTimeout(timer);
+ child.kill('SIGKILL');
+ await closed.catch(()=>{});
+ server.close();
+ rmSync(profile,{recursive:true,force:true,maxRetries:10,retryDelay:200});
+}
