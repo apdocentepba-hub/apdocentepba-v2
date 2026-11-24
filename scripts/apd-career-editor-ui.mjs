@@ -1,6 +1,7 @@
 /** Candidate UI: injected account client, no automatic migration or network. */
 import {cleanCareer} from './apd-career-account-core.mjs';
 import {validateModuleSchedule} from './apd-account-schedule-core.mjs';
+import {payrollCapReview} from './apd-career-statutory-pay.mjs';
 const days=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const palette=['#3669a4','#137b67','#8756a7','#ac6228','#526f83','#a24168'];
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
@@ -14,13 +15,13 @@ export function mountCareerEditor(host,{client,legacyModules=[],schoolCatalog=nu
  const heading=el('h3','Mi carrera docente');const note=el('p','Cargos con horarios exactos. La grilla anterior se conserva; los módulos sin asignar quedan señalados.','apd-comparator-hint');
  const status=el('p','Recuperando carrera…');status.setAttribute('role','status');
  const form=el('form'),years=input('number');years.min='0';years.max='80';years.step='1';years.required=true;
- const rows=el('div'),grid=el('div',undefined,'apd-career-grid'),summary=el('p');
+ const rows=el('div'),grid=el('div',undefined,'apd-career-grid'),summary=el('p'),payReview=el('div',undefined,'apd-career-pay-review');
  const add=button('Agregar cargo',()=>{if(current()&&!busy){addRow();dirty=true;preview();}});
  const reload=button('Recuperar carrera',()=>void load(false));
  const discard=button('Descartar borrador y recuperar',()=>void load(true));discard.hidden=true;
  const verify=button('Comprobar último guardado',()=>void verifySave());verify.hidden=true;
  const save=el('button','Guardar carrera','btn btn-primary');save.type='submit';
- form.append(field('Antigüedad reconocida (años)',years),rows,add,summary,grid,save);root.append(heading,note,reload,discard,verify,form,status);host.replaceChildren(root);
+ form.append(field('Antigüedad reconocida (años)',years),rows,add,summary,payReview,grid,save);root.append(heading,note,reload,discard,verify,form,status);host.replaceChildren(root);
  let busy=false,dirty=false,loaded=false,serial=0,uncertain=null,conflict=false;
  const session=client?.captureSession?.()||(()=>false);
  const current=()=>root.isConnected&&isCurrent()&&session();
@@ -34,6 +35,13 @@ export function mountCareerEditor(host,{client,legacyModules=[],schoolCatalog=nu
   const positions=[...rows.children].map(n=>n.read());
   const assigned=new Map();positions.forEach((p,i)=>p.modules.forEach(m=>{const a=assigned.get(m)||[];a.push(i);assigned.set(m,a);}));
   summary.textContent=positions.length+' cargos · '+legacy.filter(m=>!assigned.has(m)).length+' módulos anteriores sin asignar';
+  payReview.replaceChildren();
+  try{
+   const review=payrollCapReview({positions});
+   payReview.append(el('p',review.totals.cargo+' cargos · '+review.totals.modulo+' módulos · '+review.totals.hora_catedra+' horas cátedra'));
+   for(const w of review.warnings)payReview.append(el('p',w.text,'apd-comparator-hint'));
+   if(review.warnings.length){const link=el('a','Consultar criterios de SUTEBA');link.href=review.source;link.target='_blank';link.rel='noopener noreferrer';payReview.append(link);}
+  }catch{payReview.append(el('p','Completá las cantidades remunerativas.','apd-comparator-hint'));}
   const table=el('table',undefined,'apd-schedule-grid');table.setAttribute('aria-label','Módulos por cargo');
   const h=table.createTHead().insertRow();for(const t of ['Turno / módulo',...days])h.append(el('th',t));
   const body=table.createTBody();
