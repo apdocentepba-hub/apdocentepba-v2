@@ -4,6 +4,9 @@ on:
     paths:
       - 'docs/sql/APD_APPLICATION_DIARY*'
       - 'scripts/*account-diary*'
+      - 'apd_comparador_panel.mjs'
+      - 'index.html'
+      - 'scripts/test-apd-comparador-browser.mjs'
       - 'scripts/*application-diary*'
       - 'tests/sql/*application_diary*'
       - '.github/workflows/apd-application-diary-storage-candidate.yml'
@@ -46,3 +49,4 @@ jobs:
           node scripts/build-account-diary-worker-candidate.mjs
           node --check tmp/apd-account-diary/worker-diary-candidate.mjs
           node scripts/test-apd-account-diary-full-worker.mjs
+      - run: node scripts/test-apd-comparador-browser.mjs

@@ -51,6 +51,52 @@ async function favoriteOperation(action,key){
  }catch(error){if(epoch===favoriteEpoch&&client===accountFavorites)favoriteMessage=String(error?.message||'No se pudo confirmar la operación');}
  finally{if(epoch===favoriteEpoch&&client===accountFavorites){favoriteBusy=false;syncCurrentButton();render();}}
 }
+let diaryModeActive=false,diaryAccount=null,diaryEpoch=0,diaryBusy=false,diaryOpen=false,diaryMessage='';
+const diaryStatuses=[['sin_confirmar','Sin confirmar'],['postulada','Postulada'],['en_evaluacion','En evaluación'],['adjudicada','Adjudicada'],['no_adjudicada','No adjudicada'],['retirada','Retirada']];
+function clearDiary(){
+ diaryAccount?.reset();diaryAccount=null;diaryModeActive=false;diaryEpoch++;diaryBusy=false;diaryOpen=false;diaryMessage='';
+}
+async function diaryOperation(action,key,status){
+ const client=diaryAccount,epoch=diaryEpoch;
+ if(!client||!state.enabled||!state.privatePlannerAllowed||diaryBusy)return;
+ diaryBusy=true;diaryOpen=true;diaryMessage='';render();
+ try{
+  if(action==='reload')await client.reload();else await client.mutate(action,key,status);
+  if(epoch===diaryEpoch&&client===diaryAccount)diaryMessage=action==='reload'?'Registro cargado.':'Registro actualizado.';
+ }catch(error){if(epoch===diaryEpoch&&client===diaryAccount)diaryMessage=String(error?.message||'No se pudo confirmar la operación');}
+ finally{if(epoch===diaryEpoch&&client===diaryAccount){diaryBusy=false;render();}}
+}
+function renderDiary(){
+ const section=node('details','apd-application-diary');section.open=diaryOpen;
+ const record=diaryAccount?.peek()??null;
+ section.appendChild(node('summary','apd-work-summary','Mis postulaciones'+(record?' ('+record.entries.length+')':'')));
+ section.appendChild(node('p','apd-comparator-hint','Registro personal autodeclarado. No postula, retira ni confirma adjudicaciones en ABC.'));
+ const reload=button('Cargar / actualizar registro',()=>{if(section.isConnected)void diaryOperation('reload');});
+ reload.disabled=!diaryAccount||diaryBusy;section.appendChild(reload);
+ const message=node('p','apd-favorite-status',diaryBusy?'Consultando tu cuenta…':diaryMessage||(!record?'Cargá tu registro para comenzar.':''));
+ message.setAttribute('role','status');section.appendChild(message);
+ function editor(key,status,label,existing){
+  const row=node('article','apd-diary-row apd-favorite-row');row.appendChild(node('strong','',label));
+  if(existing)row.appendChild(node('p','apd-comparator-hint','Estado declarado por vos · '+diaryStatuses.find(x=>x[0]===status)?.[1]));
+  const select=node('select','apd-work-input');select.setAttribute('aria-label','Estado de '+label);
+  for(const [value,title] of diaryStatuses){const option=node('option','',title);option.value=value;select.appendChild(option);}
+  select.value=status;select.disabled=diaryBusy;
+  const save=button(existing?'Actualizar estado':'Registrar oferta',()=>{if(section.isConnected)void diaryOperation('set',key,select.value);});
+  save.disabled=diaryBusy;row.append(select,save);
+  if(existing){const remove=button('Quitar del registro',()=>{if(section.isConnected)void diaryOperation('remove',key);});remove.disabled=diaryBusy;row.appendChild(remove);}
+  return row;
+ }
+ if(record){
+  const key=offerKey(state.current);
+  if(key&&!record.entries.some(e=>e.key===key))section.appendChild(editor(key,'sin_confirmar','Oferta actual: '+titleFor(state.current),false));
+  for(const e of record.entries){
+   const offer=state.available.find(o=>offerKey(o)===e.key);
+   section.appendChild(editor(e.key,e.status,offer?titleFor(offer):'Oferta '+e.key,true));
+  }
+  if(!record.entries.length&&!key)section.appendChild(node('p','apd-comparator-hint','Todavía no registraste postulaciones. Elegí una oferta del carrusel cuando esté disponible.'));
+ }
+ section.addEventListener('toggle',()=>{if(section.isConnected)diaryOpen=section.open;});return section;
+}
 let recommendOpen=false,recommendDistrict='',recommendTurn='',recommendSort='cierre',recommendGroup='',recommendLimit=10;
 const safeKey=key=>/^[A-Za-z0-9_.:|-]{1,160}$/.test(key);
 const codePattern=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/;
@@ -725,9 +771,10 @@ function render(){
  if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
- root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count())));
+ root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count()||diaryModeActive)));
  if(root.hidden)return;
  if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
+ if(state.privatePlannerAllowed&&diaryModeActive)root.appendChild(renderDiary());
  if(!state.available.length)return;
  if(state.privatePlannerAllowed){root.appendChild(renderRecommendations());root.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
  const head=node('div','apd-comparator-head');
@@ -948,7 +995,7 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null,diaryMode=false,diaryClient=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
@@ -957,6 +1004,9 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  const nextMode=entitled&&favoriteMode===true;
  const nextClient=nextMode?favoriteClient:null;
  if(nextMode!==permanentFavorites||nextClient!==accountFavorites){clearAccountFavorites();favorites.clear();favoritesOpen=false;favoriteMessage='';permanentFavorites=nextMode;accountFavorites=nextClient;}
+ const nextDiary=entitled&&diaryMode===true;
+ const nextDiaryClient=nextDiary?diaryClient:null;
+ if(nextDiary!==diaryModeActive||nextDiaryClient!==diaryAccount){clearDiary();diaryModeActive=nextDiary;diaryAccount=nextDiaryClient;}
  state.privatePlannerAllowed=entitled;
  const historyHost=document.getElementById('apd-personal-history');
  if(!entitled||!enabled)clearPersonalHistory();
@@ -993,6 +1043,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ clearDiary();
  clearAccountFavorites();
  profileScheduleClient=null;
  clearPersonalHistory();
