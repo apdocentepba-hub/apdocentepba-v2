@@ -392,7 +392,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-career2')
+   import('./apd_comparador_panel.mjs?v=20261124-diary1')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }

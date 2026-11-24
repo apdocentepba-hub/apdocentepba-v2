@@ -1504,6 +1504,35 @@ try{
  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,'Career projection never writes legacy timetable');
  await js('window.__careerFilterCurrent=false;true');
  assert.deepEqual(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan).map(o=>o.source_offer_key)'),[],'Revoked career scope cannot certify availability');
+ await js(`(()=>{
+  window.APD_comparatorRefresh({offers:[{source_offer_key:'D_901',descripcioncargo:'Matemática de ensayo'}],enabled:true,planInfo:window.__careerFilterPlan});
+  const diary=document.querySelector('.apd-application-diary');
+  diary.open=true;
+  diary.querySelectorAll('select')[1].value='postulada';
+  diary.querySelector('form').requestSubmit();
+  return true;
+ })()`);
+ assert.match(await js('document.querySelector(".apd-application-diary li").textContent'),/Matemática de ensayo · Postulada/);
+ await js('window.APD_comparatorRefresh({offers:[],enabled:true,planInfo:window.__careerFilterPlan});true');
+ assert.match(await js('document.querySelector(".apd-application-diary li").textContent'),/Matemática de ensayo · Postulada/);
+ await js(`(()=>{
+  const diary=document.querySelector('.apd-application-diary');
+  diary.querySelectorAll('select')[1].value='adjudicada';
+  diary.querySelector('form').requestSubmit();
+  return true;
+ })()`);
+ assert.match(await js('document.querySelector(".apd-application-diary li").textContent'),/Adjudicada/);
+ await js('document.querySelector(".apd-application-diary li button").click();true');
+ assert.match(await js('document.querySelector(".apd-application-diary summary").textContent'),/\(0\)/);
+ await js(`(()=>{
+  window.APD_comparatorRefresh({offers:[{source_offer_key:'D_902'}],enabled:true,planInfo:window.__careerFilterPlan});
+  document.querySelector('.apd-application-diary form').requestSubmit();
+  window.APD_comparatorReset();
+  window.APD_comparatorRefresh({offers:[{source_offer_key:'D_902'}],enabled:true,planInfo:window.__careerFilterPlan});
+  return true;
+ })()`);
+ assert.match(await js('document.querySelector(".apd-application-diary summary").textContent'),/\(0\)/);
+ results.push({application_diary_ui:true,filtered_offers_retained:true,session_reset:true});
  await js('window.APD_comparatorReset();true');
  assert.equal(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan)'),null,'Reset clears private career context');
  results.push({confirmed_career_filter:true,career_revocation:true,legacy_storage_untouched:true});
