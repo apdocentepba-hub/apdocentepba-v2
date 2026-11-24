@@ -56,3 +56,15 @@ test('storage failure or invalid acknowledgment fails closed',async()=>{
  f.deps.read=async()=>{throw Error('database');};
  assert.equal((await handle(req(),f.deps)).status,503);
 });
+
+test('key cannot end with newline or contain other control characters',()=>{
+ for(const key of ['D_1\n','D_1\r','D_1\t','', 'a'.repeat(161)])assert.throws(()=>validateFavoriteMutation({action:'add',key,revision:0}));
+});
+test('last valid revision remains readable and idempotent, never overflows',async()=>{
+ const f=fixture();f.rows.set('A',{keys:['D_1'],revision:Number.MAX_SAFE_INTEGER-1});
+ assert.equal((await handle(put('add','D_2',Number.MAX_SAFE_INTEGER-1),f.deps)).status,200);
+ assert.equal((await handle(req(),f.deps)).body.favorites.revision,Number.MAX_SAFE_INTEGER);
+ assert.equal((await handle(put('add','D_2',Number.MAX_SAFE_INTEGER),f.deps)).status,200);
+ assert.equal((await handle(put('remove','D_1',Number.MAX_SAFE_INTEGER),f.deps)).status,409);
+ assert.equal(f.writes(),1);
+});

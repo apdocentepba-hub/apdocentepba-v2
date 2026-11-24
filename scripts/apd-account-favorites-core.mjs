@@ -1,10 +1,10 @@
 /** Candidate only: private favorite identity set; no browser-supplied offer metadata. */
 export const FAVORITE_LIMIT=50;
 export function validateFavoriteKey(key){
- if(typeof key!=='string'||!/^[A-Za-z0-9_.:|-]{1,160}$/.test(key))throw Error('Identificador inválido');
+ if(typeof key!=='string'||key.length<1||key.length>160||/[^A-Za-z0-9_.:|-]/.test(key))throw Error('Identificador inválido');
  return key;
 }
-function validRevision(n){return Number.isSafeInteger(n)&&n>=0&&n<2147483647;}
+function validRevision(n){return Number.isSafeInteger(n)&&n>=0&&n<=Number.MAX_SAFE_INTEGER;}
 export function validateFavoriteRow(row){
  if(row===null)return {keys:[],revision:0};
  if(!row||!validRevision(row.revision)||row.revision===0||!Array.isArray(row.keys)||row.keys.length>FAVORITE_LIMIT)throw Error('Registro inválido');
@@ -50,6 +50,7 @@ export async function accountFavoritesRequest(request,deps){
   }else{
    if(!keys.delete(input.key))return reply(200,{ok:true,favorites:row});
   }
+  if(row.revision===Number.MAX_SAFE_INTEGER)return fail(409,'Revisión agotada; contactá soporte');
   const next=[...keys].sort();
   const saved=await deps.compareAndSet(owner.id,{keys:next,revision:row.revision});
   if(saved===null)return fail(409,'Los favoritos cambiaron. Volvé a cargar.');
