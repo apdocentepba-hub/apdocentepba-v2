@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -30,7 +30,7 @@ test('access gated by active authenticated plan and reset when session changes',
  assert.match(ui,/hasInsignePlannerAccess\(planInfo\)/);
  assert.match(ui,/if\(!entitled\)clearPrivatePlanner\(\)/);
  assert.match(ui,/state\.privatePlannerAllowed\?loadPrivatePlanner\(\)/);
- assert.doesNotMatch(app,/APD_comparatorRefresh|APD_comparatorReset|apd_comparador_panel/);
+ assert.doesNotMatch(app,/APD_comparatorRefresh|apd_comparador_panel/);
 });
 test('selection never uses array index or missing ID as official identity',()=>{
  assert.match(ui,/offer\?\.source_offer_key/);
@@ -133,4 +133,35 @@ test('saved and verified account home enables automatic ABC lookup and inline mo
  assert.match(ui,/maybeAutoVerifySchools\(\);/);
  assert.match(ui,/if\(state\.privatePlannerAllowed\)/);
  assert.doesNotMatch(ui,/navigator\.geolocation|getCurrentPosition/);
+});
+
+test('filtro horario conserva solo ofertas verificables que encajan con toda la jornada', async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const {checkScheduleOverlap}=await import('./apd-mi-jornada-comparador.mjs');
+ const window={};
+ let profile={jobs:[{school:'Escuela A',days:[1],start:'08:00',end:'12:00'}],travelGapMinutes:30};
+ const start=ui.indexOf('window.APD_filterAlertsBySchedule=');
+ const end=ui.indexOf('window.APD_renderAlertScheduleControls=',start);
+ assert.ok(start>=0&&end>start);
+ runInNewContext(ui.slice(start,end),{
+  window,checkScheduleOverlap,loadPrivatePlanner:()=>profile,hasInsignePlannerAccess:Boolean
+ });
+ const offers=[
+  {horario:'MARTES 08:00 A 09:00'},
+  {horario:'LUNES 09:00 A 11:00'},
+  {horario:'LUNES 12:10 A 13:00'},
+  {dias_horarios:'LUNES 09:00 A 11:00',horario:'MARTES 09:00 A 11:00'},
+  {horario:'A confirmar'}
+ ];
+ assert.deepEqual(window.APD_filterAlertsBySchedule(offers,true),offers.slice(0,1));
+ assert.equal(window.APD_filterAlertsBySchedule(offers,false),null);
+ profile={jobs:[]};
+ assert.equal(window.APD_filterAlertsBySchedule(offers,true),null);
+});
+
+test('la grilla semanal se monta en Mi cuenta aunque no haya ofertas',()=>{
+ assert.match(app,/setHTML\("panel-datos-docente", `[\s\S]*?<div id="apd-perfil-horarios"><\/div>/);
+ assert.match(app,/APD_renderProfileSchedule\?\.\(planInfo\)/);
+ assert.match(html,/offers\.length\|\|document\.getElementById\('apd-perfil-horarios'\)/);
+ assert.match(ui,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*host\.replaceChildren/);
 });

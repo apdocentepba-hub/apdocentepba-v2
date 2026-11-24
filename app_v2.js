@@ -23,6 +23,13 @@ const alertasState = {
   index: 0
 };
 window.alertasState = alertasState;
+let todasLasAlertas = [];
+let filtrarPorJornada = false;
+
+window.APD_setAlertScheduleFilter = activo => {
+  filtrarPorJornada = activo === true;
+  mostrarAlertasFiltradas();
+};
 
 /* ===== ADMIN ===== */
 const ADMIN = {
@@ -407,8 +414,11 @@ function borrarToken() {
   dashboardLoadedOwner = null;
   tokenMem = null;
   localStorage.removeItem(TOKEN_KEY);
+  todasLasAlertas = [];
+  filtrarPorJornada = false;
   alertasState.items = [];
   alertasState.index = 0;
+  window.APD_renderAlertScheduleControls?.({ total: 0 });
   window.APD_adminAccessConfirmed = false;
   ADMIN.enabled = false;
   ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
@@ -977,14 +987,26 @@ async function obtenerMisAlertas(userId) {
   const data = await workerFetchJson(
     `/api/mis-alertas?user_id=${encodeURIComponent(userId)}`
   );
-  return filtrarAlertasVigentes(Array.isArray(data?.resultados) ? data.resultados : []);
+  if (!Array.isArray(data?.resultados)) {
+    throw new Error("El Worker no devolvió una lista de alertas válida");
+  }
+  return filtrarAlertasVigentes(data.resultados);
 }
 
 function renderAlertasAPD(alertas) {
   // Do not retain or render alert details for a non-entitled account.
-  alertasState.items = planActual?.access_active === false
+  todasLasAlertas = planActual?.access_active === false
     ? []
     : filtrarAlertasVigentes(alertas);
+  mostrarAlertasFiltradas();
+}
+
+function mostrarAlertasFiltradas() {
+  const compatibles = filtrarPorJornada
+    ? window.APD_filterAlertsBySchedule?.(todasLasAlertas, planActual)
+    : null;
+  filtrarPorJornada = Array.isArray(compatibles);
+  alertasState.items = filtrarPorJornada ? compatibles : todasLasAlertas;
   alertasState.index = 0;
   renderAlertaActual();
 }
@@ -1349,6 +1371,10 @@ function renderAlertaActual() {
 
   if (!box) return;
 
+  window.APD_renderAlertScheduleControls?.({
+    planInfo: planActual, total: todasLasAlertas.length, visible: total, active: filtrarPorJornada
+  });
+
   if (badge) {
     if (total) {
       badge.textContent = String(total);
@@ -1382,6 +1408,10 @@ function renderAlertaActual() {
   }
 
   if (!total) {
+    if (filtrarPorJornada) {
+      box.innerHTML = '<div class="empty-state" role="status">Ninguna alerta tiene un horario verificable que encaje con tu jornada. Podés volver a ver todas.</div>';
+      return;
+    }
     box.innerHTML = `
       <div class="empty-state">
         <p>No hay alertas compatibles todavía.</p>
@@ -1805,7 +1835,10 @@ async function cargarDashboard() {
     return;
   }
   if (dashboardLoadedOwner !== token) {
+    window.APD_comparatorReset?.();
     dashboardLoadedOwner = token;
+    todasLasAlertas = [];
+    filtrarPorJornada = false;
     alertasState.items = [];
     alertasState.index = 0;
     ["panel-datos-docente", "panel-preferencias-resumen", "panel-estadisticas",
@@ -1863,6 +1896,9 @@ async function cargarDashboard() {
       }
       if (!result.ok) {
         console.error("ERROR ALERTAS:", result.error);
+        todasLasAlertas = [];
+        filtrarPorJornada = false;
+        window.APD_renderAlertScheduleControls?.({ total: 0 });
         alertasState.items = [];
         alertasState.index = 0;
         const panel = document.getElementById("panel-alertas");
@@ -1949,7 +1985,10 @@ function renderDashboard(data) {
     <p><strong>Email:</strong> ${esc(doc.email || "-")}</p>
     <p><strong>Celular:</strong> ${esc(doc.celular || "-")}</p>
     <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Inactivo"}</p>
+    <div id="apd-perfil-horarios"></div>
   `);
+
+  window.APD_renderProfileSchedule?.(planInfo);
 
   setHTML("panel-preferencias-resumen", `
     <p><strong>Distritos:</strong> ${esc(distritos)}</p>

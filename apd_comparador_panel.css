@@ -542,3 +542,9 @@ body.apd-dark .apd-offer-fit-title{color:#eaf2ff}
 body.apd-dark .apd-offer-fit-reasons,body.apd-dark .apd-offer-fit-note{
  color:#d7e5f6!important}
 @media(max-width:600px){.apd-offer-fit{padding:10px 11px}}
+
+.apd-schedule-grid-scroll{overflow-x:auto;max-width:100%}
+.apd-schedule-grid{border-collapse:collapse;width:100%;white-space:nowrap}
+.apd-schedule-grid th,.apd-schedule-grid td{padding:4px;text-align:center}
+.apd-schedule-grid input[type="text"]{min-width:8rem}
+.apd-schedule-grid input[type="time"]{min-width:6.75rem}

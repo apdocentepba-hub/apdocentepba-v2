@@ -4,7 +4,7 @@
  * (text and optional Georef point) is persisted via APD_accountHome.
  * Address suggestions contact Georef Argentina only by user action/opt-in.
  */
-import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS} from './apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS,MAX_WORK_BLOCKS} from './apd-mi-jornada-comparador.mjs?v=20261124-grilla';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
 import {resolvePlannerAccountHomeWrite} from './apd-account-home-write-policy.mjs?v=20261112-keepgeo1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
@@ -105,7 +105,7 @@ function makeWorkRow(initial={},remove){
  removeBtn.type='button';
  removeBtn.addEventListener('click',()=>remove(row));
  row.appendChild(removeBtn);
- row._apdInputs={school,schoolKey,days,start,end};
+ row._apdInputs={school,schoolKey,days,start,end,period:initial.period};
  return row;
 }
 export function createPrivatePlannerForm({onChanged}={}){
@@ -284,7 +284,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  const status=element('p','apd-work-status');
  status.setAttribute('role','status');
  const addRow=initial=>{
-  if(rows.children.length>=5){status.textContent='Máximo cinco jornadas.';return}
+  if(rows.children.length>=MAX_WORK_BLOCKS){status.textContent='Máximo '+MAX_WORK_BLOCKS+' bloques horarios.';return}
   rows.appendChild(makeWorkRow(initial,row=>row.remove()));
  };
  saved.jobs.forEach(addRow);
@@ -327,10 +327,10 @@ export function createPrivatePlannerForm({onChanged}={}){
   try{
    clearTimeout(homeAutoTimer);
    const jobs=[...rows.children].map(row=>{
-    const {school,schoolKey,days,start,end}=row._apdInputs;
+    const {school,schoolKey,days,start,end,period}=row._apdInputs;
     const selected=[...days.querySelectorAll('input:checked')].map(x=>Number(x.value));
     return {school:school.value,schoolKey:schoolKey.value,days:selected,
-     start:start.value,end:end.value};
+     start:start.value,end:end.value,period};
    });
    if(homeLocation&&homeLocation.scope!=='exacta'&&!reviewCheck.checked)
     throw Error('Revisá el punto en Maps y marcá la confirmación antes de guardar.');
@@ -368,6 +368,97 @@ export function createPrivatePlannerForm({onChanged}={}){
    if(isCurrent())onChanged?.();
   }catch(error){status.textContent=String(error.message||'Datos inválidos')}
   finally{save.disabled=false;}
+ });
+ details.appendChild(form);
+ return details;
+}
+
+export function createWeeklyScheduleForm({onChanged}={}){
+ const profile=loadPrivatePlanner();
+ const generation=privacyGeneration;
+ const labels=['Prehora','1.ª hora','2.ª hora','3.ª hora','4.ª hora','5.ª hora'];
+ const details=element('details','apd-work-planner');
+ details.appendChild(element('summary','apd-work-summary','Mi carga horaria'));
+ const form=element('form','apd-work-form');
+ form.appendChild(element('p','apd-comparator-hint',
+  'Marcá las horas ocupadas y cargá su horario real. Si un bloque cambia según el día o el turno, agregá otra fila. Se conserva en esta pestaña.'));
+ const scroll=element('div','apd-schedule-grid-scroll');
+ const table=element('table','apd-schedule-grid');
+ const head=table.createTHead().insertRow();
+ for(const label of ['Hora','Desde','Hasta','Escuela',...WEEKDAYS.map(day=>day.name.slice(0,3))]){
+  const cell=element('th','',label);
+  cell.scope='col';
+  head.appendChild(cell);
+ }
+ const body=table.createTBody();
+ const fields=[];
+ const status=element('p','');
+ status.setAttribute('role','status');
+
+ function addBlock(job={}){
+  if(fields.length>=MAX_WORK_BLOCKS){
+   status.textContent='Máximo '+MAX_WORK_BLOCKS+' bloques horarios.';
+   return;
+  }
+  const label=labels[fields.length]||'Bloque '+(fields.length+1);
+  const row=body.insertRow();
+  const heading=element('th','',label);
+  heading.scope='row';
+  row.appendChild(heading);
+  const start=input('time',job.start||'');
+  const end=input('time',job.end||'');
+  const school=input('text',job.school||'',120);
+  school.placeholder='Opcional';
+  for(const [field,name] of [[start,'Desde'],[end,'Hasta'],[school,'Escuela']]){
+   field.setAttribute('aria-label',label+' · '+name);
+   row.insertCell().appendChild(field);
+  }
+  const checks=WEEKDAYS.map(day=>{
+   const check=input('checkbox',String(day.id));
+   check.checked=job.days?.includes(day.id)??false;
+   check.setAttribute('aria-label',label+' · '+day.name);
+   row.insertCell().appendChild(check);
+   return check;
+  });
+  fields.push({start,end,school,checks,originalSchool:job.school,schoolKey:job.schoolKey});
+ }
+ const blocks=[];
+ for(const job of profile.jobs){
+  const period=job.period;
+  if(Number.isInteger(period)&&!blocks[period])blocks[period]=job;
+ }
+ for(const job of profile.jobs){
+  if(blocks.includes(job))continue;
+  const free=Array.from({length:MAX_WORK_BLOCKS},(_,index)=>index).find(index=>!blocks[index]);
+  blocks[free]=job;
+ }
+ for(let index=0;index<Math.max(labels.length,blocks.length);index++)addBlock(blocks[index]);
+ scroll.appendChild(table);
+ form.appendChild(scroll);
+ const add=element('button','btn btn-secondary','Agregar bloque');
+ add.type='button';
+ add.addEventListener('click',()=>addBlock());
+ const save=element('button','btn btn-primary','Guardar horarios');
+ save.type='submit';
+ form.append(add,save,status);
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  if(generation!==privacyGeneration)return;
+  const jobs=fields.flatMap(({start,end,school,checks,originalSchool,schoolKey},period)=>{
+   const days=checks.filter(check=>check.checked).map(check=>Number(check.value));
+   if(!days.length)return [];
+   const name=school.value.trim()||'Ocupado';
+   return [{start:start.value,end:end.value,school:name,days,period,
+    schoolKey:name===originalSchool?schoolKey:undefined}];
+  });
+  try{
+   savePrivatePlanner({...loadPrivatePlanner(),jobs});
+  }catch(error){
+   status.textContent=error.message;
+   return;
+  }
+  status.textContent='Horarios guardados.';
+  onChanged?.();
  });
  details.appendChild(form);
  return details;
