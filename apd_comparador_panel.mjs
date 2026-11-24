@@ -636,7 +636,7 @@ function renderRecommendations(){
  const section=node('details','apd-recommendations');section.open=recommendOpen;
  section.appendChild(node('summary','apd-work-summary','Ofertas recomendadas para vos'));
  section.appendChild(node('p','apd-comparator-hint','Orden orientativo de tus alertas visibles. Primero coincidencias observadas de horario y PID; después datos por revisar; al final cruces detectados. No certifica elegibilidad, traslado, sueldo ni adjudicación.'));
- const tools=node('div','apd-comparator-tools');
+ const tools=node('div','apd-recommendation-tools');
  const options=field=>[...new Set(state.available.map(x=>String(x[field]||'').trim()).filter(Boolean))].sort().map(v=>[v,v]);
  if(recommendDistrict&&!options('distrito').some(([v])=>v===recommendDistrict))recommendDistrict='';
  if(recommendTurn&&!options('turno').some(([v])=>v===recommendTurn))recommendTurn='';
