@@ -121,3 +121,18 @@ test("same trusted inputs create deterministic event keys",()=>{
  assert.notEqual(first[0].event_key,
   buildMobilePushCandidates(plan({hmacSecret:"ANOTHER_FAKE_SECRET_0123456789_abcdefghijklmno"}))[0].event_key);
 });
+
+test("favorite school takes priority under device cap but does not bypass matching",()=>{
+ const ordinary={...offer,source_offer_key:"ABC:DEMO:101",school_key:"0005MS0003",school_identity_verified:true};
+ const favorite={...offer,source_offer_key:"ABC:DEMO:102",school_key:"0005MS0004",school_identity_verified:true};
+ const options={verifiedFavoriteSchools:{user_id:user,keys:["0005MS0004"]},serverMatchedOffers:[ordinary,favorite],maxPerDevice:1};
+ const selected=buildMobilePushCandidates(plan(options));
+ const expected=buildMobilePushCandidates(plan({serverMatchedOffers:[favorite]}));
+ assert.deepEqual(selected,expected);
+ const fallback=buildMobilePushCandidates(plan({...options,serverMatchedOffers:[ordinary,{...favorite,compatible:false}]}));
+ assert.deepEqual(fallback,buildMobilePushCandidates(plan({serverMatchedOffers:[ordinary]})));
+ for(const changes of [{verifiedFavoriteSchools:{user_id:otherUser,keys:["0005MS0004"]}},{serverMatchedOffers:[ordinary,{...favorite,school_identity_verified:false}]},{serverMatchedOffers:[ordinary,{...favorite,expires_at:NOW}]}]){
+  assert.deepEqual(buildMobilePushCandidates(plan({...options,...changes})),buildMobilePushCandidates(plan({serverMatchedOffers:[ordinary]})));
+ }
+ assert.ok(!JSON.stringify(selected).includes("0005MS0004"));
+});
