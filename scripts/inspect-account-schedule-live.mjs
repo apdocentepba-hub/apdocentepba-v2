@@ -46,6 +46,12 @@ if(modules.length!==1||!/^[-a-zA-Z0-9_]+\.(?:js|mjs)$/.test(String(modules[0]?.n
 const source=Buffer.from(modules[0].content_base64,'base64');
 const code=source.toString('utf8');
 if(code.includes(handler))throw Error('Candidate endpoint already present in active source');
+if(target==='career'){
+ const sourceLines=code.split('\n');
+ const diaryRoutes=sourceLines.filter(line=>line.includes('/account/application-diary')).length;
+ const genericWriteGuard=sourceLines.filter(line=>line.includes('Volv')&&line.includes('a consultar')&&line.includes('confirmar')).length;
+ console.log('APD_ACTIVE_ACCOUNT_ROUTE_CHECK '+JSON.stringify({diaryRoutes,genericWriteGuard}));
+}
 if(source.length<100000||source.length>3000000||
  !code.includes('getSessionUserByBearer')||
  !code.includes('handleAccountProfileSecureV1')||
