@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-career-*.mjs'
+      - 'scripts/apd-application-diary*.mjs'
+      - 'docs/sql/APD_APPLICATION_DIARY_CANDIDATE.sql'
       - 'scripts/apd_school_catalog_import.py'
       - 'scripts/test_apd_school_catalog_import.py'
       - 'scripts/test-apd-career-account.mjs'
@@ -91,6 +93,7 @@ jobs:
           createdb apd_career_http
           psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f tests/sql/apd_career_http_fixture.sql
           psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql
+          psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f docs/sql/APD_APPLICATION_DIARY_CANDIDATE.sql
           docker run -d --rm --name apd-career-http --network host \
             -e PGRST_DB_URI=postgres://postgres:test_only@127.0.0.1:5432/apd_career_http \
             -e PGRST_DB_ANON_ROLE=service_role -e PGRST_DB_SCHEMAS=public \

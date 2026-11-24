@@ -10,9 +10,11 @@ const bundle=[
  'const {validateModuleSchedule}=(()=>{'+strip('apd-account-schedule-core.mjs')+'\nreturn {validateModuleSchedule};})();',
  'const {validateCareerProfile,projectCareerSchedule}=(()=>{'+strip('apd-career-profile-core.mjs')+'\nreturn {validateCareerProfile,projectCareerSchedule};})();',
  'const {cleanCareer,validateCareerRecord,careerAccountRequest}=(()=>{'+strip('apd-career-account-core.mjs')+'\nreturn {cleanCareer,validateCareerRecord,careerAccountRequest};})();',
+ strip('apd-application-diary.mjs'),
+ strip('apd-application-diary-account.mjs'),
  strip('apd-career-account-storage.mjs')
 ].join('\n');
-const handler='\nconst apdCareerCandidateV1=(()=>{\n'+bundle+'\nreturn {careerAccountRequest,createCareerStorage};\n})();\n'+String.raw`
+const handler='\nconst apdCareerCandidateV1=(()=>{\n'+bundle+'\nreturn {careerAccountRequest,createCareerStorage,diaryAccountRequest,createDiaryStorage};\n})();\n'+String.raw`
 function apdCareerCorsV1(request,response){
  const origin=request.headers.get('Origin'),headers=new Headers(response?.headers);
  headers.delete('Access-Control-Allow-Credentials');headers.delete('Access-Control-Allow-Origin');
@@ -22,15 +24,17 @@ function apdCareerCorsV1(request,response){
  if(origin==='https://alertasapd.com.ar')headers.set('Access-Control-Allow-Origin',origin);
  return new Response(response?.body??null,{status:response?.status??204,headers});
 }
-async function handleAccountCareerSecureV1(request,env){
+async function hasAccountCareerAccessV1(env,id){
+ const p=await resolverPlanUsuario(env,id);
+ return isPlanActivo(p)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(p?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(p?.subscription?.status||'').toUpperCase());
+}
+async function handleAccountCareerSecureV1(request,env,diary=false){
  try{
-  const storage=apdCareerCandidateV1.createCareerStorage({base:env.SUPABASE_URL,serviceKey:env.SUPABASE_SERVICE_ROLE_KEY});
-  const result=await apdCareerCandidateV1.careerAccountRequest(request,{
+  const {createDiaryStorage,createCareerStorage,diaryAccountRequest,careerAccountRequest}=apdCareerCandidateV1;
+  const storage=(diary?createDiaryStorage:createCareerStorage)({base:env.SUPABASE_URL,serviceKey:env.SUPABASE_SERVICE_ROLE_KEY});
+  const result=await (diary?diaryAccountRequest:careerAccountRequest)(request,{
    authenticate:req=>getSessionUserByBearer(env,req),
-   entitled:async id=>{
-    const p=await resolverPlanUsuario(env,id);
-    return isPlanActivo(p)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(p?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(p?.subscription?.status||'').toUpperCase());
-   },
+   entitled:id=>hasAccountCareerAccessV1(env,id),
    read:storage.read,compareAndSet:storage.compareAndSet
   });
   return apdCareerCorsV1(request,json2(result.body,result.status));
@@ -42,8 +46,8 @@ const route='    if (path === API_URL_PREFIX3 + "/account/preferences") {';
 const fetchMark='async fetch(request, env, ctx) {';
 const routePosition=source.indexOf(route),fetchPosition=source.lastIndexOf(fetchMark,routePosition);
 if(routePosition<0||fetchPosition<0||routePosition-fetchPosition>16000||source.includes('handleAccountCareerSecureV1')||source.split(mark).length!==2||source.split(route).length!==2)throw Error('Baseline drift');
-const addedRoute='    if (path === API_URL_PREFIX3 + "/account/career") {\n      return await handleAccountCareerSecureV1(request, env);\n    }\n';
-const optionsRoute='\n    if (request.method === "OPTIONS" && new URL(request.url).pathname === API_URL_PREFIX3 + "/account/career") return apdCareerCorsV1(request);\n';
+const addedRoute='    if (path === API_URL_PREFIX3 + "/account/career") {\n      return await handleAccountCareerSecureV1(request, env);\n    }\n    if (path === API_URL_PREFIX3 + "/account/application-diary") {\n      return await handleAccountCareerSecureV1(request, env, true);\n    }\n';
+const optionsRoute='\n    if (request.method === "OPTIONS" && [API_URL_PREFIX3 + "/account/career", API_URL_PREFIX3 + "/account/application-diary"].includes(new URL(request.url).pathname)) return apdCareerCorsV1(request);\n';
 const at=fetchPosition+fetchMark.length;
 const candidate=(source.slice(0,at)+optionsRoute+source.slice(at)).replace(mark,()=>handler+mark).replace(route,addedRoute+route);
 if(candidate.replace(handler,'').replace(addedRoute,'').replace(optionsRoute,'')!==source)throw Error('Unrelated drift');

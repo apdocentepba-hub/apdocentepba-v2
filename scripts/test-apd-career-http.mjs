@@ -90,6 +90,29 @@ try{
  await runtime.setOptions(options(candidatePath));
  assert.deepEqual(await newSession.reload(),saved,'restoring the candidate preserves account A');
  assert.deepEqual(await b.reload(),other,'restoring the candidate preserves account B');
+ const diaryURL=workerOrigin+'/api/account/application-diary';
+ const diaryRequest=(token,mutation)=>invoke(diaryURL,{
+  method:mutation?'PUT':'GET',
+  headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},
+  body:mutation?JSON.stringify(mutation):undefined
+ });
+ async function diaryResult(response,status=200){
+  assert.equal(response.status,status);
+  return response.json();
+ }
+ assert.equal((await diaryRequest(null)).status,401);
+ const set={action:'set',key:'D_121',status:'postulada',revision:0};
+ const race=await Promise.all([diaryRequest(tokenA,set),diaryRequest(tokenA,{...set,status:'retirada'})]);
+ assert.deepEqual(race.map(response=>response.status).sort(),[200,409]);
+ const {diary:storedDiary}=await diaryResult(race.find(response=>response.status===200));
+ assert.equal(storedDiary.revision,1);
+ assert.equal(storedDiary.entries[0].origin,'self_reported');
+ assert.deepEqual((await diaryResult(await diaryRequest(tokenB))).diary,{entries:[],revision:0});
+ assert.deepEqual((await diaryResult(await diaryRequest(newTokenA))).diary,storedDiary);
+ assert.equal((await diaryRequest(tokenB,{...set,user_id:'11111111-1111-4111-8111-111111111111'})).status,400);
+ const {diary:removed}=await diaryResult(await diaryRequest(newTokenA,{action:'remove',key:'D_121',revision:1}));
+ assert.deepEqual(removed,{entries:[],revision:2});
+ console.log('APD_DIARY_WORKERD_PASS: stored, recovered, isolated, stale write rejected, record removed');
  console.log('APD_CAREER_WORKERD_PASS: CORS, password login, new session, separate accounts, stale revision, Worker rollback and recovery');
 }finally{
  await runtime.dispose();

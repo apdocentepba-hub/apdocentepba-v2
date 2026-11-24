@@ -1,6 +1,8 @@
 /** Worker-only adapter; service credential never leaves backend. */
 import {cleanCareer,validateCareerRecord} from './apd-career-account-core.mjs';
-export function createCareerStorage({base,serviceKey,fetcher=(url,init)=>globalThis.fetch(url,init)}){
+import {validateDiaryRecord} from './apd-application-diary-account.mjs';
+
+function createAccountRest({base,serviceKey,fetcher=(url,init)=>globalThis.fetch(url,init)}){
  const url=new URL(base);
  if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash||typeof serviceKey!=='string'||!serviceKey)throw Error('Invalid storage configuration');
  const owner=id=>{if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))throw Error('Invalid owner');return id.toLowerCase();};
@@ -12,6 +14,11 @@ export function createCareerStorage({base,serviceKey,fetcher=(url,init)=>globalT
   if(!response.ok)throw Error('Storage unavailable');
   const data=await response.json();if(!Array.isArray(data)||data.length>1)throw Error('Unexpected storage response');return data;
  }
+ return {owner,rows};
+}
+
+export function createCareerStorage(options){
+ const {owner,rows}=createAccountRest(options);
  return Object.freeze({
   async read(id){
    id=owner(id);
@@ -29,6 +36,28 @@ export function createCareerStorage({base,serviceKey,fetcher=(url,init)=>globalT
    const result=validateCareerRecord(row);
    if(result.revision!==revision+1||JSON.stringify(result.profile)!==JSON.stringify(profile))throw Error('Unconfirmed storage');
    return result;
+  }
+ });
+}
+
+export function createDiaryStorage(options){
+ const {owner,rows}=createAccountRest(options);
+ return Object.freeze({
+  async read(id){
+   id=owner(id);
+   const q=new URLSearchParams({select:'user_id,entries,revision',user_id:'eq.'+id,limit:'2'});
+   const [row]=await rows('user_application_diary?'+q,{method:'GET'});
+   if(!row)return null;
+   if(row.user_id!==id||!Number.isInteger(row.revision)||row.revision<1)throw Error('Invalid stored diary');
+   return validateDiaryRecord(row);
+  },
+  async compareAndSet(id,record){
+   const {entries,revision}=validateDiaryRecord(record);
+   if(revision<1)throw Error('Invalid revision');
+   const [row]=await rows('rpc/apd_application_diary_cas',{
+    method:'POST',body:JSON.stringify({p_user:owner(id),p_entries:entries,p_revision:revision-1})
+   });
+   return row??null;
   }
  });
 }
