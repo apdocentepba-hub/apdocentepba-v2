@@ -1,0 +1,38 @@
+name: APD application diary private storage candidate
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_APPLICATION_DIARY*'
+      - 'tests/sql/*application_diary*'
+      - '.github/workflows/apd-application-diary-storage-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PostgreSQL ACL, malformed inputs and concurrent CAS
+        env:
+          PGPASSWORD: fixture-only
+        run: |
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_default_acl.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_APPLICATION_DIARY_CANDIDATE.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_application_diary_assert.sql
+          bash tests/sql/test_apd_application_diary_race.sh
