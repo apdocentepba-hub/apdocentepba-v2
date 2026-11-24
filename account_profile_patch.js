@@ -93,6 +93,7 @@
   }
 
   function editableInput(id, label, value, type = 'text', autocomplete = '') {
+    if (!state.editingProfile) return `<div class="apd-account-read"><span>${esc(label)}</span><strong>${esc(value || 'Sin completar')}</strong></div>`;
     return `
       <div class="field">
         <label for="${id}">${label}</label>
@@ -120,14 +121,17 @@
 
   function buildAccountMarkup() {
     const docente = state.profile || { nombre: '', apellido: '', email: '', celular: '' };
+    const fullName = [docente.nombre, docente.apellido].filter(Boolean).join(' ');
+    const initials = [docente.nombre, docente.apellido].filter(Boolean).map(part => Array.from(part)[0]).join('').toUpperCase() || 'D';
     return `
-      <div class="plan-stack">
-        <div class="plan-pill-row">
-          <span class="plan-pill">Mi cuenta</span>
+      <div class="apd-account-layout">
+        <div class="apd-account-hero">
+          <span class="apd-account-avatar" aria-hidden="true">${esc(initials)}</span>
+          <div class="apd-account-identity"><span>PERFIL DOCENTE</span><strong>${esc(fullName || 'Mi perfil docente')}</strong><span>Tu espacio personal en Alertas APD</span></div>
         </div>
-        <p class="plan-note">Tus datos quedan guardados y solo se habilitan para modificar cuando tocás <b>Editar</b>.</p>
+        <h3 class="apd-account-heading">Datos personales</h3>
 
-        <form id="form-mi-cuenta" style="display:grid;gap:12px;margin-top:10px;">
+        <form id="form-mi-cuenta" class="apd-account-fields ${state.editingProfile ? 'is-editing' : 'is-reading'}">
           <div class="grid-2">
             ${editableInput('mi-cuenta-nombre', 'Nombre', docente.nombre, 'text', 'given-name')}
             ${editableInput('mi-cuenta-apellido', 'Apellido', docente.apellido, 'text', 'family-name')}
@@ -140,27 +144,25 @@
             ${state.editingProfile
               ? `<button type="submit" class="btn btn-primary">Guardar datos personales</button>
                  <button type="button" id="btn-mi-cuenta-cancelar" class="btn btn-secondary">Cancelar</button>`
-              : `<button type="button" id="btn-mi-cuenta-editar" class="btn btn-primary">Editar</button>`}
+              : `<button type="button" id="btn-mi-cuenta-editar" class="btn btn-secondary">Editar mis datos</button>`}
           </div>
           ${msgHtml('profile', 'mi-cuenta-msg')}
         </form>
 
 
-        <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
-        <section id="apd-marketing-settings" aria-label="Comunicaciones comerciales" style="display:grid;gap:8px;">
-          <div class="plan-pill-row">
-            <span class="plan-pill plan-pill-neutral">Comunicaciones promocionales</span>
-          </div>
+        <details id="apd-marketing-settings" class="apd-account-section" aria-label="Comunicaciones comerciales">
+          <summary>Comunicaciones promocionales</summary>
+          <div class="apd-account-section-body">
           <p class="plan-note" style="margin:0;">Estas comunicaciones son distintas de tus alertas docentes. No estás inscripto automáticamente para recibir publicidad.</p>
           <p id="apd-marketing-status" role="status" style="margin:0;">${esc(marketingStatusText())}</p>
           <p class="plan-note" style="margin:0;">La inscripción a promociones estará disponible cuando habilitemos la confirmación independiente por correo.</p>
           <button type="button" id="btn-apd-marketing-optout" class="btn btn-secondary" ${state.marketing.loading || state.marketing.status === 'unsubscribed' ? 'disabled' : ''}>No recibir comunicaciones promocionales</button>
           <p id="apd-marketing-message" role="status" class="plan-note" style="margin:0;">${esc(state.marketing.message || '')}</p>
-        </section>
-        <div style="height:1px;background:#e5e7eb;margin:12px 0;"></div>
-        <div style="display:grid;gap:10px;">
+          </div>
+        </details>
+        <div class="apd-account-section apd-account-security">
           <div class="plan-pill-row" style="justify-content:space-between;align-items:center;">
-            <span class="plan-pill plan-pill-neutral">Contraseña</span>
+            <h3 class="apd-account-heading">Seguridad de la cuenta</h3>
             <button type="button" id="btn-toggle-password" class="btn btn-secondary">${state.passwordOpen ? 'Ocultar' : 'Editar contraseña'}</button>
           </div>
           ${state.passwordOpen ? `

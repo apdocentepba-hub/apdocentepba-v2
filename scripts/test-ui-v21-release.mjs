@@ -69,6 +69,6 @@ test('Mi cuenta no expone identificadores técnicos al docente',()=>{
  const profile=readFileSync('account_profile_patch.js','utf8');
  assert.doesNotMatch(profile,/\$\{esc\(PATCH_VERSION\)\}/);
  assert.match(profile,/function buildAccountMarkup/);
- assert.match(html,/account_profile_patch\.js\?v=20261102-clean/);
+ assert.match(html,/account_profile_patch\.js\?v=20261124-perfil2/);
  assert.match(html,/apd_ui_v21\.js\?v=20261102-clean/);
 });

@@ -39,7 +39,12 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const approvedTransition=oldScripts.includes(oldApp)&&proposed.includes(newApp);
  if(approvedTransition)
   assert.equal(proposed.filter(tag=>tag===newApp).length,1,"Exactly one approved visual release");
- const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:tag);
+ // Allow only the audited account presentation cache revision, not arbitrary URLs.
+ const oldAccount='<script src="account_profile_patch.js?v=20261102-clean"></script>';
+ const newAccount='<script src="account_profile_patch.js?v=20261124-perfil2"></script>';
+ const accountTransition=oldScripts.includes(oldAccount)&&proposed.includes(newAccount);
+ if(accountTransition)assert.equal(proposed.filter(tag=>tag===newAccount).length,1);
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tag);
  assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){

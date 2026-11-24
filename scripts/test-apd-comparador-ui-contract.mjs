@@ -168,3 +168,20 @@ test('la grilla semanal se monta en Mi cuenta aunque no haya ofertas',()=>{
  assert.match(html,/offers\.length\|\|document\.getElementById\('apd-perfil-horarios'\)/);
  assert.match(ui,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*host\.replaceChildren/);
 });
+
+test('account overview renders a real text summary and preserves independent actions',async()=>{
+ const source=fs.readFileSync(new URL('../account_profile_patch.js',import.meta.url),'utf8');
+ const {runInNewContext}=await import('node:vm');
+ const box={innerHTML:''};
+ const window={renderDashboard:()=>{},obtenerAuthBearer:()=>''};
+ runInNewContext(source,{window,document:{getElementById:id=>id==='panel-datos-docente'?box:null,querySelectorAll:()=>[]},localStorage:{getItem:()=>''},console});
+ window.renderDashboard({docente:{nombre:'<Test>',apellido:'Docente',email:'example@example.invalid'}});
+ assert.match(box.innerHTML,/apd-account-hero/);
+ assert.match(box.innerHTML,/&lt;Test&gt;/);
+ assert.doesNotMatch(box.innerHTML,/<Test>/);
+ assert.match(box.innerHTML,/Editar mis datos/);
+ assert.doesNotMatch(box.innerHTML,/id="mi-cuenta-email"/);
+ assert.match(box.innerHTML,/<details id="apd-marketing-settings"/);
+ assert.match(box.innerHTML,/id="btn-toggle-password"/);
+ assert.match(css,/#panel-docente \.panel-card:has\(> #panel-datos-docente\)/);
+});
