@@ -135,3 +135,15 @@ test('unresolved afternoon modules are retained instead of manufacturing compati
  assert.equal(checkScheduleOverlap('Lunes: 17:00 a 18:00',result).status,'unverified');
  assert.deepEqual(result.moduleSchedule,['T1-1']);
 });
+
+import {payrollCapReview} from './apd-career-statutory-pay.mjs';
+test('salary cap warnings are aggregate and never apply an invented deduction',()=>{
+ const p=(kind,quantity)=>({kind,quantity});
+ const a=payrollCapReview({positions:[p('modulo',12),p('modulo',8)]});
+ assert.equal(a.totals.modulo,20);assert.deepEqual(a.warnings,[]);
+ const b=payrollCapReview({positions:[p('modulo',12),p('modulo',9)]});
+ assert.equal(b.warnings[0].id,'teaching-cap');assert.equal(b.automaticDeduction,false);
+ const c=payrollCapReview({positions:[p('cargo',1),p('cargo',1),p('cargo',1),p('hora_catedra',31)]});
+ assert.deepEqual(c.warnings.map(x=>x.id),['cargo-cap','teaching-cap','mixed-units']);
+ assert.throws(()=>payrollCapReview({positions:[p('cargo',2)]}));
+});
