@@ -5,6 +5,7 @@ import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-d
 import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.mjs?v=20261114-signals1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
+import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -202,7 +203,7 @@ function focusComparison() {
 function syncCurrentButton() {
  const actions=document.querySelector('#panel-alertas .alerta-main-card .alerta-actions');
  if(!actions)return;
- actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+ actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta')
   .forEach(control=>control.remove());
  if(!state.enabled||!state.available.length)return;
  const item=state.current;
@@ -232,6 +233,10 @@ function syncCurrentButton() {
  btn.setAttribute('aria-pressed',String(!!selected));
  btn.setAttribute('aria-controls','apd-comparador-panel');
  actions.appendChild(btn);
+ if(state.privatePlannerAllowed&&key){
+  const simulator=button('Simular esta oferta',()=>openWeekSimulator(key));
+  simulator.id='apd-simular-oferta';actions.appendChild(simulator);
+ }
  // The compare dialog requires at least two offers. Never show a dead CTA for one.
  if(state.selected.size>=2){
   const view=button('Ver comparación ('+state.selected.size+')',focusComparison,
@@ -241,6 +246,56 @@ function syncCurrentButton() {
   actions.appendChild(view);
  }
 }
+function openWeekSimulator(key){
+ if(!state.enabled||!state.privatePlannerAllowed||!key)return;
+ const source=state.available.find(x=>offerKey(x)===key);
+ if(!source)return;
+ const result=compareOffers({offers:[{...source,source_offer_key:key}]});
+ const offer=result.items[0];
+ closeComparisonDialog();
+ const dialog=node('dialog','apd-comparator-dialog apd-week-simulator');
+ dialog.id='apd-comparison-dialog';dialog.setAttribute('aria-label','Simulador de incorporación de cargo');
+ const head=node('div','apd-comparator-modal-head');
+ head.append(node('h2','','Simular esta oferta'),button('Cerrar simulación',closeComparisonDialog,'apd-comparator-modal-close'));
+ dialog.appendChild(head);
+ const body=node('div','apd-comparator-modal-body');
+ if(!offer){
+  body.appendChild(node('p','apd-comparator-hint','La oferta está cerrada o ya no se puede comparar. Verificá ABC.'));
+ }else{
+  body.appendChild(node('strong','',titleFor(source)));
+  const sim=simulateWeek(offer.horario,loadPrivatePlanner());
+  body.appendChild(node('p','apd-week-status',sim.reason));
+  body.appendChild(node('p','apd-comparator-hint','Simulación informativa; no modifica tu carga horaria ni realiza postulaciones. No acredita compatibilidad normativa o traslados.'));
+  if(!sim.declared&&sim.days.length)body.appendChild(node('p','apd-comparator-hint','Todavía no declaraste tu jornada: solo se muestra la oferta.'));
+  if(sim.referenceMorning)body.appendChild(node('p','apd-comparator-hint','Mañana: referencia de módulos de 60 minutos desde 07:20. Confirmá los horarios de cada escuela.'));
+  if(sim.totals){
+   const hours=m=>m===null?'Sin determinar':Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min';
+   const metrics=node('div','apd-week-metrics');
+   for(const [label,value] of [['Jornada actual de referencia',sim.totals.currentMinutes],['Horas reloj de la oferta',sim.totals.offerMinutes],['Ocupación combinada de referencia',sim.totals.combinedMinutes],['Cruces detectados',sim.totals.overlapMinutes]]){
+    const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',hours(value)));metrics.appendChild(metric);
+   }
+   body.appendChild(metrics);
+   const days=node('div','apd-week-days');
+   for(const day of sim.days){
+    const section=node('section','apd-week-day');
+    section.appendChild(node('h3','',day.name));
+    const list=node('dl','apd-week-day-data');
+    for(const [label,value] of [['Actual',intervalText(day.current)],['Nueva oferta',intervalText(day.offer)],['Combinada',intervalText(day.combined)],['Cruces detectados',intervalText(day.overlaps)]]){
+     list.append(node('dt','',label),node('dd','',value));
+    }
+    section.appendChild(list);
+    if(day.afternoon.length)section.appendChild(node('p','apd-comparator-hint','Módulos tarde ocupados: '+day.afternoon.join(', ')+' · Sin horario reloj confirmado.'));
+    if(!day.complete)section.appendChild(node('p','apd-comparator-hint','Ocupación total y disponibilidad no verificables.'));
+    days.appendChild(section);
+   }
+   body.appendChild(days);
+  }
+ }
+ dialog.appendChild(body);document.body.appendChild(dialog);
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+ dialog.showModal();
+}
+
 function makeSelect(labelText,options,value,change){
  const container=node('label','apd-comparator-label');
  container.appendChild(node('span','',labelText));
@@ -811,7 +866,7 @@ function reset() {
  state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
  state.autoGeoSignature='';
- document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion')
+ document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta')
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }
