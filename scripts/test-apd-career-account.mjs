@@ -41,3 +41,29 @@ test('storage error fails closed',async()=>{
  const r=await careerAccountRequest(new Request('https://fixture.invalid',{headers:{authorization:'BearerA'}}),deps);
  assert.equal(r.status,503);assert.ok(!JSON.stringify(r).includes('private detail'));
 });
+
+import {createCareerClient} from './apd-career-account-client.mjs';
+test('client uses real session, confirms GET PUT GET and isolates account changes',async()=>{
+ const {deps}=fixture();let token='BearerA';const calls=[];
+ deps.authenticate=async req=>({'Bearer BearerA':{id:'A'},'Bearer BearerB':{id:'B'}})[req.headers.get('authorization')];
+ const fetcher=async(url,opts)=>{calls.push([opts.method,opts.headers.Authorization]);const r=await careerAccountRequest(new Request(url,opts),deps);return new Response(JSON.stringify(r.body),{status:r.status});};
+ const client=createCareerClient({base:'https://fixture.invalid',getToken:()=>token,fetcher});
+ await client.reload();const save=await client.persist(profile);
+ assert.deepEqual(save,{profile,revision:1});
+ assert.deepEqual(calls.map(x=>x[0]),['GET','PUT','GET']);
+ const copy=client.peek();copy.profile.positions.length=0;assert.equal(client.peek().profile.positions.length,1);
+ token='BearerB';assert.equal(client.peek(),null);
+});
+test('client discards an old response after a session changes',async()=>{
+ let token='A',release;const client=createCareerClient({base:'https://fixture.invalid',getToken:()=>token,fetcher:()=>new Promise(r=>release=r)});
+ const pending=client.reload();token='B';assert.equal(client.peek(),null);
+ release(new Response(JSON.stringify({ok:true,career:{profile,revision:1}})));
+ await assert.rejects(pending,/sesión cambió/);assert.equal(client.peek(),null);
+});
+test('client requires a confirmed read before mutation and invalidates uncertain revision',async()=>{
+ let fail=false;const {deps}=fixture();deps.authenticate=async()=>({id:'A'});
+ const fetcher=async(url,opts)=>{if(fail&&opts.method==='PUT')throw Error('red');const r=await careerAccountRequest(new Request(url,opts),deps);return new Response(JSON.stringify(r.body),{status:r.status});};
+ const client=createCareerClient({base:'https://fixture.invalid',getToken:()=>'A',fetcher});
+ await assert.rejects(client.persist(profile),/Recuperá/);await client.reload();fail=true;
+ await assert.rejects(client.persist(profile),/red/);assert.equal(client.peek(),null);
+});
