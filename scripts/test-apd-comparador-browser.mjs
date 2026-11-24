@@ -17,6 +17,7 @@ const indexSource=readFileSync('index.html','utf8');
 const bootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
  .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
 assert.ok(bootstrap,'actual dashboard observer bootstrap must be present');
+const legacyBootstrap=bootstrap.replace('const accountFavoritesReleaseEnabled=true;','const accountFavoritesReleaseEnabled=false;');
 const html=`<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/apd_comparador_panel.css">
@@ -35,7 +36,7 @@ let dashboardLoadedOwner=null;
 let planActual={access_active:false};
 window.alertasState={items:[],index:0};
 window.__testToken=null;
-window.API_URL=location.origin;
+window.API_URL=location.search.includes('favorites=1')?'https://fixture.invalid':location.origin;
 function obtenerToken(){return window.__testToken;}
 window.__historyCalls=0;window.__historyHold=false;window.__historyRelease=null;
 async function workerFetchJson(path,opts){window.__historyCalls++;const days=Number(new URL(path,location.origin).searchParams.get('days'));const data={ok:true,empty:false,ventana_dias:days,ofertas_unicas:4,capturas_filtradas:5,ultima_captura:'2026-11-02T08:00:00Z',ultimas_ofertas:[{iddetalle:'100',cargo:'Histórico fixture',estado:'PUBLICADA',finoferta:'2020-01-01T08:00:00Z',captured_at:'2026-11-02T08:00:00Z'}]};if(window.__historyHold)return new Promise(resolve=>window.__historyRelease=()=>resolve(data));return data;}
@@ -48,6 +49,7 @@ window.__heldWFS=[];
 window.__realFetch=window.fetch.bind(window);
 window.fetch=async (target,opts={})=>{
  const u=new URL(String(target),location.href);
+ if(u.origin==='https://fixture.invalid'){if(!u.pathname.startsWith('/api/account/'))throw Error('Unexpected fixture route');return window.__realFetch(location.origin+u.pathname+u.search,opts);}
  if(u.hostname==='apis.datos.gob.ar'){
   window.__homeGeoRequests.push({url:u.toString(),method:opts.method,credentials:opts.credentials});
   const places=[
@@ -114,8 +116,9 @@ window.fetch=async (target,opts={})=>{
  return reply;
 };
 </script>
-<script>${bootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;')}</script></body></html>`;
-const liveScheduleHtml=html.replace(bootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
+<script>${legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;')}</script></body></html>`;
+const liveScheduleHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),legacyBootstrap);
+const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
 assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
 const accountHomes=new Map([
  ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
@@ -127,8 +130,23 @@ const accountHomes=new Map([
 ]);
 const accountRequests=[];
 const scheduleRequests=[],scheduleRows=new Map();
+const favoriteRequests=[],favoriteRows=new Map();
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
+ if(pathname==='/api/account/favorites'){
+  const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  const allowed=['SYNTHETIC_FAVORITES_A','SYNTHETIC_FAVORITES_B'].includes(bearer);
+  favoriteRequests.push({method:req.method,bearer});
+  const row=favoriteRows.get(bearer)||{keys:[],revision:0};
+  let status=allowed?200:401,data=allowed?{ok:true,favorites:row}:{ok:false};
+  if(allowed&&req.method==='PUT'){
+   let raw='';for await(const chunk of req)raw+=chunk;
+   const p=JSON.parse(raw);
+   if(p.revision!==row.revision){status=409;data={ok:false};}
+   else{const keys=new Set(row.keys);if(p.action==='add')keys.add(p.key);else keys.delete(p.key);const saved={keys:[...keys].sort(),revision:row.revision+1};favoriteRows.set(bearer,saved);data={ok:true,favorites:saved};}
+  }
+  res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));return;
+ }
  if(pathname==='/api/account/schedule'){
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
   const allowed=['SYNTHETIC_SCHEDULE_A','SYNTHETIC_SCHEDULE_B'].includes(bearer);
@@ -155,7 +173,7 @@ const server=createServer(async(req,res)=>{
   return;
  }
  const paths={
-  '/':{type:'text/html',body:url.searchParams.has('schedule')?liveScheduleHtml:html},
+  '/':{type:'text/html',body:url.searchParams.has('favorites')?liveFavoritesHtml:url.searchParams.has('schedule')?liveScheduleHtml:html},
   '/account_home_reference_patch.js':{type:'text/javascript',body:readFileSync('account_home_reference_patch.js')},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
@@ -163,6 +181,8 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-offer-decision-signals.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-decision-signals.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
+  '/scripts/apd-account-favorites-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-client.mjs')},
+  '/scripts/apd-account-favorites-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-core.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
   '/scripts/apd-week-optimizer-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer-ui.mjs')},
@@ -1427,6 +1447,59 @@ try{
   await until('!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
   assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,1);
   results.push({width,actual_release_bootstrap:true,account_schedule_readback:true,account_switch_isolation:true,no_automatic_upload:true});
+ }
+ // Candidate persistent UI: explicit read, account removal, hidden offers, reset.
+ await js(`(()=>{
+  const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+  let loaded=null,saved={keys:['D_123'],revision:1};
+  const client={peek:()=>loaded,reset:()=>{loaded=null;},reload:async()=>{loaded=saved;return loaded;},mutate:async(action,key)=>{if(action!=='remove'||key!=='D_123')throw Error('Unexpected mutation');saved={keys:[],revision:2};loaded=saved;return loaded;}};
+  window.__favoriteCandidateClient=client;
+  window.APD_comparatorRefresh({offers:[],enabled:true,planInfo:plan,favoriteMode:true,favoriteClient:client});
+  return true;
+ })()`);
+ await until('!!document.querySelector(".apd-favorites") && !document.getElementById("apd-comparador-panel").hidden');
+ assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
+ await js('document.querySelector(".apd-favorites button").click();true');
+ await until('document.querySelector(".apd-favorite-row")?.textContent.includes("Vigencia sin verificar")');
+ await js('document.querySelector(".apd-favorite-row button").click();true');
+ await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)")');
+ await js('window.APD_comparatorReset();true');
+ assert.equal(await js('!!document.querySelector(".apd-favorites")'),false);
+ results.push({account_favorites_ui_candidate:true});
+
+ // Exact enabled bootstrap, real client + local synthetic HTTP server.
+ for(const width of [390,1280]){
+  favoriteRequests.length=0;favoriteRows.clear();
+  await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+  await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/?favorites=1'});
+  await until('document.readyState==="complete"');
+  await js(`(()=>{
+   dashboardLoadedOwner='SYNTHETIC_FAVORITES_A';window.__testToken=dashboardLoadedOwner;
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+   window.alertasState={items:[{source_offer_key:'D_123',cargo:'Matemática',distrito:'Avellaneda'}],index:0};
+   document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';return true;
+  })()`);
+  await until('!!document.getElementById("apd-favorite-oferta") && !document.getElementById("apd-favorite-oferta").disabled');
+  assert.equal(favoriteRequests.length,0);
+  await js('document.getElementById("apd-favorite-oferta").click();true');
+  await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)") && !document.getElementById("apd-favorite-oferta").disabled');
+  await js('document.getElementById("apd-favorite-oferta").click();true');
+  await until('document.getElementById("apd-favorite-oferta").getAttribute("aria-pressed")==="true"');
+  assert.deepEqual(favoriteRows.get('SYNTHETIC_FAVORITES_A'),{keys:['D_123'],revision:1});
+  await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_FAVORITES_B';window.__testToken=dashboardLoadedOwner;window.alertasState={items:[],index:0};document.getElementById('panel-alertas').textContent='Cuenta B sin ofertas';return true;})()`);
+  await until('!!document.querySelector(".apd-favorites button") && !document.querySelector(".apd-favorites button").disabled');
+  assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
+  await js('document.querySelector(".apd-favorites button").click();true');
+  await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)")');
+  await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_FAVORITES_A';window.__testToken=dashboardLoadedOwner;document.getElementById('panel-alertas').textContent='Cuenta A sin ofertas';return true;})()`);
+  await until('!!document.querySelector(".apd-favorites button") && !document.querySelector(".apd-favorites button").disabled');
+  await js('document.querySelector(".apd-favorites button").click();true');
+  await until('document.querySelector(".apd-favorite-row")?.textContent.includes("Vigencia sin verificar")');
+  await js('document.querySelector(".apd-favorite-row button").click();true');
+  await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)")');
+  assert.deepEqual(favoriteRows.get('SYNTHETIC_FAVORITES_A'),{keys:[],revision:2});
+  assert.equal(favoriteRequests.filter(x=>x.method==='PUT').length,2);
+  results.push({width,actual_favorites_bootstrap:true,account_switch_isolation:true,empty_carousel_access:true});
  }
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{

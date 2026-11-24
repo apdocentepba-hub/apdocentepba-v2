@@ -1,0 +1,53 @@
+name: APD account favorites candidate - offline only
+on:
+  pull_request:
+    paths:
+      - 'scripts/*account-favorites*'
+      - 'apd_comparador_panel.mjs'
+      - 'index.html'
+      - 'scripts/test-apd-comparador-browser.mjs'
+      - 'docs/sql/APD_ACCOUNT_FAVORITES*'
+      - 'tests/sql/*account_favorites*'
+      - '.github/workflows/apd-account-favorites-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  favorites-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-account-favorites.mjs scripts/test-apd-account-favorites-storage.mjs scripts/test-apd-account-favorites-client.mjs scripts/test-apd-favorite-offers.mjs
+      - name: PostgreSQL isolated schema and concurrent writes
+        env:
+          PGPASSWORD: fixture-only
+        run: |
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_default_acl.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_ACCOUNT_FAVORITES_CANDIDATE_20261124.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_pg17_assert.sql
+          bash tests/sql/test_apd_account_favorites_race.sh
+      - name: Full offline Worker with synthetic authenticated accounts
+        run: |
+          node scripts/build-account-favorites-worker-candidate.mjs
+          node --check tmp/apd-account-favorites/worker-favorites-candidate.mjs
+          node scripts/test-apd-account-favorites-full-worker.mjs
+      - name: Chromium comparator and candidate favorites UI
+        run: node scripts/test-apd-comparador-browser.mjs

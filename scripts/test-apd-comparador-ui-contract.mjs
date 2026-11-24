@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-optimizer1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-favorite-sync1|20261124-optimizer1|20261124-planner-sync2)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -26,7 +26,7 @@ test('access gated by active authenticated plan and reset when session changes',
  assert.match(html,/owner!==previousOwner/);
  assert.match(html,/window\.APD_comparatorReset\?\.\(\)/);
  assert.match(html,/planActual\?\.access_active===true/);
- assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true,planInfo:planActual,historyContext:\{/);
+ assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:\{/);
  assert.match(html,/isCurrent:\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&planActual\?\.access_active===true/);
  assert.match(ui,/if\(!entitled\|\|!enabled\)clearPersonalHistory\(\)/);
  assert.match(ui,/hasInsignePlannerAccess\(planInfo\)/);
@@ -194,4 +194,10 @@ test('account sync release gate enabled after verified backend promotion; opaque
  assert.match(html,/window\.APD_renderProfileSchedule\?\.\(planActual,accountScheduleClient\)/);
  assert.match(ui,/createWeeklyScheduleForm\(\{accountClient:profileScheduleClient,onChanged:/);
  assert.match(ui,/profileScheduleClient=null;/);
+});
+
+test('permanent favorites enabled after authenticated live QA',()=>{
+ assert.match(html,/const accountFavoritesReleaseEnabled=true;/);
+ assert.match(html,/if\(accountFavoritesReleaseEnabled&&!accountFavoriteClient&&!favoriteLoading\)/);
+ assert.match(html,/accountFavoriteClient\?\.reset\(\)/);
 });
