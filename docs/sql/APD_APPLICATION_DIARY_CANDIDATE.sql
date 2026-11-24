@@ -5,6 +5,7 @@ CREATE TABLE public.user_application_diary (
  entries jsonb NOT NULL CHECK (
   CASE WHEN jsonb_typeof(entries)='array' THEN jsonb_array_length(entries)<=100 AND octet_length(entries::text)<=65536 ELSE false END
  ),
+ updated_at timestamptz NOT NULL DEFAULT now(),
  revision integer NOT NULL CHECK (revision>0)
 );
 ALTER TABLE public.user_application_diary ENABLE ROW LEVEL SECURITY;
@@ -21,7 +22,7 @@ BEGIN
   RETURN QUERY INSERT INTO public.user_application_diary AS d(user_id,entries,revision)
    VALUES(p_user,p_entries,1) ON CONFLICT(user_id) DO NOTHING RETURNING d.entries,d.revision;
  ELSE
-  RETURN QUERY UPDATE public.user_application_diary AS d SET entries=p_entries,revision=p_revision+1
+  RETURN QUERY UPDATE public.user_application_diary AS d SET entries=p_entries,revision=p_revision+1,updated_at=now()
    WHERE d.user_id=p_user AND d.revision=p_revision RETURNING d.entries,d.revision;
  END IF;
 END;$$;
