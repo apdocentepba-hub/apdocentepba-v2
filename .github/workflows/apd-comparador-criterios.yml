@@ -10,6 +10,13 @@ on:
       - 'scripts/apd-mi-jornada-comparador.mjs'
       - 'scripts/apd-week-simulator.mjs'
       - 'scripts/apd-favorite-offers.mjs'
+      - 'scripts/apd-offer-recommendations.mjs'
+      - 'scripts/apd-personal-history*.mjs'
+      - 'scripts/apd-historical-vacancy*.mjs'
+      - 'scripts/apd-vacancy-snapshot-*.mjs'
+      - 'scripts/test-apd-historical-vacancy.mjs'
+      - 'scripts/test-apd-personal-history.mjs'
+      - 'scripts/test-apd-offer-recommendations.mjs'
       - 'scripts/test-apd-favorite-offers.mjs'
       - 'scripts/apd-offer-economics*.mjs'
       - 'scripts/test-apd-offer-economics.mjs'
@@ -63,7 +70,7 @@ jobs:
           node --check scripts/apd-insigne-planner-entitlement.mjs
           node --check scripts/test-apd-comparador-criterios.mjs
           node --check scripts/apd-school-geodistance.mjs
-          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs scripts/test-apd-comparador-datos-evaluacion.mjs scripts/test-apd-mi-jornada-comparador.mjs scripts/test-apd-insigne-planner-entitlement.mjs scripts/test-apd-multimodal-transport.mjs scripts/test-apd-amba-bus-routes.mjs scripts/test-apd-week-simulator.mjs scripts/test-apd-offer-economics.mjs scripts/test-apd-favorite-offers.mjs
+          node --test scripts/test-apd-comparador-criterios.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-school-geodistance.mjs scripts/test-apd-comparador-datos-evaluacion.mjs scripts/test-apd-mi-jornada-comparador.mjs scripts/test-apd-insigne-planner-entitlement.mjs scripts/test-apd-multimodal-transport.mjs scripts/test-apd-amba-bus-routes.mjs scripts/test-apd-week-simulator.mjs scripts/test-apd-offer-economics.mjs scripts/test-apd-favorite-offers.mjs scripts/test-apd-offer-recommendations.mjs scripts/test-apd-personal-history.mjs scripts/test-apd-historical-vacancy.mjs
       - name: 'Chromium QA: private access, safe offer selection and mobile layout'
         run: node scripts/test-apd-comparador-browser.mjs
       - name: Browser QA screenshots
