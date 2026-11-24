@@ -1,0 +1,34 @@
+name: APD diary live preflight - read only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-account-diary-live-preflight.yml'
+      - 'scripts/inspect-account-diary-live.mjs'
+      - 'scripts/*account-diary*'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/application-diary-storage-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read live Worker without modifying traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/inspect-account-diary-live.mjs
+      - name: Prove insertion against exact live source
+        run: |
+          APD_ACCOUNT_DIARY_LIVE_SOURCE=tmp/apd-account-diary/active-worker.mjs node scripts/build-account-diary-worker-candidate.mjs
+          node --check tmp/apd-account-diary/worker-diary-candidate.mjs
+          node scripts/test-apd-account-diary-full-worker.mjs
+      - name: Remove transient source
+        if: always()
+        run: rm -rf tmp/apd-account-diary

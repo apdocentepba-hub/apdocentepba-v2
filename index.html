@@ -319,6 +319,8 @@ document.addEventListener('DOMContentLoaded',function(){
  let accountScheduleClient=null,scheduleLoading=false;
  const accountFavoritesReleaseEnabled=true;
  let accountFavoriteClient=null,favoriteLoading=false;
+ const accountDiaryReleaseEnabled=false;
+ let accountDiaryClient=null,diaryLoading=false;
  const sync=function(){
   // A bearer is never forwarded to the comparison module or stored on disk.
   const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
@@ -326,6 +328,7 @@ document.addEventListener('DOMContentLoaded',function(){
    previousOwner=owner;
    accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
+   accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
   }
   const allowed=!!owner&&typeof obtenerToken==='function'&&!!obtenerToken()&&
@@ -333,6 +336,7 @@ document.addEventListener('DOMContentLoaded',function(){
   if(!allowed){
    accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
+   accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
    comparison.hidden=true;
    return;
@@ -359,6 +363,16 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{favoriteLoading=false;});
   }
+  if(accountDiaryReleaseEnabled&&!accountDiaryClient&&!diaryLoading){
+   diaryLoading=true;
+   import('./scripts/apd-account-diary-client.mjs?v=20261124-diary1').then(({createDiaryClient})=>{
+    diaryLoading=false;
+    if(dashboardLoadedOwner!==owner||obtenerToken()!==owner||planActual?.access_active!==true)return;
+    accountDiaryClient=createDiaryClient({base:API_URL,fetcher:(url,options)=>window.fetch(url,options),
+     getToken:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true?obtenerToken():null});
+    sync();
+   }).catch(()=>{diaryLoading=false;});
+  }
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
   if(typeof window.APD_offerSchoolMapRefresh==='function'){
@@ -370,11 +384,11 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient);}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,diaryMode:accountDiaryReleaseEnabled,diaryClient:accountDiaryClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient);}
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-calendar1')
+   import('./apd_comparador_panel.mjs?v=20261124-diary1')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }

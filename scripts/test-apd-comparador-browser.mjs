@@ -36,7 +36,7 @@ let dashboardLoadedOwner=null;
 let planActual={access_active:false};
 window.alertasState={items:[],index:0};
 window.__testToken=null;
-window.API_URL=location.search.includes('favorites=1')?'https://fixture.invalid':location.origin;
+window.API_URL=(location.search.includes('favorites=1')||location.search.includes('diary=1'))?'https://fixture.invalid':location.origin;
 function obtenerToken(){return window.__testToken;}
 window.__historyCalls=0;window.__historyHold=false;window.__historyRelease=null;
 async function workerFetchJson(path,opts){window.__historyCalls++;const days=Number(new URL(path,location.origin).searchParams.get('days'));const data={ok:true,empty:false,ventana_dias:days,ofertas_unicas:4,capturas_filtradas:5,ultima_captura:'2026-11-02T08:00:00Z',ultimas_ofertas:[{iddetalle:'100',cargo:'Histórico fixture',estado:'PUBLICADA',finoferta:'2020-01-01T08:00:00Z',captured_at:'2026-11-02T08:00:00Z'}]};if(window.__historyHold)return new Promise(resolve=>window.__historyRelease=()=>resolve(data));return data;}
@@ -120,6 +120,8 @@ window.fetch=async (target,opts={})=>{
 const liveScheduleHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),legacyBootstrap);
 const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
 assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
+const liveDiaryHtml=liveFavoritesHtml.replace('const accountDiaryReleaseEnabled=false;','const accountDiaryReleaseEnabled=true;');
+assert.notEqual(liveDiaryHtml,liveFavoritesHtml,'Diary release bootstrap must be exercised');
 const accountHomes=new Map([
  ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
   georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 123, Wilde, Buenos Aires',
@@ -131,8 +133,29 @@ const accountHomes=new Map([
 const accountRequests=[];
 const scheduleRequests=[],scheduleRows=new Map();
 const favoriteRequests=[],favoriteRows=new Map();
+const diaryRequests=[],diaryRows=new Map();
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
+ if(pathname==='/api/account/application-diary'){
+  const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  const allowed=['SYNTHETIC_DIARY_A','SYNTHETIC_DIARY_B'].includes(bearer);
+  diaryRequests.push({method:req.method,bearer});
+  const row=diaryRows.get(bearer)||{entries:[],revision:0};
+  let status=allowed?200:401,data=allowed?{ok:true,diary:row}:{ok:false};
+  if(allowed&&req.method==='PUT'){
+   let raw='';for await(const chunk of req)raw+=chunk;
+   const p=JSON.parse(raw);
+   if(p.revision!==row.revision){status=409;data={ok:false};}
+   else{
+    const entries=new Map(row.entries.map(e=>[e.key,e]));
+    if(p.action==='remove')entries.delete(p.key);
+    else entries.set(p.key,{key:p.key,status:p.status,origin:'self_reported',updatedAt:'2026-11-24T15:00:00.000Z'});
+    const saved={entries:[...entries.values()].sort((a,b)=>a.key.localeCompare(b.key)),revision:row.revision+1};
+    diaryRows.set(bearer,saved);data={ok:true,diary:saved};
+   }
+  }
+  res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));return;
+ }
  if(pathname==='/api/account/favorites'){
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
   const allowed=['SYNTHETIC_FAVORITES_A','SYNTHETIC_FAVORITES_B'].includes(bearer);
@@ -173,7 +196,7 @@ const server=createServer(async(req,res)=>{
   return;
  }
  const paths={
-  '/':{type:'text/html',body:url.searchParams.has('favorites')?liveFavoritesHtml:url.searchParams.has('schedule')?liveScheduleHtml:html},
+  '/':{type:'text/html',body:url.searchParams.has('diary')?liveDiaryHtml:url.searchParams.has('favorites')?liveFavoritesHtml:url.searchParams.has('schedule')?liveScheduleHtml:html},
   '/account_home_reference_patch.js':{type:'text/javascript',body:readFileSync('account_home_reference_patch.js')},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
@@ -181,6 +204,9 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-offer-decision-signals.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-decision-signals.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
+  '/scripts/apd-account-diary-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-diary-client.mjs')},
+  '/scripts/apd-account-diary-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-diary-core.mjs')},
+  '/scripts/apd-application-diary.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary.mjs')},
   '/scripts/apd-account-favorites-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-client.mjs')},
   '/scripts/apd-account-favorites-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-core.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
@@ -1505,6 +1531,61 @@ try{
   assert.deepEqual(favoriteRows.get('SYNTHETIC_FAVORITES_A'),{keys:[],revision:2});
   assert.equal(favoriteRequests.filter(x=>x.method==='PUT').length,2);
   results.push({width,actual_favorites_bootstrap:true,account_switch_isolation:true,empty_carousel_access:true});
+ }
+ // Candidate diary: empty carousel, manual provenance, update/remove, session reset.
+ await js(`(()=>{
+  const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+  let loaded=null,saved={revision:1,entries:[{key:'D_123',status:'postulada',origin:'self_reported',updatedAt:'2026-11-24T15:00:00.000Z'}]};
+  const client={peek:()=>loaded,reset:()=>{loaded=null;},reload:async()=>{loaded=saved;return loaded;},mutate:async(action,key,status)=>{if(key!=='D_123')throw Error('Unexpected identity');saved={revision:saved.revision+1,entries:action==='remove'?[]:[{...saved.entries[0],status}]};loaded=saved;return loaded;}};
+  window.APD_comparatorRefresh({offers:[],enabled:true,planInfo:plan,diaryMode:true,diaryClient:client});
+  return true;
+ })()`);
+ await until('!!document.querySelector(".apd-application-diary") && !document.getElementById("apd-comparador-panel").hidden');
+ assert.equal(await js('document.querySelectorAll(".apd-diary-row").length'),0);
+ await js('document.querySelector(".apd-application-diary button").click();true');
+ await until('document.querySelector(".apd-diary-row")?.textContent.includes("Estado declarado por vos")');
+ await js(`(()=>{const row=document.querySelector('.apd-diary-row');row.querySelector('select').value='adjudicada';row.querySelector('button').click();return true;})()`);
+ await until('document.querySelector(".apd-diary-row")?.textContent.includes("Estado declarado por vos · Adjudicada")');
+ await js('document.querySelectorAll(".apd-diary-row button")[1].click();true');
+ await until('document.querySelector(".apd-application-diary summary").textContent.includes("(0)")');
+ await js('window.APD_comparatorReset();true');
+ assert.equal(await js('!!document.querySelector(".apd-application-diary")'),false);
+ results.push({application_diary_ui_candidate:true});
+ // Full diary bootstrap with actual production client, synthetic local HTTP only.
+ for(const width of [390,1280]){
+  diaryRows.clear();diaryRequests.length=0;
+  await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+  await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/?diary=1'});
+  await until('document.readyState==="complete"');
+  assert.equal(diaryRequests.length,0);
+  await js("dashboardLoadedOwner='SYNTHETIC_DIARY_A';window.__testToken=dashboardLoadedOwner;planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};window.alertasState={items:[{source_offer_key:'D_123',cargo:'Matemática',distrito:'Avellaneda'}],index:0};document.getElementById('panel-alertas').innerHTML='<article class=alerta-main-card><div class=alerta-actions></div></article>';true");
+  await until('!!document.querySelector(".apd-application-diary button") && !document.querySelector(".apd-application-diary button").disabled');
+  assert.equal(diaryRequests.length,0,'No automatic diary read before explicit action');
+  await js('document.querySelector(".apd-application-diary button").click();true');
+  await until('!!document.querySelector(".apd-diary-row select") && !document.querySelector(".apd-diary-row button").disabled');
+  await js('document.querySelector(".apd-diary-row select").value="postulada";document.querySelector(".apd-diary-row button").click();true');
+  await until('document.querySelector(".apd-diary-row")?.textContent.includes("Estado declarado por vos · Postulada")');
+  assert.equal(diaryRows.get('SYNTHETIC_DIARY_A').entries[0].key,'D_123');
+  await js("window.alertasState={items:[],index:0};document.getElementById('panel-alertas').textContent='Sin ofertas';true");
+  await until('document.querySelector(".apd-diary-row")?.textContent.includes("Oferta D_123")');
+  await js("dashboardLoadedOwner='SYNTHETIC_DIARY_B';window.__testToken=dashboardLoadedOwner;document.getElementById('panel-alertas').textContent='Cuenta B';true");
+  await until('!!document.querySelector(".apd-application-diary button") && !document.querySelector(".apd-application-diary button").disabled && !document.querySelector(".apd-diary-row")');
+  await js('document.querySelector(".apd-application-diary button").click();true');
+  await until('document.querySelector(".apd-application-diary summary")?.textContent.includes("(0)")');
+  await js("dashboardLoadedOwner='SYNTHETIC_DIARY_A';window.__testToken=dashboardLoadedOwner;document.getElementById('panel-alertas').textContent='Cuenta A';true");
+  await until('!!document.querySelector(".apd-application-diary button") && !document.querySelector(".apd-application-diary button").disabled && !document.querySelector(".apd-application-diary summary").textContent.includes("(0)")');
+  await js('document.querySelector(".apd-application-diary button").click();true');
+  await until('document.querySelector(".apd-diary-row")?.textContent.includes("Postulada")');
+  await js('document.querySelector(".apd-diary-row select").value="adjudicada";document.querySelector(".apd-diary-row button").click();true');
+  await until('document.querySelector(".apd-diary-row")?.textContent.includes("Estado declarado por vos · Adjudicada")');
+  await screenshot('application-diary-'+width);
+  await js('document.querySelectorAll(".apd-diary-row button")[1].click();true');
+  await until('document.querySelector(".apd-application-diary summary")?.textContent.includes("(0)")');
+  assert.deepEqual(diaryRows.get('SYNTHETIC_DIARY_A'),{entries:[],revision:3});
+  assert.equal(diaryRequests.filter(x=>x.method==='PUT').length,3);
+  await js("planActual={access_active:false};document.getElementById('panel-alertas').textContent='Plan inactivo';true");
+  await until('!document.querySelector(".apd-application-diary")');
+  results.push({width,actual_diary_bootstrap:true,account_switch_isolation:true,empty_carousel_access:true,update_remove:true});
  }
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
