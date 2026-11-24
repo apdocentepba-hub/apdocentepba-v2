@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   stage:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/account-diary-contract-20261124'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/application-diary-storage-20261124'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
