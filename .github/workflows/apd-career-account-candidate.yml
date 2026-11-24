@@ -8,6 +8,8 @@ on:
       - 'scripts/test-apd-career-account.mjs'
       - 'scripts/test-apd-career-editor-browser.mjs'
       - 'scripts/test-apd-career-full-worker.mjs'
+      - 'scripts/test-apd-career-http.mjs'
+      - 'tests/sql/apd_career_http_fixture.sql'
       - 'scripts/build-apd-career-worker-candidate.mjs'
       - 'docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql'
       - 'tests/sql/apd_career_profile_assert.sql'
@@ -28,6 +30,8 @@ jobs:
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -68,3 +72,24 @@ jobs:
           test "$(cat /tmp/career-writer-1 /tmp/career-writer-2 | grep -E '^[01]$' | sort | tr '\n' ' ')" = '0 1 '
           test "$(psql -Atc 'SELECT revision FROM public.user_career_profile')" = 3
           echo APD_CAREER_CONCURRENT_CAS_PASS
+      - name: Authenticate two fixture accounts through the Worker and real PostgREST
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: test_only
+          PGDATABASE: postgres
+        run: |
+          createdb apd_career_http
+          psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f tests/sql/apd_career_http_fixture.sql
+          psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql
+          docker run -d --rm --name apd-career-http --network host \
+            -e PGRST_DB_URI=postgres://postgres:test_only@127.0.0.1:5432/apd_career_http \
+            -e PGRST_DB_ANON_ROLE=service_role -e PGRST_DB_SCHEMAS=public \
+            -e PGRST_SERVER_HOST=127.0.0.1 -e PGRST_SERVER_PORT=3301 \
+            postgrest/postgrest:v16.3
+          trap 'docker rm -f apd-career-http >/dev/null 2>&1 || true' EXIT
+          curl --silent --show-error --fail --retry 15 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:3301/ >/dev/null
+          node scripts/test-apd-career-http.mjs
+          test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.sessions')" = 3
+          test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.user_career_profile WHERE revision=1')" = 2
