@@ -27,7 +27,7 @@ test('access gated by active authenticated plan and reset when session changes',
  assert.match(html,/window\.APD_comparatorReset\?\.\(\)/);
  assert.match(html,/planActual\?\.access_active===true/);
  assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:\{/);
- assert.match(html,/isCurrent:\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&planActual\?\.access_active===true/);
+ assert.match(html,/isCurrent:\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&readBearer\(\)===bearer&&planActual\?\.access_active===true/);
  assert.match(ui,/if\(!entitled\|\|!enabled\)clearPersonalHistory\(\)/);
  assert.match(ui,/hasInsignePlannerAccess\(planInfo\)/);
  assert.match(ui,/if\(!entitled\)clearPrivatePlanner\(\)/);
@@ -200,4 +200,10 @@ test('permanent favorites enabled after authenticated live QA',()=>{
  assert.match(html,/const accountFavoritesReleaseEnabled=true;/);
  assert.match(html,/if\(accountFavoritesReleaseEnabled&&!accountFavoriteClient&&!favoriteLoading\)/);
  assert.match(html,/accountFavoriteClient\?\.reset\(\)/);
+});
+
+test('account clients use the secure session bearer rather than the user ID',()=>{
+ assert.match(html,/window\.obtenerAuthBearer\(\)/);
+ assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,2);
+ assert.doesNotMatch(html,/getToken:\(\)=>[^\n]*\?obtenerToken\(\):null/);
 });
