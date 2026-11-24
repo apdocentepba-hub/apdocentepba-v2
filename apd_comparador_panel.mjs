@@ -7,7 +7,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
-import {marginalPay,mergeConfirmedCareerPlanner} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
+import {marginalPay,mergeConfirmedCareerPlanner} from './scripts/apd-career-profile-core.mjs?v=20261124-career2';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
