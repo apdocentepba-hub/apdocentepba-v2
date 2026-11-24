@@ -165,6 +165,8 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
+  '/scripts/apd-week-optimizer-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer-ui.mjs')},
+  '/scripts/apd-week-optimizer.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer.mjs')},
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
   '/scripts/apd-favorite-offers.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-favorite-offers.mjs')},
   '/scripts/apd-offer-recommendations.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-recommendations.mjs')},
@@ -304,6 +306,13 @@ try{
   assert.equal(await js(`getComputedStyle(document.querySelector(
    '#apd-comparador-panel .apd-work-summary')).minHeight`),'44px');
   assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),true);
+  await js('document.querySelector(".apd-week-optimizer").open=true;true');
+  assert.equal(await js('document.querySelector(".apd-week-optimizer button").disabled'),true);
+  await js(`(()=>{const input=document.querySelector('.apd-week-optimizer input');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('.apd-week-optimizer form').requestSubmit();return true;})()`);
+  assert.match(await js('document.querySelector(".apd-optimizer-results").textContent'),/combinación|cargos/);
+  await js(`(()=>{const input=document.querySelector('.apd-week-optimizer input');input.checked=false;input.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  assert.equal(await js('document.querySelector(".apd-optimizer-results").textContent'),'');
+
   await js('document.getElementById("apd-simular-oferta").click();true');
   await until('!!document.querySelector(".apd-week-simulator[open]")');
   assert.match(await js('document.querySelector(".apd-week-simulator").textContent'),/Simulación informativa/);

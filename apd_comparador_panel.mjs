@@ -8,6 +8,7 @@ import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
+import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
 import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-vacancy1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
@@ -688,7 +689,7 @@ function render(){
  if(root.hidden)return;
  if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
  if(!state.available.length)return;
- if(state.privatePlannerAllowed)root.appendChild(renderRecommendations());
+ if(state.privatePlannerAllowed){root.appendChild(renderRecommendations());root.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
  heading.tabIndex=-1;
