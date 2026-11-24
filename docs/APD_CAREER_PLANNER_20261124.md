@@ -17,3 +17,5 @@ Next phases:
 Acceptance: no production changes until actual baseline, schema/permission verification and staging. Regression checks on login, expiry, alerts, all plans and all notification channels.
 
 Phase 1 follow-up: existing form supports an explicitly injected account client; production mount remains unchanged until release. Reads never upload tab drafts. Existing account record is authoritative after retrieval, server error preserves selection, conflict blocks save until retrieval. SQL constraints reject duplicates, noncanonical dimensions and invalid IDs. Isolated PG17 workflow validates permissions, CAS predicate and cascade, not production storage.
+
+24/11 follow-up: production table created empty with RLS, no direct anon/authenticated grants; Cloudflare candidate 6c58c497-e362-4b03-8324-39064c39fdf7 validated at 0% traffic. Complete captured Worker auth/router exercised with two synthetic identities and mock PostgREST. This does not constitute authenticated Cloudflare + live database proof. Do not create paid or real customer accounts for QA. Keep existing production mount unchanged until verified.

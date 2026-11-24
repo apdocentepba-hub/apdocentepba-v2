@@ -6,7 +6,7 @@ export function createScheduleClient({getToken,fetcher,base}){
  async function request(method,body){
   const token=scope(),generation=epoch;
   if(!token)throw Error('Ingresá a tu cuenta');
-  const response=await fetcher(base+'/api/account/schedule',{method,credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const response=await fetcher(base+'/api/account/schedule',{method,credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
   if(scope()!==token||epoch!==generation)throw Error('La sesión cambió');
   const result=await response.json();
   if(scope()!==token||epoch!==generation)throw Error('La sesión cambió');

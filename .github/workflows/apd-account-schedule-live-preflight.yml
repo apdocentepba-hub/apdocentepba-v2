@@ -5,6 +5,7 @@ on:
       - '.github/workflows/apd-account-schedule-live-preflight.yml'
       - 'scripts/inspect-account-schedule-live.mjs'
       - 'scripts/build-account-schedule-worker-candidate.mjs'
+      - 'scripts/test-apd-account-schedule-full-worker.mjs'
 permissions:
   contents: read
 jobs:
@@ -28,6 +29,7 @@ jobs:
         run: |
           APD_ACCOUNT_SCHEDULE_LIVE_SOURCE=tmp/apd-account-schedule/active-worker.mjs node scripts/build-account-schedule-worker-candidate.mjs
           node --check tmp/apd-account-schedule/worker-schedule-candidate.mjs
+          node scripts/test-apd-account-schedule-full-worker.mjs
       - name: Remove transient source
         if: always()
         run: rm -rf tmp/apd-account-schedule

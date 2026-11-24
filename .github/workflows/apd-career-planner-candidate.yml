@@ -37,6 +37,7 @@ jobs:
       - run: |
           node scripts/build-account-schedule-worker-candidate.mjs
           node --check tmp/apd-account-schedule/worker-schedule-candidate.mjs
+          node scripts/test-apd-account-schedule-full-worker.mjs
       - name: PostgreSQL 17 isolated schema and CAS proof
         env:
           PGPASSWORD: fixture-only
