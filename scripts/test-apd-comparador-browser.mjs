@@ -28,6 +28,7 @@ const html=`<!doctype html><html lang="es"><head>
 </style></head><body><div id="fixture">
 <h2>Panel de Alertas APD — laboratorio</h2>
 <div id="panel-datos-docente"></div>
+<div id="apd-alert-schedule-controls" hidden></div>
 <div id="panel-alertas"><article class="alerta-main-card"><div class="alerta-actions"></div></article></div>
 <section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section><section id="apd-personal-history" hidden></section>
 </div>
@@ -1439,6 +1440,27 @@ try{
   assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,0,'Never upload on initialization');
   assert.deepEqual(await js('[...document.querySelectorAll("#apd-perfil-horarios input:checked")].map(x=>x.value)'),['M1-2'],'Persisted schedule loaded before opening');
   assert.equal(await js(`JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1')).moduleSchedule[0]`),'M1-2','Filter profile hydrated automatically');
+  await js(`(()=>{
+   window.__filterCalls=[];
+   window.APD_setAlertScheduleFilter=active=>{
+    window.__filterCalls.push(active);
+    window.APD_renderAlertScheduleControls({planInfo:planActual,total:5,visible:active?2:5,active});
+   };
+   window.APD_renderAlertScheduleControls({planInfo:planActual,total:5,visible:5,active:false});
+   return true;
+  })()`);
+  assert.equal(await js('document.querySelector(".apd-schedule-switch").getAttribute("aria-checked")'),'false');
+  await js('document.querySelector(".apd-schedule-switch").click();true');
+  assert.equal(await js('document.querySelector(".apd-schedule-switch").getAttribute("aria-checked")'),'true');
+  assert.match(await js('document.querySelector(".apd-schedule-filter-count").textContent'),/2 de 5 ofertas compatibles/);
+  assert.equal(await js('document.activeElement.classList.contains("apd-schedule-switch")'),true);
+  assert.equal(await js('document.querySelector(".apd-schedule-switch").scrollWidth<=document.querySelector(".apd-schedule-switch").clientWidth'),true);
+  await js('document.querySelector(".apd-schedule-switch").click();true');
+  assert.deepEqual(await js('window.__filterCalls'),[true,false]);
+  await js('document.querySelector(".apd-schedule-edit").click();true');
+  assert.equal(await js('document.querySelector("#apd-perfil-horarios details").open'),true);
+  await js('delete window.APD_setAlertScheduleFilter;true');
+
   await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
   await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
   await js(`(()=>{const host=document.getElementById('apd-perfil-horarios');host.querySelectorAll('input').forEach(i=>i.checked=i.value==='M2-1');host.querySelector('form').requestSubmit();return true;})()`);

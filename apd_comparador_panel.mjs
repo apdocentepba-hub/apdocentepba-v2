@@ -1053,24 +1053,35 @@ window.APD_renderAlertScheduleControls=({planInfo,total,visible,active})=>{
 
  const profile=loadPrivatePlanner();
  const hasJobs=profile.jobs.length>0||!!profile.moduleSchedule?.length;
- const toggle=button(active?'Ver todas las alertas':'Solo compatibles con mi horario',()=>{
+ const openPlanner=()=>{
+  const planner=document.querySelector('#apd-perfil-horarios details');
+  if(!planner)return;
+  planner.open=true;
+  planner.scrollIntoView?.({block:'center'});
+  planner.querySelector('summary')?.focus();
+ };
+ const card=node('div','apd-schedule-filter-card');
+ const toggle=button('',()=>{
   window.APD_setAlertScheduleFilter?.(!active);
-  scheduleControls.querySelector('button')?.focus();
- },'btn btn-secondary');
- if(!hasJobs){
-  scheduleControls.appendChild(button('Cargar mis horarios',()=>{
-   const planner=document.querySelector('#apd-perfil-horarios details');
-   if(!planner)return;
-   planner.open=true;
-   planner.scrollIntoView?.({block:'center'});
-   planner.querySelector('summary')?.focus();
-  },'btn btn-secondary'));
-  return;
- }
- toggle.setAttribute('aria-pressed',String(scheduleFilterActive));
- scheduleControls.append(toggle,node('span','apd-comparator-hint',
-  active?visible+' de '+total+' alertas · Horarios verificables y sin cruces según tu jornada.':''
- ));
+  scheduleControls.querySelector('.apd-schedule-switch')?.focus();
+ },'apd-schedule-switch');
+ const symbol=node('span','apd-schedule-symbol','✓');symbol.setAttribute('aria-hidden','true');
+ const copy=node('span','apd-schedule-copy');
+ copy.append(node('strong','','Compatibilidad horaria'),node('span','apd-schedule-subtitle',
+  !hasJobs?'Cargá tus horarios para filtrar':active?'Filtro activo · sin superposiciones verificadas':'Mostrando todas las ofertas'));
+ const track=node('span','apd-schedule-track');track.setAttribute('aria-hidden','true');
+ track.appendChild(node('span','apd-schedule-thumb'));
+ toggle.append(symbol,copy,track);
+ toggle.setAttribute('aria-label','Solo compatibles con mi horario');
+ toggle.setAttribute('role','switch');
+ toggle.setAttribute('aria-checked',String(hasJobs&&scheduleFilterActive));
+ toggle.disabled=!hasJobs;
+ const footer=node('div','apd-schedule-filter-footer');
+ const count=node('span','apd-schedule-filter-count',
+  active&&hasJobs?visible+' de '+total+' ofertas compatibles':total+' '+(total===1?'oferta disponible':'ofertas disponibles'));
+ count.setAttribute('role','status');
+ footer.append(count,button(hasJobs?'Mi carga horaria':'Cargar mis horarios',openPlanner,'apd-schedule-edit'));
+ card.append(toggle,footer);scheduleControls.appendChild(card);
 };
 
 window.APD_renderProfileSchedule=(planInfo,accountClient=undefined,accountRequired=undefined)=>{
