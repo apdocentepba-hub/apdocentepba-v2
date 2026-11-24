@@ -81,3 +81,20 @@ test('public school catalog searches exact identity and preserves unknown classi
  assert.equal(catalog.exact('0005MS0006'),null);
  assert.throws(()=>createSchoolCatalog({...snap,schools:[first,first]}));
 });
+
+import {loadReviewedSchoolCatalog} from './apd-career-school-loader.mjs';
+test('reviewed school loader fails closed without approval or matching content digest',async()=>{
+ const snapshot={schema:1,source:'DGCYE_PBA',datasetId:'4becb4b7-0a21-4fef-8f2c-30df7f345a01',resourceId:'3951210e-7e0e-4fed-bbf1-0183e704c9ae',sha256:'a'.repeat(64),catalogModified:'2026-11-18',schools:[{schoolKey:'0005MS0004',name:'Escuela fixture',district:'Avellaneda',level:'Secundaria',area:'Rural',classification:null,surveyPeriod:'2026'}]};
+ const bytes=new TextEncoder().encode(JSON.stringify(snapshot));
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+ const manifest={approved:true,indexDigest:'sha256:'+digest,sourceDigest:snapshot.sha256,resourceId:snapshot.resourceId,catalogModified:snapshot.catalogModified,path:'data/career-schools-'+digest.slice(0,16)+'.json'};
+ let calls=0;
+ const fetcher=async(url,options)=>{calls++;assert.equal(new URL(url).origin,'https://alertasapd.com.ar');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');return new Response(bytes);};
+ assert.equal(await loadReviewedSchoolCatalog({manifest:{...manifest,approved:false},origin:'https://alertasapd.com.ar',fetcher}),null);
+ assert.equal(calls,0);
+ const catalog=await loadReviewedSchoolCatalog({manifest,origin:'https://alertasapd.com.ar',fetcher});
+ assert.equal(catalog.exact('0005MS0004').classification,null);
+ await assert.rejects(loadReviewedSchoolCatalog({manifest:{...manifest,indexDigest:'sha256:'+'b'.repeat(64)},origin:'https://alertasapd.com.ar',fetcher}),/Integridad/);
+ await assert.rejects(loadReviewedSchoolCatalog({manifest:{...manifest,sourceDigest:'b'.repeat(64)},origin:'https://alertasapd.com.ar',fetcher}),/Procedencia/);
+ assert.equal(await loadReviewedSchoolCatalog({manifest:{...manifest,path:'https://foreign.invalid/index.json'},origin:'https://alertasapd.com.ar',fetcher}),null);
+});
