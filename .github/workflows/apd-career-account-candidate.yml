@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-career-*.mjs'
+      - 'scripts/apd_school_catalog_import.py'
+      - 'scripts/test_apd_school_catalog_import.py'
       - 'scripts/test-apd-career-account.mjs'
       - 'scripts/test-apd-career-editor-browser.mjs'
       - 'scripts/test-apd-career-full-worker.mjs'
@@ -29,6 +31,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: School catalog importer regression (synthetic CSV)
+        run: python3 -m unittest discover -s scripts -p 'test_apd_school_catalog_import.py' -v
       - name: Validate JS and account isolation
         run: |
           node --check scripts/apd-career-editor-ui.mjs
