@@ -1,0 +1,23 @@
+name: APD career planner phase 1 - offline security
+on:
+  pull_request:
+    paths:
+      - 'scripts/*account-schedule*'
+      - 'docs/sql/APD_ACCOUNT_SCHEDULE*'
+      - '.github/workflows/apd-career-planner-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-account-schedule.mjs
+      - run: |
+          node scripts/build-account-schedule-worker-candidate.mjs
+          node --check tmp/apd-account-schedule/worker-schedule-candidate.mjs
