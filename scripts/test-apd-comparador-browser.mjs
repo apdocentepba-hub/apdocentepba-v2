@@ -144,10 +144,11 @@ const server=createServer((req,res)=>{
   '/scripts/apd-offer-decision-signals.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-decision-signals.mjs')},
   '/scripts/apd-comparador-datos-evaluacion.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-comparador-datos-evaluacion.mjs')},
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
-  '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
-  '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
+  '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
+  '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
+  '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
   '/scripts/apd-account-home-write-policy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-home-write-policy.mjs')},
   '/scripts/apd-insigne-planner-entitlement.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-insigne-planner-entitlement.mjs')},
   '/scripts/apd-school-geodistance.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-school-geodistance.mjs')},
@@ -274,6 +275,14 @@ try{
    'Optional editor starts collapsed on mobile and desktop');
   assert.equal(await js(`getComputedStyle(document.querySelector(
    '#apd-comparador-panel .apd-work-summary')).minHeight`),'44px');
+  assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),true);
+  await js('document.getElementById("apd-simular-oferta").click();true');
+  await until('!!document.querySelector(".apd-week-simulator[open]")');
+  assert.match(await js('document.querySelector(".apd-week-simulator").textContent'),/Simulación informativa/);
+  assert.equal(await js('document.querySelectorAll(".apd-week-day").length'),7);
+  assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null);
+  await js('document.querySelector(".apd-week-simulator .apd-comparator-modal-close").click();true');
+  await until('!document.querySelector(".apd-week-simulator")');
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -287,6 +296,7 @@ try{
   await until('!!document.querySelector("#apd-comparador-panel .apd-comparator-insigne-locked")');
   assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),false,
    'Plus may compare offers but cannot open private work planner');
+  assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),false);
   assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
    'Downgrade must wipe domicile from the same browser tab');
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
