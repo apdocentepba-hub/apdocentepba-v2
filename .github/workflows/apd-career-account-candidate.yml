@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/apd-career-*.mjs'
       - 'scripts/test-apd-career-account.mjs'
+      - 'scripts/test-apd-career-editor-browser.mjs'
       - 'docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql'
       - 'tests/sql/apd_career_profile_assert.sql'
       - '.github/workflows/apd-career-account-candidate.yml'
@@ -30,6 +31,8 @@ jobs:
         run: |
           node --check scripts/apd-career-editor-ui.mjs
           node --test scripts/test-apd-career-account.mjs scripts/test-apd-week-simulator.mjs
+      - name: Real Chromium editor regression (synthetic accounts)
+        run: node scripts/test-apd-career-editor-browser.mjs
       - name: PostgreSQL isolated CAS and grants
         env:
           PGHOST: localhost
