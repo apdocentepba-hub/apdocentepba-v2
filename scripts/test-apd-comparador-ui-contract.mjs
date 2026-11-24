@@ -192,7 +192,7 @@ test('account sync release gate enabled after verified backend promotion; opaque
  assert.match(html,/const accountScheduleReleaseEnabled=true;/);
  assert.match(html,/if\(accountScheduleReleaseEnabled&&!accountScheduleClient&&!scheduleLoading\)/);
  assert.match(html,/window\.APD_renderProfileSchedule\?\.\(planActual,accountScheduleClient,accountScheduleReleaseEnabled\)/);
- assert.match(ui,/createWeeklyScheduleForm\(\{accountClient:profileScheduleClient,onChanged:/);
+ assert.match(ui,/createWeeklyScheduleForm\(\{accountClient:profileScheduleClient,accountRequired:profileScheduleRequired,onChanged:/);
  assert.match(ui,/profileScheduleClient=null;/);
 });
 
