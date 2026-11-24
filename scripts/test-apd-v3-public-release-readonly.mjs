@@ -10,11 +10,11 @@ test("anonymous source baseline recognizes whether V3 has already shipped",()=>{
   before.includes('apd_panel_priority_v3.js?v=1');
  // V3 has already shipped. Only normalize the exact old app asset tag in
  // the historical main baseline; the candidate and live gate require NEW.
- const priorApp='<script src="app_v2.js?v=20&rev=20261102-unverified-plan"></script>';
- const approvedApp='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
- assert.ok(before.includes(priorApp)||before.includes(approvedApp),
-  "Baseline must carry one known canonical app source");
- const normalizedBefore=before.replace(priorApp,approvedApp);
+ const approvedApp='<script src="app_v2.js?v=20&rev=20261124-perfil"></script>';
+ const knownOld=['20261102-unverified-plan','20261114-compact1'].map(rev=>'<script src="app_v2.js?v=20&rev='+rev+'"></script>');
+ const recognized=[approvedApp,...knownOld].filter(tag=>before.includes(tag));
+ assert.equal(recognized.length,1,"Baseline must carry one known canonical app source");
+ const normalizedBefore=before.replace(recognized[0],approvedApp);
  const result=checkHtml(normalizedBefore,v3AlreadyPresent?"after":"before");
  assert.equal(result.new_asset_links,v3AlreadyPresent?2:0);
  assert.equal(result.forms_preserved,true);
@@ -35,4 +35,12 @@ test("post-deploy gate detects missing priority JS, missing CSS or wrong radar v
 });
 test("pre-deploy baseline rejects a candidate accidentally published",()=>{
  assert.throws(()=>checkHtml(after,"before"),/already present/);
+});
+
+test("release rejects unapproved app version, duplicate runtime and reordered approved runtime",()=>{
+ const approved='<script src="app_v2.js?v=20&rev=20261124-perfil"></script>';
+ const tabs='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
+ assert.throws(()=>checkHtml(after.replace(approved,approved.replace('20261124-perfil','unknown')),"after"),/app runtime script changed/);
+ assert.throws(()=>checkHtml(after.replace(approved,approved+'<script src="./app_v2.js?v=other"></script>'),"after"),/duplicate app runtime/);
+ assert.throws(()=>checkHtml(after.replace(approved,'').replace(tabs,tabs+approved),"after"),/legacy script ordering/);
 });
