@@ -12,7 +12,7 @@ import {
  StatusBar, Platform
 } from "react-native";
 const {
- DEMO_OFFERS, DISTRICTS, SHIFTS, filterDemoOffers, toggleSaved, demoCounters
+ DEMO_OFFERS, DISTRICTS, SHIFTS, SCHOOLS, filterDemoOffers, toggleSaved, demoCounters, toggleDemoSchool, prioritizeDemoOffers
 } = require("./src/demo-state.js");
 const {
  createDemoInboxStore,emptyInbox,inboxCounters
@@ -73,7 +73,7 @@ function Metric({number,label}){
   <Text style={styles.metricLabel}>{label}</Text>
  </View>;
 }
-function OfferCard({item,saved,onToggle}){
+function OfferCard({item,saved,onToggle,schoolFavorite,onSchoolToggle}){
  return (
   <View style={styles.offer}>
    <View style={styles.offerTop}>
@@ -82,6 +82,7 @@ function OfferCard({item,saved,onToggle}){
    </View>
    <Text style={styles.offerTitle}>{item.cargo}</Text>
    <Text style={styles.offerSchool}>{item.escuela}</Text>
+   <Pill label={schoolFavorite?"★ Escuela favorita":"☆ Seguir esta escuela"} selected={schoolFavorite} onPress={onSchoolToggle}/>
    <Text style={styles.offerMeta}>{item.distrito}  ·  {item.nivel}</Text>
    <View style={styles.offerFooter}>
     <Text style={styles.offerId}>{item.id}</Text>
@@ -141,6 +142,8 @@ export default function App(){
  const [shift,setShift]=useState("Todos");
  const [query,setQuery]=useState("");
  const [saved,setSaved]=useState([]);
+ const [favoriteSchools,setFavoriteSchools]=useState([]);
+ const [onlyFavoriteSchools,setOnlyFavoriteSchools]=useState(false);
  const inboxStore=useMemo(()=>createDemoInboxStore({storage:AsyncStorage}),[]);
  const [inbox,setInbox]=useState(emptyInbox);
  const [inboxReady,setInboxReady]=useState(false);
@@ -214,8 +217,8 @@ export default function App(){
    setNotificationStatus("No se pudo mostrar el aviso local en este dispositivo.");
   }
  };
- const offers=useMemo(()=>filterDemoOffers(DEMO_OFFERS,{district,shift,query}),
-  [district,shift,query]);
+ const offers=useMemo(()=>prioritizeDemoOffers(filterDemoOffers(DEMO_OFFERS,{district,shift,query}),favoriteSchools,onlyFavoriteSchools),
+  [district,shift,query,favoriteSchools,onlyFavoriteSchools]);
  const counters=demoCounters(offers,saved);
  const inboxCounts=inboxCounters(inbox);
  const reset=async()=>{
@@ -223,7 +226,7 @@ export default function App(){
    const restored=await inboxStore.reset();
    setInbox(restored);setInboxReady(true);setInboxLocked(false);
    setInboxNote("Se reiniciaron los avisos ficticios de este equipo.");
-   setDistrict("Todos");setShift("Todos");setQuery("");setSaved([]);setTab("inicio");
+   setDistrict("Todos");setShift("Todos");setQuery("");setSaved([]);setFavoriteSchools([]);setOnlyFavoriteSchools(false);setTab("inicio");
   }catch{
    setInboxNote("No se pudo borrar la demostración local. Los datos anteriores siguen intactos.");
   }
@@ -258,7 +261,7 @@ export default function App(){
       <View style={styles.metricsRow}>
        <Metric number={String(counters.matching)} label="Ofertas de ejemplo"/>
        <Metric number={String(counters.saved)} label="Guardadas en esta sesión"/>
-       <Metric number="0" label="Push recibidos"/>
+       <Metric number={String(inboxCounts.demoUnread)} label="Avisos ficticios sin leer"/>
       </View>
       <View style={styles.featurePanel}>
        <Text style={styles.featureEyebrow}>PRÓXIMAMENTE</Text>
@@ -267,7 +270,8 @@ export default function App(){
         La versión final buscará ofertas compatibles con tus preferencias y podrá
         avisarte por notificación. Esta pantalla todavía no envía avisos.
        </Text>
-       <PrimaryButton label="Explorar la demostración" onPress={()=>setTab("alertas")}/>
+       <PrimaryButton label="Ver bandeja de avisos" onPress={()=>setTab("alertas")}/>
+       <PrimaryButton label="Elegir escuelas favoritas" secondary onPress={()=>setTab("filtros")}/>
       </View>
       <SectionHeading title="Cómo funcionará"
        sub="Una misma cuenta y filtros compartidos con la web."/>
@@ -296,6 +300,7 @@ export default function App(){
       {inbox.items.map(item=><DemoInboxCard
        key={item.id} notice={item}
        disabled={!inboxReady||inboxLocked} onRead={markInboxRead}/>)}
+      <Pill label={onlyFavoriteSchools?"★ Solo escuelas favoritas":"☆ Ver todas las escuelas"} selected={onlyFavoriteSchools} onPress={()=>setOnlyFavoriteSchools(v=>!v)}/>
       <SectionHeading title="Explorar ofertas ficticias"
        sub="Filtrá los ejemplos locales. No son vacantes de ABC."/>
       <TextInput
@@ -310,12 +315,13 @@ export default function App(){
        </Pressable>
       </View>
       {offers.length?offers.map(offer=><OfferCard key={offer.id} item={offer}
-       saved={saved.includes(offer.id)}
+       saved={saved.includes(offer.id)} schoolFavorite={favoriteSchools.includes(offer.escuela)}
+       onSchoolToggle={()=>setFavoriteSchools(current=>toggleDemoSchool(current,offer.escuela))}
        onToggle={()=>setSaved(current=>toggleSaved(current,offer.id))}/>):
        <View style={styles.empty}><Text style={styles.emptyTitle}>Sin ejemplos para esos filtros</Text>
         <Text style={styles.help}>Probá otro distrito, turno o texto de búsqueda.</Text>
         <PrimaryButton label="Limpiar filtros" onPress={()=>{
-         setQuery("");setDistrict("Todos");setShift("Todos");
+         setQuery("");setDistrict("Todos");setShift("Todos");setOnlyFavoriteSchools(false);
         }} secondary/></View>}
       <Text style={styles.bottomNote}>
        La aplicación terminada abrirá el enlace oficial de ABC solo después de verificar
@@ -332,6 +338,8 @@ export default function App(){
       <Text style={styles.filterLabel}>Turno</Text>
       <View style={styles.chipList}>{SHIFTS.map(x=><Pill key={x} label={x}
        selected={x===shift} onPress={()=>setShift(x)}/>)}</View>
+      <SectionHeading title="Escuelas favoritas" sub="Selección de esta sesión de demostración; todavía no se sincroniza ni envía avisos."/>
+      <View style={styles.chipList}>{SCHOOLS.map(s=><Pill key={s} label={(favoriteSchools.includes(s)?"★ ":"☆ ")+s} selected={favoriteSchools.includes(s)} onPress={()=>setFavoriteSchools(v=>toggleDemoSchool(v,s))}/>)}</View>
       <View style={styles.summaryBox}>
        <Text style={styles.summaryTitle}>Vista previa de compatibilidad</Text>
        <Text style={styles.summaryText}>{offers.length} ofertas ficticias coinciden
