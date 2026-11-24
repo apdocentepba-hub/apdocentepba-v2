@@ -196,8 +196,8 @@ test('account sync release gate enabled after verified backend promotion; opaque
  assert.match(ui,/profileScheduleClient=null;/);
 });
 
-test('permanent favorites remain gated off until authenticated live QA',()=>{
- assert.match(html,/const accountFavoritesReleaseEnabled=false;/);
+test('permanent favorites enabled after authenticated live QA',()=>{
+ assert.match(html,/const accountFavoritesReleaseEnabled=true;/);
  assert.match(html,/if\(accountFavoritesReleaseEnabled&&!accountFavoriteClient&&!favoriteLoading\)/);
  assert.match(html,/accountFavoriteClient\?\.reset\(\)/);
 });
