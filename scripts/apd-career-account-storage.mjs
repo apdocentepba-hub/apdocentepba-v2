@@ -5,7 +5,8 @@ export function createCareerStorage({base,serviceKey,fetcher=(url,init)=>globalT
  if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash||typeof serviceKey!=='string'||!serviceKey)throw Error('Invalid storage configuration');
  const owner=id=>{if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))throw Error('Invalid owner');return id.toLowerCase();};
  const headers={apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':'application/json'};
- const opts={headers,redirect:'error',cache:'no-store',signal:undefined};
+ // workerd accepts manual redirects. The status check rejects every 3xx.
+ const opts={headers,redirect:'manual',cache:'no-store',signal:undefined};
  async function rows(path,init){
   const response=await fetcher(url.origin+'/rest/v1/'+path,{...opts,...init,signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('Storage unavailable');

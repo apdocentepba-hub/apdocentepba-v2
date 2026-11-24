@@ -7,7 +7,7 @@ const expiry=new Date(Date.now()+86400000).toISOString(),revoked=new Date(Date.n
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
 const filter=(u,n)=>u.searchParams.get(n)?.replace(/^eq\./,'');
 const nativeFetch=globalThis.fetch;
-let badOwner=false,failWrite=false;
+let badOwner=false,failWrite=false,redirectRead=false;
 globalThis.fetch=async(input,init)=>{
  const req=new Request(input,init),u=new URL(req.url);
  assert.equal(u.origin,'https://fixture.invalid');assert.equal(req.headers.get('Authorization'),'Bearer fixture-server-only');
@@ -17,11 +17,12 @@ globalThis.fetch=async(input,init)=>{
  if(table==='subscription_plans')return json([]);
  if(table==='user_subscriptions'){const id=filter(u,'user_id');return json([{id:'fixture-sub',user_id:id,plan_code:id===ids.c?'PLUS':'INSIGNE',status:'active',source:'mercadopago_checkout',started_at:new Date().toISOString(),current_period_ends_at:expiry}]);}
  if(table==='user_career_profile'){
-  assert.equal(req.method,'GET');assert.equal(req.redirect,'error');
+  assert.equal(req.method,'GET');assert.equal(req.redirect,'manual');
+  if(redirectRead)return new Response(null,{status:307,headers:{Location:'https://unrelated.invalid'}});
   const id=filter(u,'user_id'),row=rows.get(id);assert.ok(Object.values(ids).includes(id));
   return json(row?[{user_id:badOwner?ids.b:id,...row}]:[]);
  }
- assert.equal(u.pathname,'/rest/v1/rpc/apd_career_profile_cas');assert.equal(req.method,'POST');assert.equal(req.redirect,'error');
+ assert.equal(u.pathname,'/rest/v1/rpc/apd_career_profile_cas');assert.equal(req.method,'POST');assert.equal(req.redirect,'manual');
  const body=await req.json();assert.deepEqual(Object.keys(body).sort(),['p_profile','p_revision','p_user']);
  if(failWrite)return json({error:'private backend detail'},500);
  if((rows.get(body.p_user)?.revision||0)!==body.p_revision)return json([]);
@@ -46,6 +47,7 @@ try{
  assert.equal((await put('b',0,{...profile,seniorityYears:2})).status,200);
  const forged=await run('a','GET',undefined,'?user_id='+ids.b);
  assert.equal(forged.headers.get('cache-control'),'private, no-store');assert.deepEqual(await value(forged),saved);
+ redirectRead=true;assert.equal((await run('a')).status,503);redirectRead=false;
  badOwner=true;assert.equal((await run('a')).status,503);badOwner=false;
  failWrite=true;const fail=await put('a',1);assert.equal(fail.status,503);assert.ok(!(await fail.text()).includes('private backend detail'));failWrite=false;
  assert.equal((await put('a',1,{schema:1,seniorityYears:10,positions:[]})).status,200);

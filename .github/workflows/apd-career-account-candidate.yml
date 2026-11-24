@@ -93,4 +93,5 @@ jobs:
           test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.sessions')" = 3
           test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.user_career_profile WHERE revision=1')" = 2
       - name: Real Chromium editor regression (synthetic accounts)
+        if: ${{ !cancelled() }}
         run: node scripts/test-apd-career-editor-browser.mjs
