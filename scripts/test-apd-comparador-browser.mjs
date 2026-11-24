@@ -1188,7 +1188,33 @@ try{
   assert.equal(await js('window.__wfsRequests.some(x=>x.filter?.includes("Calle de prueba"))'),false,
    'No private address must reach ABC during school identity lookup');
 
-  results.push({width,official_school_identity:true,private_gating:true,up_to_five:true,xss_escaped:true,
+  // Reproduce the account card from the real index and its profile rewrites.
+  const accountCard=indexSource.split('\n').find(line=>line.includes('id="panel-datos-docente"'));
+  assert.ok(accountCard,'Actual account card is required');
+  await js(`(()=>{
+   document.getElementById('panel-datos-docente').outerHTML=${JSON.stringify(accountCard.trim())};
+   window.alertasState={items:[],index:0};
+   document.getElementById('panel-alertas').textContent='Sin ofertas';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
+  assert.equal(await js(`(()=>{
+   const profile=document.getElementById('panel-datos-docente');
+   const host=document.getElementById('apd-perfil-horarios');
+   const grid=host.querySelector('.apd-schedule-grid');
+   profile.innerHTML='<button>Editar perfil</button>';
+   profile.innerHTML='<form>Edición</form>';
+   profile.innerHTML='<p>Perfil actualizado</p>';
+   return profile.parentElement===host.parentElement &&
+    !profile.contains(host) && grid===host.querySelector('.apd-schedule-grid');
+  })()`),true,'Profile rewrites must not remove or remount the schedule');
+  await js(`(()=>{
+   planActual={access_active:false};
+   document.getElementById('panel-alertas').textContent='Plan inactivo';
+   return true;
+  })()`);
+  await until('!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
+  results.push({width,profile_schedule_survives_edits:true,official_school_identity:true,private_gating:true,up_to_five:true,xss_escaped:true,
    auto_home_school_abc:true,inline_mobility:true,external_location_opt_in:true,
    account_home_reload:true,
    session_reset:true,limit_enforced:true,responsive:true});
