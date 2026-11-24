@@ -202,4 +202,4 @@ test('permanent favorites enabled after authenticated live QA',()=>{
  assert.match(html,/accountFavoriteClient\?\.reset\(\)/);
 });
 
-test('diary is gated pending authenticated production QA',()=>{assert.match(html,/const accountDiaryReleaseEnabled=false;/);assert.match(html,/accountDiaryClient\?\.reset\(\)/);});
+test('diary release is enabled after authenticated QA',()=>{assert.match(html,/const accountDiaryReleaseEnabled=true;/);assert.match(html,/accountDiaryClient\?\.reset\(\)/);});
