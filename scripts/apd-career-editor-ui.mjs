@@ -8,7 +8,7 @@ const button=(text,click)=>{const n=el('button',text,'btn btn-secondary');n.type
 const field=(text,input)=>{const n=el('label',undefined,'apd-work-field');n.append(el('span',text),input);return n;};
 const input=(type,value='',max)=>{const n=el('input',undefined,'apd-work-input');n.type=type;n.value=value;if(max)n.maxLength=max;return n;};
 const select=(values,value)=>{const n=el('select',undefined,'apd-work-input');for(const [v,t] of values){const o=el('option',t);o.value=v;n.append(o);}n.value=value;return n;};
-export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>false,onConfirmed=()=>{}}){
+export function mountCareerEditor(host,{client,legacyModules=[],schoolCatalog=null,isCurrent=()=>false,onConfirmed=()=>{}}){
  let legacy=validateModuleSchedule(legacyModules);
  const root=el('section',undefined,'apd-career-editor');
  const heading=el('h3','Mi carrera docente');const note=el('p','Cargos con horarios exactos. La grilla anterior se conserva; los módulos sin asignar quedan señalados.','apd-comparator-hint');
@@ -59,7 +59,29 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
   const kind=select([['cargo','Cargo'],['modulo','Módulos'],['hora_catedra','Horas cátedra']],p?.kind||'modulo');
   const situation=select([['titular','Titular'],['provisional','Provisional'],['suplente','Suplente'],['otro','Otra']],p?.status||'titular');
   const quantity=input('number',p?.quantity||1);quantity.min='1';quantity.max='77';quantity.step='1';quantity.required=true;
-  row.append(field('Escuela',school),field('Clave provincial (Mapa Escolar ABC)',schoolKey),el('p','Desfavorabilidad: sin verificar.','apd-comparator-hint'),field('Materia o función',role),field('Nivel',level),field('Unidad de liquidación',kind),field('Cantidad remunerativa (no horas reloj)',quantity),field('Situación de revista',situation));
+  const schoolStatus=el('p','Desfavorabilidad: sin verificar.','apd-comparator-hint');
+  function schoolInfo(){
+   const record=schoolCatalog?.exact(schoolKey.value.trim());
+   schoolStatus.textContent=record?'Padrón DGCyE · '+record.name+' · '+record.district+' · Ámbito: '+(record.area||'Sin datos')+' · Desfavorabilidad: '+(record.classification??'Sin datos')+' · Relevamiento: '+(record.surveyPeriod||'Sin datos')+' · Actualización del catálogo: '+record.catalogModified:'Desfavorabilidad: sin verificar.';
+  }
+  schoolKey.addEventListener('input',schoolInfo);
+  if(schoolCatalog){
+   const lookup=input('search','',120),results=el('div',undefined,'apd-career-school-results');
+   lookup.placeholder='Nombre, distrito o clave';
+   lookup.addEventListener('input',()=>{
+    results.replaceChildren();
+    for(const record of schoolCatalog.search(lookup.value)){
+     results.append(button(record.name+' · '+record.district+' · '+record.schoolKey,()=>{
+      if(!current()||busy)return;
+      school.value=record.name.slice(0,120);schoolKey.value=record.schoolKey;if(record.level)level.value=record.level.slice(0,80);
+      lookup.value='';results.replaceChildren();schoolInfo();dirty=true;preview();
+     }));
+    }
+   });
+   row.append(field('Buscar escuela en padrón oficial',lookup),results);
+  }
+  schoolInfo();
+  row.append(field('Escuela',school),field('Clave provincial (Mapa Escolar ABC)',schoolKey),schoolStatus,field('Materia o función',role),field('Nivel',level),field('Unidad de liquidación',kind),field('Cantidad remunerativa (no horas reloj)',quantity),field('Situación de revista',situation));
   const blocks=el('div');
   function block(initial={}){
    if(blocks.children.length>=42)return;
