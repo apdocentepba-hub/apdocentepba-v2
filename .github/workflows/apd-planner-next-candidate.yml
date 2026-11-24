@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'scripts/*economics-calendar*'
+      - 'scripts/apd-offer-economics-ui.mjs'
+      - 'apd_comparador_panel.mjs'
+      - 'scripts/test-apd-comparador-browser.mjs'
       - 'scripts/*application-diary*'
       - '.github/workflows/apd-planner-next-candidate.yml'
 permissions:
@@ -18,3 +21,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/test-apd-offer-economics-calendar.mjs scripts/test-apd-application-diary.mjs scripts/test-apd-offer-economics.mjs
+      - run: node scripts/test-apd-comparador-browser.mjs
