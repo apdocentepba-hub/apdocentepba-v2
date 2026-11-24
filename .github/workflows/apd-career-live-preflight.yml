@@ -1,0 +1,36 @@
+name: APD career preflight against the active Worker (read only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-career-live-preflight.yml'
+      - 'scripts/inspect-account-schedule-live.mjs'
+      - 'scripts/build-apd-career-worker-candidate.mjs'
+      - 'scripts/apd-career-account-*.mjs'
+      - 'scripts/test-apd-career-full-worker.mjs'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.number == 330 && github.event.pull_request.head.ref == 'feat/career-account-persistence-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read the active Cloudflare version and module
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/inspect-account-schedule-live.mjs career
+      - name: Build the candidate on the live module and exercise fixture routes
+        run: |
+          APD_CAREER_LIVE_SOURCE=tmp/apd-career/active-worker.mjs node scripts/build-apd-career-worker-candidate.mjs
+          node --check tmp/apd-career/worker-career-candidate.mjs
+          node scripts/test-apd-career-full-worker.mjs
+      - name: Remove live module and temporary output
+        if: always()
+        run: rm -rf tmp/apd-career

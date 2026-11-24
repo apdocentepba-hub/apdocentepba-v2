@@ -1,5 +1,5 @@
 /**
- * Read only Cloudflare active Worker capture for account-home preview.
+ * Read-only Cloudflare active Worker capture for account candidates.
  * Stores only candidate bytes in tmp/ on the GitHub runner; never writes
  * secrets, production user rows, or the canonical worker-live snapshot.
  */
@@ -9,12 +9,15 @@ import crypto from 'node:crypto';
 const name='ancient-wildflower-cd37';
 const token=String(process.env.CLOUDFLARE_API_TOKEN||'');
 if(!token)throw Error('Cloudflare token missing');
-const root='tmp/apd-account-schedule';
+const target=process.argv[2]||'schedule';
+if(!['schedule','career'].includes(target))throw Error('Unknown account candidate');
+const root=target==='career'?'tmp/apd-career':'tmp/apd-account-schedule';
+const handler=target==='career'?'handleAccountCareerSecureV1':'handleAccountScheduleSecureV1';
 fs.mkdirSync(root,{recursive:true});
 const get=async endpoint=>{
  const response=await fetch('https://api.cloudflare.com/client/v4'+endpoint,{
   headers:{Authorization:'Bearer '+token},
-  signal:AbortSignal.timeout(20000)
+  redirect:'error',signal:AbortSignal.timeout(20000)
  });
  if(!response.ok)throw Error('Cloudflare metadata HTTP '+response.status);
  const json=await response.json();
@@ -42,7 +45,7 @@ if(modules.length!==1||!/^[-a-zA-Z0-9_]+\.(?:js|mjs)$/.test(String(modules[0]?.n
  throw Error('Unexpected Cloudflare live module shape; refuse staging');
 const source=Buffer.from(modules[0].content_base64,'base64');
 const code=source.toString('utf8');
-if(code.includes('handleAccountScheduleSecureV1'))throw Error('Schedule endpoint already present; inspect manually');
+if(code.includes(handler))throw Error('Candidate endpoint already present in active source');
 if(source.length<100000||source.length>3000000||
  !code.includes('getSessionUserByBearer')||
  !code.includes('handleAccountProfileSecureV1')||
@@ -70,7 +73,7 @@ fs.writeFileSync(path.join(root,'active-version.txt'),version);
 fs.writeFileSync(path.join(root,'account-id.txt'),id);
 fs.writeFileSync(path.join(root,'active-binding-keys.json'),
  JSON.stringify([...now.keys()].sort()));
-console.log('APD_ACCOUNT_SCHEDULE_LIVE_SOURCE_READY '+JSON.stringify({
+console.log((target==='career'?'APD_CAREER_LIVE_SOURCE_READY ':'APD_ACCOUNT_SCHEDULE_LIVE_SOURCE_READY ')+JSON.stringify({
  live_version:version,matching_old_manifest:version===manifest.version_id,
  bytes:source.length,
  sha256_prefix:crypto.createHash('sha256').update(source).digest('hex').slice(0,12),
