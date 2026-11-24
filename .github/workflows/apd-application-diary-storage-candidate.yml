@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-application-diary.mjs
+      - run: node --test scripts/test-apd-application-diary.mjs scripts/test-apd-account-diary-client.mjs
       - run: |
           node scripts/build-account-diary-worker-candidate.mjs
           node --check tmp/apd-account-diary/worker-diary-candidate.mjs
