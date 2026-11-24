@@ -46,7 +46,7 @@ export async function accountDiaryRequest(request,deps){
   const saved=await deps.compareAndSet(owner.id,{entries:result.record.entries,revision:row.revision});
   if(saved===null)return fail(409,'El registro cambió. Volvé a cargar.');
   const confirmed=validateDiaryRow(saved);
-  if(JSON.stringify(confirmed)!==JSON.stringify(result.record))throw Error('Escritura no confirmada');
+  if(confirmed.revision!==result.record.revision||JSON.stringify(confirmed.entries)!==JSON.stringify(result.record.entries))throw Error('Escritura no confirmada');
   return reply(200,{ok:true,diary:confirmed});
  }catch{return fail(503,'No se pudo confirmar la operación. Volvé a consultar.');}
 }
