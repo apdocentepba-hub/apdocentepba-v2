@@ -1,0 +1,45 @@
+name: APD application diary guarded zero-traffic stage
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-account-diary-zero-traffic.yml'
+      - 'scripts/stage-account-diary-worker-candidate.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: apd-schedule-zero-traffic-cloudflare
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/account-diary-contract-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline checks
+        run: |
+          node --test scripts/test-apd-application-diary.mjs scripts/test-apd-account-diary-client.mjs
+          node --check scripts/stage-account-diary-worker-candidate.mjs
+      - name: Read active Worker and build candidate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/inspect-account-diary-live.mjs
+          APD_ACCOUNT_DIARY_LIVE_SOURCE=tmp/apd-account-diary/active-worker.mjs node scripts/build-account-diary-worker-candidate.mjs
+          node --check tmp/apd-account-diary/worker-diary-candidate.mjs
+          node scripts/test-apd-account-diary-full-worker.mjs
+      - name: Install Wrangler tooling
+        run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - name: Upload candidate without production traffic and verify unauthenticated requests
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/stage-account-diary-worker-candidate.mjs
+      - name: Remove transient artifacts
+        if: always()
+        run: rm -rf tmp/apd-account-diary wrangler.account-diary.ci.toml
