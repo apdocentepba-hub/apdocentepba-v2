@@ -35,12 +35,14 @@ let profileScheduleClient=null,profileScheduleRequired=true;
 let confirmedCareerContext=null;
 function loadPrivatePlanner(){
  const base=loadLegacyPlanner();
- if(!confirmedCareerContext||!confirmedCareerContext.isCurrent())return base;
- const record=confirmedCareerContext.getRecord();
- // A pending career read must not be advertised as a free week.
- if(!record)return {...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]};
- try{return mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey:verifiedSchoolKey});}
- catch{return {...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]};}
+ if(!confirmedCareerContext)return base;
+ // A pending, invalid or revoked account scope must not certify a free week.
+ const unavailable=()=>({...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]});
+ try{
+  if(!confirmedCareerContext.isCurrent())return unavailable();
+  const record=confirmedCareerContext.getRecord();
+  return record?mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey:verifiedSchoolKey}):unavailable();
+ }catch{return unavailable();}
 }
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
