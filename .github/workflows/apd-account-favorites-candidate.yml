@@ -40,3 +40,8 @@ jobs:
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_ACCOUNT_FAVORITES_CANDIDATE_20261124.sql
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_pg17_assert.sql
           bash tests/sql/test_apd_account_favorites_race.sh
+      - name: Full offline Worker with synthetic authenticated accounts
+        run: |
+          node scripts/build-account-favorites-worker-candidate.mjs
+          node --check tmp/apd-account-favorites/worker-favorites-candidate.mjs
+          node scripts/test-apd-account-favorites-full-worker.mjs
