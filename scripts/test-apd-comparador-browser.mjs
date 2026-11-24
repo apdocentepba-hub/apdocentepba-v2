@@ -190,6 +190,7 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-week-optimizer-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer-ui.mjs')},
   '/scripts/apd-week-optimizer.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer.mjs')},
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
+   '/scripts/apd-career-profile-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-career-profile-core.mjs')},
   '/scripts/apd-favorite-offers.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-favorite-offers.mjs')},
   '/scripts/apd-offer-recommendations.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-recommendations.mjs')},
   '/scripts/apd-personal-history.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-personal-history.mjs')},
@@ -342,7 +343,7 @@ try{
   assert.equal(await js('document.querySelectorAll(".apd-week-day").length'),7);
    assert.equal(await js('document.querySelectorAll(".apd-week-visual-day .apd-week-track").length'),21);
    assert.ok(await js('document.querySelectorAll(".apd-week-segment-offer").length')>0);
-   await js(`(()=>{const form=document.querySelector('.apd-salary-compare form');const fields=form.querySelectorAll('input');fields[0].value='800000';fields[1].value='950000';form.requestSubmit();return true;})()`);
+   await js(`(()=>{const form=document.querySelector('.apd-salary-compare form');form.querySelector('[name=salaryPeriod]').value='2026-11';const fields=form.querySelectorAll('input[type=number]');fields[0].value='800000';fields[1].value='950000';form.requestSubmit();return true;})()`);
    assert.match(await js('document.querySelector(".apd-salary-compare [role=status]").textContent'),/150[.]000/);
 
   await js(`(()=>{
@@ -1497,6 +1498,8 @@ try{
   return true;
  })()`);
  await until('!!document.querySelector(".apd-favorites") && !document.getElementById("apd-comparador-panel").hidden');
+ assert.equal(await js('document.querySelectorAll(".apd-career-tool").length'),4);
+ assert.equal(await js('document.querySelectorAll(".apd-career-tool:disabled").length'),2);
  assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
  await js('document.querySelector(".apd-favorites button").click();true');
  await until('document.querySelector(".apd-favorite-row")?.textContent.includes("Vigencia sin verificar")');
