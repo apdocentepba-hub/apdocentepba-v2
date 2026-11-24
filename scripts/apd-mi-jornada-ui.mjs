@@ -373,13 +373,15 @@ export function createPrivatePlannerForm({onChanged}={}){
  return details;
 }
 
-export function createWeeklyScheduleForm({onChanged}={}){
+export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
  const profile=loadPrivatePlanner();
  const generation=privacyGeneration;
  const details=element('details','apd-work-planner');
  details.appendChild(element('summary','apd-work-summary','Mi carga horaria'));
  const form=element('form','apd-work-form apd-module-form');
- form.appendChild(element('p','apd-comparator-hint','Marcá las horas que tenés ocupadas en cada turno. Se conservan en esta pestaña.'));
+ form.appendChild(element('p','apd-comparator-hint',accountClient?
+  'Marcá las horas ocupadas. Guardalas en tu cuenta para recuperarlas en otro dispositivo.':
+  'Marcá las horas que tenés ocupadas en cada turno. Se conservan en esta pestaña.'));
  const fields=[];
  for(const [shift,title,modules] of [['M','Turno mañana',[1,2,3,4,5]],['T','Turno tarde',[0,1,2,3,4,5]]]){
   const section=element('section','apd-module-section');
@@ -409,12 +411,63 @@ export function createWeeklyScheduleForm({onChanged}={}){
  const status=element('p','');status.setAttribute('role','status');
  const save=element('button','btn btn-primary','Guardar horarios');save.type='submit';
  form.append(save,status);
- form.addEventListener('submit',event=>{
+ const sessionCurrent=accountClient?.captureSession?.()||(()=>!accountClient);
+ const isCurrent=()=>generation===privacyGeneration&&details.isConnected&&sessionCurrent();
+ const readDraft=()=>fields.filter(check=>check.checked).map(check=>check.value);
+ const applySelection=modules=>{for(const check of fields)check.checked=modules.includes(check.value);};
+ let busy=false,initialLoad=true;
+ const setBusy=value=>{
+  for(const check of fields)check.disabled=value;
+  save.disabled=value||!!accountClient&&(initialLoad||!accountClient.peek());
+ };
+ let reload;
+ if(accountClient){
+  reload=element('button','btn btn-secondary','Recuperar horarios de la cuenta');reload.type='button';
+  form.insertBefore(reload,save);
+  async function load(){
+   if(busy||!isCurrent())return;
+   busy=true;reload.disabled=true;setBusy(true);status.textContent='Recuperando horarios…';
+   try{
+    const draft=readDraft();
+    const record=await accountClient.reload();
+    if(!isCurrent())return;
+    if(record.revision>0){
+     applySelection(record.modules);
+     savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:record.modules});
+     status.textContent='Horarios recuperados de tu cuenta.';onChanged?.();
+    }else{
+     applySelection(draft);
+     status.textContent='Todavía no hay horarios guardados en tu cuenta. Guardá tu selección para sincronizarla.';
+    }
+    initialLoad=false;
+   }catch(error){if(isCurrent())status.textContent=String(error.message||'No se pudo recuperar la cuenta');}
+   finally{if(isCurrent()){busy=false;reload.disabled=false;setBusy(false);}}
+  }
+  reload.addEventListener('click',load);
+  details.addEventListener('toggle',()=>{if(details.open&&initialLoad)void load();});
+  setBusy(false);
+  status.textContent='Recuperá tus horarios antes de guardar.';
+ }
+ form.addEventListener('submit',async event=>{
   event.preventDefault();
-  if(generation!==privacyGeneration)return;
-  try{savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:fields.filter(check=>check.checked).map(check=>check.value)});}
-  catch(error){status.textContent=error.message;return;}
-  status.textContent='Horarios guardados.';onChanged?.();
+  if(generation!==privacyGeneration||busy)return;
+  const modules=readDraft();
+  if(!accountClient){
+   try{savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:modules});}
+   catch(error){status.textContent=error.message;return;}
+   status.textContent='Horarios guardados.';onChanged?.();return;
+  }
+  if(!isCurrent()||initialLoad||!accountClient.peek())return;
+  busy=true;reload.disabled=true;setBusy(true);status.textContent='Guardando en tu cuenta…';
+  try{
+   const confirmed=await accountClient.persist(modules);
+   if(!isCurrent())return;
+   applySelection(confirmed.modules);
+   try{savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:confirmed.modules});}
+   catch{status.textContent='Guardado en tu cuenta. No se pudo actualizar esta pestaña; recuperá los horarios para reintentar.';return;}
+   status.textContent='Horarios guardados en tu cuenta.';onChanged?.();
+  }catch(error){if(isCurrent())status.textContent=String(error.message||'No se pudo confirmar el guardado')+' Tu selección sigue en la grilla.';}
+  finally{if(isCurrent()){busy=false;reload.disabled=false;setBusy(false);}}
  });
  details.appendChild(form);return details;
 }
