@@ -749,3 +749,5 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 .apd-recommendation-tools select{max-width:100%;min-width:0;width:100%}
 
 .apd-history-personal{border-top:1px solid var(--border,#cbd5e1);margin-top:12px;padding-top:12px}.apd-history-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.apd-history-tools select{max-width:100%;padding:6px}.apd-history-results{display:grid;gap:8px}.apd-history-row{border:1px solid var(--border,#cbd5e1);border-radius:10px;padding:10px;overflow-wrap:anywhere}.apd-history-row p{margin:4px 0}
+
+.apd-vacancy-radar{margin-top:14px;border-top:1px solid var(--border,#cbd5e1);padding-top:12px}.apd-vacancy-results{display:grid;gap:8px;margin-top:8px}.apd-vacancy-results progress{width:100%;accent-color:#2454a2}.apd-vacancy-radar input{max-width:100%;min-width:0}

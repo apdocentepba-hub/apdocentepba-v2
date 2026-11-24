@@ -9,7 +9,7 @@ import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=2026
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
-import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-history1';
+import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-vacancy1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';

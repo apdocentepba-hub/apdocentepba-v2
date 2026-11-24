@@ -1,4 +1,5 @@
 import {HISTORY_WINDOWS,projectPersonalHistory} from './apd-personal-history.mjs?v=20261124-history1';
+import {createVacancyRadar} from './apd-historical-vacancy-ui.mjs?v=20261124-vacancy1';
 const el=(tag,txt,cls)=>{const n=document.createElement(tag);if(txt!==undefined)n.textContent=txt;if(cls)n.className=cls;return n;};
 const date=v=>v?new Date(v).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'Sin fecha verificable';
 export function mountPersonalHistory(host,{fetchSummary,isCurrent}){
@@ -10,7 +11,7 @@ export function mountPersonalHistory(host,{fetchSummary,isCurrent}){
  for(const days of HISTORY_WINDOWS){const op=el('option',days+' días');op.value=String(days);select.append(op);}select.value='30';label.append(select);
  const submit=el('button','Consultar historial','btn btn-secondary');submit.type='submit';form.append(label,submit);
  const status=el('p','Elegí un período y consultá tus oportunidades anteriores.','apd-comparator-hint');status.setAttribute('role','status');
- const output=el('div',undefined,'apd-history-results');root.append(form,status,output);host.replaceChildren(root);host.hidden=false;
+ const output=el('div',undefined,'apd-history-results');root.append(form,status,output,createVacancyRadar());host.replaceChildren(root);host.hidden=false;
  const current=()=>root.isConnected&&isCurrent();
  const cancel=()=>{generation++;controller?.abort();controller=null;output.replaceChildren();submit.disabled=false;};
  select.addEventListener('change',()=>{cancel();status.textContent='Período cambiado. Consultá nuevamente.';});
