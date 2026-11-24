@@ -784,7 +784,29 @@ function render(){
  root.replaceChildren();
  root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count())));
  if(root.hidden)return;
- if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
+ if(state.privatePlannerAllowed){
+  const hub=node('section','apd-career-tools');
+  hub.append(node('h3','','Herramientas para elegir cargos'));
+  const grid=node('div','apd-career-tools-grid');
+  const count=state.available.length;
+  for(const [title,detail,target,enabled] of [
+   ['Recomendaciones',count?count+' alertas para analizar':'Sin alertas para analizar','.apd-recommendations',count>0],
+   ['Optimizar ofertas',count?'Combinar hasta 12':'Esperando nuevas ofertas','.apd-week-optimizer',count>0],
+   ['Mis favoritos','Ofertas guardadas en tu cuenta','.apd-favorites',true],
+   ['Historial','Oportunidades anteriores','#apd-personal-history',true]
+  ]){
+   const control=button('',()=>{
+    const destination=target.startsWith('#')?document.querySelector(target):root.querySelector(target);
+    if(!destination||destination.hidden)return;
+    if(destination.tagName==='DETAILS')destination.open=true;
+    destination.scrollIntoView?.({block:'start'});
+    destination.querySelector('summary,button,select')?.focus();
+   },'apd-career-tool');
+   control.disabled=!enabled;
+   control.append(node('strong','',title),node('span','',detail));grid.append(control);
+  }
+  hub.append(grid);root.append(hub,renderFavorites());
+ }
  if(!state.available.length)return;
  if(state.privatePlannerAllowed){root.appendChild(renderRecommendations());root.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
  const head=node('div','apd-comparator-head');
