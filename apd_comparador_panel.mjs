@@ -6,6 +6,8 @@ import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.m
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
+import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
+import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -24,6 +26,8 @@ const state={
 };
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
+const favorites=createFavoriteOffers();
+let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
 const safeKey=key=>/^[A-Za-z0-9_.:|-]{1,160}$/.test(key);
 const codePattern=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/;
 
@@ -203,7 +207,7 @@ function focusComparison() {
 function syncCurrentButton() {
  const actions=document.querySelector('#panel-alertas .alerta-main-card .alerta-actions');
  if(!actions)return;
- actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta')
+ actions.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta,#apd-favorite-oferta')
   .forEach(control=>control.remove());
  if(!state.enabled||!state.available.length)return;
  const item=state.current;
@@ -236,6 +240,12 @@ function syncCurrentButton() {
  if(state.privatePlannerAllowed&&key){
   const simulator=button('Simular esta oferta',()=>openWeekSimulator(key));
   simulator.id='apd-simular-oferta';actions.appendChild(simulator);
+  const favorite=button(favorites.has(key)?'Quitar favorito':'Guardar favorito',()=>{
+   if(!state.enabled||!state.privatePlannerAllowed||offerKey(state.current)!==key)return;
+   try{if(favorites.has(key))favorites.remove(key);else favorites.add(state.current,key);favoriteVisible=favorites.refresh(state.available,offerKey);favoriteMessage='';}
+   catch(error){favoriteMessage=error.message;}
+   favoritesOpen=true;syncCurrentButton();render();
+  });favorite.id='apd-favorite-oferta';favorite.setAttribute('aria-pressed',String(favorites.has(key)));actions.appendChild(favorite);
  }
  // The compare dialog requires at least two offers. Never show a dead CTA for one.
  if(state.selected.size>=2){
@@ -290,6 +300,7 @@ function openWeekSimulator(key){
    }
    body.appendChild(days);
   }
+  body.appendChild(createOfferEconomics());
  }
  dialog.appendChild(body);document.body.appendChild(dialog);
  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
@@ -590,14 +601,45 @@ function renderSideBySide(items){
  table.appendChild(tbody);wrap.appendChild(table);region.appendChild(wrap);
  return region;
 }
+function renderFavorites(){
+ const section=node('details','apd-favorites');
+ section.open=favoritesOpen;
+ const summary=node('summary','apd-work-summary','Mis favoritos de esta sesión ('+favorites.count()+')');
+ section.appendChild(summary);
+ section.appendChild(node('p','apd-comparator-hint','Guardados solo mientras esté abierta esta sesión de la página. No se sincronizan ni envían avisos. La ausencia de una oferta del carrusel no demuestra que esté cerrada.'));
+ if(favoriteMessage){const status=node('p','',favoriteMessage);status.setAttribute('role','status');section.appendChild(status);}
+ const list=node('div','apd-favorites-list');section.appendChild(list);
+ const draw=()=>{
+  list.replaceChildren();
+  const items=favorites.list(favoriteVisible);
+  if(!items.length)list.appendChild(node('p','apd-comparator-hint','Todavía no guardaste ofertas.'));
+  for(const item of items){
+   const row=node('article','apd-favorite-row');
+   row.appendChild(node('strong','',[item.cargo||'Cargo sin descripción',item.distrito].filter(Boolean).join(' · ')));
+   row.appendChild(node('p','apd-comparator-hint',[item.escuela,item.turno].filter(Boolean).join(' · ')));
+   row.appendChild(node('p','apd-favorite-status',item.label+(item.visible?'':' · No visible en los filtros actuales')));
+   if(item.deadline!==null)row.appendChild(node('p','apd-comparator-hint',new Date(item.deadline).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'})));
+   row.appendChild(button('Quitar favorito',()=>{
+    if(!state.enabled||!state.privatePlannerAllowed||!section.isConnected)return;
+    favorites.remove(item.source_offer_key);favoriteMessage='';syncCurrentButton();render();
+   }));
+   list.appendChild(row);
+  }
+ };
+ section.addEventListener('toggle',()=>{if(section.isConnected){favoritesOpen=section.open;if(section.open)draw();}});
+ draw();return section;
+}
+
 function render(){
  if(!root)return;
  // Editing an existing job invalidates previously verified distances.
  if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
- root.hidden=!state.enabled||!state.available.length;
+ root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&favorites.count()));
  if(root.hidden)return;
+ if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
+ if(!state.available.length)return;
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
  heading.tabIndex=-1;
@@ -821,6 +863,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
+ if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';}
  state.privatePlannerAllowed=entitled;
  state.enabled=enabled===true;
  if(!state.enabled){
@@ -832,6 +875,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
   if(key&&!unique.has(key))unique.set(key,item);
  }
  state.available=[...unique.values()];
+ favoriteVisible=entitled?favorites.refresh(state.available,offerKey):new Set();
  state.index=Number.isInteger(index)&&index>=0&&index<offers.length?index:0;
  state.current=Array.isArray(offers)?offers[state.index]:null;
  // The current card may have an invalid key: preserve its physical index only
@@ -860,13 +904,14 @@ function reset() {
  clearPrivatePlanner();
  applicantObserver?.disconnect();
  observedApplicants.clear();
+ favorites.clear();favoriteVisible=new Set();favoritesOpen=false;favoriteMessage='';
  closeComparisonDialog();
  invalidateGeo();
  state.enabled=false;state.privatePlannerAllowed=false;
  state.available=[];state.current=null;state.selected.clear();
  state.sort='cierre';state.district='';state.turn='';
  state.autoGeoSignature='';
- document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta')
+ document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta,#apd-favorite-oferta')
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
 }

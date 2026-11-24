@@ -147,6 +147,9 @@ const server=createServer((req,res)=>{
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
+  '/scripts/apd-favorite-offers.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-favorite-offers.mjs')},
+  '/scripts/apd-offer-economics.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics.mjs')},
+  '/scripts/apd-offer-economics-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-ui.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
   '/scripts/apd-mi-jornada-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-ui.mjs')},
   '/scripts/apd-account-home-write-policy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-home-write-policy.mjs')},
@@ -280,9 +283,26 @@ try{
   await until('!!document.querySelector(".apd-week-simulator[open]")');
   assert.match(await js('document.querySelector(".apd-week-simulator").textContent'),/Simulación informativa/);
   assert.equal(await js('document.querySelectorAll(".apd-week-day").length'),7);
+  await js(`(()=>{
+   const el=document.querySelector('.apd-economics');el.open=true;
+   for(const [name,value] of Object.entries({monthlyNet:400000,workDays:12,dailyRoundTrip:2500,otherMonthly:10000,roundTripMinutes:75}))el.querySelector('[name="'+name+'"]').value=value;
+   el.querySelector('form').requestSubmit();return true;
+  })()`);
+  assert.match(await js('document.querySelector(".apd-economics-output").textContent'),/360[.]000/);
+  assert.match(await js('document.querySelector(".apd-economics-output").textContent'),/15 h mensuales/);
+  await js(`(()=>{const input=document.querySelector('.apd-economics [name=monthlyNet]');input.value='0';input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);
+  assert.equal(await js('document.querySelector(".apd-economics-output").textContent'),'');
   assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null);
   await js('document.querySelector(".apd-week-simulator .apd-comparator-modal-close").click();true');
   await until('!document.querySelector(".apd-week-simulator")');
+  await js('document.getElementById("apd-favorite-oferta").click();true');
+  assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),1);
+  assert.equal(await js('document.getElementById("apd-favorite-oferta").getAttribute("aria-pressed")'),'true');
+  await js(`(()=>{window.alertasState={items:[],index:0};document.getElementById('panel-alertas').textContent='Sin alertas';return true;})()`);
+  await until('!!document.querySelector(".apd-favorite-row") && !document.getElementById("apd-comparador-panel").hidden');
+  assert.match(await js('document.querySelector(".apd-favorite-row").textContent'),/No visible en los filtros actuales/);
+  await js(`(()=>{window.alertasState={items:window.__offers,index:0};document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';return true;})()`);
+  await until('!!document.getElementById("apd-favorite-oferta")');
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -297,6 +317,8 @@ try{
   assert.equal(await js('!!document.querySelector("#apd-comparador-panel .apd-work-planner")'),false,
    'Plus may compare offers but cannot open private work planner');
   assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),false);
+  assert.equal(await js('!!document.querySelector(".apd-favorites")'),false);
+  assert.equal(await js('!!document.getElementById("apd-favorite-oferta")'),false);
   assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
    'Downgrade must wipe domicile from the same browser tab');
   assert.equal(await js('!!document.querySelector("#apd-comparar-oferta")'),true);
