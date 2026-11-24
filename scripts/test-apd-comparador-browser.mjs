@@ -38,6 +38,7 @@ window.alertasState={items:[],index:0};
 window.__testToken=null;
 window.API_URL=location.search.includes('favorites=1')?'https://fixture.invalid':location.origin;
 function obtenerToken(){return window.__testToken;}
+window.obtenerAuthBearer=()=>window.__testToken?'BEARER_'+window.__testToken:'';
 window.__historyCalls=0;window.__historyHold=false;window.__historyRelease=null;
 async function workerFetchJson(path,opts){window.__historyCalls++;const days=Number(new URL(path,location.origin).searchParams.get('days'));const data={ok:true,empty:false,ventana_dias:days,ofertas_unicas:4,capturas_filtradas:5,ultima_captura:'2026-11-02T08:00:00Z',ultimas_ofertas:[{iddetalle:'100',cargo:'Histórico fixture',estado:'PUBLICADA',finoferta:'2020-01-01T08:00:00Z',captured_at:'2026-11-02T08:00:00Z'}]};if(window.__historyHold)return new Promise(resolve=>window.__historyRelease=()=>resolve(data));return data;}
 window.__wfsRequests=[];
@@ -135,7 +136,7 @@ const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
  if(pathname==='/api/account/favorites'){
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
-  const allowed=['SYNTHETIC_FAVORITES_A','SYNTHETIC_FAVORITES_B'].includes(bearer);
+  const allowed=['BEARER_SYNTHETIC_FAVORITES_A','BEARER_SYNTHETIC_FAVORITES_B'].includes(bearer);
   favoriteRequests.push({method:req.method,bearer});
   const row=favoriteRows.get(bearer)||{keys:[],revision:0};
   let status=allowed?200:401,data=allowed?{ok:true,favorites:row}:{ok:false};
@@ -149,7 +150,7 @@ const server=createServer(async(req,res)=>{
  }
  if(pathname==='/api/account/schedule'){
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
-  const allowed=['SYNTHETIC_SCHEDULE_A','SYNTHETIC_SCHEDULE_B'].includes(bearer);
+  const allowed=['BEARER_SYNTHETIC_SCHEDULE_A','BEARER_SYNTHETIC_SCHEDULE_B'].includes(bearer);
   scheduleRequests.push({method:req.method,bearer});
   const row=scheduleRows.get(bearer)||{modules:[],revision:0};
   let status=allowed?200:401,data=allowed?{ok:true,schedule:row}:{ok:false,message:'Session not authorized'};
@@ -1418,7 +1419,7 @@ try{
  // Exercise the exact release-enabled index bootstrap without injected client.
  for(const width of [390,1280]){
   scheduleRequests.length=0;scheduleRows.clear();
-  scheduleRows.set('SYNTHETIC_SCHEDULE_A',{modules:['M1-2'],revision:1});
+  scheduleRows.set('BEARER_SYNTHETIC_SCHEDULE_A',{modules:['M1-2'],revision:1});
   await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
   await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/?schedule=1'});
   await until('document.readyState==="complete"');
@@ -1434,6 +1435,7 @@ try{
   await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
   await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
   assert.equal(scheduleRequests.filter(x=>x.method==='GET').length,1,'Load saved schedules without opening form');
+  assert.equal(scheduleRequests[0].bearer,'BEARER_SYNTHETIC_SCHEDULE_A','Send session credential, never account identifier');
   assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,0,'Never upload on initialization');
   assert.deepEqual(await js('[...document.querySelectorAll("#apd-perfil-horarios input:checked")].map(x=>x.value)'),['M1-2'],'Persisted schedule loaded before opening');
   assert.equal(await js(`JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1')).moduleSchedule[0]`),'M1-2','Filter profile hydrated automatically');
@@ -1441,7 +1443,7 @@ try{
   await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
   await js(`(()=>{const host=document.getElementById('apd-perfil-horarios');host.querySelectorAll('input').forEach(i=>i.checked=i.value==='M2-1');host.querySelector('form').requestSubmit();return true;})()`);
   await until('document.querySelector("#apd-perfil-horarios [role=status]").textContent.includes("Horarios guardados en tu cuenta")');
-  assert.deepEqual(scheduleRows.get('SYNTHETIC_SCHEDULE_A'),{modules:['M2-1'],revision:2});
+  assert.deepEqual(scheduleRows.get('BEARER_SYNTHETIC_SCHEDULE_A'),{modules:['M2-1'],revision:2});
   await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_SCHEDULE_B';window.__testToken='SYNTHETIC_SCHEDULE_B';document.getElementById('panel-alertas').textContent='Cuenta B';return true;})()`);
   await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
   await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
@@ -1495,7 +1497,7 @@ try{
   await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)") && !document.getElementById("apd-favorite-oferta").disabled');
   await js('document.getElementById("apd-favorite-oferta").click();true');
   await until('document.getElementById("apd-favorite-oferta").getAttribute("aria-pressed")==="true"');
-  assert.deepEqual(favoriteRows.get('SYNTHETIC_FAVORITES_A'),{keys:['D_123'],revision:1});
+  assert.deepEqual(favoriteRows.get('BEARER_SYNTHETIC_FAVORITES_A'),{keys:['D_123'],revision:1});
   await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_FAVORITES_B';window.__testToken=dashboardLoadedOwner;window.alertasState={items:[],index:0};document.getElementById('panel-alertas').textContent='Cuenta B sin ofertas';return true;})()`);
   await until('!!document.querySelector(".apd-favorites button") && !document.querySelector(".apd-favorites button").disabled');
   assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
@@ -1507,7 +1509,7 @@ try{
   await until('document.querySelector(".apd-favorite-row")?.textContent.includes("Vigencia sin verificar")');
   await js('document.querySelector(".apd-favorite-row button").click();true');
   await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)")');
-  assert.deepEqual(favoriteRows.get('SYNTHETIC_FAVORITES_A'),{keys:[],revision:2});
+  assert.deepEqual(favoriteRows.get('BEARER_SYNTHETIC_FAVORITES_A'),{keys:[],revision:2});
   assert.equal(favoriteRequests.filter(x=>x.method==='PUT').length,2);
   results.push({width,actual_favorites_bootstrap:true,account_switch_isolation:true,empty_carousel_access:true});
  }
