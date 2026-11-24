@@ -8,6 +8,7 @@ const chrome=['google-chrome','chromium','chromium-browser'].find(x=>spawnSync('
 assert.ok(chrome,'Chromium required');
 const page=`<!doctype html><meta charset="utf-8"><div id="host"></div><pre id="result">RUNNING</pre><script type="module">
 import {mountCareerEditor} from '/scripts/apd-career-editor-ui.mjs';
+import {createCareerPanelCoordinator} from '/scripts/apd-career-panel-coordinator.mjs';
 import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
 import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
 const check=(v,m)=>{if(!v)throw Error(m);};
@@ -36,11 +37,27 @@ try{
  button('Descartar borrador y recuperar').click();await until(()=>status().includes('recuperada'));check(years().value==='13','explicit discard');
  dispose();token='B';mountCareerEditor(host,{client,legacyModules:[],isCurrent:()=>true});await until(()=>status().includes('Todavía no'));
  check(years().value===''&&!host.textContent.includes('Matemática'),'other account isolated');check(puts===2,'no hidden writes');
+ host.replaceChildren();token='A';
+ const coordinator=createCareerPanelCoordinator();
+ let modules=['M1-2','T1-1'];
+ const plan={ok:true,access_active:true,subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'},plan:{code:'INSIGNE'}};
+ const scheduleClient={peek:()=>({modules,revision:1})};
+ const opts={enabled:true,host,plan,client,scheduleClient,isCurrent:()=>true};
+ coordinator.sync({...opts,enabled:false});check(host.hidden&&!host.firstElementChild,'release gate closed');
+ coordinator.sync(opts);await until(()=>status().includes('recuperada'));
+ edit('14');const before=host.firstElementChild;
+ modules=['M1-2','T1-1','T2-2'];coordinator.sync(opts);
+ check(host.firstElementChild===before&&years().value==='14','same-session refresh keeps draft');
+ check(host.textContent.includes('2 módulos anteriores sin asignar'),'legacy updates without remount');
+ coordinator.sync({...opts,plan:{access_active:false}});check(host.hidden&&!host.firstElementChild,'revoked plan clears editor');
+ token='B';coordinator.sync(opts);await until(()=>status().includes('Todavía no'));
+ check(years().value===''&&!host.textContent.includes('Matemática'),'coordinator isolates accounts');
+ check(puts===2,'no writes during refresh or account change');
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
 }catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}</script>`;
 const server=createServer((req,res)=>{
  if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});return res.end(page);}
- if(/^\/scripts\/apd-(career-[a-z-]+|account-schedule-core)\.mjs$/.test(req.url)){try{const content=readFileSync('.'+req.url);res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(content);}catch{}}
+ if(/^\/scripts\/apd-(career-[a-z-]+|account-schedule-core|insigne-planner-entitlement)\.mjs$/.test(req.url)){try{const content=readFileSync('.'+req.url);res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(content);}catch{}}
  res.writeHead(404);res.end();
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
