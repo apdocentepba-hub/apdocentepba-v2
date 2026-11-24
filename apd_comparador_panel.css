@@ -751,3 +751,22 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 .apd-history-personal{border-top:1px solid var(--border,#cbd5e1);margin-top:12px;padding-top:12px}.apd-history-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.apd-history-tools select{max-width:100%;padding:6px}.apd-history-results{display:grid;gap:8px}.apd-history-row{border:1px solid var(--border,#cbd5e1);border-radius:10px;padding:10px;overflow-wrap:anywhere}.apd-history-row p{margin:4px 0}
 
 .apd-vacancy-radar{margin-top:14px;border-top:1px solid var(--border,#cbd5e1);padding-top:12px}.apd-vacancy-results{display:grid;gap:8px;margin-top:8px}.apd-vacancy-results progress{width:100%;accent-color:#2454a2}.apd-vacancy-radar input{max-width:100%;min-width:0}
+
+/* Compact, keyboard-accessible compatibility filter. */
+#apd-alert-schedule-controls .apd-schedule-filter-card{width:100%;max-width:100%;box-sizing:border-box;border:1px solid #cbd8e9;border-radius:14px;background:#fff;padding:12px 14px;box-shadow:0 2px 8px #1734540a}
+#apd-alert-schedule-controls .apd-schedule-switch{display:flex;align-items:center;gap:12px;width:100%;min-width:0;text-align:left;white-space:normal;padding:0;border:0;border-radius:9px;background:transparent;color:#173454;font:inherit;cursor:pointer}
+#apd-alert-schedule-controls .apd-schedule-switch:disabled{cursor:default;opacity:.8}
+#apd-alert-schedule-controls .apd-schedule-symbol{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#eaf1fa;color:#315b8b;font-size:20px;font-weight:800}
+#apd-alert-schedule-controls .apd-schedule-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+#apd-alert-schedule-controls .apd-schedule-copy strong{font-size:14px;line-height:1.3;color:#173454}
+#apd-alert-schedule-controls .apd-schedule-subtitle{font-size:12px;line-height:1.4;color:#52677f}
+#apd-alert-schedule-controls .apd-schedule-track{display:flex;align-items:center;flex:0 0 44px;width:44px;height:26px;box-sizing:border-box;border-radius:20px;padding:3px;background:#8290a2}
+#apd-alert-schedule-controls .apd-schedule-thumb{width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0003;transform:translateX(0);transition:transform .15s}
+#apd-alert-schedule-controls .apd-schedule-switch[aria-checked=true] .apd-schedule-track{background:#168064}
+#apd-alert-schedule-controls .apd-schedule-switch[aria-checked=true] .apd-schedule-thumb{transform:translateX(18px)}
+#apd-alert-schedule-controls .apd-schedule-switch[aria-checked=true] .apd-schedule-symbol{background:#dcf4ea;color:#166a50}
+#apd-alert-schedule-controls .apd-schedule-filter-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid #e1e9f2;margin-top:10px;padding-top:8px}
+#apd-alert-schedule-controls .apd-schedule-filter-count{font-size:12px;color:#435b75;font-weight:650}
+#apd-alert-schedule-controls .apd-schedule-edit{border:0;background:transparent;color:#24538a;font:inherit;font-size:12px;font-weight:750;min-height:32px;padding:4px 6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+#apd-alert-schedule-controls button:focus-visible{outline:2px solid #2369b3;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){#apd-alert-schedule-controls .apd-schedule-thumb{transition:none}}
