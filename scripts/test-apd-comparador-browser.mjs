@@ -17,7 +17,8 @@ const indexSource=readFileSync('index.html','utf8');
 const bootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
  .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
 assert.ok(bootstrap,'actual dashboard observer bootstrap must be present');
-const legacyBootstrap=bootstrap.replace('const accountFavoritesReleaseEnabled=true;','const accountFavoritesReleaseEnabled=false;');
+const diaryDisabledBootstrap=bootstrap.replace('const accountDiaryReleaseEnabled=true;','const accountDiaryReleaseEnabled=false;');
+const legacyBootstrap=diaryDisabledBootstrap.replace('const accountFavoritesReleaseEnabled=true;','const accountFavoritesReleaseEnabled=false;');
 const html=`<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/apd_comparador_panel.css">
@@ -118,7 +119,7 @@ window.fetch=async (target,opts={})=>{
 </script>
 <script>${legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;')}</script></body></html>`;
 const liveScheduleHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),legacyBootstrap);
-const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
+const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),diaryDisabledBootstrap);
 assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
 const liveDiaryHtml=liveFavoritesHtml.replace('const accountDiaryReleaseEnabled=false;','const accountDiaryReleaseEnabled=true;');
 assert.notEqual(liveDiaryHtml,liveFavoritesHtml,'Diary release bootstrap must be exercised');
