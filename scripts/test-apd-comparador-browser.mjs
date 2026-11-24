@@ -1548,7 +1548,7 @@ try{
   return true;
  })()`);
  await until('!!document.querySelector(".apd-favorites") && !document.getElementById("apd-comparador-panel").hidden');
- assert.equal(await js('document.querySelectorAll(".apd-career-tool").length'),4);
+ assert.equal(await js('document.querySelectorAll(".apd-career-tool").length'),5);
  assert.equal(await js('document.querySelectorAll(".apd-career-tool:disabled").length'),2);
  assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
  await js('document.querySelector(".apd-favorites button").click();true');
