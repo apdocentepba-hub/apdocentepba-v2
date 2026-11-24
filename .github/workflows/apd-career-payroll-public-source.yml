@@ -1,0 +1,33 @@
+name: APD official provincial payroll scale (read only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-career-payroll-public-source.yml'
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve exact November 2026 provincial scale
+        run: |
+          mkdir -p /tmp/apd-payroll-review
+          curl --fail --silent --show-error --proto '=https' --max-time 100 --max-filesize 20971520 \
+            'https://www.ec.gba.gov.ar/areas/Sub_Politica_Coord_Eco/economialaboral/archivos/Escala%20salarial%20Ley%20N%C2%BA%2010.579%20-%20Noviembre%202026.pdf' \
+            -o /tmp/apd-payroll-review/november.pdf
+          test "$(head -c 5 /tmp/apd-payroll-review/november.pdf)" = '%PDF-'
+          sha256sum /tmp/apd-payroll-review/november.pdf
+          pdftotext -layout /tmp/apd-payroll-review/november.pdf /tmp/apd-payroll-review/november.txt
+          test -s /tmp/apd-payroll-review/november.txt
+          echo APD_PAYROLL_SOURCE_REVIEW_REQUIRED
+          head -n 45 /tmp/apd-payroll-review/november.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apd-provincial-payroll-november-review
+          path: /tmp/apd-payroll-review
+          retention-days: 7
+          if-no-files-found: error
