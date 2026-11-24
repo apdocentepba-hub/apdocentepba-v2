@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded',function(){
  if(!panel||!comparison||typeof MutationObserver!=='function')return;
  let previousOwner=null,loading=false,mapLoading=false;
  // Release gate: enable only after authenticated QA and Worker promotion.
- const accountScheduleReleaseEnabled=false;
+ const accountScheduleReleaseEnabled=true;
  let accountScheduleClient=null,scheduleLoading=false;
  const sync=function(){
   // A bearer is never forwarded to the comparison module or stored on disk.

@@ -114,7 +114,9 @@ window.fetch=async (target,opts={})=>{
  return reply;
 };
 </script>
-<script>${bootstrap}</script></body></html>`;
+<script>${bootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;')}</script></body></html>`;
+const liveScheduleHtml=html.replace(bootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
+assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
 const accountHomes=new Map([
  ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
   georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 123, Wilde, Buenos Aires',
@@ -124,8 +126,23 @@ const accountHomes=new Map([
    height:456,lat:-34.74,lon:-58.27,scope:'partido',reviewed:true}}]
 ]);
 const accountRequests=[];
-const server=createServer((req,res)=>{
- const pathname=new URL(req.url,'http://localhost').pathname;
+const scheduleRequests=[],scheduleRows=new Map();
+const server=createServer(async(req,res)=>{
+ const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
+ if(pathname==='/api/account/schedule'){
+  const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  const allowed=['SYNTHETIC_SCHEDULE_A','SYNTHETIC_SCHEDULE_B'].includes(bearer);
+  scheduleRequests.push({method:req.method,bearer});
+  const row=scheduleRows.get(bearer)||{modules:[],revision:0};
+  let status=allowed?200:401,data=allowed?{ok:true,schedule:row}:{ok:false,message:'Session not authorized'};
+  if(allowed&&req.method==='PUT'){
+   let raw='';for await(const chunk of req)raw+=chunk;
+   const p=JSON.parse(raw);
+   if(p.revision!==row.revision){status=409;data={ok:false,message:'Los horarios cambiaron en otro dispositivo'};}
+   else{const saved={modules:p.modules,revision:row.revision+1};scheduleRows.set(bearer,saved);data={ok:true,schedule:saved};}
+  }
+  res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));return;
+ }
  if(pathname==='/api/account/home'){
   // No real user/session address is ever involved: synthetic in-process backend.
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
@@ -138,7 +155,7 @@ const server=createServer((req,res)=>{
   return;
  }
  const paths={
-  '/':{type:'text/html',body:html},
+  '/':{type:'text/html',body:url.searchParams.has('schedule')?liveScheduleHtml:html},
   '/account_home_reference_patch.js':{type:'text/javascript',body:readFileSync('account_home_reference_patch.js')},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
@@ -1363,6 +1380,44 @@ try{
    auto_home_school_abc:true,inline_mobility:true,external_location_opt_in:true,
    account_home_reload:true,account_schedule_candidate:true,
    session_reset:true,limit_enforced:true,responsive:true});
+ }
+ // Exercise the exact release-enabled index bootstrap without injected client.
+ for(const width of [390,1280]){
+  scheduleRequests.length=0;scheduleRows.clear();
+  await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+  await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/?schedule=1'});
+  await until('document.readyState==="complete"');
+  assert.equal(scheduleRequests.length,0);
+  const accountCard=indexSource.split('\n').find(line=>line.includes('id="panel-datos-docente"'));
+  await js(`(()=>{
+   document.getElementById('panel-datos-docente').outerHTML=${JSON.stringify(accountCard.trim())};
+   dashboardLoadedOwner='SYNTHETIC_SCHEDULE_A';window.__testToken='SYNTHETIC_SCHEDULE_A';
+   planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+   window.alertasState={items:[],index:0};document.getElementById('panel-alertas').textContent='Sin ofertas';
+   return true;
+  })()`);
+  await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
+  assert.equal(scheduleRequests.length,0,'No automatic data upload or read before opening form');
+  await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
+  await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
+  await js(`(()=>{const host=document.getElementById('apd-perfil-horarios');host.querySelectorAll('input').forEach(i=>i.checked=i.value==='M2-1');host.querySelector('form').requestSubmit();return true;})()`);
+  await until('document.querySelector("#apd-perfil-horarios [role=status]").textContent.includes("Horarios guardados en tu cuenta")');
+  assert.deepEqual(scheduleRows.get('SYNTHETIC_SCHEDULE_A'),{modules:['M2-1'],revision:1});
+  await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_SCHEDULE_B';window.__testToken='SYNTHETIC_SCHEDULE_B';document.getElementById('panel-alertas').textContent='Cuenta B';return true;})()`);
+  await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
+  await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
+  await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
+  assert.equal(await js('document.querySelectorAll("#apd-perfil-horarios input:checked").length'),0);
+  assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,1);
+  await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_SCHEDULE_A';window.__testToken='SYNTHETIC_SCHEDULE_A';document.getElementById('panel-alertas').textContent='Cuenta A';return true;})()`);
+  await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
+  await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
+  await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
+  assert.deepEqual(await js('[...document.querySelectorAll("#apd-perfil-horarios input:checked")].map(x=>x.value)'),['M2-1']);
+  await js(`(()=>{planActual={access_active:false};document.getElementById('panel-alertas').textContent='Plan inactivo';return true;})()`);
+  await until('!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
+  assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,1);
+  results.push({width,actual_release_bootstrap:true,account_schedule_readback:true,account_switch_isolation:true,no_automatic_upload:true});
  }
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{

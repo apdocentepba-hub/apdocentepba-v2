@@ -188,8 +188,8 @@ test('account overview renders a real text summary and preserves independent act
  assert.match(css,/#panel-docente \.panel-card:has\(> #panel-datos-docente\)/);
 });
 
-test('account sync release gate remains off until authenticated verification; opaque client only',()=>{
- assert.match(html,/const accountScheduleReleaseEnabled=false;/);
+test('account sync release gate enabled after verified backend promotion; opaque client only',()=>{
+ assert.match(html,/const accountScheduleReleaseEnabled=true;/);
  assert.match(html,/if\(accountScheduleReleaseEnabled&&!accountScheduleClient&&!scheduleLoading\)/);
  assert.match(html,/window\.APD_renderProfileSchedule\?\.\(planActual,accountScheduleClient\)/);
  assert.match(ui,/createWeeklyScheduleForm\(\{accountClient:profileScheduleClient,onChanged:/);

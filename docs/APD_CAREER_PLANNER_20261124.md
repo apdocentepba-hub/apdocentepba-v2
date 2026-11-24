@@ -25,3 +25,6 @@ Operator-only `node scripts/check-apd-account-schedule-authenticated.mjs --execu
 
 ## Frontend mount gate
 The actual profile mount now accepts an opaque account schedule client from authenticated bootstrap. The release switch is explicitly false; no account-schedule HTTP requests in production. Current tab-only behavior remains intact. Chromium mounts the candidate into the real profile host, not a separate detached fixture, and exercises load/save/conflict/session revocation. Only enable the release switch after live authenticated QA and verified Worker promotion.
+
+## Production promotion 24/11/2026
+Authenticated QA run 45418646403 PASS, two real dedicated accounts, cleanup verified. Worker promotion run 45428659866 PASS: version 49a33cc8-0b0a-4c07-9b8b-3492bf0c2132 at 100%, previous 8d0d65d9-a338-45d2-b7e9-68879f35b6d8, 12 public smoke checks, 29 bindings and 4 crons. Enable UI after this evidence. Rollback UI by reverting gate, backend by promoting exact previous version if necessary; no deletion of saved schedules. Browser test exercises exact enabled bootstrap plus preserved gate-off regression coverage.
