@@ -340,6 +340,11 @@ try{
   await until('!!document.querySelector(".apd-week-simulator[open]")');
   assert.match(await js('document.querySelector(".apd-week-simulator").textContent'),/Simulación informativa/);
   assert.equal(await js('document.querySelectorAll(".apd-week-day").length'),7);
+   assert.equal(await js('document.querySelectorAll(".apd-week-visual-day .apd-week-track").length'),21);
+   assert.ok(await js('document.querySelectorAll(".apd-week-segment-offer").length')>0);
+   await js(`(()=>{const form=document.querySelector('.apd-salary-compare form');const fields=form.querySelectorAll('input');fields[0].value='800000';fields[1].value='950000';form.requestSubmit();return true;})()`);
+   assert.match(await js('document.querySelector(".apd-salary-compare [role=status]").textContent'),/150[.]000/);
+
   await js(`(()=>{
    const el=document.querySelector('.apd-economics');el.open=true;
    for(const [name,value] of Object.entries({monthlyNet:400000,workDays:12,dailyRoundTrip:2500,otherMonthly:10000,roundTripMinutes:75}))el.querySelector('[name="'+name+'"]').value=value;
