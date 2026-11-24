@@ -115,3 +115,23 @@ test('known statutory components never masquerade as full gross or take-home pay
  assert.equal(b.disadvantageCentavos,4800000);assert.equal(b.knownSubtotalCentavos,19800000);assert.equal(b.status,'partial');
  assert.throws(()=>statutoryComponents({recognizedYears:10,monthlyAssignmentCentavos:NaN}));
 });
+
+import {mergeConfirmedCareerPlanner} from './apd-career-profile-core.mjs';
+import {checkScheduleOverlap} from './apd-mi-jornada-comparador.mjs?v=20261124-modulos';
+test('confirmed career affects availability without altering the original schedule',()=>{
+ const base={jobs:[],moduleSchedule:['M1-2'],travelGapMinutes:0};
+ const profile={schema:1,seniorityYears:10,positions:[{id:'c1',schoolKey:'0005MS0004',school:'Escuela de prueba',role:'Matemática',level:'Secundaria',kind:'modulo',status:'titular',quantity:2,modules:[],blocks:[{day:1,start:'14:00',end:'16:00'}]}]};
+ const before=JSON.stringify(base),merged=mergeConfirmedCareerPlanner(base,{profile,revision:1});
+ assert.equal(JSON.stringify(base),before);
+ assert.equal(checkScheduleOverlap('Lunes: 15:00 a 16:00',merged).status,'overlap');
+ assert.deepEqual(merged.moduleSchedule,['M1-2']);
+ assert.equal(checkScheduleOverlap('Lunes: 17:00 a 18:00',merged).status,'no-overlap');
+ assert.equal(mergeConfirmedCareerPlanner(base,{profile:null,revision:0}),base);
+});
+test('unresolved afternoon modules are retained instead of manufacturing compatibility',()=>{
+ const base={jobs:[],moduleSchedule:['T1-1'],travelGapMinutes:0};
+ const profile={schema:1,seniorityYears:5,positions:[{id:'c1',schoolKey:'0005MS0004',school:'Escuela fixture',role:'Matemática',level:'Secundaria',kind:'modulo',status:'titular',quantity:1,modules:['T1-1'],blocks:[{day:1,start:'14:00',end:'15:00'}]}]};
+ const result=mergeConfirmedCareerPlanner(base,{profile,revision:1});
+ assert.equal(checkScheduleOverlap('Lunes: 17:00 a 18:00',result).status,'unverified');
+ assert.deepEqual(result.moduleSchedule,['T1-1']);
+});
