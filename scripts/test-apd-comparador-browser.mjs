@@ -195,6 +195,7 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-historical-vacancy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-historical-vacancy.mjs')},
   '/scripts/apd-historical-vacancy-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-historical-vacancy-ui.mjs')},
   '/scripts/apd-vacancy-snapshot-20261124.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-vacancy-snapshot-20261124.mjs')},
+  '/scripts/apd-offer-economics-calendar.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-calendar.mjs')},
   '/scripts/apd-offer-economics.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics.mjs')},
   '/scripts/apd-offer-economics-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-ui.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
@@ -343,6 +344,10 @@ try{
    el.querySelector('form').requestSubmit();return true;
   })()`);
   assert.match(await js('document.querySelector(".apd-economics-output").textContent'),/360[.]000/);
+  await js(`(()=>{const el=document.querySelector('.apd-economics');el.querySelector('[name=calendarMonth]').value='2026-11';el.querySelector('.apd-economics-fill-days').click();return true;})()`);
+  assert.equal(await js('document.querySelector(".apd-economics [name=workDays]").value'),"21");
+  assert.equal(await js('document.querySelector(".apd-economics-output").textContent'),'');
+  await js(`(()=>{const el=document.querySelector('.apd-economics');el.querySelector('[name=workDays]').value=12;el.querySelector('form').requestSubmit();return true;})()`);
   assert.match(await js('document.querySelector(".apd-economics-output").textContent'),/15 h mensuales/);
   await js(`(()=>{const input=document.querySelector('.apd-economics [name=monthlyNet]');input.value='0';input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);
   assert.equal(await js('document.querySelector(".apd-economics-output").textContent'),'');
