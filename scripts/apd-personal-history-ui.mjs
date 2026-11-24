@@ -16,17 +16,17 @@ export function mountPersonalHistory(host,{fetchSummary,isCurrent}){
  select.addEventListener('change',()=>{cancel();status.textContent='Período cambiado. Consultá nuevamente.';});
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(!current())return;
-  cancel();const seq=generation,days=Number(select.value);controller=new AbortController();
+  cancel();const seq=generation,days=Number(select.value);controller=new AbortController();const requestController=controller;
   submit.disabled=true;status.textContent='Consultando capturas…';
-  const timer=setTimeout(()=>controller?.abort(),15000);
+  const timer=setTimeout(()=>requestController.abort(),15000);
   try{
-   const raw=await fetchSummary(days,controller.signal);
+   const raw=await fetchSummary(days,requestController.signal);
    if(seq!==generation||!current())return;
    const data=projectPersonalHistory(raw,days);
-   status.textContent=data.empty?'Sin capturas coincidentes en este período.':data.total.toLocaleString('es-AR')+' ofertas únicas informadas por el histórico.';
+   status.textContent=data.empty?'El servidor no informó capturas coincidentes en este período.':data.total.toLocaleString('es-AR')+' ofertas únicas informadas por el histórico.';
    if(data.message)output.append(el('p',data.message));
    output.append(el('p','Última captura informada: '+date(data.latest),'apd-comparator-hint'));
-   output.append(el('p','Cobertura parcial: el servidor devuelve hasta seis oportunidades recientes; no representa todas las publicaciones del período.','apd-comparator-hint'));
+   output.append(el('p','Cobertura parcial: el servidor devuelve hasta seis oportunidades recientes; no representa todas las publicaciones del período. Una respuesta vacía no confirma ausencia de publicaciones.','apd-comparator-hint'));
    for(const row of data.rows){
     const card=el('article',undefined,'apd-history-row');
     card.append(el('strong',[row.cargo||'Cargo sin descripción',row.area].filter(Boolean).join(' · ')),
