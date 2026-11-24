@@ -40,6 +40,7 @@ jobs:
           PGPASSWORD: fixture-only
         run: |
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_default_acl.sql
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_ACCOUNT_FAVORITES_CANDIDATE_20261124.sql
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_favorites_pg17_assert.sql
           bash tests/sql/test_apd_account_favorites_race.sh

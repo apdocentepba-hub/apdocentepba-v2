@@ -3,13 +3,16 @@ DECLARE r text; p text;
 BEGIN
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.user_favorite_offers'::regclass) THEN RAISE EXCEPTION 'RLS disabled'; END IF;
  FOREACH r IN ARRAY ARRAY['anon','authenticated'] LOOP
-  FOREACH p IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'] LOOP
+  FOREACH p IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'] LOOP
    IF has_table_privilege(r,'public.user_favorite_offers',p) THEN RAISE EXCEPTION 'Unexpected permission % %',r,p; END IF;
   END LOOP;
   IF has_function_privilege(r,'public.apd_valid_favorite_keys(text[])','EXECUTE') THEN RAISE EXCEPTION 'Public helper execute'; END IF;
  END LOOP;
  IF NOT has_table_privilege('service_role','public.user_favorite_offers','SELECT') OR NOT has_table_privilege('service_role','public.user_favorite_offers','INSERT') OR NOT has_table_privilege('service_role','public.user_favorite_offers','UPDATE') OR has_table_privilege('service_role','public.user_favorite_offers','DELETE') THEN RAISE EXCEPTION 'Service permissions'; END IF;
-END $$;
+ FOREACH p IN ARRAY ARRAY['DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'] LOOP
+  IF has_table_privilege('service_role','public.user_favorite_offers',p) THEN RAISE EXCEPTION 'Excess service privilege %',p; END IF;
+ END LOOP;
+END $;
 SET ROLE service_role;
 DO $$
 DECLARE a uuid:='00000000-0000-0000-0000-000000000001'; b uuid:='00000000-0000-0000-0000-000000000002'; bad text[]; n int;
