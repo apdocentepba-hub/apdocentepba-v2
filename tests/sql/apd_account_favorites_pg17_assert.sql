@@ -12,7 +12,7 @@ BEGIN
  FOREACH p IN ARRAY ARRAY['DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'] LOOP
   IF has_table_privilege('service_role','public.user_favorite_offers',p) THEN RAISE EXCEPTION 'Excess service privilege %',p; END IF;
  END LOOP;
-END $;
+END $$;
 SET ROLE service_role;
 DO $$
 DECLARE a uuid:='00000000-0000-0000-0000-000000000001'; b uuid:='00000000-0000-0000-0000-000000000002'; bad text[]; n int;
