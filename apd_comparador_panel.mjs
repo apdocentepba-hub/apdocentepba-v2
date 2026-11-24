@@ -862,7 +862,8 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
- if(!entitled){clearPrivatePlanner();favorites.clear();favoritesOpen=false;favoriteMessage='';}
+ if(!entitled)clearPrivatePlanner();
+ if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';}
  state.privatePlannerAllowed=entitled;
  state.enabled=enabled===true;
  if(!state.enabled){

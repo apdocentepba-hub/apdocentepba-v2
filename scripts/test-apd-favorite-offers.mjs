@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createFavoriteOffers} from './apd-favorite-offers.mjs';
 const now=new Date('2026-11-24T12:00:00Z');
-const offer={cargo:'Matemática',distrito:'Avellaneda',finoferta:'2026-11-24 14:00:00',estado:'PUBLICADA',pid_puntaje_total:42,postulantes_count:12};
+const offer={cargo:'Matemática',distrito:'Avellaneda',finoferta:'2026-11-24T14:00:00Z',estado:'PUBLICADA',pid_puntaje_total:42,postulantes_count:12};
 test('favorites deduplicate and retain only minimal public fields',()=>{
  const f=createFavoriteOffers();f.add(offer,'D_1',now);f.add(offer,'D_1',now);
  assert.equal(f.count(),1);const row=f.list(new Set(['D_1']),now)[0];assert.equal(row.status,'soon');assert.equal(row.visible,true);assert.equal('pid_puntaje_total' in row,false);assert.equal('postulantes_count' in row,false);
@@ -28,4 +28,8 @@ test('missing date is not active and reset removes favorites',()=>{
 test('limit and removal are deterministic',()=>{
  const f=createFavoriteOffers();for(let i=0;i<50;i++)f.add(offer,'D_'+i,now);
  assert.throws(()=>f.add(offer,'D_50',now));assert.equal(f.remove('D_0'),true);f.add(offer,'D_50',now);assert.equal(f.count(),50);
+});
+
+test('ambiguous clock stays unknown, never presented as active',()=>{
+ const f=createFavoriteOffers();f.add({...offer,finoferta:'2026-11-24 14:00:00'},'D_1',now);assert.equal(f.list(new Set(),now)[0].status,'unknown');
 });

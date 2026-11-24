@@ -38,6 +38,8 @@ export function createFavoriteOffers(){
     const next=snapshot(offer,key),old=saved.get(key);
     const hasDeadline=!!(next.finoferta||next.finoferta_label||next.fecha_cierre);
     saved.set(key,Object.freeze({...next,
+     cargo:next.cargo||old.cargo,distrito:next.distrito||old.distrito,
+     escuela:next.escuela||old.escuela,turno:next.turno||old.turno,
      estado:next.estado||old.estado,
      ...(!hasDeadline?{finoferta:old.finoferta,finoferta_label:old.finoferta_label,fecha_cierre:old.fecha_cierre}:{})
     }));
