@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{careerLoading=false;});
   }
-  if(accountCareerReleaseEnabled&&careerCoordinator){careerCoordinator.sync({enabled:true,host:document.getElementById('apd-perfil-carrera'),plan:planActual,client:accountCareerClient,scheduleClient:accountScheduleClient,schoolCatalog:careerSchoolCatalog,getPlan:()=>planActual,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true});}
+  if(accountCareerReleaseEnabled&&careerCoordinator){careerCoordinator.sync({enabled:true,host:document.getElementById('apd-perfil-carrera'),plan:planActual,client:accountCareerClient,scheduleClient:accountScheduleClient,schoolCatalog:careerSchoolCatalog,onConfirmed:()=>{sync();window.APD_refreshConfirmedCareer?.();},getPlan:()=>planActual,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true});}
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
   if(typeof window.APD_offerSchoolMapRefresh==='function'){
@@ -388,11 +388,11 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient,accountScheduleReleaseEnabled);}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true},careerContext:accountCareerReleaseEnabled?{enabled:true,getRecord:()=>accountCareerClient?.peek()??null,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true}:null});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient,accountScheduleReleaseEnabled);}
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-career1')
+   import('./apd_comparador_panel.mjs?v=20261124-career2')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
