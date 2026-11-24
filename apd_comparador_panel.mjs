@@ -340,7 +340,7 @@ function openWeekSimulator(key){
    const hours=m=>m===null?'—':Math.floor(m/60)+' h '+(m%60?String(m%60).padStart(2,'0')+' min':'');
    const metrics=node('div','apd-week-metrics');
    const occupied=sim.days.reduce((n,d)=>n+d.afternoon.length,0);
-   for(const [label,value] of [['Horas actuales',sim.totals.currentMinutes===null?(occupied+' mód. tarde*'):hours(sim.totals.currentMinutes)],['Nueva oferta',hours(sim.totals.offerMinutes)],['Semana resultante',hours(sim.totals.combinedMinutes)],['Cruce conocido',hours(sim.totals.overlapMinutes)]]){
+   for(const [label,value] of [['Horas actuales',sim.totals.currentMinutes===null?(!sim.declared?'No declarada':occupied+' mód. tarde*'):hours(sim.totals.currentMinutes)],['Nueva oferta',hours(sim.totals.offerMinutes)],['Semana resultante',hours(sim.totals.combinedMinutes)],['Cruce conocido',hours(sim.totals.overlapMinutes)]]){
     const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',value));metrics.appendChild(metric);
    }
    body.appendChild(metrics);
@@ -348,17 +348,17 @@ function openWeekSimulator(key){
    for(const [kind,label] of [['current','Mi jornada'],['offer','Oferta nueva'],['overlap','Cruce'],['unknown','Módulo sin hora reloj']])legend.append(node('span','apd-week-key apd-week-key-'+kind,label));
    body.appendChild(legend);
    const days=node('div','apd-week-days apd-week-visual-days');
+   const all=sim.days.flatMap(day=>[...day.current,...day.offer]);
+   const lo=Math.min(420,...all.map(v=>v[0])),hi=Math.max(1200,...all.map(v=>v[1]));
    for(const day of sim.days){
     const section=node('section','apd-week-day apd-week-visual-day');
     section.appendChild(node('h3','',day.name));
-    const all=[...day.current,...day.offer];
-    const lo=Math.min(420,...all.map(v=>v[0])),hi=Math.max(1200,...all.map(v=>v[1]));
     const ruler=node('div','apd-week-ruler');ruler.append(node('span','',intervalText([[lo,hi]])));
     section.appendChild(ruler);
     for(const [kind,intervals] of [['current',day.current],['offer',day.offer],['overlap',day.overlaps]]){
      const row=node('div','apd-week-bar-row');
      const track=node('div','apd-week-track');
-     track.setAttribute('aria-label',kind+': '+intervalText(intervals));
+     track.setAttribute('role','img');track.setAttribute('aria-label',({current:'Mi jornada',offer:'Oferta nueva',overlap:'Cruces'})[kind]+': '+intervalText(intervals));
      for(const [a,b] of intervals){
       const segment=node('span','apd-week-segment apd-week-segment-'+kind);
       segment.style.left=((a-lo)/(hi-lo)*100)+'%';segment.style.width=((b-a)/(hi-lo)*100)+'%';
