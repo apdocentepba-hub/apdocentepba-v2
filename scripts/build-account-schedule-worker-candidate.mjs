@@ -7,6 +7,18 @@ if(requested&&!base.startsWith(path.resolve('tmp/apd-account-schedule')+path.sep
 const source=fs.readFileSync(base,'utf8');
 const core=fs.readFileSync('scripts/apd-account-schedule-core.mjs','utf8').replaceAll('export function ','function ').replaceAll('export async function ','async function ');
 const handler=String.raw`
+function accountScheduleCors(request,response){
+ const origin=request.headers.get('Origin');
+ const headers=new Headers(response?.headers);
+ headers.delete('Access-Control-Allow-Credentials');
+ headers.delete('Access-Control-Allow-Origin');
+ headers.set('Access-Control-Allow-Methods','GET, PUT, OPTIONS');
+ headers.set('Access-Control-Allow-Headers','Authorization, Content-Type');
+ headers.set('Cache-Control','private, no-store');
+ headers.set('Vary','Origin');
+ if(origin==='https://alertasapd.com.ar')headers.set('Access-Control-Allow-Origin',origin);
+ return new Response(response?.body??null,{status:response?.status??204,headers});
+}
 async function handleAccountScheduleSecureV1(request,env){
  const table=env.SUPABASE_URL+'/rest/v1/user_module_schedule';
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:'Bearer '+env.SUPABASE_SERVICE_ROLE_KEY,'Content-Type':'application/json',Prefer:'return=representation'};
@@ -37,16 +49,19 @@ async function handleAccountScheduleSecureV1(request,env){
  });
  const response=json2(result.body,result.status);
  response.headers.set('Cache-Control','private, no-store');
- return response;
+ return accountScheduleCors(request,response);
 }
 `;
 const mark='async function handleAccountPreferencesSecureV1(request, env) {';
 const route='    if (path === API_URL_PREFIX3 + "/account/preferences") {';
 const addedRoute='    if (path === API_URL_PREFIX3 + "/account/schedule") {\n      return await handleAccountScheduleSecureV1(request, env);\n    }\n';
+const optionsMark='    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders2() });';
+const optionsRoute='    if (request.method === "OPTIONS" && new URL(request.url).pathname === API_URL_PREFIX3 + "/account/schedule") return accountScheduleCors(request);\n';
+if(source.split(optionsMark).length!==2)throw Error('OPTIONS baseline drift');
 if(source.includes('handleAccountScheduleSecureV1')||source.split(mark).length!==2||source.split(route).length!==2)throw Error('Baseline drift');
 const added=core+'\n'+handler+'\n';
-const candidate=source.replace(mark,added+mark).replace(route,addedRoute+route);
-if(candidate.replace(added,'').replace(addedRoute,'')!==source)throw Error('Unrelated drift');
+const candidate=source.replace(mark,added+mark).replace(route,addedRoute+route).replace(optionsMark,optionsRoute+optionsMark);
+if(candidate.replace(added,'').replace(addedRoute,'').replace(optionsRoute,'')!==source)throw Error('Unrelated drift');
 fs.mkdirSync('tmp/apd-account-schedule',{recursive:true});
 fs.writeFileSync('tmp/apd-account-schedule/worker-schedule-candidate.mjs',candidate);
 console.log('PASS: isolated route candidate; no deployment; production baseline must be captured separately');

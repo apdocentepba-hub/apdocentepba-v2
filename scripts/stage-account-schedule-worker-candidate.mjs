@@ -15,7 +15,8 @@ if(start<0||end<start)throw Error('New handler missing');
 const withoutHandler=candidate.slice(0,start)+candidate.slice(end);
 const route='    if (path === API_URL_PREFIX3 + "/account/schedule") {\n'+
  '      return await handleAccountScheduleSecureV1(request, env);\n    }\n';
-if(withoutHandler.split(route).length!==2||withoutHandler.replace(route,'')!==live)
+const optionsRoute='    if (request.method === "OPTIONS" && new URL(request.url).pathname === API_URL_PREFIX3 + "/account/schedule") return accountScheduleCors(request);\n';
+if(withoutHandler.split(route).length!==2||withoutHandler.split(optionsRoute).length!==2||withoutHandler.replace(route,'').replace(optionsRoute,'')!==live)
  throw Error('Candidate changed unrelated production Worker code');
 const manifest=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
 const schedules=manifest.schedules;
@@ -111,7 +112,12 @@ for(const [method,path,expectedStatus] of checks){
 const preflight=await fetch(preview+'/api/account/schedule',{method:'OPTIONS',headers:{Origin:'https://alertasapd.com.ar','Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'authorization,content-type'},signal:AbortSignal.timeout(15000)});
 const methods=(preflight.headers.get('access-control-allow-methods')||'').toUpperCase();
 const allowed=(preflight.headers.get('access-control-allow-headers')||'').toLowerCase();
-if(!preflight.ok||!methods.includes('PUT')||(!allowed.includes('authorization')&&!allowed.includes('*'))||(!allowed.includes('content-type')&&!allowed.includes('*')))throw Error('Schedule CORS PUT not verified');
+if(!preflight.ok||preflight.headers.get('access-control-allow-origin')!=='https://alertasapd.com.ar'||!methods.includes('PUT')||(!allowed.includes('authorization')&&!allowed.includes('*'))||(!allowed.includes('content-type')&&!allowed.includes('*')))throw Error('Schedule CORS PUT not verified');
+const foreign=await fetch(preview+'/api/account/schedule',{method:'OPTIONS',headers:{Origin:'https://untrusted.invalid','Access-Control-Request-Method':'PUT'},signal:AbortSignal.timeout(15000)});
+if(foreign.headers.has('access-control-allow-origin'))throw Error('Unexpected cross-origin access');
+const authenticatedRoute=await fetch(preview+'/api/account/schedule',{headers:{Origin:'https://alertasapd.com.ar'},signal:AbortSignal.timeout(15000)});
+if(authenticatedRoute.status!==401||authenticatedRoute.headers.get('access-control-allow-origin')!=='https://alertasapd.com.ar'||!authenticatedRoute.headers.get('cache-control')?.includes('no-store'))throw Error('Account response headers invalid');
+console.log('APD_SCHEDULE_CORS_PASS canonical origin, foreign denied, no-store');
 console.log('APD_ACCOUNT_SCHEDULE_STAGE_PASS '+JSON.stringify({
  active_version:before,candidate_version:staged.id,
  unchanged_production_percentage:100,preview_http_checks:checks.length,
