@@ -1198,6 +1198,26 @@ try{
    return true;
   })()`);
   await until('!!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
+  const layout=await js(`(()=>{
+   const host=document.getElementById('apd-perfil-horarios');
+   host.parentElement.style.maxWidth='340px';
+   host.querySelector('details').open=true;
+   const row=host.querySelector('tbody tr');
+   const check=row.querySelector('input[type=checkbox]');
+   check.checked=true;
+   const style=getComputedStyle(check.parentElement);
+   const selected=style.backgroundColor;
+   check.checked=false;
+   const free=getComputedStyle(check.parentElement).backgroundColor;
+   return {grid:getComputedStyle(row).display,overflow:host.scrollWidth-host.clientWidth,
+    checkedVisible:selected!==free,days:row.querySelectorAll('input[type=checkbox]').length,
+    labels:[...row.querySelectorAll('input')].every(input=>!!input.getAttribute('aria-label'))};
+  })()`);
+  assert.equal(layout.grid,'grid','Narrow account card must use responsive block layout');
+  assert.ok(layout.overflow<=2,'Schedule must not overflow the account card');
+  assert.equal(layout.checkedVisible,true,'Occupied days must have a distinct background');
+  assert.equal(layout.days,7);
+  assert.equal(layout.labels,true);
   assert.equal(await js(`(()=>{
    const profile=document.getElementById('panel-datos-docente');
    const host=document.getElementById('apd-perfil-horarios');

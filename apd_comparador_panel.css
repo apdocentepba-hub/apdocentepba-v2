@@ -548,3 +548,135 @@ body.apd-dark .apd-offer-fit-reasons,body.apd-dark .apd-offer-fit-note{
 .apd-schedule-grid th,.apd-schedule-grid td{padding:4px;text-align:center}
 .apd-schedule-grid input[type="text"]{min-width:8rem}
 .apd-schedule-grid input[type="time"]{min-width:6.75rem}
+
+/* Mi cuenta: local visual polish. No changes to account or planner data. */
+#panel-datos-docente,#apd-perfil-horarios{
+ --ac-ink:#183655;--ac-muted:#526981;--ac-border:#d9e4ef;
+ --ac-surface:#fff;--ac-soft:#f3f7fb;--ac-accent:#2459ad;--ac-selected:#e1efff;
+ min-width:0;max-width:100%;color:var(--ac-ink);
+}
+body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
+ --ac-ink:#e6efff;--ac-muted:#b7c8dd;--ac-border:#425670;
+ --ac-surface:#18273b;--ac-soft:#22354c;--ac-accent:#9dc7ff;--ac-selected:#284c74;
+ color-scheme:dark;
+}
+#panel-datos-docente .plan-stack{display:grid;gap:12px;min-width:0}
+#panel-datos-docente .plan-stack>.plan-pill-row:first-child{display:none}
+#panel-datos-docente .plan-note{font-size:12px;line-height:1.5;color:var(--ac-muted)}
+#panel-datos-docente #form-mi-cuenta{margin-top:0!important;gap:8px!important}
+#panel-datos-docente .grid-2{grid-template-columns:minmax(0,1fr);gap:8px;margin:0}
+#panel-datos-docente .field{margin:0;min-width:0}
+#panel-datos-docente .field label{font-size:12px;color:var(--ac-muted);margin:0 0 4px}
+#panel-datos-docente .field input{
+ width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--ac-border);
+ background:var(--ac-surface);color:var(--ac-ink);border-radius:9px;min-height:40px;
+}
+#panel-datos-docente .field input:disabled{
+ background:var(--ac-soft);color:var(--ac-ink);opacity:1;-webkit-text-fill-color:var(--ac-ink);
+ cursor:default;border-color:transparent;
+}
+#panel-datos-docente .plan-stack>div[style*="height:1px"]{display:none}
+#panel-datos-docente #apd-marketing-settings,
+#panel-datos-docente .plan-stack>div:last-child{
+ border:1px solid var(--ac-border);border-radius:12px;background:var(--ac-soft);
+ padding:12px;min-width:0;box-sizing:border-box;
+}
+#panel-datos-docente .plan-pill-neutral{background:transparent;color:var(--ac-ink);padding:0;border:0;font-size:13px;font-weight:800}
+#panel-datos-docente #apd-marketing-status{font-size:13px;font-weight:700;color:var(--ac-ink)}
+#panel-datos-docente .btn,#apd-perfil-horarios .btn{
+ max-width:100%;min-height:42px;white-space:normal;overflow-wrap:anywhere;border-radius:10px;line-height:1.3;
+}
+#panel-datos-docente .btn-secondary,#apd-perfil-horarios .btn-secondary{
+ color:var(--ac-ink);background:var(--ac-surface);border:1px solid var(--ac-border);
+}
+#panel-datos-docente .form-actions .btn{flex:1 1 120px}
+#panel-datos-docente .msg:empty{display:none}
+#panel-datos-docente #apd-marketing-message:empty{display:none}
+#panel-datos-docente :is(button,input):focus-visible,
+#apd-perfil-horarios :is(button,input,summary):focus-visible{
+ outline:2px solid var(--ac-accent);outline-offset:2px;
+}
+/* The planner stays in the same card; use its own width, not viewport width. */
+#apd-perfil-horarios{container-type:inline-size}
+#apd-perfil-horarios .apd-work-planner{
+ margin:14px 0 0;border:1px solid var(--ac-border);border-radius:14px;
+ color:var(--ac-ink);background:var(--ac-soft);overflow:visible;
+}
+#apd-perfil-horarios .apd-work-summary{
+ padding:14px;min-height:48px;box-sizing:border-box;font-size:15px;color:var(--ac-ink);
+}
+#apd-perfil-horarios .apd-work-summary::after{
+ content:"";display:block;height:0; /* Keep the native disclosure marker. */
+}
+#apd-perfil-horarios .apd-work-form{min-width:0;padding:0 10px 12px;gap:10px}
+#apd-perfil-horarios .apd-comparator-hint{color:var(--ac-muted);line-height:1.5}
+#apd-perfil-horarios .apd-schedule-grid-scroll{border-radius:10px;min-width:0}
+#apd-perfil-horarios .apd-schedule-grid{
+ color:var(--ac-ink);background:var(--ac-surface);font-size:12px;
+}
+#apd-perfil-horarios .apd-schedule-grid th{font-weight:750;color:var(--ac-muted)}
+#apd-perfil-horarios .apd-schedule-grid td,#apd-perfil-horarios .apd-schedule-grid th{
+ border-bottom:1px solid var(--ac-border);padding:6px;
+}
+#apd-perfil-horarios .apd-schedule-grid input:not([type=checkbox]){
+ color:var(--ac-ink);background:var(--ac-surface);border:1px solid var(--ac-border);
+ border-radius:8px;box-sizing:border-box;font-size:13px;
+}
+#apd-perfil-horarios .apd-schedule-grid input[type=checkbox]{
+ appearance:auto;-webkit-appearance:auto;accent-color:#2764c3;
+ width:23px;height:23px;min-height:0;margin:0;cursor:pointer;padding:0;
+}
+#apd-perfil-horarios .apd-schedule-grid td:has(input:checked){
+ background:var(--ac-selected);
+}
+#apd-perfil-horarios .apd-work-form>p[role=status]{margin:0;font-size:12px;line-height:1.4}
+#apd-perfil-horarios .apd-work-form>p[role=status]:empty{display:none}
+@container (max-width: 810px){
+ #apd-perfil-horarios .apd-schedule-grid-scroll{overflow:visible}
+ #apd-perfil-horarios .apd-schedule-grid,
+ #apd-perfil-horarios .apd-schedule-grid tbody{display:block;background:transparent;width:100%}
+ #apd-perfil-horarios .apd-schedule-grid thead{
+  position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody tr{
+  display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:5px;
+  border:1px solid var(--ac-border);border-radius:12px;margin:0 0 8px;
+  padding:9px;background:var(--ac-surface);box-sizing:border-box;min-width:0;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody th{
+  grid-column:1/-1;text-align:left;font-size:13px;color:var(--ac-ink);padding:0 0 5px;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody td{
+  padding:0;border:0;min-width:0;display:grid;gap:3px;justify-items:stretch;white-space:normal;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(2),
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(3){grid-column:span 7;text-align:left}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(4){grid-column:1/-1;text-align:left}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(2)::before{content:"Desde"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(3)::before{content:"Hasta"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(4)::before{content:"Escuela (opcional)"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td::before{font-size:11px;color:var(--ac-muted);font-weight:650}
+ #apd-perfil-horarios .apd-schedule-grid input:not([type=checkbox]){
+  width:100%;min-width:0;max-width:100%;min-height:40px;padding:5px;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(n+5){
+  grid-column:span 2;justify-items:center;align-content:center;min-height:48px;
+  background:var(--ac-soft);border:1px solid var(--ac-border);border-radius:7px;
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody td:has(input:checked){
+  background:var(--ac-selected);border-color:var(--ac-accent);
+ }
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(5)::before{content:"Lun"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(6)::before{content:"Mar"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(7)::before{content:"Mié"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(8)::before{content:"Jue"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(9)::before{content:"Vie"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(10)::before{content:"Sáb"}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(11)::before{content:"Dom"}
+}
+@container (max-width: 300px){
+ #apd-perfil-horarios .apd-schedule-grid tbody tr{padding:6px;gap:3px;grid-template-columns:repeat(4,minmax(0,1fr))}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(2),
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(3){grid-column:span 2}
+ #apd-perfil-horarios .apd-schedule-grid tbody td:nth-child(n+5){grid-column:span 1}
+}
