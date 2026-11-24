@@ -23,6 +23,7 @@ export async function authenticatedScheduleSmoke({accounts,fetcher=fetch}){
  const read=async(a,query='')=>{
   const data=await call(a,'/api/account/schedule'+query);
   if(data.schedule?.revision===0&&Array.isArray(data.schedule.modules)&&data.schedule.modules.length===0)return {revision:0,modules:[]};
+  if(!data.schedule||typeof data.schedule!=='object'||Array.isArray(data.schedule))throw Error('QA schedule response invalid');
   return validateScheduleRow(data.schedule);
  };
  const write=async(a,modules,revision,expected=200)=>{

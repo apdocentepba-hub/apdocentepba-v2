@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {authenticatedScheduleSmoke} from './check-apd-account-schedule-authenticated.mjs';
 const accounts=['A','B'].map((label,i)=>({label,id:'00000000-0000-4000-8000-00000000000'+(i+1),token:'fixture-token-'+label.repeat(30)}));
-function fixture({wrongEmail=false,nonempty=false,failB=false,unexpectedChange=false}={}){
+function fixture({wrongEmail=false,nonempty=false,failB=false,unexpectedChange=false,malformed=false}={}){
  const rows=new Map(accounts.map((a,i)=>[a.label,{revision:nonempty&&i===1?1:0,modules:nonempty&&i===1?['M3-3']:[]}]));
  let writes=0;
  const fetcher=async(url,opt)=>{
@@ -12,7 +12,7 @@ function fixture({wrongEmail=false,nonempty=false,failB=false,unexpectedChange=f
   if(route.endsWith('/profile'))return respond({ok:true,user:{id:a.id,email:wrongEmail&&a.label==='B'?'normal@example.invalid':'apd-schedule-qa-'+a.label.toLowerCase()+'@example.invalid',activo:true}});
   if(route.endsWith('/mi-plan'))return respond({ok:true,user_id:a.id,access_active:true,subscription:{plan_code:'INSIGNE'}});
   const row=rows.get(a.label);
-  if(opt.method==='GET')return respond({ok:true,schedule:row});
+  if(opt.method==='GET')return respond({ok:true,schedule:malformed&&a.label==='B'?null:row});
   writes++;const p=JSON.parse(opt.body);
   if(p.revision!==row.revision)return respond({ok:false},409);
   if(failB&&a.label==='B'&&p.modules.length){
@@ -26,7 +26,7 @@ test('QA smoke confirms both identities, CAS, cross-account read and cleanup',as
  const f=fixture();const out=await authenticatedScheduleSmoke({accounts,fetcher:f.fetcher});assert.equal(out.qaSchedulesEmpty,true);assert.equal(f.writes(),5);assert.ok([...f.rows.values()].every(x=>x.modules.length===0));
 });
 test('wrong QA identity or nonempty schedule prevents all writes',async()=>{
- for(const opts of [{wrongEmail:true},{nonempty:true}]){
+ for(const opts of [{wrongEmail:true},{nonempty:true},{malformed:true}]){
   const f=fixture(opts);await assert.rejects(()=>authenticatedScheduleSmoke({accounts,fetcher:f.fetcher}));assert.equal(f.writes(),0);
  }
 });
