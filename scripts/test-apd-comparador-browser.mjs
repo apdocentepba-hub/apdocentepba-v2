@@ -151,6 +151,9 @@ const server=createServer((req,res)=>{
   '/scripts/apd-offer-recommendations.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-recommendations.mjs')},
   '/scripts/apd-personal-history.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-personal-history.mjs')},
   '/scripts/apd-personal-history-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-personal-history-ui.mjs')},
+  '/scripts/apd-historical-vacancy.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-historical-vacancy.mjs')},
+  '/scripts/apd-historical-vacancy-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-historical-vacancy-ui.mjs')},
+  '/scripts/apd-vacancy-snapshot-20261124.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-vacancy-snapshot-20261124.mjs')},
   '/scripts/apd-offer-economics.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics.mjs')},
   '/scripts/apd-offer-economics-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-ui.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
@@ -315,6 +318,11 @@ try{
   await js(`(()=>{const f=document.querySelectorAll('.apd-recommendations select')[3];f.value='';f.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
   assert.equal(await js('document.querySelectorAll(".apd-recommendation-row").length'),6);
   assert.equal(await js('window.__historyCalls'),0);
+  await js('document.querySelector(".apd-vacancy-radar").open=true;true');
+  assert.equal(await js('document.querySelectorAll(".apd-vacancy-results article").length'),6);
+  await js(`(()=>{const s=document.querySelector('.apd-vacancy-radar select');s.value='AVELLANEDA';s.dispatchEvent(new Event('change'));const input=document.querySelector('.apd-vacancy-radar input');input.value='matematica';input.dispatchEvent(new Event('input'));return true;})()`);
+  assert.equal(await js('document.querySelectorAll(".apd-vacancy-results article").length'),2);
+  assert.match(await js('document.querySelector(".apd-vacancy-radar").textContent'),/No indica tus chances/);
   assert.equal(await js('document.getElementById("apd-personal-history").hidden'),false);
   await js('document.querySelector(".apd-history-tools form")?.requestSubmit();document.querySelector("form.apd-history-tools").requestSubmit();true');
   await until('document.querySelector(".apd-history-row")?.textContent.includes("Vencida según cierre informado")');
