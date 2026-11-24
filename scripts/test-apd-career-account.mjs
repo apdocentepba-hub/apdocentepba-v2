@@ -67,3 +67,17 @@ test('client requires a confirmed read before mutation and invalidates uncertain
  await assert.rejects(client.persist(profile),/Recuperá/);await client.reload();fail=true;
  await assert.rejects(client.persist(profile),/red/);assert.equal(client.peek(),null);
 });
+
+import {createSchoolCatalog} from './apd-career-school-catalog.mjs';
+test('public school catalog searches exact identity and preserves unknown classification',()=>{
+ const first={schoolKey:'0005MS0004',name:'Escuela Secundaria N° 4',district:'Avellaneda',level:'Secundaria',area:'Rural',classification:null,surveyPeriod:'2026'};
+ const other={...first,schoolKey:'0005MS0005',name:'Escuela Secundaria N° 5',classification:'0'};
+ const snap={schema:1,source:'DGCYE_PBA',datasetId:'4becb4b7-0a21-4fef-8f2c-30df7f345a01',resourceId:'00000000-0000-4000-8000-000000000001',sha256:'a'.repeat(64),catalogModified:'2026-11-18',schools:[first,other]};
+ const catalog=createSchoolCatalog(snap);
+ assert.equal(catalog.exact(first.schoolKey).classification,null);
+ assert.equal(catalog.exact(other.schoolKey).classification,'0');
+ assert.equal(catalog.search('secundaria 4','avellaneda').length,1);
+ assert.equal(catalog.search('secundaria','quilmes').length,0);
+ assert.equal(catalog.exact('0005MS0006'),null);
+ assert.throws(()=>createSchoolCatalog({...snap,schools:[first,first]}));
+});
