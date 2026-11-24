@@ -1,0 +1,32 @@
+name: APD schedule exact-version authorized production promotion
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - '.github/workflows/apd-schedule-promote-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-authenticated-backend-release
+  cancel-in-progress: false
+jobs:
+  promote:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'release/schedule-worker-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify release source and authenticated smoke regressions
+        run: |
+          node --check scripts/promote-apd-schedule-once.mjs
+          node --test scripts/test-apd-account-schedule.mjs scripts/test-apd-account-schedule-authenticated.mjs
+      - name: Promote exact authenticated-tested version and rollback on regression
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/promote-apd-schedule-once.mjs
