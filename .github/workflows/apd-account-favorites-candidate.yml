@@ -1,0 +1,19 @@
+name: APD account favorites candidate - offline only
+on:
+  pull_request:
+    paths:
+      - 'scripts/*account-favorites*'
+      - '.github/workflows/apd-account-favorites-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  favorites-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-account-favorites.mjs scripts/test-apd-favorite-offers.mjs
