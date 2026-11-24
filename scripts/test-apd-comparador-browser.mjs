@@ -1488,6 +1488,25 @@ try{
   assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,1);
   results.push({width,actual_release_bootstrap:true,account_schedule_readback:true,account_switch_isolation:true,no_automatic_upload:true});
  }
+ // Confirmed career uses the actual comparator filter, not just a model unit test.
+ await js(`(()=>{
+  const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+  window.__careerFilterPlan=plan;
+  window.__careerOffers=[{source_offer_key:'D_901',horario:'Lunes: 15:00 a 16:00'},{source_offer_key:'D_902',horario:'Lunes: 17:00 a 18:00'}];
+  window.__careerFilterRecord=null;
+  window.__careerFilterCurrent=true;
+  window.APD_comparatorRefresh({offers:window.__careerOffers,enabled:true,planInfo:plan,careerContext:{enabled:true,getRecord:()=>window.__careerFilterRecord,isCurrent:()=>window.__careerFilterCurrent}});
+  return true;
+ })()`);
+ assert.deepEqual(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan).map(o=>o.source_offer_key)'),[],'Unconfirmed career cannot be advertised as compatible');
+ await js(`window.__careerFilterRecord={revision:1,profile:{schema:1,seniorityYears:10,positions:[{id:'fixture-cargo',schoolKey:'0005MS0004',school:'Escuela de ensayo',role:'Matemática',level:'Secundaria',kind:'modulo',status:'titular',quantity:2,modules:[],blocks:[{day:1,start:'14:00',end:'16:00'}]}]}};true`);
+ assert.deepEqual(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan).map(o=>o.source_offer_key)'),['D_902'],'Clock overlap from confirmed career excludes offer');
+ assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,'Career projection never writes legacy timetable');
+ await js('window.__careerFilterCurrent=false;true');
+ assert.deepEqual(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan).map(o=>o.source_offer_key)'),[],'Revoked career scope cannot certify availability');
+ await js('window.APD_comparatorReset();true');
+ assert.equal(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan)'),null,'Reset clears private career context');
+ results.push({confirmed_career_filter:true,career_revocation:true,legacy_storage_untouched:true});
  // Candidate persistent UI: explicit read, account removal, hidden offers, reset.
  await js(`(()=>{
   const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
