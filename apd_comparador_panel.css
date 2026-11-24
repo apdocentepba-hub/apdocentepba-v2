@@ -727,3 +727,9 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 .apd-week-day-data{display:grid;grid-template-columns:minmax(75px,1fr) 2fr;gap:5px 8px;margin:0}
 .apd-week-day-data dd{margin:0;overflow-wrap:anywhere;font-size:13px}
 .apd-week-status{font-weight:700;margin:10px 0}
+
+.apd-economics{border:1px solid var(--border,#cbd5e1);border-radius:12px;padding:12px;margin-top:14px}
+.apd-economics-form{display:grid;gap:8px;margin-top:10px}
+.apd-economics-output{display:grid;gap:4px}
+.apd-economics-result{display:flex;gap:8px;justify-content:space-between;margin:3px 0;flex-wrap:wrap}
+.apd-economics-result strong{font-variant-numeric:tabular-nums}
