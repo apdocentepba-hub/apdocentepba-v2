@@ -716,3 +716,14 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 #apd-perfil-horarios .apd-module-grid tbody td::before{content:none!important;display:none}
 #apd-perfil-horarios .apd-module-grid tbody td:has(input:checked){background:var(--ac-selected);border-radius:6px}
 #apd-perfil-horarios .apd-module-grid input[type=checkbox]{width:clamp(15px,6cqw,23px);height:clamp(15px,6cqw,23px);margin:0}
+
+.apd-week-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0}
+.apd-week-metric,.apd-week-day{border:1px solid var(--border,#cbd5e1);border-radius:12px;padding:12px;min-width:0}
+.apd-week-metric{display:grid;gap:4px}
+.apd-week-metric span,.apd-week-day-data dt{font-size:12px;opacity:.85}
+.apd-week-metric strong{font-size:16px}
+.apd-week-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px}
+.apd-week-day h3{margin:0 0 8px;font-size:15px}
+.apd-week-day-data{display:grid;grid-template-columns:minmax(75px,1fr) 2fr;gap:5px 8px;margin:0}
+.apd-week-day-data dd{margin:0;overflow-wrap:anywhere;font-size:13px}
+.apd-week-status{font-weight:700;margin:10px 0}
