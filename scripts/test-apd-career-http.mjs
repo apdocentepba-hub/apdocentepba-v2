@@ -8,7 +8,10 @@ const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.js
 const {Miniflare}=requireRuntime('miniflare');
 const candidatePath=fileURLToPath(new URL('../tmp/apd-career/worker-career-candidate.mjs',import.meta.url));
 const baselinePath=new URL('../tmp/apd-career/worker-career-baseline.mjs',import.meta.url);
-writeFileSync(baselinePath,readFileSync(new URL('../worker-live/worker_hotfix.js',import.meta.url)));
+const baselineSource=process.env.APD_CAREER_LIVE_SOURCE
+ ? new URL('../tmp/apd-career/active-worker.mjs',import.meta.url)
+ : new URL('../worker-live/worker_hotfix.js',import.meta.url);
+writeFileSync(baselinePath,readFileSync(baselineSource));
 const env={SUPABASE_URL:'https://career-db.invalid',SUPABASE_SERVICE_ROLE_KEY:'disposable-service-role'};
 const workerOrigin='https://career-worker.invalid';
 

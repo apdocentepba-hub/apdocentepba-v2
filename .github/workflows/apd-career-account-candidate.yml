@@ -9,6 +9,7 @@ on:
       - 'scripts/test-apd-career-editor-browser.mjs'
       - 'scripts/test-apd-career-full-worker.mjs'
       - 'scripts/test-apd-career-http.mjs'
+      - 'scripts/inspect-account-schedule-live.mjs'
       - 'tests/sql/apd_career_http_fixture.sql'
       - 'scripts/build-apd-career-worker-candidate.mjs'
       - 'docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql'
@@ -41,7 +42,16 @@ jobs:
         run: |
           node --check scripts/apd-career-editor-ui.mjs
           node --test scripts/test-apd-career-account.mjs scripts/test-apd-week-simulator.mjs
+      - name: Read active Cloudflare source for the isolated runtime test
+        id: capture
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.number == 330 && github.event.pull_request.head.ref == 'feat/career-account-persistence-20261124'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/inspect-account-schedule-live.mjs career
       - name: Build isolated Worker and verify routing
+        env:
+          APD_CAREER_LIVE_SOURCE: ${{ steps.capture.outcome == 'success' && 'tmp/apd-career/active-worker.mjs' || '' }}
         run: |
           node scripts/build-apd-career-worker-candidate.mjs
           node --check tmp/apd-career/worker-career-candidate.mjs
@@ -72,6 +82,7 @@ jobs:
           echo APD_CAREER_CONCURRENT_CAS_PASS
       - name: Authenticate two fixture accounts in workerd with real PostgREST
         env:
+          APD_CAREER_LIVE_SOURCE: ${{ steps.capture.outcome == 'success' && 'tmp/apd-career/active-worker.mjs' || '' }}
           PGHOST: 127.0.0.1
           PGUSER: postgres
           PGPASSWORD: test_only
@@ -95,3 +106,6 @@ jobs:
       - name: Real Chromium editor regression (synthetic accounts)
         if: ${{ !cancelled() }}
         run: node scripts/test-apd-career-editor-browser.mjs
+      - name: Remove captured source and isolated builds
+        if: always()
+        run: rm -rf tmp/apd-career
