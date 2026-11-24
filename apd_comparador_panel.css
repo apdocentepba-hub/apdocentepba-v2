@@ -705,3 +705,14 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 #apd-perfil-horarios .apd-work-summary{background:var(--ac-selected);border-radius:13px;line-height:1.5}
 #apd-perfil-horarios .apd-work-summary::after{content:" · Organizá tu semana";display:inline;font-size:12px;font-weight:400;color:var(--ac-muted)}
 @media(max-width:680px){#panel-datos-docente .apd-account-fields .grid-2{grid-template-columns:1fr}#panel-datos-docente .apd-account-hero{padding:12px}}
+
+/* Numbered module matrix: same columns at every width, no clock or school fields. */
+#apd-perfil-horarios .apd-module-section{min-width:0;margin:4px 0 10px}
+#apd-perfil-horarios .apd-module-title{margin:0 0 8px;font-size:14px;color:var(--ac-ink)}
+#apd-perfil-horarios .apd-module-grid{display:block;width:100%;table-layout:fixed;background:var(--ac-surface);border-radius:10px}
+#apd-perfil-horarios .apd-module-grid :is(thead,tbody){display:block;position:static;width:auto;height:auto;clip-path:none;overflow:visible}
+#apd-perfil-horarios .apd-module-grid tr,#apd-perfil-horarios .apd-module-grid tbody tr{display:grid;grid-template-columns:minmax(48px,1.25fr) repeat(7,minmax(0,1fr));gap:2px;margin:0;padding:3px;border:0;border-bottom:1px solid var(--ac-border);border-radius:0;background:transparent;align-items:center}
+#apd-perfil-horarios .apd-module-grid :is(th,td),#apd-perfil-horarios .apd-module-grid tbody :is(th,td){grid-column:auto!important;display:grid;place-items:center;min-width:0;min-height:34px;padding:2px 0;border:0;margin:0;text-align:center;font-size:11px;background:transparent;white-space:normal}
+#apd-perfil-horarios .apd-module-grid tbody td::before{content:none!important;display:none}
+#apd-perfil-horarios .apd-module-grid tbody td:has(input:checked){background:var(--ac-selected);border-radius:6px}
+#apd-perfil-horarios .apd-module-grid input[type=checkbox]{width:clamp(15px,6cqw,23px);height:clamp(15px,6cqw,23px);margin:0}

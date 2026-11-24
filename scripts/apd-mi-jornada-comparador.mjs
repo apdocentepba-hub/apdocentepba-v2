@@ -147,7 +147,12 @@ export function sanitizeWorkProfile(data){
  // A manually edited address can never reuse stale coordinates.
  if(homeLocation&&domicile!==homeLocation.label)
   throw Error('Elegí nuevamente la dirección para verificar su ubicación');
- return {domicile,jobs:clean,travelGapMinutes,homeLocation};
+ const moduleSchedule=data.moduleSchedule;
+ if(moduleSchedule!==undefined&&(!Array.isArray(moduleSchedule)||moduleSchedule.length>77||
+   !moduleSchedule.every(id=>typeof id==='string'&&/^(?:M[1-5]|T[0-5])-[1-7]$/.test(id))||
+   new Set(moduleSchedule).size!==moduleSchedule.length))throw Error('Módulos inválidos');
+ return {domicile,jobs:clean,travelGapMinutes,homeLocation,
+  ...(moduleSchedule!==undefined?{moduleSchedule:[...moduleSchedule]}:{})};
 }
 export function checkScheduleOverlap(rawOffer,profile){
  const blocks=parseOfferWeeklySegments(rawOffer);
@@ -155,10 +160,17 @@ export function checkScheduleOverlap(rawOffer,profile){
  let clean;
  try{clean=sanitizeWorkProfile(profile??{jobs:[]})}
  catch{return {status:'unverified',label:'Jornada declarada inválida'}}
- if(!clean.jobs.length)return {status:'unverified',label:'Cargá tu jornada actual para comparar'};
+ if(!clean.jobs.length&&!clean.moduleSchedule?.length)return {status:'unverified',label:'Cargá tu jornada actual para comparar'};
+ // Morning reference follows the teacher's 07:20, 08:20, ... modules.
+ // Afternoon clock times are unconfirmed: never fabricate a compatible result.
+ const moduleJobs=(clean.moduleSchedule||[]).filter(id=>id[0]==='M').map(id=>{
+  const start=440+(Number(id[1])-1)*60;
+  return {school:'Módulo mañana '+id[1],days:[Number(id[3])],start:hhmm(start),end:hhmm(start+60)};
+ });
+ const unresolved=(clean.moduleSchedule||[]).filter(id=>id[0]==='T');
  const conflicts=[],transitions=[];
  const minimum=clean.travelGapMinutes;
- for(const job of clean.jobs)for(const parsed of blocks){
+ for(const job of [...clean.jobs,...moduleJobs])for(const parsed of blocks){
   const sharedDays=parsed.days.filter(d=>job.days.includes(d));
   if(!sharedDays.length)continue;
   const start=minute(job.start),end=minute(job.end);
@@ -181,6 +193,8 @@ export function checkScheduleOverlap(rawOffer,profile){
  }
  if(conflicts.length)return {status:'overlap',label:'Superposición horaria',
   conflicts,transitions,travelGapMinutes:minimum};
+ if(unresolved.some(id=>blocks.some(block=>block.days.includes(Number(id[3])))))
+  return {status:'unverified',label:'Módulo de tarde ocupado: horario real sin confirmar'};
  if(transitions.length)return {status:'tight-transition',
   label:'Poco margen entre horarios: traslado a revisar',
   conflicts:[],transitions,travelGapMinutes:minimum};

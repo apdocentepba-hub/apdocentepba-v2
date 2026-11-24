@@ -631,3 +631,14 @@ test('la jornada conserva la fila de la grilla y admite más de cinco horas sema
  assert.deepEqual(profile.jobs.map(job=>job.period),[1,2,3,4,5,6]);
  assert.equal(checkScheduleOverlap('SÁBADO 07:30 A 07:50',profile).status,'overlap');
 });
+
+test('numbered morning modules compare by the reference clock, afternoon remains unverified',()=>{
+ const profile={jobs:[],travelGapMinutes:0,moduleSchedule:['M1-1','M2-1','T0-2']};
+ assert.deepEqual(sanitizeWorkProfile(profile).moduleSchedule,profile.moduleSchedule);
+ assert.equal(checkScheduleOverlap('LUNES 07:30 A 08:00',profile).status,'overlap');
+ assert.equal(checkScheduleOverlap('LUNES 08:30 A 09:00',profile).status,'overlap');
+ assert.equal(checkScheduleOverlap('LUNES 10:00 A 11:00',profile).status,'no-overlap');
+ assert.equal(checkScheduleOverlap('MARTES 14:00 A 15:00',profile).status,'unverified');
+ assert.equal(checkScheduleOverlap('MIERCOLES 14:00 A 15:00',profile).status,'no-overlap');
+ assert.throws(()=>sanitizeWorkProfile({jobs:[],moduleSchedule:['M0-1']}));
+});
