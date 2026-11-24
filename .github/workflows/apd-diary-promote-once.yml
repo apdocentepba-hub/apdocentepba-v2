@@ -1,0 +1,92 @@
+name: APD diary authorized one-shot promotion
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - '.github/workflows/apd-diary-promote-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-schedule-zero-traffic-cloudflare
+  cancel-in-progress: false
+jobs:
+  promote:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'release/diary-worker-once-20261124' && github.event.pull_request.base.sha == '93f1557abf7d74690f7bf199bc2ea25698662a68'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Promote only verified version, roll back on failed smoke
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const before='7685b89f-3535-4e2a-b2c3-082d1e8c857e';
+          const tested='ca35b90f-81bc-4a4d-85e1-f37e6cf75bd4';
+          const candidate='39270d55-e179-4c69-96a7-c1658d617a03';
+          const worker='ancient-wildflower-cd37';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          assert.ok(token,'Missing authorized token');
+          async function api(path,body){
+            const r=await fetch('https://api.cloudflare.com/client/v4'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000)});
+            if(!r.ok)throw Error('Cloudflare API HTTP '+r.status);
+            const j=await r.json();if(j.success!==true)throw Error('Cloudflare API rejected operation');return j.result;
+          }
+          const accounts=await api('/accounts?per_page=50');
+          const id=process.env.CONFIGURED_ACCOUNT_ID?.trim()||(accounts.length===1?accounts[0].id:'');
+          assert.ok(id&&accounts.some(a=>a.id===id),'Account identity not verified');
+          const root='/accounts/'+encodeURIComponent(id)+'/workers/';
+          const dep=root+'scripts/'+worker+'/deployments';
+          const active=async()=>{
+            const d=await api(dep),a=(d.deployments?.[0]?.versions||[]).filter(v=>Number(v.percentage)>0);
+            if(a.length!==1||Number(a[0].percentage)!==100)throw Error('Unexpected traffic split');return a[0].version_id;
+          };
+          const version=id=>api(root+'workers/'+worker+'/versions/'+id+'?include=modules');
+          const keys=d=>(d.bindings||[]).map(x=>x.name+':'+x.type).sort();
+          const old=await version(before),qa=await version(tested),next=await version(candidate);
+          assert.equal(await active(),before,'Production changed; no promotion');
+          assert.equal(keys(old).length,29);
+          assert.deepEqual(keys(next),keys(old));
+          assert.deepEqual(keys(qa),keys(next));
+          assert.equal(next.modules?.length,1);
+          assert.equal(qa.modules?.length,1);
+          assert.ok(next.modules[0].content_base64&&qa.modules[0].content_base64,'Missing module bytes');
+          if(next.modules[0].content_base64!==qa.modules[0].content_base64)throw Error('Authenticated QA version differs; no promotion');
+          const cron=async()=>{const r=await api(root+'scripts/'+worker+'/schedules');return (Array.isArray(r)?r:r.schedules||[]).map(x=>x.cron).sort();};
+          const expected=['0 01 * * *','0 17 * * *','0 21 * * *','1-59/2 * * * *'].sort();
+          assert.deepEqual(await cron(),expected);
+          const host='https://'+worker+'.apdocentepba.workers.dev';
+          async function check(method,path,status){
+            const r=await fetch(host+path,{method,redirect:'manual',cache:'no-store',headers:{Origin:'https://alertasapd.com.ar',...(method==='PUT'?{'Content-Type':'application/json'}:{})},...(method==='PUT'?{body:'{}'}:{}),signal:AbortSignal.timeout(10000)});
+            if(r.status!==status)throw Error(method+' '+path+' HTTP '+r.status+' expected '+status);
+            if(path==='/api/account/application-diary'&&(!r.headers.get('cache-control')?.includes('no-store')||r.headers.get('access-control-allow-origin')!=='https://alertasapd.com.ar'))throw Error('Diary response headers incorrect');
+          }
+          const common=async()=>{for(const p of ['/api/account/home','/api/account/schedule','/api/account/favorites','/api/account/profile','/api/mis-alertas'])await check('GET',p,401);for(const p of ['/api/version','/api/planes'])await check('GET',p,200);};
+          const deploy=id=>api(dep,{strategy:'percentage',versions:[{version_id:id,percentage:100}],annotations:{'workers/message':id===before?'APD diary automatic rollback':'APD diary authorized release'}});
+          await common();
+          assert.equal(await active(),before,'Production changed during preflight');
+          console.log('APD_DIARY_PROMOTION_PREFLIGHT_PASS exact QA bytes, 29 bindings, four crons');
+          try {
+            await deploy(candidate);
+            await new Promise(r=>setTimeout(r,12000));
+            assert.equal(await active(),candidate);
+            await common();
+            await check('GET','/api/account/application-diary',401);
+            await check('PUT','/api/account/application-diary',401);
+            const r=await fetch(host+'/api/account/application-diary',{method:'OPTIONS',headers:{Origin:'https://alertasapd.com.ar','Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'authorization,content-type'},signal:AbortSignal.timeout(10000)});
+            assert.ok(r.ok&&r.headers.get('access-control-allow-origin')==='https://alertasapd.com.ar'&&r.headers.get('access-control-allow-methods')?.includes('PUT'));
+            assert.deepEqual(await cron(),expected);
+            assert.equal(await active(),candidate);
+            console.log('APD_DIARY_PRODUCTION_PASS '+candidate+' 100%; frontend unchanged');
+          } catch(e){
+            console.error('Promotion checks failed: '+e.message);
+            const current=await active();
+            if(current===candidate){await deploy(before);await new Promise(r=>setTimeout(r,12000));assert.equal(await active(),before);await common();console.log('APD_DIARY_ROLLBACK_PASS '+before);}
+            else if(current!==before)throw Error('Unexpected external deployment; manual investigation required');
+            throw Error('Promotion failed; check deployment status');
+          }
+          JS
