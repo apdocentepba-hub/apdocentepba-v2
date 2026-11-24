@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {spawn,spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const chrome=['google-chrome','chromium','chromium-browser'].find(x=>spawnSync('which',[x]).status===0);
+assert.ok(chrome,'Chromium required');
+const page=`<!doctype html><meta charset="utf-8"><div id="host"></div><pre id="result">RUNNING</pre><script type="module">
+import {mountCareerEditor} from '/scripts/apd-career-editor-ui.mjs';
+import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
+import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
+const check=(v,m)=>{if(!v)throw Error(m);};
+const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('timeout');};
+const rows=new Map();let token='A',lost=false,puts=0;
+const p={schema:1,seniorityYears:10,positions:[{id:'c1',schoolKey:'0005MS0004',school:'Escuela de ensayo',role:'Matemática',level:'Secundaria',kind:'modulo',status:'titular',quantity:2,modules:['T1-1'],blocks:[{day:1,start:'14:00',end:'16:00'}]}]};
+rows.set('A',{profile:p,revision:1});
+const deps={authenticate:async req=>({id:req.headers.get('authorization').slice(7)}),entitled:async()=>true,read:async id=>rows.get(id)||null,compareAndSet:async(id,data)=>{puts++;if((rows.get(id)?.revision||0)!==data.revision)return null;const record={profile:data.profile,revision:data.revision+1};rows.set(id,record);return record;}};
+const client=createCareerClient({base:location.origin,getToken:()=>token,fetcher:async(url,opts)=>{const r=await careerAccountRequest(new Request(url,opts),deps);if(lost&&opts.method==='PUT'){lost=false;throw Error('Conexión interrumpida');}return new Response(JSON.stringify(r.body),{status:r.status});}});
+const host=document.querySelector('#host'),status=()=>host.querySelector('[role=status]').textContent,save=()=>host.querySelector('button[type=submit]'),years=()=>host.querySelector('input[type=number]'),button=t=>[...host.querySelectorAll('button')].find(n=>n.textContent===t);
+const edit=v=>{years().value=v;years().dispatchEvent(new Event('input',{bubbles:true}));};
+const submit=()=>host.querySelector('form').requestSubmit();
+try{
+ let dispose=mountCareerEditor(host,{client,legacyModules:['M1-2','T1-1'],isCurrent:()=>true});
+ await until(()=>status().includes('recuperada'));
+ check(years().value==='10','seniority readback');check(host.textContent.includes('C1 · Matemática'),'color legend');check(host.textContent.includes('1 módulos anteriores sin asignar'),'legacy preserved');check(puts===0,'no automatic write');
+ edit('11');button('Recuperar carrera').click();check(years().value==='11','draft retained');check(status().includes('cambios sin guardar'),'explicit warning');
+ lost=true;submit();await until(()=>status().includes('borrador se conserva'));
+ check(save().disabled,'ambiguous revision blocked');check(rows.get('A').profile.seniorityYears===11,'server committed despite lost response');
+ button('Comprobar último guardado').click();await until(()=>status().includes('se confirmó'));
+ check(!save().disabled&&years().value==='11','confirmed readback');
+ edit('12');rows.set('A',{profile:{...p,seniorityYears:13},revision:3});
+ submit();await until(()=>status().includes('borrador se conserva'));
+ button('Comprobar último guardado').click();await until(()=>status().includes('No se confirmó ese guardado'));
+ check(save().disabled&&years().value==='12'&&rows.get('A').profile.seniorityYears===13,'conflict preserves local draft and server revision');
+ button('Descartar borrador y recuperar').click();await until(()=>status().includes('recuperada'));check(years().value==='13','explicit discard');
+ dispose();token='B';mountCareerEditor(host,{client,legacyModules:[],isCurrent:()=>true});await until(()=>status().includes('Todavía no'));
+ check(years().value===''&&!host.textContent.includes('Matemática'),'other account isolated');check(puts===2,'no hidden writes');
+ document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}</script>`;
+const server=createServer((req,res)=>{
+ if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});return res.end(page);}
+ if(/^\/scripts\/apd-(career-[a-z-]+|account-schedule-core)\.mjs$/.test(req.url)){try{const content=readFileSync('.'+req.url);res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(content);}catch{}}
+ res.writeHead(404);res.end();
+});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const profile=mkdtempSync(join(tmpdir(),'apd-career-browser-'));
+try{
+ const output=await new Promise((resolve,reject)=>{
+  const child=spawn(chrome,['--headless','--no-sandbox','--disable-dev-shm-usage','--disable-gpu','--no-first-run','--virtual-time-budget=12000','--dump-dom','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+'/'],{stdio:['ignore','pipe','pipe']});
+  let out='',err='';child.stdout.on('data',x=>out+=x);child.stderr.on('data',x=>err+=x);
+  const timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error('Chromium timeout'));},45000);
+  child.on('error',e=>{clearTimeout(timer);reject(e);});
+  child.on('close',code=>{clearTimeout(timer);if(code!==0)reject(Error(err.slice(-1500)));else resolve(out);});
+ });
+ const result=output.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
+ assert.equal(result,'APD_CAREER_CHROMIUM_PASS');console.log(result);
+}finally{server.close();rmSync(profile,{recursive:true,force:true});}
