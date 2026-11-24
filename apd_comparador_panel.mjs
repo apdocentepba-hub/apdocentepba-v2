@@ -9,6 +9,7 @@ import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=2026
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
+import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-history1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -27,6 +28,8 @@ const state={
 };
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
+let disposePersonalHistory=null;
+function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
 let recommendOpen=false,recommendDistrict='',recommendTurn='',recommendSort='cierre',recommendGroup='',recommendLimit=10;
@@ -903,13 +906,16 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
  if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
  state.privatePlannerAllowed=entitled;
+ const historyHost=document.getElementById('apd-personal-history');
+ if(!entitled||!enabled)clearPersonalHistory();
+ else if(historyHost&&historyContext&&!disposePersonalHistory)disposePersonalHistory=mountPersonalHistory(historyHost,{fetchSummary:historyContext.fetchSummary,isCurrent:()=>state.privatePlannerAllowed&&state.enabled&&historyContext.isCurrent()});
  state.enabled=enabled===true;
  if(!state.enabled){
   reset();return;
@@ -942,6 +948,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  render();
 }
 function reset() {
+ clearPersonalHistory();
  document.getElementById('apd-perfil-horarios')?.replaceChildren();
  window.APD_renderAlertScheduleControls?.({total:0});
  // Auth/session ownership changes must not expose a former account's local

@@ -28,7 +28,7 @@ const html=`<!doctype html><html lang="es"><head>
 <h2>Panel de Alertas APD — laboratorio</h2>
 <div id="panel-datos-docente"></div>
 <div id="panel-alertas"><article class="alerta-main-card"><div class="alerta-actions"></div></article></div>
-<section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section>
+<section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section><section id="apd-personal-history" hidden></section>
 </div>
 <script>
 let dashboardLoadedOwner=null;
@@ -37,6 +37,8 @@ window.alertasState={items:[],index:0};
 window.__testToken=null;
 window.API_URL=location.origin;
 function obtenerToken(){return window.__testToken;}
+window.__historyCalls=0;window.__historyHold=false;window.__historyRelease=null;
+async function workerFetchJson(path,opts){window.__historyCalls++;const days=Number(new URL(path,location.origin).searchParams.get('days'));const data={ok:true,empty:false,ventana_dias:days,ofertas_unicas:4,capturas_filtradas:5,ultima_captura:'2026-11-02T08:00:00Z',ultimas_ofertas:[{iddetalle:'100',cargo:'Histórico fixture',estado:'PUBLICADA',finoferta:'2020-01-01T08:00:00Z',captured_at:'2026-11-02T08:00:00Z'}]};if(window.__historyHold)return new Promise(resolve=>window.__historyRelease=()=>resolve(data));return data;}
 window.__wfsRequests=[];
 window.__homeGeoRequests=[];
 window.__mobilityExternalRequests=[];
@@ -147,6 +149,8 @@ const server=createServer((req,res)=>{
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
   '/scripts/apd-favorite-offers.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-favorite-offers.mjs')},
   '/scripts/apd-offer-recommendations.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-recommendations.mjs')},
+  '/scripts/apd-personal-history.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-personal-history.mjs')},
+  '/scripts/apd-personal-history-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-personal-history-ui.mjs')},
   '/scripts/apd-offer-economics.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics.mjs')},
   '/scripts/apd-offer-economics-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-ui.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
@@ -310,6 +314,13 @@ try{
   assert.equal(await js('document.querySelectorAll(".apd-recommendation-row").length'),0);
   await js(`(()=>{const f=document.querySelectorAll('.apd-recommendations select')[3];f.value='';f.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
   assert.equal(await js('document.querySelectorAll(".apd-recommendation-row").length'),6);
+  assert.equal(await js('window.__historyCalls'),0);
+  assert.equal(await js('document.getElementById("apd-personal-history").hidden'),false);
+  await js('document.querySelector(".apd-history-tools form")?.requestSubmit();document.querySelector("form.apd-history-tools").requestSubmit();true');
+  await until('document.querySelector(".apd-history-row")?.textContent.includes("Vencida según cierre informado")');
+  assert.equal(await js('window.__historyCalls'),1);
+  await js(`(()=>{window.__historyHold=true;document.querySelector('form.apd-history-tools').requestSubmit();return true;})()`);
+  await until('typeof window.__historyRelease==="function"');
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -326,6 +337,9 @@ try{
   assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),false);
   assert.equal(await js('!!document.querySelector(".apd-favorites")'),false);
   assert.equal(await js('!!document.querySelector(".apd-recommendations")'),false);
+  await js('window.__historyRelease();window.__historyHold=false;true');
+  assert.equal(await js('document.getElementById("apd-personal-history").hidden'),true);
+  assert.equal(await js('document.querySelectorAll(".apd-history-row").length'),0);
   assert.equal(await js('!!document.getElementById("apd-favorite-oferta")'),false);
   assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
    'Downgrade must wipe domicile from the same browser tab');
