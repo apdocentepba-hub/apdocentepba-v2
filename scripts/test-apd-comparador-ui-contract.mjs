@@ -168,7 +168,7 @@ test('la grilla semanal se monta en Mi cuenta aunque no haya ofertas',()=>{
   assert.match(html,/app_v2\.js\?v=20&rev=20261124-perfil/);
  assert.match(app,/APD_renderProfileSchedule\?\.\(planInfo\)/);
  assert.match(html,/offers\.length\|\|document\.getElementById\('apd-perfil-horarios'\)/);
- assert.match(ui,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*host\.replaceChildren/);
+ assert.match(ui,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*profileScheduleClient=null;\s*host\.replaceChildren/);
 });
 
 test('account overview renders a real text summary and preserves independent actions',async()=>{
