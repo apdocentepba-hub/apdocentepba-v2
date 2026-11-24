@@ -7,6 +7,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
+import {marginalPay} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
@@ -287,6 +288,12 @@ function createSalaryComparison(){
  const info=node('p','apd-comparator-hint','Compará dos liquidaciones del mismo período. Los importes se ingresan manualmente; no se guardan ni se envían.');
  box.appendChild(info);
  const form=node('form','apd-salary-compare-form');
+ const sourceField=node('label','apd-work-field');sourceField.append(node('span','','Método de cálculo'));
+ const source=node('select','apd-work-input');source.name='salarySource';
+ for(const [value,label] of [['FEB','FEB'],['SUTEBA','SUTEBA'],['RECIBO_MANUAL','Estimación manual']]){const option=node('option','',label);option.value=value;source.append(option);}
+ sourceField.append(source);form.append(sourceField);
+ const periodField=node('label','apd-work-field');periodField.append(node('span','','Período de ambas liquidaciones'));
+ const period=node('input','apd-work-input');period.name='salaryPeriod';period.type='month';period.required=true;periodField.append(period);form.append(periodField);
  const inputs=[];
  for(const label of ['Bolsillo actual ($)','Bolsillo con la nueva oferta ($)']){
   const field=node('label','apd-work-field');field.append(node('span','',label));
@@ -302,7 +309,9 @@ function createSalaryComparison(){
   if(!form.reportValidity()||inputs.some(i=>!i.value.trim()))return;
   const [before,after]=inputs.map(i=>Number(i.value));
   if(![before,after].every(v=>Number.isFinite(v)&&v>=0&&v<=100000000))return;
-  const delta=Math.round((after-before)*100)/100;
+  let result;
+  try{result=marginalPay({source:source.value,period:period.value,netCentavos:Math.round(before*100)},{source:source.value,period:period.value,netCentavos:Math.round(after*100)});}catch(error){output.append(node('p','',error.message));return;}
+  const delta=result.deltaCentavos/100;
   for(const [label,value] of [['Actual',before],['Con la oferta',after],['Diferencia mensual',delta]]){
    const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',fmt(value)));output.append(metric);
   }
