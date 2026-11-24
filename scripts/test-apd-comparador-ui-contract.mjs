@@ -27,7 +27,7 @@ test('access gated by active authenticated plan and reset when session changes',
  assert.match(html,/window\.APD_comparatorReset\?\.\(\)/);
  assert.match(html,/planActual\?\.access_active===true/);
  assert.match(html,/window\.APD_comparatorRefresh\(\{offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:\{/);
- assert.match(html,/isCurrent:\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&planActual\?\.access_active===true/);
+ assert.match(html,/isCurrent:\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&readBearer\(\)===bearer&&planActual\?\.access_active===true/);
  assert.match(ui,/if\(!entitled\|\|!enabled\)clearPersonalHistory\(\)/);
  assert.match(ui,/hasInsignePlannerAccess\(planInfo\)/);
  assert.match(ui,/if\(!entitled\)clearPrivatePlanner\(\)/);
