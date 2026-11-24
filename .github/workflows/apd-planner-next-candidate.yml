@@ -1,0 +1,20 @@
+name: APD economic calendar and manual application diary
+on:
+  pull_request:
+    paths:
+      - 'scripts/*economics-calendar*'
+      - 'scripts/*application-diary*'
+      - '.github/workflows/apd-planner-next-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-offer-economics-calendar.mjs scripts/test-apd-application-diary.mjs scripts/test-apd-offer-economics.mjs
