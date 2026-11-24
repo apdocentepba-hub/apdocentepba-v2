@@ -204,7 +204,7 @@ test('permanent favorites enabled after authenticated live QA',()=>{
 
 test('account clients use the secure session bearer rather than the user ID',()=>{
  assert.match(html,/window\.obtenerAuthBearer\(\)/);
- assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,2);
+ assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,3);
  assert.doesNotMatch(html,/getToken:\(\)=>[^\n]*\?obtenerToken\(\):null/);
 });
 
@@ -214,4 +214,10 @@ test('schedule compatibility switch exposes active state and edit shortcut',()=>
  assert.match(ui,/toggle\.disabled=!hasJobs/);
  assert.match(ui,/window\.APD_setAlertScheduleFilter\?\.\(!active\)/);
  assert.match(css,/\.apd-schedule-switch\[aria-checked=true\]/);
+});
+
+test('career profile remains release-gated and separate from existing module form',()=>{
+ assert.match(html,/const accountCareerReleaseEnabled=false;/);
+ assert.match(html,/id="apd-perfil-horarios"><\/div><section id="apd-perfil-carrera" hidden>/);
+ assert.match(html,/if\(accountCareerReleaseEnabled&&careerCoordinator\)/);
 });
