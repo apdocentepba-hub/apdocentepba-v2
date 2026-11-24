@@ -246,7 +246,7 @@
         <div class="panel-header"><div><h2 id="panel-bienvenida">Bienvenido/a</h2><p id="panel-subtitulo" class="panel-sub">Cargando...</p></div><div class="panel-actions"><a class="btn btn-primary" href="./herramientas-docentes.html">🧰 Herramientas</a><a class="btn btn-secondary" href="./licencias-docentes.html">🧾 Licencias</a><button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button><button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button></div></div>
         <div id="panel-loading" class="panel-loading hidden"><div class="spinner"></div><span>Cargando panel...</span></div>
         <div id="panel-content" class="cards-grid">
-          <div class="panel-card span-4"><div class="card-lbl">👤 Mi cuenta</div><div id="panel-datos-docente"><p class="ph">Cargando...</p></div><div id="apd-perfil-horarios"></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">👤 Mi cuenta</div><div id="panel-datos-docente"><p class="ph">Cargando...</p></div><div id="apd-perfil-horarios"></div><section id="apd-perfil-carrera" hidden></section></div>
           <div class="panel-card span-4"><div class="card-lbl">⚙️ Mis preferencias</div><div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-4"><div class="card-lbl">📊 Estadísticas</div><div id="panel-estadisticas"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-12"><div class="card-lbl-row"><span class="card-lbl">🧰 Herramientas docentes</span></div><p class="prefs-hint">Funciones rápidas para docentes PBA: licencias, PID, recursos y nuevas utilidades.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary" href="./licencias-docentes.html">Asistente de Licencias</a><a class="btn btn-secondary" href="./herramientas.html">Ver herramientas</a><a class="btn btn-secondary" href="./buscar-herramientas.html">Buscar herramienta</a></div></div>
@@ -318,6 +318,10 @@ document.addEventListener('DOMContentLoaded',function(){
  // Release gate: enable only after authenticated QA and Worker promotion.
  const accountScheduleReleaseEnabled=true;
  let accountScheduleClient=null,scheduleLoading=false;
+ // Career candidate: do not connect to production before storage and authenticated QA.
+ const accountCareerReleaseEnabled=false;
+ let accountCareerClient=null,careerCoordinator=null,careerLoading=false;
+ const resetCareer=()=>{careerCoordinator?.reset();accountCareerClient=null;const host=document.getElementById('apd-perfil-carrera');if(host){host.hidden=true;host.replaceChildren();}};
  const accountFavoritesReleaseEnabled=true;
  let accountFavoriteClient=null,favoriteLoading=false;
  const sync=function(){
@@ -326,14 +330,14 @@ document.addEventListener('DOMContentLoaded',function(){
   const bearer=readBearer();
   if(owner!==previousOwner||bearer!==previousBearer){
    previousOwner=owner;previousBearer=bearer;
-   accountScheduleClient=null;
+   resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
   }
   const allowed=!!owner&&!!bearer&&typeof obtenerToken==='function'&&obtenerToken()===owner&&
    typeof planActual!=='undefined'&&planActual?.access_active===true;
   if(!allowed){
-   accountScheduleClient=null;
+   resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
    comparison.hidden=true;
@@ -361,6 +365,17 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{favoriteLoading=false;});
   }
+  if(accountCareerReleaseEnabled&&!accountCareerClient&&!careerLoading){
+   careerLoading=true;
+   Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261124-career2'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261124-career2')]).then(([{createCareerClient},{createCareerPanelCoordinator}])=>{
+    careerLoading=false;
+    if(dashboardLoadedOwner!==owner||obtenerToken()!==owner||readBearer()!==bearer||planActual?.access_active!==true){sync();return;}
+    careerCoordinator=createCareerPanelCoordinator();
+    accountCareerClient=createCareerClient({base:API_URL,fetcher:(url,options)=>window.fetch(url,options),getToken:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true?bearer:null});
+    sync();
+   }).catch(()=>{careerLoading=false;});
+  }
+  if(accountCareerReleaseEnabled&&careerCoordinator){careerCoordinator.sync({enabled:true,host:document.getElementById('apd-perfil-carrera'),plan:planActual,client:accountCareerClient,scheduleClient:accountScheduleClient,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true});}
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
   if(typeof window.APD_offerSchoolMapRefresh==='function'){
