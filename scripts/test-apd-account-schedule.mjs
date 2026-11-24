@@ -76,3 +76,10 @@ test('max revision remains readable and cannot wrap',async()=>{
  assert.equal((await f.call('GET')).body.schedule.revision,2147483647);
  assert.equal((await f.call('PUT',{modules:[],revision:2147483647})).status,400);
 });
+
+test('form session guard is permanently revoked after observed account change',()=>{
+ let token='A';const c=createScheduleClient({getToken:()=>token,base:'https://fixture.invalid',fetcher:async()=>{throw Error('No network');}});
+ const guard=c.captureSession();assert.equal(guard(),true);
+ token='B';assert.equal(guard(),false);
+ token='A';assert.equal(guard(),false);
+});

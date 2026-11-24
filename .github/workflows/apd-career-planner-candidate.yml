@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/*account-schedule*'
       - 'scripts/apd-mi-jornada-ui.mjs'
+      - 'scripts/test-apd-comparador-browser.mjs'
       - 'tests/sql/apd_account_schedule_pg17*.sql'
       - 'docs/sql/APD_ACCOUNT_SCHEDULE*'
       - '.github/workflows/apd-career-planner-candidate.yml'
@@ -44,3 +45,5 @@ jobs:
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_ACCOUNT_SCHEDULE_CANDIDATE_20261124.sql
           psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17_assert.sql
       - run: node --check scripts/apd-mi-jornada-ui.mjs
+      - name: Chromium integration with synthetic account schedule
+        run: node scripts/test-apd-comparador-browser.mjs

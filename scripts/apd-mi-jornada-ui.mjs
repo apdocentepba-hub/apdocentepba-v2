@@ -411,13 +411,14 @@ export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
  const status=element('p','');status.setAttribute('role','status');
  const save=element('button','btn btn-primary','Guardar horarios');save.type='submit';
  form.append(save,status);
- const isCurrent=()=>generation===privacyGeneration&&details.isConnected;
+ const sessionCurrent=accountClient?.captureSession?.()||(()=>!accountClient);
+ const isCurrent=()=>generation===privacyGeneration&&details.isConnected&&sessionCurrent();
  const readDraft=()=>fields.filter(check=>check.checked).map(check=>check.value);
  const applySelection=modules=>{for(const check of fields)check.checked=modules.includes(check.value);};
  let busy=false,initialLoad=true;
  const setBusy=value=>{
   for(const check of fields)check.disabled=value;
-  save.disabled=value||!!accountClient&&!accountClient.peek();
+  save.disabled=value||!!accountClient&&(initialLoad||!accountClient.peek());
  };
  let reload;
  if(accountClient){
@@ -456,7 +457,7 @@ export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
    catch(error){status.textContent=error.message;return;}
    status.textContent='Horarios guardados.';onChanged?.();return;
   }
-  if(!isCurrent()||!accountClient.peek())return;
+  if(!isCurrent()||initialLoad||!accountClient.peek())return;
   busy=true;reload.disabled=true;setBusy(true);status.textContent='Guardando en tu cuenta…';
   try{
    const confirmed=await accountClient.persist(modules);

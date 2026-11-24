@@ -1233,6 +1233,52 @@ try{
   assert.deepEqual(modules.labels,[['1','2','3','4','5'],['Prehora','1','2','3','4','5']]);
   assert.equal(modules.checkboxes,true);
   assert.deepEqual(modules.saved,['M1-1','T0-2']);
+  // The release candidate is intentionally injected only in this synthetic lab.
+  await js(`(async()=>{
+   const {createWeeklyScheduleForm}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-modulos');
+   const {createScheduleClient}=await import('/scripts/apd-account-schedule-client.mjs');
+   const {accountScheduleRequest}=await import('/scripts/apd-account-schedule-core.mjs');
+   const fixture=document.createElement('div');fixture.id='schedule-sync-fixture';document.body.append(fixture);
+   window.__syncOwner='A';window.__syncWrites=0;window.__syncRow=null;
+   const client=createScheduleClient({base:location.origin,getToken:()=>window.__syncOwner,fetcher:async(url,opts)=>{
+    const result=await accountScheduleRequest(new Request(url,opts),{
+     authenticate:async()=>({id:window.__syncOwner}),entitled:async()=>true,
+     read:async()=>window.__syncRow,
+     compareAndSet:async(id,p)=>{window.__syncWrites++;if((window.__syncRow?.revision||0)!==p.revision)return null;
+      return window.__syncRow={modules:p.modules,revision:p.revision+1};}
+    });
+    return new Response(JSON.stringify(result.body),{status:result.status});
+   }});
+   fixture.append(createWeeklyScheduleForm({accountClient:client}));
+   return true;
+  })()`);
+  assert.equal(await js(`document.querySelector('#schedule-sync-fixture button[type=submit]').disabled`),true);
+  await js(`document.querySelector('#schedule-sync-fixture button[type=button]').click()`);
+  await until(`!document.querySelector('#schedule-sync-fixture button[type=submit]').disabled`);
+  assert.deepEqual(await js(`[...document.querySelectorAll('#schedule-sync-fixture input:checked')].map(x=>x.value)`),['M1-1','T0-2']);
+  assert.equal(await js('window.__syncWrites'),0,'Reading must never upload the local draft');
+  await js(`document.querySelector('#schedule-sync-fixture form').requestSubmit()`);
+  await until(`document.querySelector('#schedule-sync-fixture [role=status]').textContent.includes('Horarios guardados en tu cuenta')`);
+  assert.deepEqual(await js('window.__syncRow'),{modules:['M1-1','T0-2'],revision:1});
+  await js(`(()=>{
+   window.__syncRow={modules:['M3-3'],revision:2};
+   const fixture=document.getElementById('schedule-sync-fixture');
+   fixture.querySelector('input[value="T1-2"]').checked=true;
+   fixture.querySelector('form').requestSubmit();
+  })()`);
+  await until(`document.querySelector('#schedule-sync-fixture [role=status]').textContent.includes('otro dispositivo')`);
+  assert.equal(await js(`document.querySelector('#schedule-sync-fixture input[value="T1-2"]').checked`),true,'Conflict preserves draft');
+  assert.equal(await js(`document.querySelector('#schedule-sync-fixture button[type=submit]').disabled`),true);
+  await js(`document.querySelector('#schedule-sync-fixture button[type=button]').click()`);
+  await until(`!document.querySelector('#schedule-sync-fixture button[type=submit]').disabled`);
+  assert.deepEqual(await js(`[...document.querySelectorAll('#schedule-sync-fixture input:checked')].map(x=>x.value)`),['M3-3']);
+  await js(`(()=>{
+   window.__syncOwner='B';
+   document.querySelector('#schedule-sync-fixture form').requestSubmit();
+   return true;
+  })()`);
+  assert.equal(await js('window.__syncWrites'),2,'Revoked form cannot save into the next account');
+  await js(`document.getElementById('schedule-sync-fixture').remove()`);
   assert.equal(await js(`(()=>{
    const profile=document.getElementById('panel-datos-docente');
    const host=document.getElementById('apd-perfil-horarios');
@@ -1251,7 +1297,7 @@ try{
   await until('!document.querySelector("#apd-perfil-horarios .apd-schedule-grid")');
   results.push({width,profile_schedule_survives_edits:true,official_school_identity:true,private_gating:true,up_to_five:true,xss_escaped:true,
    auto_home_school_abc:true,inline_mobility:true,external_location_opt_in:true,
-   account_home_reload:true,
+   account_home_reload:true,account_schedule_candidate:true,
    session_reset:true,limit_enforced:true,responsive:true});
  }
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));

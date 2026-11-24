@@ -21,6 +21,7 @@ export function createScheduleClient({getToken,fetcher,base}){
  }
  async function perform(fn){scope();if(busy)throw Error('Operación en curso');busy=true;const generation=epoch;try{return await fn();}finally{if(generation===epoch)busy=false;}}
  return Object.freeze({
+  captureSession(){const token=scope(),generation=epoch;return ()=>!!token&&scope()===token&&epoch===generation;},
   peek(){scope();return record?{modules:[...record.modules],revision:record.revision}:null;},
   reload(){return perform(async()=>{record=null;record=await request('GET');return this.peek();});},
   persist(modules){return perform(async()=>{
