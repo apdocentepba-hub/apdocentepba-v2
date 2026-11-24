@@ -53,3 +53,26 @@ test('late response from old account cannot restore private cache',async()=>{
  resolve(new Response(JSON.stringify({ok:true,schedule:{modules:['M1-1'],revision:1}})));
  await assert.rejects(()=>old);assert.equal(client.peek(),null);
 });
+
+test('malformed successful response must not become an empty account',async()=>{
+ for(const schedule of [null,undefined,{},[],{revision:0,modules:['M1-1']},{revision:0}]){
+  const client=createScheduleClient({getToken:()=> 'A',base:'https://fixture.invalid',fetcher:async()=>new Response(JSON.stringify({ok:true,schedule}))});
+  await assert.rejects(()=>client.reload());assert.equal(client.peek(),null);
+  await assert.rejects(()=>client.persist([]));
+ }
+});
+test('conflict invalidates revision and requires a fresh read',async()=>{
+ const f=fixture();const fetcher=async(url,init)=>{const result=await accountScheduleRequest(new Request(url,{...init,headers:{...init.headers,Authorization:'A'}}),f.deps);return new Response(JSON.stringify(result.body),{status:result.status});};
+ const a=createScheduleClient({getToken:()=> 'A',base:'https://fixture.invalid',fetcher});
+ const b=createScheduleClient({getToken:()=> 'A',base:'https://fixture.invalid',fetcher});
+ await a.reload();await b.reload();await a.persist(['M1-1']);
+ await assert.rejects(()=>b.persist(['T1-1']),/otro dispositivo/);
+ assert.equal(b.peek(),null);await assert.rejects(()=>b.persist([]));
+ assert.deepEqual(await b.reload(),{modules:['M1-1'],revision:1});
+ assert.deepEqual(await b.persist(['T1-1']),{modules:['T1-1'],revision:2});
+});
+test('max revision remains readable and cannot wrap',async()=>{
+ const f=fixture();f.rows.set('A',{modules:['M1-1'],revision:2147483647});
+ assert.equal((await f.call('GET')).body.schedule.revision,2147483647);
+ assert.equal((await f.call('PUT',{modules:[],revision:2147483647})).status,400);
+});

@@ -6,12 +6,18 @@ export function createScheduleClient({getToken,fetcher,base}){
  async function request(method,body){
   const token=scope(),generation=epoch;
   if(!token)throw Error('Ingresá a tu cuenta');
-  const response=await fetcher(base+'/api/account/schedule',{method,credentials:'omit',cache:'no-store',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const response=await fetcher(base+'/api/account/schedule',{method,credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
   if(scope()!==token||epoch!==generation)throw Error('La sesión cambió');
   const result=await response.json();
   if(scope()!==token||epoch!==generation)throw Error('La sesión cambió');
   if(!response.ok||result.ok!==true){if(response.status===409)record=null;throw Error(result.message||'No disponible');}
-  return validateScheduleRow(result.schedule?.revision===0&&Array.isArray(result.schedule?.modules)&&result.schedule.modules.length===0?null:result.schedule);
+  const value=result.schedule;
+  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Respuesta de horarios inválida');
+  if(value.revision===0){
+   if(!Array.isArray(value.modules)||value.modules.length!==0)throw Error('Respuesta de horarios inválida');
+   return {modules:[],revision:0};
+  }
+  return validateScheduleRow(value);
  }
  async function perform(fn){scope();if(busy)throw Error('Operación en curso');busy=true;const generation=epoch;try{return await fn();}finally{if(generation===epoch)busy=false;}}
  return Object.freeze({

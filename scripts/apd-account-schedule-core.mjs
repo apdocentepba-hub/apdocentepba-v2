@@ -9,9 +9,8 @@ export function validateScheduleWrite(value){
 }
 export function validateScheduleRow(row){
  if(row===null)return {modules:[],revision:0};
- const clean=validateScheduleWrite({modules:row.modules,revision:row.revision});
- if(clean.revision===0)throw Error('Invalid stored revision');
- return clean;
+ if(!row||typeof row!=='object'||Array.isArray(row)||!Number.isSafeInteger(row.revision)||row.revision<1||row.revision>2147483647)throw Error('Invalid stored revision');
+ return {modules:validateModuleSchedule(row.modules),revision:row.revision};
 }
 /** Dependency-injected handler. Storage write must perform an atomic CAS. */
 export async function accountScheduleRequest(request, deps){
