@@ -281,6 +281,39 @@ function syncCurrentButton() {
   actions.appendChild(view);
  }
 }
+function createSalaryComparison(){
+ const box=node('details','apd-salary-compare');box.open=true;
+ box.append(node('summary','apd-work-summary','Impacto en mi sueldo'));
+ const info=node('p','apd-comparator-hint','Compará dos liquidaciones del mismo período. Los importes se ingresan manualmente; no se guardan ni se envían.');
+ box.appendChild(info);
+ const form=node('form','apd-salary-compare-form');
+ const inputs=[];
+ for(const label of ['Bolsillo actual ($)','Bolsillo con la nueva oferta ($)']){
+  const field=node('label','apd-work-field');field.append(node('span','',label));
+  const input=node('input','apd-work-input');input.type='number';input.min='0';input.max='100000000';input.step='0.01';input.required=true;
+  field.append(input);form.append(field);inputs.push(input);
+ }
+ const output=node('div','apd-week-metrics');output.setAttribute('role','status');
+ const calculate=button('Comparar haberes',()=>{},'btn btn-primary');calculate.type='submit';form.append(calculate,output);
+ const fmt=v=>v.toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:2});
+ form.addEventListener('input',()=>output.replaceChildren());
+ form.addEventListener('submit',e=>{
+  e.preventDefault();output.replaceChildren();
+  if(!form.reportValidity()||inputs.some(i=>!i.value.trim()))return;
+  const [before,after]=inputs.map(i=>Number(i.value));
+  if(![before,after].every(v=>Number.isFinite(v)&&v>=0&&v<=100000000))return;
+  const delta=Math.round((after-before)*100)/100;
+  for(const [label,value] of [['Actual',before],['Con la oferta',after],['Diferencia mensual',delta]]){
+   const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',fmt(value)));output.append(metric);
+  }
+ });
+ const refs=node('div','apd-week-legend');
+ for(const [title,url] of [['FEB','https://calculadora.feb.org.ar/'],['SUTEBA','https://haberes.suteba.org.ar/app/']]){
+  const a=node('a','apd-comparator-map-link',title+' · consultar haberes');a.href=url;a.target='_blank';a.rel='noopener noreferrer';refs.append(a);
+ }
+ box.append(form,refs);return box;
+}
+
 function openWeekSimulator(key){
  if(!state.enabled||!state.privatePlannerAllowed||!key)return;
  const source=state.available.find(x=>offerKey(x)===key);
@@ -299,32 +332,56 @@ function openWeekSimulator(key){
  }else{
   body.appendChild(node('strong','',titleFor(source)));
   const sim=simulateWeek(offer.horario,loadPrivatePlanner());
-  body.appendChild(node('p','apd-week-status',sim.reason));
-  body.appendChild(node('p','apd-comparator-hint','Simulación informativa; no modifica tu carga horaria ni realiza postulaciones. No acredita compatibilidad normativa o traslados.'));
-  if(!sim.declared&&sim.days.length)body.appendChild(node('p','apd-comparator-hint','Todavía no declaraste tu jornada: solo se muestra la oferta.'));
-  if(sim.referenceMorning)body.appendChild(node('p','apd-comparator-hint','Mañana: referencia de módulos de 60 minutos desde 07:20. Confirmá los horarios de cada escuela.'));
+  const labels={'no-overlap':'Sin cruces detectados','overlap':'Hay cruces de horario','tight-transition':'Traslado a revisar','unverified':'Faltan datos para confirmar'};
+  const verdict=node('div','apd-week-verdict apd-week-verdict-'+sim.status);
+  verdict.append(node('strong','',labels[sim.status]||'Revisar horario'),node('span','',sim.reason));
+  body.appendChild(verdict);
   if(sim.totals){
-   const hours=m=>m===null?'Sin determinar':Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min';
+   const hours=m=>m===null?'—':Math.floor(m/60)+' h '+(m%60?String(m%60).padStart(2,'0')+' min':'');
    const metrics=node('div','apd-week-metrics');
-   for(const [label,value] of [['Jornada actual de referencia',sim.totals.currentMinutes],['Horas reloj de la oferta',sim.totals.offerMinutes],['Ocupación combinada de referencia',sim.totals.combinedMinutes],['Cruces detectados',sim.totals.overlapMinutes]]){
-    const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',hours(value)));metrics.appendChild(metric);
+   const occupied=sim.days.reduce((n,d)=>n+d.afternoon.length,0);
+   for(const [label,value] of [['Horas actuales',sim.totals.currentMinutes===null?(occupied+' mód. tarde*'):hours(sim.totals.currentMinutes)],['Nueva oferta',hours(sim.totals.offerMinutes)],['Semana resultante',hours(sim.totals.combinedMinutes)],['Cruce conocido',hours(sim.totals.overlapMinutes)]]){
+    const metric=node('div','apd-week-metric');metric.append(node('span','',label),node('strong','',value));metrics.appendChild(metric);
    }
    body.appendChild(metrics);
-   const days=node('div','apd-week-days');
+   const legend=node('div','apd-week-legend');
+   for(const [kind,label] of [['current','Mi jornada'],['offer','Oferta nueva'],['overlap','Cruce'],['unknown','Módulo sin hora reloj']])legend.append(node('span','apd-week-key apd-week-key-'+kind,label));
+   body.appendChild(legend);
+   const days=node('div','apd-week-days apd-week-visual-days');
    for(const day of sim.days){
-    const section=node('section','apd-week-day');
+    const section=node('section','apd-week-day apd-week-visual-day');
     section.appendChild(node('h3','',day.name));
-    const list=node('dl','apd-week-day-data');
-    for(const [label,value] of [['Actual',intervalText(day.current)],['Nueva oferta',intervalText(day.offer)],['Combinada',intervalText(day.combined)],['Cruces detectados',intervalText(day.overlaps)]]){
-     list.append(node('dt','',label),node('dd','',value));
+    const all=[...day.current,...day.offer];
+    const lo=Math.min(420,...all.map(v=>v[0])),hi=Math.max(1200,...all.map(v=>v[1]));
+    const ruler=node('div','apd-week-ruler');ruler.append(node('span','',intervalText([[lo,hi]])));
+    section.appendChild(ruler);
+    for(const [kind,intervals] of [['current',day.current],['offer',day.offer],['overlap',day.overlaps]]){
+     const row=node('div','apd-week-bar-row');
+     const track=node('div','apd-week-track');
+     track.setAttribute('aria-label',kind+': '+intervalText(intervals));
+     for(const [a,b] of intervals){
+      const segment=node('span','apd-week-segment apd-week-segment-'+kind);
+      segment.style.left=((a-lo)/(hi-lo)*100)+'%';segment.style.width=((b-a)/(hi-lo)*100)+'%';
+      segment.title=intervalText([[a,b]]);track.appendChild(segment);
+     }
+     row.append(track,node('span','apd-week-clock',intervalText(intervals)));section.appendChild(row);
     }
-    section.appendChild(list);
-    if(day.afternoon.length)section.appendChild(node('p','apd-comparator-hint','Módulos tarde ocupados: '+day.afternoon.join(', ')+' · Sin horario reloj confirmado.'));
-    if(!day.complete)section.appendChild(node('p','apd-comparator-hint','Ocupación total y disponibilidad no verificables.'));
+    if(day.afternoon.length){
+     const pending=node('div','apd-week-unknown');
+     for(const module of day.afternoon)pending.append(node('span','apd-week-module-chip',module));
+     section.appendChild(pending);
+    }
     days.appendChild(section);
    }
    body.appendChild(days);
+   if(occupied)body.appendChild(node('p','apd-comparator-hint','* Tarde: '+occupied+' módulos marcados, sin hora reloj confirmada. No se suman a horas exactas.'));
   }
+  const details=node('details','apd-week-explanation');
+  details.append(node('summary','','Cómo se interpreta'),node('p','apd-comparator-hint','Simulación informativa; no modifica tu carga horaria ni realiza postulaciones. No acredita compatibilidad normativa o traslados.'));
+  if(!sim.declared)details.append(node('p','','Todavía no declaraste tu jornada.'));
+  if(sim.referenceMorning)details.append(node('p','','Mañana: módulos de 60 minutos desde 07:20 como referencia. Confirmá el horario de cada escuela.'));
+  body.appendChild(details);
+  body.appendChild(createSalaryComparison());
   body.appendChild(createOfferEconomics({schedule:offer.horario}));
  }
  dialog.appendChild(body);document.body.appendChild(dialog);
