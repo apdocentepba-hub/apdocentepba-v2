@@ -1,5 +1,5 @@
 /** Candidate UI: injected account client, no automatic migration or network. */
-import {cleanCareer,combineCareerWithSchedule} from './apd-career-account-core.mjs';
+import {cleanCareer} from './apd-career-account-core.mjs';
 import {validateModuleSchedule} from './apd-account-schedule-core.mjs';
 const days=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const palette=['#3669a4','#137b67','#8756a7','#ac6228','#526f83','#a24168'];
@@ -17,15 +17,16 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
  const add=button('Agregar cargo',()=>{if(current()&&!busy){addRow();dirty=true;preview();}});
  const reload=button('Recuperar carrera',()=>void load(false));
  const discard=button('Descartar borrador y recuperar',()=>void load(true));discard.hidden=true;
+ const verify=button('Comprobar último guardado',()=>void verifySave());verify.hidden=true;
  const save=el('button','Guardar carrera','btn btn-primary');save.type='submit';
- form.append(field('Antigüedad reconocida (años)',years),rows,add,summary,grid,save);root.append(heading,note,reload,discard,form,status);host.replaceChildren(root);
- let busy=false,dirty=false,loaded=false,serial=0;
+ form.append(field('Antigüedad reconocida (años)',years),rows,add,summary,grid,save);root.append(heading,note,reload,discard,verify,form,status);host.replaceChildren(root);
+ let busy=false,dirty=false,loaded=false,serial=0,uncertain=null,conflict=false;
  const session=client?.captureSession?.()||(()=>false);
  const current=()=>root.isConnected&&isCurrent()&&session();
  function read(){
   return cleanCareer({schema:1,seniorityYears:years.value===''?-1:Number(years.value),positions:[...rows.children].map(n=>n.read())});
  }
- function setBusy(v){busy=v;for(const n of form.querySelectorAll('input,select,button'))n.disabled=v||!loaded;reload.disabled=v||!current();discard.disabled=v||!current();}
+ function setBusy(v){busy=v;for(const n of form.querySelectorAll('input,select,button'))n.disabled=v||!loaded||!current();save.disabled=v||!loaded||!current()||conflict||!!uncertain||!client?.peek();reload.disabled=v||!current();discard.disabled=v||!current();verify.disabled=v||!current();}
  function preview(){
   grid.replaceChildren();
   const positions=[...rows.children].map(n=>n.read());
@@ -44,6 +45,7 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
    }
   }
   grid.append(table);
+  const legend=el('div',undefined,'apd-career-legend');positions.forEach((p,i)=>{const item=el('span','C'+(i+1)+' · '+(p.role||'Cargo sin nombre')+' · '+(p.school||'Escuela sin declarar'));item.style.borderLeft='4px solid '+palette[i%palette.length];item.style.paddingLeft='6px';legend.append(item);});grid.append(legend);
  }
  function addRow(p){
   if(rows.children.length>=42)return;
@@ -78,7 +80,7 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
   row.read=()=>({id,schoolKey:schoolKey.value.trim(),school:school.value,role:role.value,level:level.value,kind:kind.value,status:situation.value,quantity:Number(quantity.value),modules:checks.filter(x=>x.checked).map(x=>x.value),blocks:[...blocks.children].map(n=>n.read())});
   rows.append(row);
  }
- function apply(record){rows.replaceChildren();years.value=record.profile?String(record.profile.seniorityYears):'';for(const p of record.profile?.positions||[])addRow(p);dirty=false;loaded=true;discard.hidden=true;preview();}
+ function apply(record){rows.replaceChildren();years.value=record.profile?String(record.profile.seniorityYears):'';for(const p of record.profile?.positions||[])addRow(p);dirty=false;loaded=true;uncertain=null;conflict=false;verify.hidden=true;discard.hidden=true;preview();}
  async function load(force){
   if(!current()||busy)return;
   if(dirty&&!force){status.textContent='Hay cambios sin guardar. Guardalos o descartá expresamente el borrador.';discard.hidden=false;return;}
@@ -87,14 +89,31 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
   catch(e){if(current())status.textContent=e.message||'No se pudo recuperar la carrera.';}
   finally{if(current())setBusy(false);}
  }
- form.addEventListener('input',()=>{dirty=true;discard.hidden=true;preview();});
+ async function verifySave(){
+  if(!current()||busy||!uncertain)return;
+  const attempted=uncertain;setBusy(true);
+  try{
+   const record=await client.reload();if(!current())return;
+   if(record.revision===attempted.revision+1&&JSON.stringify(record.profile)===JSON.stringify(attempted.profile)){
+    let unchanged=false;try{unchanged=JSON.stringify(read())===JSON.stringify(attempted.profile);}catch{}
+    if(unchanged){apply(record);status.textContent='El guardado anterior se confirmó en tu cuenta.';}
+    else{uncertain=null;conflict=false;verify.hidden=true;discard.hidden=true;status.textContent='El guardado anterior se confirmó. Conservamos tus cambios posteriores sin guardar.';}
+    onConfirmed(record);
+   }else{
+    conflict=true;uncertain=null;verify.hidden=true;discard.hidden=false;
+    status.textContent='No se confirmó ese guardado. Tu borrador se conserva. No se sobrescribirá la versión del servidor.';
+   }
+  }catch(err){if(current())status.textContent='No se pudo verificar. Tu borrador se conserva.';}
+  finally{if(current())setBusy(false);}
+ }
+ form.addEventListener('input',()=>{dirty=true;if(!conflict&&!uncertain)discard.hidden=true;preview();});
  form.addEventListener('submit',async e=>{
-  e.preventDefault();if(!current()||busy||!loaded||!client.peek())return;
+  e.preventDefault();if(!current()||busy||!loaded||conflict||uncertain||!client.peek())return;
   let profile;try{profile=read();}catch(err){status.textContent=err.message;return;}
-  setBusy(true);
+  const revision=client.peek().revision;setBusy(true);
   try{const saved=await client.persist(profile);if(!current())return;apply(saved);status.textContent='Carrera guardada en tu cuenta.';onConfirmed(saved);}
-  catch(err){if(current()){status.textContent=(err.message||'No se confirmó el guardado')+' Tu borrador se conserva.';discard.hidden=false;}}
-  finally{if(current()){setBusy(false);save.disabled=!client.peek();}}
+  catch(err){if(current()){status.textContent=(err.message||'No se confirmó el guardado')+' Tu borrador se conserva.';uncertain={profile,revision};verify.hidden=false;discard.hidden=false;}}
+  finally{if(current()){setBusy(false);}}
  });
  setBusy(false);queueMicrotask(()=>void load(false));
  return ()=>{root.remove();};
