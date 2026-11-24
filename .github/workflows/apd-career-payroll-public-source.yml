@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/apd-career-payroll-public-source.yml'
+      - 'docs/apd-payroll-source-review-20261124.md'
 permissions:
   contents: read
 jobs:
@@ -16,13 +17,13 @@ jobs:
       - name: Retrieve exact November 2026 provincial scale
         run: |
           mkdir -p /tmp/apd-payroll-review
-          curl --fail --silent --show-error --proto '=https' --max-time 100 --max-filesize 20971520 \
+          curl --fail --silent --show-error --proto '=https' --connect-timeout 15 --max-time 60 --retry 2 --retry-max-time 125 --max-filesize 20971520 \
             'https://www.ec.gba.gov.ar/areas/Sub_Politica_Coord_Eco/economialaboral/archivos/Escala%20salarial%20Ley%20N%C2%BA%2010.579%20-%20Noviembre%202026.pdf' \
             -o /tmp/apd-payroll-review/november.pdf
           test "$(head -c 5 /tmp/apd-payroll-review/november.pdf)" = '%PDF-'
-          sha256sum /tmp/apd-payroll-review/november.pdf
+          echo 'dd190cbf770923694337679609c344923777c050c2d535026e1761659f95b6a2  /tmp/apd-payroll-review/november.pdf' | sha256sum --check
           pdftotext -layout /tmp/apd-payroll-review/november.pdf /tmp/apd-payroll-review/november.txt
-          test -s /tmp/apd-payroll-review/november.txt
+          grep -Fq "Noviembre 2026" /tmp/apd-payroll-review/november.txt
           echo APD_PAYROLL_SOURCE_REVIEW_REQUIRED
           head -n 45 /tmp/apd-payroll-review/november.txt
       - uses: actions/upload-artifact@v4
