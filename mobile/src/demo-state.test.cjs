@@ -46,3 +46,14 @@ test("local sample contains no real external URLs, user accounts, or credentials
  const s=JSON.stringify(DEMO_OFFERS);
  assert.doesNotMatch(s,/https?:|Bearer |@|password|dni|cuil|apns|fcm/i);
 });
+
+test("favorite schools prioritize existing filtered offers and can be removed",()=>{
+ const {DEMO_OFFERS,SCHOOLS,toggleDemoSchool,prioritizeDemoOffers}=require("./demo-state.js");
+ const chosen=SCHOOLS[2],selected=toggleDemoSchool([],chosen);
+ assert.deepEqual(selected,[chosen]);
+ assert.equal(prioritizeDemoOffers(DEMO_OFFERS,selected)[0].escuela,chosen);
+ assert.equal(prioritizeDemoOffers(DEMO_OFFERS,selected,true).length,1);
+ assert.equal(prioritizeDemoOffers(DEMO_OFFERS.slice(0,2),selected,true).length,0);
+ assert.deepEqual(toggleDemoSchool(selected,chosen),[]);
+ assert.deepEqual(toggleDemoSchool([], "Escuela no verificada"),[]);
+});
