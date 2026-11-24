@@ -1837,6 +1837,7 @@ async function cargarDashboard() {
   if (dashboardLoadedOwner !== token) {
     window.APD_comparatorReset?.();
     dashboardLoadedOwner = token;
+    planActual = buildPlanFallback();
     todasLasAlertas = [];
     filtrarPorJornada = false;
     alertasState.items = [];
@@ -1985,7 +1986,6 @@ function renderDashboard(data) {
     <p><strong>Email:</strong> ${esc(doc.email || "-")}</p>
     <p><strong>Celular:</strong> ${esc(doc.celular || "-")}</p>
     <p><strong>Estado:</strong> ${doc.activo ? "Activo" : "Inactivo"}</p>
-    <div id="apd-perfil-horarios"></div>
   `);
 
   window.APD_renderProfileSchedule?.(planInfo);
