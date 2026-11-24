@@ -4,7 +4,7 @@
  * (text and optional Georef point) is persisted via APD_accountHome.
  * Address suggestions contact Georef Argentina only by user action/opt-in.
  */
-import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS,MAX_WORK_BLOCKS} from './apd-mi-jornada-comparador.mjs?v=20261124-grilla';
+import {WEEKDAYS,sanitizeWorkProfile,TRAVEL_GAP_OPTIONS,MAX_WORK_BLOCKS} from './apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {lookupHomeAddressesDetailed} from './apd-home-georef.mjs?v=20261110-home4';
 import {resolvePlannerAccountHomeWrite} from './apd-account-home-write-policy.mjs?v=20261112-keepgeo1';
 const STORE='apd_comparador_jornada_solo_pestana_v1';
@@ -343,7 +343,7 @@ export function createPrivatePlannerForm({onChanged}={}){
     currentAccountHome,domicile.value,reviewedHome);
    // A schedule-only save must not replace an already verified location
    // with null. A different typed address can still clear the old point.
-   savePrivatePlanner({domicile:domicile.value,jobs,
+   savePrivatePlanner({...loadPrivatePlanner(),domicile:domicile.value,jobs,
     travelGapMinutes:Number(travelGap.value),homeLocation:targetHome.georef});
    if(accountLoaded&&targetHome.address_text){
     try{
@@ -376,90 +376,45 @@ export function createPrivatePlannerForm({onChanged}={}){
 export function createWeeklyScheduleForm({onChanged}={}){
  const profile=loadPrivatePlanner();
  const generation=privacyGeneration;
- const labels=['Prehora','1.ª hora','2.ª hora','3.ª hora','4.ª hora','5.ª hora'];
  const details=element('details','apd-work-planner');
  details.appendChild(element('summary','apd-work-summary','Mi carga horaria'));
- const form=element('form','apd-work-form');
- form.appendChild(element('p','apd-comparator-hint',
-  'Marcá las horas ocupadas y cargá su horario real. Si un bloque cambia según el día o el turno, agregá otra fila. Se conserva en esta pestaña.'));
- const scroll=element('div','apd-schedule-grid-scroll');
- const table=element('table','apd-schedule-grid');
- const head=table.createTHead().insertRow();
- for(const label of ['Hora','Desde','Hasta','Escuela',...WEEKDAYS.map(day=>day.name.slice(0,3))]){
-  const cell=element('th','',label);
-  cell.scope='col';
-  head.appendChild(cell);
- }
- const body=table.createTBody();
+ const form=element('form','apd-work-form apd-module-form');
+ form.appendChild(element('p','apd-comparator-hint','Marcá las horas que tenés ocupadas en cada turno. Se conservan en esta pestaña.'));
  const fields=[];
- const status=element('p','');
- status.setAttribute('role','status');
-
- function addBlock(job={}){
-  if(fields.length>=MAX_WORK_BLOCKS){
-   status.textContent='Máximo '+MAX_WORK_BLOCKS+' bloques horarios.';
-   return;
+ for(const [shift,title,modules] of [['M','Turno mañana',[1,2,3,4,5]],['T','Turno tarde',[0,1,2,3,4,5]]]){
+  const section=element('section','apd-module-section');
+  section.appendChild(element('h3','apd-module-title',title));
+  const table=element('table','apd-schedule-grid apd-module-grid');
+  table.setAttribute('aria-label',title);
+  const head=table.createTHead().insertRow();
+  for(const label of ['Hora',...WEEKDAYS.map(day=>day.name.slice(0,3))]){
+   const cell=element('th','',label);cell.scope='col';head.appendChild(cell);
   }
-  const label=labels[fields.length]||'Bloque '+(fields.length+1);
-  const row=body.insertRow();
-  const heading=element('th','',label);
-  heading.scope='row';
-  row.appendChild(heading);
-  const start=input('time',job.start||'');
-  const end=input('time',job.end||'');
-  const school=input('text',job.school||'',120);
-  school.placeholder='Opcional';
-  for(const [field,name] of [[start,'Desde'],[end,'Hasta'],[school,'Escuela']]){
-   field.setAttribute('aria-label',label+' · '+name);
-   row.insertCell().appendChild(field);
+  const body=table.createTBody();
+  for(const module of modules){
+   const row=body.insertRow();
+   const label=module===0?'Prehora':String(module);
+   const heading=element('th','',label);heading.scope='row';row.appendChild(heading);
+   for(const day of WEEKDAYS){
+    const id=shift+module+'-'+day.id;
+    const check=input('checkbox',id);
+    check.checked=profile.moduleSchedule?.includes(id)??false;
+    check.setAttribute('aria-label',title+' · '+label+' · '+day.name);
+    row.insertCell().appendChild(check);fields.push(check);
+   }
   }
-  const checks=WEEKDAYS.map(day=>{
-   const check=input('checkbox',String(day.id));
-   check.checked=job.days?.includes(day.id)??false;
-   check.setAttribute('aria-label',label+' · '+day.name);
-   row.insertCell().appendChild(check);
-   return check;
-  });
-  fields.push({start,end,school,checks,originalSchool:job.school,schoolKey:job.schoolKey});
+  section.appendChild(table);form.appendChild(section);
  }
- const blocks=[];
- for(const job of profile.jobs){
-  const period=job.period;
-  if(Number.isInteger(period)&&!blocks[period])blocks[period]=job;
- }
- for(const job of profile.jobs){
-  if(blocks.includes(job))continue;
-  const free=Array.from({length:MAX_WORK_BLOCKS},(_,index)=>index).find(index=>!blocks[index]);
-  blocks[free]=job;
- }
- for(let index=0;index<Math.max(labels.length,blocks.length);index++)addBlock(blocks[index]);
- scroll.appendChild(table);
- form.appendChild(scroll);
- const add=element('button','btn btn-secondary','Agregar bloque');
- add.type='button';
- add.addEventListener('click',()=>addBlock());
- const save=element('button','btn btn-primary','Guardar horarios');
- save.type='submit';
- form.append(add,save,status);
+ form.appendChild(element('p','apd-comparator-hint','El filtro solo certifica compatibilidad cuando el horario real es verificable.'));
+ const status=element('p','');status.setAttribute('role','status');
+ const save=element('button','btn btn-primary','Guardar horarios');save.type='submit';
+ form.append(save,status);
  form.addEventListener('submit',event=>{
   event.preventDefault();
   if(generation!==privacyGeneration)return;
-  const jobs=fields.flatMap(({start,end,school,checks,originalSchool,schoolKey},period)=>{
-   const days=checks.filter(check=>check.checked).map(check=>Number(check.value));
-   if(!days.length)return [];
-   const name=school.value.trim()||'Ocupado';
-   return [{start:start.value,end:end.value,school:name,days,period,
-    schoolKey:name===originalSchool?schoolKey:undefined}];
-  });
-  try{
-   savePrivatePlanner({...loadPrivatePlanner(),jobs});
-  }catch(error){
-   status.textContent=error.message;
-   return;
-  }
-  status.textContent='Horarios guardados.';
-  onChanged?.();
+  try{savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:fields.filter(check=>check.checked).map(check=>check.value)});}
+  catch(error){status.textContent=error.message;return;}
+  status.textContent='Horarios guardados.';onChanged?.();
  });
- details.appendChild(form);
- return details;
+ details.appendChild(form);return details;
 }

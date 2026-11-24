@@ -951,7 +951,7 @@ try{
    toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
    field.value='Rondeau 319';
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-grilla');
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-modulos');
    clearPrivatePlanner();
    return true;
   })()`);
@@ -1069,7 +1069,7 @@ try{
    await until('window.APD_accountHome.ready()');
    assert.equal(await js('window.APD_accountHome.peek()?.address_text'),expected);
    const retrieved=await js(`(async()=>{
-    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-grilla');
+    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-modulos');
     const profile=loadPrivatePlanner();
     return {address:profile.domicile,source:profile.homeLocation?.source,
       reviewed:profile.homeLocation?.reviewed};
@@ -1218,6 +1218,21 @@ try{
   assert.equal(layout.checkedVisible,true,'Occupied days must have a distinct background');
   assert.equal(layout.days,7);
   assert.equal(layout.labels,true);
+  const modules=await js(`(()=>{
+   const host=document.getElementById('apd-perfil-horarios');
+   const tables=[...host.querySelectorAll('.apd-module-grid')];
+   const labels=tables.map(t=>[...t.querySelectorAll('tbody th')].map(th=>th.textContent));
+   const inputs=[...host.querySelectorAll('input')];
+   inputs.forEach(i=>i.checked=false);
+   inputs.find(i=>i.value==='M1-1').checked=true;
+   inputs.find(i=>i.value==='T0-2').checked=true;
+   host.querySelector('form').requestSubmit();
+   const saved=JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1'));
+   return {labels,checkboxes:inputs.every(i=>i.type==='checkbox'),saved:saved.moduleSchedule};
+  })()`);
+  assert.deepEqual(modules.labels,[['1','2','3','4','5'],['Prehora','1','2','3','4','5']]);
+  assert.equal(modules.checkboxes,true);
+  assert.deepEqual(modules.saved,['M1-1','T0-2']);
   assert.equal(await js(`(()=>{
    const profile=document.getElementById('panel-datos-docente');
    const host=document.getElementById('apd-perfil-horarios');

@@ -4,11 +4,11 @@
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.mjs?v=20261114-signals1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-grilla';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-grilla';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-modulos';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -476,7 +476,7 @@ function renderSideBySide(items){
     'Falta verificar la ubicación ABC de ambas escuelas';
   }]);
  }
- if(privateProfile?.jobs.length){
+ if(privateProfile?.jobs.length||privateProfile?.moduleSchedule?.length){
   data.push(['Cruce con mi jornada actual',x=>{
    const o=checkScheduleOverlap(x.horario,privateProfile);
    return o.status==='overlap'?
@@ -837,7 +837,7 @@ function refreshAlertSchedule(){
 window.APD_filterAlertsBySchedule=(offers,planInfo)=>{
  if(!hasInsignePlannerAccess(planInfo))return null;
  const profile=loadPrivatePlanner();
- if(!profile.jobs.length)return null;
+ if(!profile.jobs.length&&!profile.moduleSchedule?.length)return null;
  return offers.filter(offer=>
   checkScheduleOverlap(offer.dias_horarios||offer.horario,profile).status==='no-overlap'
  );
@@ -851,7 +851,8 @@ window.APD_renderAlertScheduleControls=({planInfo,total,visible,active})=>{
  scheduleControls.classList.toggle('apd-comparator-head',!scheduleControls.hidden);
  if(scheduleControls.hidden)return;
 
- const hasJobs=loadPrivatePlanner().jobs.length>0;
+ const profile=loadPrivatePlanner();
+ const hasJobs=profile.jobs.length>0||!!profile.moduleSchedule?.length;
  const toggle=button(active?'Ver todas las alertas':'Solo compatibles con mi horario',()=>{
   window.APD_setAlertScheduleFilter?.(!active);
   scheduleControls.querySelector('button')?.focus();
