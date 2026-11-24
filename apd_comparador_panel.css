@@ -739,3 +739,11 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 .apd-favorite-row{border:1px solid var(--border,#cbd5e1);border-radius:8px;padding:10px;overflow-wrap:anywhere}
 .apd-favorite-row p{margin:4px 0}
 .apd-favorite-status{font-weight:600}
+
+.apd-recommendations{border:1px solid var(--border,#cbd5e1);border-radius:12px;padding:10px;margin:8px 0}
+.apd-recommendation-list{display:grid;gap:8px}
+.apd-recommendation-row{border:1px solid var(--border,#cbd5e1);border-radius:8px;padding:10px;overflow-wrap:anywhere}
+.apd-recommendation-row p{margin:4px 0}
+
+.apd-recommendation-tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:8px;margin:8px 0}
+.apd-recommendation-tools select{max-width:100%;min-width:0;width:100%}
