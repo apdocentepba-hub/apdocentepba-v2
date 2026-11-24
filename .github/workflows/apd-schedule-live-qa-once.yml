@@ -1,0 +1,29 @@
+name: APD one-shot dedicated schedule QA
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - '.github/workflows/apd-schedule-live-qa-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-schedule-live-qa-once
+  cancel-in-progress: false
+jobs:
+  qa:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'qa/schedule-live-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate QA runner
+        run: |
+          node --check scripts/run-apd-schedule-live-qa-once.mjs
+          node --test scripts/test-apd-account-schedule-authenticated.mjs
+      - name: Register and test two dedicated accounts (operator grant and cleanup required)
+        run: node scripts/run-apd-schedule-live-qa-once.mjs
