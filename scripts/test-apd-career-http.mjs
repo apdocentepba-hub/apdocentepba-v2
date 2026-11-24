@@ -15,6 +15,7 @@ const baselineSource=process.env.APD_CAREER_LIVE_SOURCE
 writeFileSync(baselinePath,readFileSync(baselineSource));
 const env={SUPABASE_URL:'https://career-db.invalid',SUPABASE_SERVICE_ROLE_KEY:'disposable-service-role'};
 const workerOrigin='https://career-worker.invalid';
+let diaryContractCalls=null;
 
 async function disposableDatabase(request){
  const url=new URL(request.url);
@@ -26,8 +27,14 @@ async function disposableDatabase(request){
  const headers=new Headers(request.headers);
  headers.delete('Authorization');
  headers.delete('apikey');
- const response=await fetch(local,{method:request.method,headers,redirect:'error',
-  ...(request.body?{body:await request.arrayBuffer()}:{}),signal:request.signal});
+ const payload=request.body?await request.arrayBuffer():undefined;
+ const response=await fetch(local,{method:request.method,headers,redirect:'error',body:payload,signal:request.signal});
+ if(diaryContractCalls&&/^\/(?:rpc\/)?[a-z_]+$/.test(local.pathname)){
+  const params=payload&&headers.get('Content-Type')?.includes('application/json')
+   ? Object.keys(JSON.parse(new TextDecoder().decode(payload))).sort()
+   : [];
+  diaryContractCalls.push({resource:local.pathname,method:request.method,status:response.status,params});
+ }
  if(!response.ok&&local.pathname.includes('application_diary')){
   const error=await response.clone().json().catch(()=>({}));
   console.error('Disposable diary storage error',local.pathname,response.status,error.code,error.message);
@@ -97,28 +104,42 @@ try{
  assert.deepEqual(await newSession.reload(),saved,'restoring the candidate preserves account A');
  assert.deepEqual(await b.reload(),other,'restoring the candidate preserves account B');
  console.log('APD_CAREER_WORKERD_PASS: CORS, password login, new session, separate accounts, stale revision, Worker rollback and recovery');
+ const diaryURL=workerOrigin+'/api/account/application-diary';
+ const diaryRequest=(token,mutation)=>invoke(diaryURL,{
+  method:mutation?'PUT':'GET',
+  headers:{Origin:trustedOrigin,...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},
+  body:mutation?JSON.stringify(mutation):undefined
+ });
+ const set={action:'set',key:'D_121',status:'postulada',revision:0};
  if(readFileSync(baselineSource,'utf8').includes('/account/application-diary')){
-  // Test the new persistence route against the packaged baseline only.
-  // The independently deployed route retains precedence in the active baseline.
+  diaryContractCalls=[];
+  const anonymous=await diaryRequest(null);
+  const read=await diaryRequest(tokenA);
+  const before=await read.json().catch(()=>({}));
+  const write=await diaryRequest(tokenA,set);
+  const after=await write.json().catch(()=>({}));
+  console.log('APD_DEPLOYED_DIARY_FIXTURE_CONTRACT '+JSON.stringify({
+   anonymous:anonymous.status,read:read.status,write:write.status,
+   readKeys:Object.keys(before?.diary||{}).sort(),
+   writeKeys:Object.keys(after?.diary||{}).sort(),
+   cors:read.headers.get('Access-Control-Allow-Origin')===trustedOrigin,
+   calls:diaryContractCalls
+  }));
+  diaryContractCalls=null;
+  // Reset any fixture data before exercising the packaged candidate.
+  execFileSync('psql',['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','5432','-U','postgres','-d','apd_career_http','-c','TRUNCATE public.user_application_diary'],{stdio:'inherit'});
   execFileSync(process.execPath,['scripts/build-apd-career-worker-candidate.mjs'],{
    env:{...process.env,APD_CAREER_LIVE_SOURCE:''},stdio:'inherit'
   });
   await runtime.setOptions(options(candidatePath));
   console.log('APD_DIARY_PACKAGED_BASELINE_TEST');
  }
- const diaryURL=workerOrigin+'/api/account/application-diary';
- const diaryRequest=(token,mutation)=>invoke(diaryURL,{
-  method:mutation?'PUT':'GET',
-  headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},
-  body:mutation?JSON.stringify(mutation):undefined
- });
  async function diaryResult(response,status=200){
   assert.equal(response.status,status);
   return response.json();
  }
  assert.equal((await diaryRequest(null)).status,401);
  assert.deepEqual((await diaryResult(await diaryRequest(tokenA))).diary,{entries:[],revision:0});
- const set={action:'set',key:'D_121',status:'postulada',revision:0};
  const race=await Promise.all([diaryRequest(tokenA,set),diaryRequest(tokenA,{...set,status:'retirada'})]);
  const raceStatuses=race.map(response=>response.status).sort();
  if(raceStatuses.includes(503)){
