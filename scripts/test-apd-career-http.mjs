@@ -7,6 +7,11 @@ import {createCareerClient} from './apd-career-account-client.mjs';
 const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.json',import.meta.url));
 const {Miniflare}=requireRuntime('miniflare');
 const candidatePath=fileURLToPath(new URL('../tmp/apd-career/worker-career-candidate.mjs',import.meta.url));
+// This instrumented copy runs only with the disposable fixture database.
+const candidateSource=readFileSync(candidatePath,'utf8');
+const diagnosticMarker="}catch{return reply(503,{ok:false,message:'No se pudo confirmar la operación'});}";
+assert.ok(candidateSource.includes(diagnosticMarker));
+writeFileSync(candidatePath,candidateSource.replaceAll(diagnosticMarker,"}catch(error){console.error('Fixture diary handler:',error);return reply(503,{ok:false,message:'No se pudo confirmar la operación'});}"));
 const baselinePath=new URL('../tmp/apd-career/worker-career-baseline.mjs',import.meta.url);
 const baselineSource=process.env.APD_CAREER_LIVE_SOURCE
  ? new URL('../tmp/apd-career/active-worker.mjs',import.meta.url)
