@@ -11,7 +11,7 @@ const candidatePath=fileURLToPath(new URL('../tmp/apd-career/worker-career-candi
 const candidateSource=readFileSync(candidatePath,'utf8');
 const diagnosticMarker="}catch{return reply(503,{ok:false,message:'No se pudo confirmar la operación'});}";
 assert.ok(candidateSource.includes(diagnosticMarker));
-writeFileSync(candidatePath,candidateSource.replaceAll(diagnosticMarker,"}catch(error){console.error('Fixture diary handler:',error);return reply(503,{ok:false,message:'No se pudo confirmar la operación'});}"));
+writeFileSync(candidatePath,candidateSource.replaceAll(diagnosticMarker,"}catch(error){return reply(503,{ok:false,message:String(error)});}"));
 const baselinePath=new URL('../tmp/apd-career/worker-career-baseline.mjs',import.meta.url);
 const baselineSource=process.env.APD_CAREER_LIVE_SOURCE
  ? new URL('../tmp/apd-career/active-worker.mjs',import.meta.url)
@@ -114,7 +114,12 @@ try{
  assert.deepEqual((await diaryResult(await diaryRequest(tokenA))).diary,{entries:[],revision:0});
  const set={action:'set',key:'D_121',status:'postulada',revision:0};
  const race=await Promise.all([diaryRequest(tokenA,set),diaryRequest(tokenA,{...set,status:'retirada'})]);
- assert.deepEqual(race.map(response=>response.status).sort(),[200,409]);
+ const raceStatuses=race.map(response=>response.status).sort();
+ if(raceStatuses.includes(503)){
+  const diagnostics=await Promise.all(race.filter(response=>response.status===503).map(response=>response.clone().text()));
+  console.error('Fixture diary responses:',diagnostics);
+ }
+ assert.deepEqual(raceStatuses,[200,409]);
  const {diary:storedDiary}=await diaryResult(race.find(response=>response.status===200));
  assert.equal(storedDiary.revision,1);
  assert.equal(storedDiary.entries[0].origin,'self_reported');
