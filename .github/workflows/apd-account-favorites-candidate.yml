@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'scripts/*account-favorites*'
+      - 'apd_comparador_panel.mjs'
+      - 'index.html'
+      - 'scripts/test-apd-comparador-browser.mjs'
       - 'docs/sql/APD_ACCOUNT_FAVORITES*'
       - 'tests/sql/*account_favorites*'
       - '.github/workflows/apd-account-favorites-candidate.yml'
@@ -45,3 +48,5 @@ jobs:
           node scripts/build-account-favorites-worker-candidate.mjs
           node --check tmp/apd-account-favorites/worker-favorites-candidate.mjs
           node scripts/test-apd-account-favorites-full-worker.mjs
+      - name: Chromium comparator and candidate favorites UI
+        run: node scripts/test-apd-comparador-browser.mjs

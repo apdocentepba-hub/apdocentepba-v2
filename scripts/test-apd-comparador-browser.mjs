@@ -1419,6 +1419,24 @@ try{
   assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,1);
   results.push({width,actual_release_bootstrap:true,account_schedule_readback:true,account_switch_isolation:true,no_automatic_upload:true});
  }
+ // Candidate persistent UI: explicit read, account removal, hidden offers, reset.
+ await js(`(()=>{
+  const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+  let loaded=null,saved={keys:['D_123'],revision:1};
+  const client={peek:()=>loaded,reset:()=>{loaded=null;},reload:async()=>{loaded=saved;return loaded;},mutate:async(action,key)=>{if(action!=='remove'||key!=='D_123')throw Error('Unexpected mutation');saved={keys:[],revision:2};loaded=saved;return loaded;}};
+  window.__favoriteCandidateClient=client;
+  window.APD_comparatorRefresh({offers:[],enabled:true,planInfo:plan,favoriteMode:true,favoriteClient:client});
+  return true;
+ })()`);
+ await until('!!document.querySelector(".apd-favorites") && !document.getElementById("apd-comparador-panel").hidden');
+ assert.equal(await js('document.querySelectorAll(".apd-favorite-row").length'),0);
+ await js('document.querySelector(".apd-favorites button").click();true');
+ await until('document.querySelector(".apd-favorite-row")?.textContent.includes("Vigencia sin verificar")');
+ await js('document.querySelector(".apd-favorite-row button").click();true');
+ await until('document.querySelector(".apd-favorites summary").textContent.includes("(0)")');
+ await js('window.APD_comparatorReset();true');
+ assert.equal(await js('!!document.querySelector(".apd-favorites")'),false);
+ results.push({account_favorites_ui_candidate:true});
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
  for(const p of pending.values()){clearTimeout(p.t);p.reject(Error('Browser stopping'));}

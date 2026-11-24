@@ -33,6 +33,23 @@ let profileScheduleClient=null;
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
+let permanentFavorites=false,accountFavorites=null,favoriteEpoch=0,favoriteBusy=false;
+function clearAccountFavorites(){
+ accountFavorites?.reset();accountFavorites=null;permanentFavorites=false;favoriteEpoch++;favoriteBusy=false;
+}
+function favoriteRecord(){return permanentFavorites?accountFavorites?.peek()??null:null;}
+function favoriteHas(key){return permanentFavorites?!!favoriteRecord()?.keys.includes(key):favorites.has(key);}
+async function favoriteOperation(action,key){
+ const client=accountFavorites,epoch=favoriteEpoch;
+ if(!state.enabled||!state.privatePlannerAllowed||!client||favoriteBusy)return;
+ favoriteBusy=true;favoriteMessage='';favoritesOpen=true;syncCurrentButton();render();
+ try{
+  if(action==='reload')await client.reload();
+  else await client.mutate(action,key);
+  if(epoch===favoriteEpoch&&client===accountFavorites)favoriteMessage=action==='reload'?'Favoritos de tu cuenta cargados.':'Favoritos de tu cuenta actualizados.';
+ }catch(error){if(epoch===favoriteEpoch&&client===accountFavorites)favoriteMessage=String(error?.message||'No se pudo confirmar la operación');}
+ finally{if(epoch===favoriteEpoch&&client===accountFavorites){favoriteBusy=false;syncCurrentButton();render();}}
+}
 let recommendOpen=false,recommendDistrict='',recommendTurn='',recommendSort='cierre',recommendGroup='',recommendLimit=10;
 const safeKey=key=>/^[A-Za-z0-9_.:|-]{1,160}$/.test(key);
 const codePattern=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/;
@@ -246,12 +263,13 @@ function syncCurrentButton() {
  if(state.privatePlannerAllowed&&key){
   const simulator=button('Simular esta oferta',()=>openWeekSimulator(key));
   simulator.id='apd-simular-oferta';actions.appendChild(simulator);
-  const favorite=button(favorites.has(key)?'Quitar favorito':'Guardar favorito',()=>{
+  const favorite=button(favoriteHas(key)?'Quitar favorito':permanentFavorites&&!favoriteRecord()?'Cargar mis favoritos':'Guardar favorito',()=>{
    if(!state.enabled||!state.privatePlannerAllowed||offerKey(state.current)!==key)return;
+   if(permanentFavorites){void favoriteOperation(!favoriteRecord()?'reload':favoriteHas(key)?'remove':'add',key);return;}
    try{if(favorites.has(key))favorites.remove(key);else favorites.add(state.current,key);favoriteVisible=favorites.refresh(state.available,offerKey);favoriteMessage='';}
    catch(error){favoriteMessage=error.message;}
    favoritesOpen=true;syncCurrentButton();render();
-  });favorite.id='apd-favorite-oferta';favorite.setAttribute('aria-pressed',String(favorites.has(key)));actions.appendChild(favorite);
+  });favorite.id='apd-favorite-oferta';favorite.setAttribute('aria-pressed',String(favoriteHas(key)));favorite.disabled=permanentFavorites&&(!accountFavorites||favoriteBusy);actions.appendChild(favorite);
  }
  // The compare dialog requires at least two offers. Never show a dead CTA for one.
  if(state.selected.size>=2){
@@ -607,7 +625,29 @@ function renderSideBySide(items){
  table.appendChild(tbody);wrap.appendChild(table);region.appendChild(wrap);
  return region;
 }
+function renderPermanentFavorites(){
+ const section=node('details','apd-favorites');section.open=favoritesOpen;
+ const record=favoriteRecord();
+ section.appendChild(node('summary','apd-work-summary','Mis favoritos de la cuenta'+(record?' ('+record.keys.length+')':'')));
+ section.appendChild(node('p','apd-comparator-hint','Se guardan en tu cuenta. El estado de una oferta ausente del carrusel no está verificado. Los avisos automáticos aún no están habilitados.'));
+ const reload=button('Cargar / actualizar favoritos',()=>{if(section.isConnected)void favoriteOperation('reload');});
+ reload.disabled=!accountFavorites||favoriteBusy;section.appendChild(reload);
+ const status=node('p','apd-favorite-status',favoriteBusy?'Consultando tu cuenta…':favoriteMessage||(!accountFavorites?'Conexión no disponible':!record?'Cargá tus favoritos para empezar.':record.keys.length?'':'Todavía no guardaste ofertas.'));
+ status.setAttribute('role','status');section.appendChild(status);
+ const list=node('div','apd-favorites-list');
+ for(const key of record?.keys||[]){
+  const offer=state.available.find(x=>offerKey(x)===key);
+  const row=node('article','apd-favorite-row');
+  row.appendChild(node('strong','',offer?[offer.descripcioncargo||offer.cargo||'Oferta',offer.distrito].filter(Boolean).join(' · '):'Oferta '+key));
+  row.appendChild(node('p','apd-favorite-status',offer?'Verificá estado y cierre en ABC':'No visible en los filtros actuales · Vigencia sin verificar'));
+  const remove=button('Quitar favorito',()=>{if(section.isConnected)void favoriteOperation('remove',key);});
+  remove.disabled=favoriteBusy;row.appendChild(remove);list.appendChild(row);
+ }
+ section.appendChild(list);section.addEventListener('toggle',()=>{if(section.isConnected)favoritesOpen=section.open;});
+ return section;
+}
 function renderFavorites(){
+ if(permanentFavorites)return renderPermanentFavorites();
  const section=node('details','apd-favorites');
  section.open=favoritesOpen;
  const summary=node('summary','apd-work-summary','Mis favoritos de esta sesión ('+favorites.count()+')');
@@ -684,7 +724,7 @@ function render(){
  if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
- root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&favorites.count()));
+ root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count())));
  if(root.hidden)return;
  if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
  if(!state.available.length)return;
@@ -907,12 +947,15 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
  if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
+ const nextMode=entitled&&favoriteMode===true;
+ const nextClient=nextMode?favoriteClient:null;
+ if(nextMode!==permanentFavorites||nextClient!==accountFavorites){clearAccountFavorites();favorites.clear();favoritesOpen=false;favoriteMessage='';permanentFavorites=nextMode;accountFavorites=nextClient;}
  state.privatePlannerAllowed=entitled;
  const historyHost=document.getElementById('apd-personal-history');
  if(!entitled||!enabled)clearPersonalHistory();
@@ -949,6 +992,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ clearAccountFavorites();
  profileScheduleClient=null;
  clearPersonalHistory();
  document.getElementById('apd-perfil-horarios')?.replaceChildren();
