@@ -2,16 +2,12 @@ import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
 import {createCareerClient} from './apd-career-account-client.mjs';
 
 const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.json',import.meta.url));
 const {Miniflare}=requireRuntime('miniflare');
 const candidatePath=fileURLToPath(new URL('../tmp/apd-career/worker-career-candidate.mjs',import.meta.url));
-// This instrumented copy runs only with the disposable fixture database.
-const candidateSource=readFileSync(candidatePath,'utf8');
-const diagnosticMarker="}catch{return reply(503,{ok:false,message:'No se pudo confirmar la operación'});}";
-assert.ok(candidateSource.includes(diagnosticMarker));
-writeFileSync(candidatePath,candidateSource.replaceAll(diagnosticMarker,"}catch(error){return reply(503,{ok:false,message:String(error)});}"));
 const baselinePath=new URL('../tmp/apd-career/worker-career-baseline.mjs',import.meta.url);
 const baselineSource=process.env.APD_CAREER_LIVE_SOURCE
  ? new URL('../tmp/apd-career/active-worker.mjs',import.meta.url)
@@ -100,6 +96,16 @@ try{
  await runtime.setOptions(options(candidatePath));
  assert.deepEqual(await newSession.reload(),saved,'restoring the candidate preserves account A');
  assert.deepEqual(await b.reload(),other,'restoring the candidate preserves account B');
+ console.log('APD_CAREER_WORKERD_PASS: CORS, password login, new session, separate accounts, stale revision, Worker rollback and recovery');
+ if(readFileSync(baselineSource,'utf8').includes('/account/application-diary')){
+  // Test the new persistence route against the packaged baseline only.
+  // The independently deployed route retains precedence in the active baseline.
+  execFileSync(process.execPath,['scripts/build-apd-career-worker-candidate.mjs'],{
+   env:{...process.env,APD_CAREER_LIVE_SOURCE:''},stdio:'inherit'
+  });
+  await runtime.setOptions(options(candidatePath));
+  console.log('APD_DIARY_PACKAGED_BASELINE_TEST');
+ }
  const diaryURL=workerOrigin+'/api/account/application-diary';
  const diaryRequest=(token,mutation)=>invoke(diaryURL,{
   method:mutation?'PUT':'GET',
@@ -129,7 +135,6 @@ try{
  const {diary:removed}=await diaryResult(await diaryRequest(newTokenA,{action:'remove',key:'D_121',revision:1}));
  assert.deepEqual(removed,{entries:[],revision:2});
  console.log('APD_DIARY_WORKERD_PASS: stored, recovered, isolated, stale write rejected, record removed');
- console.log('APD_CAREER_WORKERD_PASS: CORS, password login, new session, separate accounts, stale revision, Worker rollback and recovery');
 }finally{
  await runtime.dispose();
 }

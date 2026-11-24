@@ -46,8 +46,16 @@ const route='    if (path === API_URL_PREFIX3 + "/account/preferences") {';
 const fetchMark='async fetch(request, env, ctx) {';
 const routePosition=source.indexOf(route),fetchPosition=source.lastIndexOf(fetchMark,routePosition);
 if(routePosition<0||fetchPosition<0||routePosition-fetchPosition>16000||source.includes('handleAccountCareerSecureV1')||source.split(mark).length!==2||source.split(route).length!==2)throw Error('Baseline drift');
-const addedRoute='    if (path === API_URL_PREFIX3 + "/account/career") {\n      return await handleAccountCareerSecureV1(request, env);\n    }\n    if (path === API_URL_PREFIX3 + "/account/application-diary") {\n      return await handleAccountCareerSecureV1(request, env, true);\n    }\n';
-const optionsRoute='\n    if (request.method === "OPTIONS" && [API_URL_PREFIX3 + "/account/career", API_URL_PREFIX3 + "/account/application-diary"].includes(new URL(request.url).pathname)) return apdCareerCorsV1(request);\n';
+const diaryPath='/account/application-diary';
+const diaryRouteExists=source.includes(diaryPath);
+const candidatePaths=['/account/career',...(!diaryRouteExists?[diaryPath]:[])];
+const addedRoute=candidatePaths.map(path=>
+ '    if (path === API_URL_PREFIX3 + '+JSON.stringify(path)+') {\n'+
+ '      return await handleAccountCareerSecureV1(request, env'+(path===diaryPath?', true':'')+');\n    }\n'
+).join('');
+const optionsRoute='\n    if (request.method === "OPTIONS" && '+JSON.stringify(candidatePaths.map(path=>'/api'+path))+
+ '.includes(new URL(request.url).pathname)) return apdCareerCorsV1(request);\n';
+if(diaryRouteExists)console.log('APD_EXISTING_DIARY_ROUTE_PRESERVED');
 const at=fetchPosition+fetchMark.length;
 const candidate=(source.slice(0,at)+optionsRoute+source.slice(at)).replace(mark,()=>handler+mark).replace(route,addedRoute+route);
 if(candidate.replace(handler,'').replace(addedRoute,'').replace(optionsRoute,'')!==source)throw Error('Unrelated drift');
