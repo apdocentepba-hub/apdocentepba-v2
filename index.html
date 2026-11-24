@@ -370,11 +370,11 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient);}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient,accountScheduleReleaseEnabled);}
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-calendar1')
+   import('./apd_comparador_panel.mjs?v=20261124-schedulefix1')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }

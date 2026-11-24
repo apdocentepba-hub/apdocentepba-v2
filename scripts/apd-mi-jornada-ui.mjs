@@ -373,7 +373,7 @@ export function createPrivatePlannerForm({onChanged}={}){
  return details;
 }
 
-export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
+export function createWeeklyScheduleForm({onChanged,accountClient=null,accountRequired=false}={}){
  const profile=loadPrivatePlanner();
  const generation=privacyGeneration;
  const details=element('details','apd-work-planner');
@@ -381,7 +381,7 @@ export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
  const form=element('form','apd-work-form apd-module-form');
  form.appendChild(element('p','apd-comparator-hint',accountClient?
   'Marcá las horas ocupadas. Guardalas en tu cuenta para recuperarlas en otro dispositivo.':
-  'Marcá las horas que tenés ocupadas en cada turno. Se conservan en esta pestaña.'));
+  accountRequired?'Conectando con tu cuenta. No se permite guardar solo en esta pestaña.':'Marcá las horas que tenés ocupadas en cada turno. Se conservan en esta pestaña.'));
  const fields=[];
  for(const [shift,title,modules] of [['M','Turno mañana',[1,2,3,4,5]],['T','Turno tarde',[0,1,2,3,4,5]]]){
   const section=element('section','apd-module-section');
@@ -447,10 +447,12 @@ export function createWeeklyScheduleForm({onChanged,accountClient=null}={}){
   details.addEventListener('toggle',()=>{if(details.open&&initialLoad)void load();});
   setBusy(false);
   status.textContent='Recuperá tus horarios antes de guardar.';
+  if(accountRequired)queueMicrotask(()=>{if(isCurrent()&&initialLoad)void load();});
  }
+ if(accountRequired&&!accountClient){setBusy(true);status.textContent='Conectando con tu cuenta. Si no se conecta, actualizá la página.';}
  form.addEventListener('submit',async event=>{
   event.preventDefault();
-  if(generation!==privacyGeneration||busy)return;
+  if(generation!==privacyGeneration||busy||accountRequired&&!accountClient)return;
   const modules=readDraft();
   if(!accountClient){
    try{savePrivatePlanner({...loadPrivatePlanner(),moduleSchedule:modules});}

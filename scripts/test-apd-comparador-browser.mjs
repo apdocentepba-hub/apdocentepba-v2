@@ -1068,7 +1068,7 @@ try{
    toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
    field.value='Rondeau 319';
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-account-sync1');
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1');
    clearPrivatePlanner();
    return true;
   })()`);
@@ -1186,7 +1186,7 @@ try{
    await until('window.APD_accountHome.ready()');
    assert.equal(await js('window.APD_accountHome.peek()?.address_text'),expected);
    const retrieved=await js(`(async()=>{
-    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-account-sync1');
+    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1');
     const profile=loadPrivatePlanner();
     return {address:profile.domicile,source:profile.homeLocation?.source,
       reviewed:profile.homeLocation?.reviewed};
@@ -1418,6 +1418,7 @@ try{
  // Exercise the exact release-enabled index bootstrap without injected client.
  for(const width of [390,1280]){
   scheduleRequests.length=0;scheduleRows.clear();
+  scheduleRows.set('SYNTHETIC_SCHEDULE_A',{modules:['M1-2'],revision:1});
   await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
   await cdp('Page.navigate',{url:'http://127.0.0.1:'+port+'/?schedule=1'});
   await until('document.readyState==="complete"');
@@ -1431,12 +1432,16 @@ try{
    return true;
   })()`);
   await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
-  assert.equal(scheduleRequests.length,0,'No automatic data upload or read before opening form');
+  await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
+  assert.equal(scheduleRequests.filter(x=>x.method==='GET').length,1,'Load saved schedules without opening form');
+  assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,0,'Never upload on initialization');
+  assert.deepEqual(await js('[...document.querySelectorAll("#apd-perfil-horarios input:checked")].map(x=>x.value)'),['M1-2'],'Persisted schedule loaded before opening');
+  assert.equal(await js(`JSON.parse(sessionStorage.getItem('apd_comparador_jornada_solo_pestana_v1')).moduleSchedule[0]`),'M1-2','Filter profile hydrated automatically');
   await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
   await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
   await js(`(()=>{const host=document.getElementById('apd-perfil-horarios');host.querySelectorAll('input').forEach(i=>i.checked=i.value==='M2-1');host.querySelector('form').requestSubmit();return true;})()`);
   await until('document.querySelector("#apd-perfil-horarios [role=status]").textContent.includes("Horarios guardados en tu cuenta")');
-  assert.deepEqual(scheduleRows.get('SYNTHETIC_SCHEDULE_A'),{modules:['M2-1'],revision:1});
+  assert.deepEqual(scheduleRows.get('SYNTHETIC_SCHEDULE_A'),{modules:['M2-1'],revision:2});
   await js(`(()=>{dashboardLoadedOwner='SYNTHETIC_SCHEDULE_B';window.__testToken='SYNTHETIC_SCHEDULE_B';document.getElementById('panel-alertas').textContent='Cuenta B';return true;})()`);
   await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
   await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
