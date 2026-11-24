@@ -30,6 +30,15 @@ jobs:
             --output /tmp/apd-school-catalog/index.json
           python3 -c "import json; p=json.load(open('/tmp/apd-school-catalog/index.json')); assert len(p['schools'])>1000; print('APD_SCHOOL_INDEX_REVIEW_REQUIRED',p['counts'])"
           sha256sum /tmp/apd-school-catalog/index.json
+          python3 - <<'PY'
+          import json, collections
+          p=json.load(open('/tmp/apd-school-catalog/index.json'))
+          assert p['sha256']=='36a3809e7173611030cdcd4bbd2d606eedcc7d366479ba3c4075c1523beeef7e', 'Dated source changed; review again'
+          for field in ('classification','area','surveyPeriod'):
+              counts=collections.Counter(r[field] for r in p['schools'])
+              print('APD_SCHOOL_FIELD_REVIEW',field,json.dumps(dict(counts),ensure_ascii=False))
+          print('APD_SCHOOL_PINNED_SOURCE_PASS')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: apd-school-registry-review-only
