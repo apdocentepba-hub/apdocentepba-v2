@@ -24,3 +24,12 @@ INSERT INTO public.users (id,email,password_hash) VALUES
  ('22222222-2222-4222-8222-222222222222','career-b@example.invalid','career-fixture-b');
 INSERT INTO public.user_subscriptions (user_id,plan_code,status,source,current_period_ends_at)
  SELECT id,'INSIGNE','ACTIVE','mercadopago_checkout',now()+interval '1 day' FROM public.users;
+
+-- Known offer for the existing deployed diary's indexed identity check.
+CREATE TABLE public.apd_ofertas_global_current (
+ source_offer_key text PRIMARY KEY, idoferta bigint, iddetalle bigint,
+ estado text NOT NULL, finoferta text, escuela text, distrito text, cargo text
+);
+GRANT SELECT ON public.apd_ofertas_global_current TO service_role;
+INSERT INTO public.apd_ofertas_global_current(source_offer_key,idoferta,iddetalle,estado,finoferta,escuela,distrito,cargo)
+VALUES ('D_121',121,121,'PUBLICADA',to_char(now()+interval '1 day','YYYY-MM-DD"T"HH24:MI:SS'),'Escuela de ensayo','Distrito de ensayo','Matemática');

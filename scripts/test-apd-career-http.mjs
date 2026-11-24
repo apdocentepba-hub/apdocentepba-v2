@@ -3,6 +3,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
+import {createApplicationDiaryClient} from './apd-application-diary-client.mjs';
 import {createCareerClient} from './apd-career-account-client.mjs';
 
 const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.json',import.meta.url));
@@ -126,6 +127,16 @@ try{
    calls:diaryContractCalls
   }));
   diaryContractCalls=null;
+  if(write.ok){
+   const browserFetch=(url,init)=>invoke(url,{...init,headers:{...init.headers,Origin:trustedOrigin}});
+   const diaryFor=token=>createApplicationDiaryClient({base:workerOrigin,getToken:()=>token,fetcher:browserFetch});
+   const restored=await diaryFor(newTokenA).reload();
+   assert.equal(restored.entries.find(entry=>entry.key===set.key)?.status,set.status);
+   assert.deepEqual((await diaryFor(tokenB).reload()).entries,[]);
+   const removed=await diaryFor(newTokenA).mutate({action:'remove',key:set.key,revision:restored.revision});
+   assert.deepEqual(removed.entries,[]);
+   console.log('APD_DEPLOYED_DIARY_BROWSER_CLIENT_PASS_WITH_FIXTURE');
+  }
   // Reset any fixture data before exercising the packaged candidate.
   execFileSync('psql',['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','5432','-U','postgres','-d','apd_career_http','-c','TRUNCATE public.user_application_diary'],{stdio:'inherit'});
   execFileSync(process.execPath,['scripts/build-apd-career-worker-candidate.mjs'],{
