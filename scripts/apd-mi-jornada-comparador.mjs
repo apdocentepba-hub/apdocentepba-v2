@@ -113,6 +113,8 @@ export function schedulesEquivalent(a,b){
  const key=v=>v.days.join(',')+'|'+v.start+'|'+v.end;
  return x.map(key).sort().join(';')===y.map(key).sort().join(';');
 }
+export const MAX_WORK_BLOCKS=42;
+
 export function sanitizeWorkProfile(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Perfil inválido');
  const domicile=String(data.domicile??'').trim();
@@ -120,7 +122,7 @@ export function sanitizeWorkProfile(data){
  const travelGapMinutes=data.travelGapMinutes===undefined?30:data.travelGapMinutes;
  if(!TRAVEL_GAP_OPTIONS.includes(travelGapMinutes))throw Error('Margen entre clases inválido');
  const jobs=data.jobs??[];
- if(!Array.isArray(jobs)||jobs.length>5)throw Error('Máximo cinco jornadas');
+ if(!Array.isArray(jobs)||jobs.length>MAX_WORK_BLOCKS)throw Error('Máximo '+MAX_WORK_BLOCKS+' bloques horarios');
  const clean=jobs.map((job,index)=>{
   if(!job||typeof job!=='object'||Array.isArray(job))throw Error('Jornada inválida');
   const school=String(job.school??'').trim();
@@ -138,7 +140,8 @@ export function sanitizeWorkProfile(data){
   const schoolKey=supplied?verifiedSchoolKey(supplied):null;
   if(supplied&&!schoolKey)throw Error('Clave provincial inválida para '+school);
   return {school,days:[...days].sort((a,b)=>a-b),start,end,
-   ...(schoolKey?{schoolKey}:{})};
+   ...(schoolKey?{schoolKey}:{}),
+   ...(Number.isInteger(job.period)&&job.period>=0&&job.period<MAX_WORK_BLOCKS?{period:job.period}:{})};
  });
  const homeLocation=sanitizeHomeLocation(data.homeLocation);
  // A manually edited address can never reuse stale coordinates.

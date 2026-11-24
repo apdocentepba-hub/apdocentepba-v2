@@ -44,7 +44,7 @@ function harness(accessActive,items=[{id:'previous-offer',secret:'ALERTA-PREVIA'
     querySelector:sel=>sel.includes('data-top-tab-key="plan"') ?planTab:null
   };
   const alertasState={items:[],index:0};
-  const context={document,alertasState,planActual: accessActive===undefined?{}:{access_active:accessActive},
+  const context={document,window:{},alertasState,todasLasAlertas:[],filtrarPorJornada:false,planActual: accessActive===undefined?{}:{access_active:accessActive},
     filtrarAlertasVigentes:x=>x};
   const code=alertPanel+'\n'+renderCurrent+'\n({renderAlertasAPD,renderAlertaActual})';
   const fn=vm.runInNewContext(code,context);

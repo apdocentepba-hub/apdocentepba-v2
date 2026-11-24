@@ -4,11 +4,11 @@
 import {compareOffers} from './scripts/apd-comparador-criterios.mjs?v=20261109-decision1';
 import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.mjs?v=20261114-signals1';
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
-import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261112-dothour1';
+import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-grilla';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner} from './scripts/apd-mi-jornada-ui.mjs?v=20261112-georef-safe1';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-grilla';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -144,7 +144,7 @@ function focusComparison() {
  dialog.appendChild(header);
  const body=node('div','apd-comparator-modal-body');
  if(state.privatePlannerAllowed)body.appendChild(
-  createPrivatePlannerForm({onChanged:()=>{render();focusComparison()}})
+  createPrivatePlannerForm({onChanged:()=>{refreshAlertSchedule(); refreshProfileSchedule();render();focusComparison()}})
  );
  else body.appendChild(node('p','apd-comparator-insigne-locked',
   'Domicilio y compatibilidad de jornadas: exclusivo del Plan Insigne vigente. '+
@@ -553,7 +553,7 @@ function render(){
   'Elegí ofertas del carrusel. Solo se comparan datos visibles de tu sesión; no se guardan selecciones ni se calculan chances de adjudicación.');
  root.appendChild(hint);
  if(state.privatePlannerAllowed)
-  root.appendChild(createPrivatePlannerForm({onChanged:render}));
+  root.appendChild(createPrivatePlannerForm({onChanged:()=>{refreshAlertSchedule();refreshProfileSchedule();render()}}));
  else root.appendChild(node('p','apd-comparator-insigne-locked',
   'Comparación con domicilio y jornadas actuales: exclusiva del Plan Insigne. '+
   'Revisá Mi plan si querés acceder a esta función.'));
@@ -798,6 +798,8 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  render();
 }
 function reset() {
+ document.getElementById('apd-perfil-horarios')?.replaceChildren();
+ window.APD_renderAlertScheduleControls?.({total:0});
  // Auth/session ownership changes must not expose a former account's local
  // home address or work timetable to the next account in the same tab.
  clearPrivatePlanner();
@@ -824,3 +826,71 @@ window.APD_comparatorRefresh=refresh;
 window.APD_comparatorReset=reset;
 // Core app may have rendered before module import was completed.
 if(root){root.hidden=true;}
+
+const scheduleControls=document.getElementById('apd-alert-schedule-controls');
+let scheduleFilterActive=false;
+
+function refreshAlertSchedule(){
+ window.APD_setAlertScheduleFilter?.(scheduleFilterActive);
+}
+
+window.APD_filterAlertsBySchedule=(offers,planInfo)=>{
+ if(!hasInsignePlannerAccess(planInfo))return null;
+ const profile=loadPrivatePlanner();
+ if(!profile.jobs.length)return null;
+ return offers.filter(offer=>
+  checkScheduleOverlap(offer.dias_horarios||offer.horario,profile).status==='no-overlap'
+ );
+};
+
+window.APD_renderAlertScheduleControls=({planInfo,total,visible,active})=>{
+ scheduleFilterActive=active===true;
+ if(!scheduleControls)return;
+ scheduleControls.replaceChildren();
+ scheduleControls.hidden=!total||!hasInsignePlannerAccess(planInfo);
+ scheduleControls.classList.toggle('apd-comparator-head',!scheduleControls.hidden);
+ if(scheduleControls.hidden)return;
+
+ const hasJobs=loadPrivatePlanner().jobs.length>0;
+ const toggle=button(active?'Ver todas las alertas':'Solo compatibles con mi horario',()=>{
+  window.APD_setAlertScheduleFilter?.(!active);
+  scheduleControls.querySelector('button')?.focus();
+ },'btn btn-secondary');
+ if(!hasJobs){
+  scheduleControls.appendChild(button('Cargar mis horarios',()=>{
+   const planner=document.querySelector('#apd-perfil-horarios details');
+   if(!planner)return;
+   planner.open=true;
+   planner.querySelector('summary')?.focus();
+  },'btn btn-secondary'));
+  return;
+ }
+ toggle.setAttribute('aria-pressed',String(scheduleFilterActive));
+ scheduleControls.append(toggle,node('span','apd-comparator-hint',
+  active?visible+' de '+total+' alertas · Horarios verificables y sin cruces según tu jornada.':''
+ ));
+};
+
+window.APD_renderProfileSchedule=planInfo=>{
+ const host=document.getElementById('apd-perfil-horarios');
+ if(!host)return;
+ if(!hasInsignePlannerAccess(planInfo)){
+  host.replaceChildren();
+  return;
+ }
+ if(!host.firstElementChild)mountProfileSchedule(host);
+};
+
+function refreshProfileSchedule(){
+ const host=document.getElementById('apd-perfil-horarios');
+ if(!host)return;
+ host.replaceChildren();
+ if(state.privatePlannerAllowed)mountProfileSchedule(host);
+}
+
+function mountProfileSchedule(host){
+ host.appendChild(createWeeklyScheduleForm({onChanged:()=>{
+  refreshAlertSchedule();
+  render();
+ }}));
+}

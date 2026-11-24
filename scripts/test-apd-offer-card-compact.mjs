@@ -29,7 +29,7 @@ export function renderOffer(input){
  const helpers={
   document:{getElementById(id){return id==='panel-alertas'?box:
    id==='alertas-badge'?badge:null}},
-  alertasState:{items:[offer],index:0},planActual:{access_active:true},
+  window:{},todasLasAlertas:[offer],filtrarPorJornada:false,alertasState:{items:[offer],index:0},planActual:{access_active:true},
   tituloAlerta:o=>o.descripcioncargo,
   turnoTexto:o=>o,
   esc,normalizarCursoDivision:o=>String(o||'-'),

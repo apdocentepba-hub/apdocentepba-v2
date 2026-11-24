@@ -159,7 +159,7 @@ test('privacy/safety: reject wrong working times and malformed days',()=>{
   {school:'Escuela',days:[1],start:'25:00',end:'11:00'}
  ])assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:[job]}));
  assert.throws(()=>sanitizeWorkProfile({domicile:'x\nsecret',jobs:[]}));
- assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:Array(6).fill(jobs[0])}));
+ assert.throws(()=>sanitizeWorkProfile({domicile:'',jobs:Array(43).fill(jobs[0])}));
 });
 
 test('current work school key is optional and strictly validated against ABC layers',()=>{
@@ -621,4 +621,13 @@ test('A reviewed approximate home survives private validation without claiming o
  assert.equal(profile.homeLocation.reviewed,true);
  assert.equal(profile.homeLocation.scope,'partido');
  assert.throws(()=>sanitizeHomeLocation({...initial,reviewed:false}),/inválida/);
+});
+
+test('la jornada conserva la fila de la grilla y admite más de cinco horas semanales',()=>{
+ const weekly=Array.from({length:6},(_,index)=>({
+  school:'Escuela A',days:[1+index],start:'07:20',end:'08:00',period:index+1
+ }));
+ const profile=sanitizeWorkProfile({jobs:weekly});
+ assert.deepEqual(profile.jobs.map(job=>job.period),[1,2,3,4,5,6]);
+ assert.equal(checkScheduleOverlap('SÁBADO 07:30 A 07:50',profile).status,'overlap');
 });

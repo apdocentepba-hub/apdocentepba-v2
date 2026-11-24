@@ -132,3 +132,46 @@ test('histórico y estadísticas no equiparan falta de capturas con cero ofertas
  const msg=extract('function renderHistoricoAPD(data) {','async function cargarHistoricoPanel(');
  assert.match(msg,/El historial necesita capturas recientes/);
 });
+
+test('solo una lista válida puede confirmar cero alertas', async () => {
+ const block=extract('async function obtenerMisAlertas(userId) {','function renderAlertasAPD(alertas) {');
+ let response;
+ const ctx=vm.createContext({
+  workerFetchJson:async()=>response,
+  filtrarAlertasVigentes:items=>items
+ });
+ vm.runInContext(block,ctx);
+
+ for(const invalid of [{ok:true},{ok:true,resultados:null},{ok:true,resultados:{}}]){
+  response=invalid;
+  await assert.rejects(ctx.obtenerMisAlertas('test-user'),/lista de alertas/);
+ }
+ response={ok:true,resultados:[]};
+ assert.deepEqual(await ctx.obtenerMisAlertas('test-user'),[]);
+ response={ok:true,resultados:[{idoferta:'test-offer'}]};
+ assert.deepEqual(await ctx.obtenerMisAlertas('test-user'),response.resultados);
+});
+
+test('el filtro de jornada es optativo y conserva las alertas originales al mostrar cero', () => {
+ const window={};
+ const ctx=vm.createContext({
+  window, planActual:{access_active:true},
+  filtrarAlertasVigentes:items=>items,
+  renderAlertaActual(){}
+ });
+ vm.runInContext(extract('const alertasState = {','/* ===== ADMIN ===== */'),ctx);
+ vm.runInContext(extract('function renderAlertasAPD(alertas) {','function moverAlerta(step) {'),ctx);
+ const offers=[{idoferta:'a'},{idoferta:'b'}];
+ ctx.renderAlertasAPD(offers);
+ assert.equal(window.alertasState.items.length,2);
+
+ window.APD_filterAlertsBySchedule=()=>[];
+ window.APD_setAlertScheduleFilter(true);
+ assert.equal(window.alertasState.items.length,0);
+ window.APD_setAlertScheduleFilter(false);
+ assert.equal(window.alertasState.items,offers);
+
+ window.APD_filterAlertsBySchedule=()=>null;
+ window.APD_setAlertScheduleFilter(true);
+ assert.equal(window.alertasState.items,offers);
+});
