@@ -1,6 +1,6 @@
 /** Server-only candidate. Inject service-role credentials from Worker bindings, never browser. */
 import {validateFavoriteRow} from './apd-account-favorites-core.mjs';
-export function createFavoriteStorage({base,serviceKey,fetcher=fetch}){
+export function createFavoriteStorage({base,serviceKey,fetcher=(input,init)=>globalThis.fetch(input,init)}){
  const url=new URL(base);
  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/'||typeof serviceKey!=='string'||!serviceKey)throw Error('Storage configuration invalid');
  const endpoint=url.origin+'/rest/v1/user_favorite_offers';
@@ -23,7 +23,7 @@ export function createFavoriteStorage({base,serviceKey,fetcher=fetch}){
   if(values[0]?.user_id!==id)throw Error('Owner mismatch');
   return validateFavoriteRow(values[0]);
  }
- const opts={headers,redirect:'error',cache:'no-store'};
+ const opts={headers,redirect:'manual',cache:'no-store'};
  return Object.freeze({
   async read(id){id=owner(id);return rows(await fetcher(query(id),{...opts,method:'GET'}),id);},
   async compareAndSet(id,{keys,revision}){

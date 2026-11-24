@@ -12,7 +12,7 @@ test('read scoped to owner and fails closed on foreign rows',async()=>{
 });
 test('first write POST never upserts; duplicate conflict only 23505',async()=>{
  const f=setup(()=>response({code:'23505'},409));assert.equal(await f.storage.compareAndSet(A,{keys:['D_1'],revision:0}),null);
- const c=f.calls[0];assert.equal(c.opts.method,'POST');assert.equal(c.opts.headers.Prefer,'return=representation');assert.equal(c.opts.redirect,'error');assert.equal(JSON.parse(c.opts.body).user_id,A);
+ const c=f.calls[0];assert.equal(c.opts.method,'POST');assert.equal(c.opts.headers.Prefer,'return=representation');assert.equal(c.opts.redirect,'manual');assert.equal(JSON.parse(c.opts.body).user_id,A);
  const g=setup(()=>response({code:'23503'},409));await assert.rejects(g.storage.compareAndSet(A,{keys:['D_1'],revision:0}));
 });
 test('patch requires both owner and old revision, no owner in body',async()=>{
@@ -29,4 +29,12 @@ test('network failure never retries and unsafe revision never sends request',asy
  const f=setup(()=>{throw Error('network');});
  await assert.rejects(f.storage.compareAndSet(A,{keys:['D_1'],revision:0}));assert.equal(f.calls.length,1);
  await assert.rejects(f.storage.compareAndSet(A,{keys:[],revision:Number.MAX_SAFE_INTEGER}));assert.equal(f.calls.length,1);
+});
+
+test('Cloudflare-compatible manual redirect rejects all 3xx without following or retrying',async()=>{
+ const f=setup(()=>new Response(null,{status:302,headers:{Location:'https://foreign.invalid'}}));
+ await assert.rejects(f.storage.read(A),/Storage error/);
+ assert.equal(f.calls.length,1);assert.equal(f.calls[0].opts.redirect,'manual');
+ await assert.rejects(f.storage.compareAndSet(A,{keys:['D_1'],revision:0}),/Storage error/);
+ assert.equal(f.calls.length,2);assert.equal(f.calls[1].opts.redirect,'manual');
 });
