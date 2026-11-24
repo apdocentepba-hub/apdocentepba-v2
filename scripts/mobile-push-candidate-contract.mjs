@@ -24,6 +24,7 @@ export function buildMobilePushCandidates({
  serverMatchedOffers,
  authorizedDevices,
  existingEventKeys=[],
+ verifiedFavoriteSchools=null,
  hmacSecret,
  now=new Date(),
  maxPerDevice=3
@@ -36,6 +37,15 @@ export function buildMobilePushCandidates({
     maxPerDevice<1||maxPerDevice>10)return [];
  const timestamp=now instanceof Date?now.getTime():new Date(now).getTime();
  if(!Number.isFinite(timestamp))return [];
+ // Priority only: a trusted, same-account school preference cannot bypass
+ // offer matching, opt-in, plan access, closing time, or deduplication.
+ const schoolKey=v=>typeof v==="string"&&/^[0-9]{4}[A-Z]{2}[0-9]{4}$/.test(v);
+ const favorites=new Set(verifiedFavoriteSchools?.user_id===authenticatedUserId&&
+  Array.isArray(verifiedFavoriteSchools.keys)&&verifiedFavoriteSchools.keys.length<=100?
+  verifiedFavoriteSchools.keys.filter(schoolKey):[]);
+ const prioritized=serverMatchedOffers.map((offer,index)=>({offer,index,priority:
+  offer?.school_identity_verified===true&&schoolKey(offer.school_key)&&favorites.has(offer.school_key)?1:0
+ })).sort((a,b)=>b.priority-a.priority||a.index-b.index).map(x=>x.offer);
  const queued=new Set(existingEventKeys.filter(key=>typeof key==="string"));
  const candidates=[];
  const processedDevices=new Set();
@@ -47,7 +57,7 @@ export function buildMobilePushCandidates({
      !["expo","fcm","apns"].includes(device.transport))continue;
   const processedOffers=new Set();
   let count=0;
-  for(const offer of serverMatchedOffers){
+  for(const offer of prioritized){
    if(count>=maxPerDevice)break;
    const offerKey=offer?.source_offer_key;
    if(!validKey(offerKey)||processedOffers.has(offerKey))continue;
