@@ -11,7 +11,8 @@ import {mountCareerEditor} from '/scripts/apd-career-editor-ui.mjs';
 import {createCareerPanelCoordinator} from '/scripts/apd-career-panel-coordinator.mjs';
 import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
 import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
-import {createSchoolCatalog} from '/scripts/apd-career-school-catalog.mjs';
+import {CAREER_SCHOOL_MANIFEST} from '/scripts/apd-career-school-manifest.mjs';
+import {loadReviewedSchoolCatalog} from '/scripts/apd-career-school-loader.mjs';
 const check=(v,m)=>{if(!v)throw Error(m);};
 const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('timeout');};
 const rows=new Map();let token='A',lost=false,puts=0;
@@ -55,12 +56,16 @@ try{
  check(years().value===''&&!host.textContent.includes('Matemática'),'coordinator isolates accounts');
  check(puts===2,'no writes during refresh or account change');
  coordinator.reset();token='A';
- const school={schoolKey:'0005MS0005',name:'Escuela de catálogo fixture',district:'Avellaneda',level:'Secundaria',area:'Urbano',classification:'0',surveyPeriod:'Inicial 2026'};
- const schoolCatalog=createSchoolCatalog({schema:1,source:'DGCYE_PBA',datasetId:'4becb4b7-0a21-4fef-8f2c-30df7f345a01',resourceId:'3951210e-7e0e-4fed-bbf1-0183e704c9ae',sha256:'a'.repeat(64),catalogModified:'2026-11-18',schools:[school]});
+ const schoolCatalog=await loadReviewedSchoolCatalog({
+  manifest:CAREER_SCHOOL_MANIFEST,origin:'https://alertasapd.com.ar',
+  fetcher:(url,opts)=>fetch(new URL(url).pathname,opts)
+ });
+ const school=schoolCatalog.exact('0005DC0709');
+ check(school?.district==='Avellaneda'&&school.classification==='0','reviewed school in the official index');
  coordinator.sync({...opts,schoolCatalog});await until(()=>status().includes('recuperada'));
  const search=host.querySelector('input[type=search]');check(!!search,'school catalog integrated');
- search.value='catalogo';search.dispatchEvent(new Event('input',{bubbles:true}));
- const resultButton=host.querySelector('.apd-career-school-results button');check(!!resultButton,'school found by accent-insensitive query');
+ search.value='centro de educacion de adultos 709/05';search.dispatchEvent(new Event('input',{bubbles:true}));
+ const resultButton=[...host.querySelectorAll('.apd-career-school-results button')].find(node=>node.textContent.includes(school.schoolKey));check(!!resultButton,'school found by accent-insensitive query');
  resultButton.click();
  check(host.textContent.includes('Desfavorabilidad: 0'),'explicit zero displayed, not unknown');
  check([...host.querySelectorAll('input')].some(i=>i.value===school.schoolKey),'official key populated');
@@ -71,7 +76,12 @@ try{
  coordinator.reset();
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
 }catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}</script>`;
+import {CAREER_SCHOOL_MANIFEST} from './apd-career-school-manifest.mjs';
 const server=createServer((req,res)=>{
+ if(req.url==='/'+CAREER_SCHOOL_MANIFEST.path){
+  res.writeHead(200,{'Content-Type':'application/json'});
+  return res.end(readFileSync(CAREER_SCHOOL_MANIFEST.path));
+ }
  if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});return res.end(page);}
  if(/^\/scripts\/apd-(career-[a-z-]+|account-schedule-core|insigne-planner-entitlement)\.mjs$/.test(req.url)){try{const content=readFileSync('.'+req.url);res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(content);}catch{}}
  res.writeHead(404);res.end();

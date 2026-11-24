@@ -7,6 +7,10 @@
 - Las clasificaciones rural/urbano y desfavorabilidad no son equivalentes. No inferir el suplemento pagado por coordenadas, nombre o código sin una regla vigente documentada.
 - No se confirmó una API pública de liquidación ni permiso para replicar código/algoritmos de FEB/SUTEBA. No extraer ni enviar datos privados del docente a esos sitios sin autorización.
 
+## Padrón integrado al candidato
+
+El índice estático deriva del [padrón de establecimientos educativos de la DGCyE PBA](https://catalogo.datos.gba.gob.ar/dataset/establecimientos-educativos), bajo [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). El importador reduce las columnas a datos educativos públicos y excluye claves ambiguas. Se incluyen 18.697 escuelas y se excluyen 1.152 claves ambiguas. El manifiesto fija el recurso, la fecha de modificación del catálogo y los hashes del CSV y del índice. La fecha de modificación del catálogo no certifica la vigencia de cada clasificación. El candidato mantiene cerrado el acceso a Mi carrera docente hasta completar la validación autenticada y la reversión.
+
 ## Contrato
 Perfil versionado por cuenta con antigüedad general y cargos identificados por clave provincial. Cantidad remunerativa (cargo, módulo, hora cátedra) separada de duración reloj. Horarios exactos con día e inicio/fin; asociación a módulos ya marcados solamente explícita. Mantener marcas antiguas como no asignadas; no borrarlas por migración. Evitar sobreposición o doble conteo en el simulador; una colisión declarada debe mostrarse, no ocultarse. Validación, RLS, CAS, sesión bearer real y QA con dos cuentas antes de persistir. No aplicar SQL en producción desde este candidato.
 
