@@ -11,6 +11,7 @@ import {mountCareerEditor} from '/scripts/apd-career-editor-ui.mjs';
 import {createCareerPanelCoordinator} from '/scripts/apd-career-panel-coordinator.mjs';
 import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
 import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
+import {createSchoolCatalog} from '/scripts/apd-career-school-catalog.mjs';
 const check=(v,m)=>{if(!v)throw Error(m);};
 const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('timeout');};
 const rows=new Map();let token='A',lost=false,puts=0;
@@ -53,6 +54,21 @@ try{
  token='B';coordinator.sync(opts);await until(()=>status().includes('Todavía no'));
  check(years().value===''&&!host.textContent.includes('Matemática'),'coordinator isolates accounts');
  check(puts===2,'no writes during refresh or account change');
+ coordinator.reset();token='A';
+ const school={schoolKey:'0005MS0005',name:'Escuela de catálogo fixture',district:'Avellaneda',level:'Secundaria',area:'Urbano',classification:'0',surveyPeriod:'Inicial 2026'};
+ const schoolCatalog=createSchoolCatalog({schema:1,source:'DGCYE_PBA',datasetId:'4becb4b7-0a21-4fef-8f2c-30df7f345a01',resourceId:'3951210e-7e0e-4fed-bbf1-0183e704c9ae',sha256:'a'.repeat(64),catalogModified:'2026-11-18',schools:[school]});
+ coordinator.sync({...opts,schoolCatalog});await until(()=>status().includes('recuperada'));
+ const search=host.querySelector('input[type=search]');check(!!search,'school catalog integrated');
+ search.value='catalogo';search.dispatchEvent(new Event('input',{bubbles:true}));
+ const resultButton=host.querySelector('.apd-career-school-results button');check(!!resultButton,'school found by accent-insensitive query');
+ resultButton.click();
+ check(host.textContent.includes('Desfavorabilidad: 0'),'explicit zero displayed, not unknown');
+ check([...host.querySelectorAll('input')].some(i=>i.value===school.schoolKey),'official key populated');
+ submit();await until(()=>status().includes('guardada en tu cuenta'));
+ check(rows.get('A').profile.positions[0].schoolKey===school.schoolKey,'school choice saved');
+ check(rows.get('A').profile.positions[0].school===school.name,'canonical school name saved');
+ check(!Object.hasOwn(rows.get('A').profile.positions[0],'classification'),'classification not stored as personal data or legal confirmation');
+ coordinator.reset();
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
 }catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}</script>`;
 const server=createServer((req,res)=>{
@@ -72,4 +88,4 @@ try{
  });
  const result=output.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
  assert.equal(result,'APD_CAREER_CHROMIUM_PASS');console.log(result);
-}finally{server.close();rmSync(profile,{recursive:true,force:true});}
+}finally{server.close();rmSync(profile,{recursive:true,force:true,maxRetries:10,retryDelay:200});}
