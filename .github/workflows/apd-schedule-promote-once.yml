@@ -1,7 +1,7 @@
 name: APD schedule exact-version authorized production promotion
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     paths:
       - '.github/workflows/apd-schedule-promote-once.yml'
 permissions:

@@ -4,15 +4,19 @@ import assert from 'node:assert/strict';
 const old='8d0d65d9-a338-45d2-b7e9-68879f35b6d8',candidate='49a33cc8-0b0a-4c07-9b8b-3492bf0c2132';
 const worker='ancient-wildflower-cd37',origin='https://alertasapd.com.ar',live='https://'+worker+'.apdocentepba.workers.dev';
 const preview='https://apd-schedule-pr304-'+worker+'.apdocentepba.workers.dev';
-const token=process.env.CLOUDFLARE_API_TOKEN,account=process.env.CLOUDFLARE_ACCOUNT_ID;
+const token=process.env.CLOUDFLARE_API_TOKEN;let account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim();
 assert.equal(process.env.GITHUB_HEAD_REF,'release/schedule-worker-20261124');
-assert.ok(token&&/^[a-f0-9]{32}$/i.test(account||''),'Cloudflare release credentials missing');
-const prefix='/accounts/'+account+'/workers/',deployment=prefix+'scripts/'+worker+'/deployments';
+assert.ok(token,'Cloudflare release token missing');
 const api=async(path,body)=>{
  const res=await fetch('https://api.cloudflare.com/client/v4'+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(25000)});
  if(!res.ok)throw Error('Cloudflare HTTP '+res.status);
  const j=await res.json();if(!j.success)throw Error('Cloudflare API rejected');return j.result;
 };
+const accounts=await api('/accounts?per_page=50');
+assert.ok(Array.isArray(accounts)&&accounts.length>0,'Cloudflare account inaccessible');
+if(!account){assert.equal(accounts.length,1,'Cloudflare account ambiguous');account=String(accounts[0].id);}
+assert.ok(/^[a-f0-9]{32}$/i.test(account)&&accounts.some(x=>x.id===account),'Cloudflare account mismatch');
+const prefix='/accounts/'+account+'/workers/',deployment=prefix+'scripts/'+worker+'/deployments';
 const active=async()=>{const a=(await api(deployment))?.deployments?.[0]?.versions?.filter(v=>Number(v.percentage)>0);assert.ok(a?.length===1&&Number(a[0].percentage)===100,'Unexpected traffic distribution');return a[0].version_id;};
 const cronExpected=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8')).schedules.slice().sort();
 async function cron(){const j=await api(prefix+'scripts/'+worker+'/schedules');assert.deepEqual((Array.isArray(j)?j:j?.schedules||[]).map(x=>x.cron).sort(),cronExpected);}
