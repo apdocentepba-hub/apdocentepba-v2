@@ -1431,7 +1431,9 @@ try{
    return true;
   })()`);
   await until('!!document.querySelector("#apd-perfil-horarios button[type=button]")');
-  assert.equal(scheduleRequests.length,0,'No automatic data upload or read before opening form');
+  await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
+  assert.equal(scheduleRequests.filter(x=>x.method==='GET').length,1,'Load saved schedules without opening form');
+  assert.equal(scheduleRequests.filter(x=>x.method==='PUT').length,0,'Never upload on initialization');
   await js('document.querySelector("#apd-perfil-horarios details").open=true;true');
   await until('!document.querySelector("#apd-perfil-horarios button[type=submit]").disabled');
   await js(`(()=>{const host=document.getElementById('apd-perfil-horarios');host.querySelectorAll('input').forEach(i=>i.checked=i.value==='M2-1');host.querySelector('form').requestSubmit();return true;})()`);
