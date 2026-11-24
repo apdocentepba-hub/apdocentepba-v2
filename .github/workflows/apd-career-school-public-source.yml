@@ -4,6 +4,8 @@ on:
     paths:
       - '.github/workflows/apd-career-school-public-source.yml'
       - 'scripts/apd_school_catalog_import.py'
+      - 'scripts/test-apd-career-real-school-index.mjs'
+      - 'scripts/apd-career-school-*.mjs'
 permissions:
   contents: read
 jobs:
@@ -39,6 +41,11 @@ jobs:
               print('APD_SCHOOL_FIELD_REVIEW',field,json.dumps(dict(counts),ensure_ascii=False))
           print('APD_SCHOOL_PINNED_SOURCE_PASS')
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify real catalog search and integrity loader
+        run: node scripts/test-apd-career-real-school-index.mjs /tmp/apd-school-catalog/index.json
       - uses: actions/upload-artifact@v4
         with:
           name: apd-school-registry-review-only
