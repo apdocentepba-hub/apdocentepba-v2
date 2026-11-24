@@ -98,3 +98,20 @@ test('reviewed school loader fails closed without approval or matching content d
  await assert.rejects(loadReviewedSchoolCatalog({manifest:{...manifest,sourceDigest:'b'.repeat(64)},origin:'https://alertasapd.com.ar',fetcher}),/Procedencia/);
  assert.equal(await loadReviewedSchoolCatalog({manifest:{...manifest,path:'https://foreign.invalid/index.json'},origin:'https://alertasapd.com.ar',fetcher}),null);
 });
+
+import {seniorityPercent,disadvantagePercent,statutoryComponents} from './apd-career-statutory-pay.mjs';
+test('statutory seniority thresholds and boundaries',()=>{
+ for(const [years,rate] of [[0,0],[1,10],[2,20],[3,20],[4,30],[6,30],[7,40],[9,40],[10,50],[11,50],[12,60],[14,60],[15,70],[16,70],[17,80],[19,80],[20,100],[21,100],[22,110],[23,110],[24,120],[40,120]])assert.equal(seniorityPercent(years),rate);
+ for(const n of [-1,1.5,null,81])assert.throws(()=>seniorityPercent(n));
+});
+test('disadvantage requires legal classification, not geography or raw data',()=>{
+ for(const [c,r] of [['NORMAL',0],['I',30],['II',60],['III',90],['IV',100],['V',120]])assert.equal(disadvantagePercent(c),r);
+ for(const c of ['Rural','U0','0','1',null,'__proto__'])assert.equal(disadvantagePercent(c),null);
+});
+test('known statutory components never masquerade as full gross or take-home pay',()=>{
+ const a=statutoryComponents({recognizedYears:10,monthlyAssignmentCentavos:10000000,confirmedLegalClass:'II'});
+ assert.equal(a.seniorityCentavos,5000000);assert.equal(a.disadvantageCentavos,null);assert.equal(a.knownSubtotalCentavos,15000000);assert.equal(a.netCentavos,null);assert.equal(a.grossCentavos,null);
+ const b=statutoryComponents({recognizedYears:10,monthlyAssignmentCentavos:10000000,confirmedLegalClass:'II',confirmedDisadvantageBaseCentavos:8000000});
+ assert.equal(b.disadvantageCentavos,4800000);assert.equal(b.knownSubtotalCentavos,19800000);assert.equal(b.status,'partial');
+ assert.throws(()=>statutoryComponents({recognizedYears:10,monthlyAssignmentCentavos:NaN}));
+});
