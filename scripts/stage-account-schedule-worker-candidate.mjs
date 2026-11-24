@@ -15,7 +15,7 @@ if(start<0||end<start)throw Error('New handler missing');
 const withoutHandler=candidate.slice(0,start)+candidate.slice(end);
 const route='    if (path === API_URL_PREFIX3 + "/account/schedule") {\n'+
  '      return await handleAccountScheduleSecureV1(request, env);\n    }\n';
-const optionsRoute='    if (request.method === "OPTIONS" && new URL(request.url).pathname === API_URL_PREFIX3 + "/account/schedule") return accountScheduleCors(request);\n';
+const optionsRoute='\n    if (request.method === "OPTIONS" && new URL(request.url).pathname === API_URL_PREFIX3 + "/account/schedule") return accountScheduleCors(request);\n';
 if(withoutHandler.split(route).length!==2||withoutHandler.split(optionsRoute).length!==2||withoutHandler.replace(route,'').replace(optionsRoute,'')!==live)
  throw Error('Candidate changed unrelated production Worker code');
 const manifest=JSON.parse(fs.readFileSync('worker-live/manifest.json','utf8'));
