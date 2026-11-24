@@ -72,7 +72,7 @@ jobs:
           test "$(cat /tmp/career-writer-1 /tmp/career-writer-2 | grep -E '^[01]$' | sort | tr '\n' ' ')" = '0 1 '
           test "$(psql -Atc 'SELECT revision FROM public.user_career_profile')" = 3
           echo APD_CAREER_CONCURRENT_CAS_PASS
-      - name: Authenticate two fixture accounts through the Worker and real PostgREST
+      - name: Authenticate two fixture accounts in workerd with real PostgREST
         env:
           PGHOST: 127.0.0.1
           PGUSER: postgres
@@ -90,6 +90,7 @@ jobs:
           trap 'docker rm -f apd-career-http >/dev/null 2>&1 || true' EXIT
           curl --silent --show-error --fail --retry 15 --retry-connrefused --retry-delay 1 \
             http://127.0.0.1:3301/ >/dev/null
+          npm install --prefix tmp/apd-career-runtime --no-package-lock --no-audit --no-fund miniflare@4.20251118.0
           node scripts/test-apd-career-http.mjs
           test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.sessions')" = 3
           test "$(psql -d apd_career_http -Atc 'SELECT count(*) FROM public.user_career_profile WHERE revision=1')" = 2

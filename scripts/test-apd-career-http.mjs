@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {createCareerClient} from './apd-career-account-client.mjs';
 
-const {default: candidate}=await import('../tmp/apd-career/worker-career-candidate.mjs');
+const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.json',import.meta.url));
+const {Miniflare}=requireRuntime('miniflare');
+const candidatePath=fileURLToPath(new URL('../tmp/apd-career/worker-career-candidate.mjs',import.meta.url));
 const baselinePath=new URL('../tmp/apd-career/worker-career-baseline.mjs',import.meta.url);
 writeFileSync(baselinePath,readFileSync(new URL('../worker-live/worker_hotfix.js',import.meta.url)));
-const {default: baseline}=await import(baselinePath);
 const env={SUPABASE_URL:'https://career-db.invalid',SUPABASE_SERVICE_ROLE_KEY:'disposable-service-role'};
 const workerOrigin='https://career-worker.invalid';
-const nativeFetch=globalThis.fetch;
 
-globalThis.fetch=async (input,init)=>{
- const request=new Request(input,init);
+async function disposableDatabase(request){
  const url=new URL(request.url);
  // Never forward credentials or fixture data outside the disposable container.
  assert.equal(url.origin,env.SUPABASE_URL);
@@ -21,15 +22,17 @@ globalThis.fetch=async (input,init)=>{
  const headers=new Headers(request.headers);
  headers.delete('Authorization');
  headers.delete('apikey');
- return nativeFetch(local,{method:request.method,headers,redirect:'error',
+ return fetch(local,{method:request.method,headers,redirect:'error',
   ...(request.body?{body:await request.arrayBuffer()}:{}),signal:request.signal});
-};
-
-const invoke=(worker,url,init)=>worker.fetch(new Request(url,init),env,{
- waitUntil(){throw Error('Unexpected background operation');}
+}
+const options=scriptPath=>({
+ modules:true,scriptPath,compatibilityDate:'2026-04-01',
+ bindings:env,outboundService:disposableDatabase
 });
+const runtime=new Miniflare(options(candidatePath));
+const invoke=(url,init)=>runtime.dispatchFetch(url,init);
 async function login(account){
- const response=await invoke(candidate,workerOrigin+'/api/login',{
+ const response=await invoke(workerOrigin+'/api/login',{
   method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({email:'career-'+account+'@example.invalid',password:'career-fixture-'+account})
  });
@@ -39,8 +42,8 @@ async function login(account){
  assert.match(session.session_token,/^[0-9a-f]{64}$/);
  return session.session_token;
 }
-const client=(token,worker=candidate)=>createCareerClient({
- base:workerOrigin,getToken:()=>token,fetcher:(url,opts)=>invoke(worker,url,opts)
+const client=token=>createCareerClient({
+ base:workerOrigin,getToken:()=>token,fetcher:invoke
 });
 const vacancy={profile:null,revision:0};
 const profile={schema:1,seniorityYears:10,positions:[{
@@ -49,6 +52,19 @@ const profile={schema:1,seniorityYears:10,positions:[{
  modules:['T1-1'],blocks:[{day:1,start:'14:00',end:'16:00'}]
 }]};
 try{
+ const endpoint=workerOrigin+'/api/account/career';
+ async function preflight(origin){
+  return invoke(endpoint,{method:'OPTIONS',headers:{
+   Origin:origin,'Access-Control-Request-Method':'PUT',
+   'Access-Control-Request-Headers':'authorization,content-type'
+  }});
+ }
+ const trustedOrigin='https://alertasapd.com.ar';
+ const allowed=await preflight(trustedOrigin);
+ assert.equal(allowed.status,204);
+ assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),trustedOrigin);
+ assert.equal((await preflight('https://unrelated.invalid')).headers.get('Access-Control-Allow-Origin'),null);
+ assert.equal((await invoke(endpoint)).status,401);
  const [tokenA,tokenB]=await Promise.all([login('a'),login('b')]);
  assert.notEqual(tokenA,tokenB);
  const a=client(tokenA),b=client(tokenB),competing=client(tokenA);
@@ -63,13 +79,15 @@ try{
  assert.notEqual(newTokenA,tokenA);
  const newSession=client(newTokenA);
  assert.deepEqual(await newSession.reload(),saved);
- const baselineResponse=await invoke(baseline,workerOrigin+'/api/account/career',{
+ await runtime.setOptions(options(fileURLToPath(baselinePath)));
+ const baselineResponse=await invoke(endpoint,{
   headers:{Authorization:'Bearer '+newTokenA}
  });
  assert.equal(baselineResponse.status,404,'rollback removes the career route');
+ await runtime.setOptions(options(candidatePath));
  assert.deepEqual(await newSession.reload(),saved,'restoring the candidate preserves account A');
  assert.deepEqual(await b.reload(),other,'restoring the candidate preserves account B');
- console.log('APD_CAREER_HTTP_PASS: password login, new session, separate accounts, stale revision, Worker rollback and recovery');
+ console.log('APD_CAREER_WORKERD_PASS: CORS, password login, new session, separate accounts, stale revision, Worker rollback and recovery');
 }finally{
- globalThis.fetch=nativeFetch;
+ await runtime.dispose();
 }
