@@ -1,7 +1,8 @@
 import {estimateOfferEconomics,officialPaySource} from './apd-offer-economics.mjs?v=20261124-economics1';
+import {estimateCalendarWorkDays} from './apd-offer-economics-calendar.mjs?v=20261124-calendar1';
 const node=(tag,text,cls='')=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const currency=new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:2});
-export function createOfferEconomics(){
+export function createOfferEconomics({schedule}={}){
  const root=node('details',undefined,'apd-economics');
  root.append(node('summary','Ingresos y gastos de esta oferta','apd-work-summary'));
  root.append(node('p','Estimación manual por mes completo. Ingresá el importe de bolsillo estimado para esta oferta, no tu sueldo total. No se calcula automáticamente la liquidación ni se guardan datos.','apd-comparator-hint'));
@@ -20,6 +21,16 @@ export function createOfferEconomics(){
   const input=node('input',undefined,'apd-work-input');input.type='number';input.min='0';input.max=String(max);input.step=step;input.required=!optional;
   input.name=key;fields[key]=input;row.append(input);form.append(row);
  }
+ const calendar=node('div',undefined,'apd-economics-calendar');
+ const label=node('label','Mes de referencia ','apd-work-field');
+ const month=node('input',undefined,'apd-work-input');month.type='month';month.min='2020-01';month.max='2099-12';month.name='calendarMonth';
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit'}).formatToParts(new Date());
+ month.value=parts.find(x=>x.type==='year').value+'-'+parts.find(x=>x.type==='month').value;
+ label.append(month);calendar.append(label);
+ const hint=node('p','Días de calendario según horario publicado. Revisá feriados, recesos, licencias y fechas de la suplencia; podés ajustar el número manualmente.','apd-comparator-hint');
+ const fill=node('button','Completar días desde el horario','btn btn-secondary');fill.type='button';fill.classList.add('apd-economics-fill-days');
+ fill.addEventListener('click',()=>{output.replaceChildren();try{const r=estimateCalendarWorkDays(schedule,month.value);if(!r){hint.textContent='Horario insuficiente: ingresá los días manualmente.';return;}fields.workDays.value=String(r.days);hint.textContent=r.days+' días de calendario. Revisá feriados, recesos, licencias y fechas de la suplencia.';}catch(error){hint.textContent=error.message;}});
+ calendar.append(fill,hint);form.insertBefore(calendar,fields.workDays.parentElement);
  const button=node('button','Calcular ingreso después de gastos','btn btn-primary');button.type='submit';form.append(button,output);
  form.addEventListener('input',()=>output.replaceChildren());
  form.addEventListener('submit',event=>{

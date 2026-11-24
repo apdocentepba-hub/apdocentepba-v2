@@ -6,7 +6,7 @@ import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.m
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
-import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
+import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
@@ -325,7 +325,7 @@ function openWeekSimulator(key){
    }
    body.appendChild(days);
   }
-  body.appendChild(createOfferEconomics());
+  body.appendChild(createOfferEconomics({schedule:offer.horario}));
  }
  dialog.appendChild(body);document.body.appendChild(dialog);
  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
