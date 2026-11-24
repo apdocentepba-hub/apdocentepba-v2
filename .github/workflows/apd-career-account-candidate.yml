@@ -94,6 +94,8 @@ jobs:
           psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f tests/sql/apd_career_http_fixture.sql
           psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql
           psql -d apd_career_http -X -v ON_ERROR_STOP=1 -f docs/sql/APD_APPLICATION_DIARY_CANDIDATE.sql
+          # The deployed route includes this column in its direct REST writes.
+          psql -d apd_career_http -X -v ON_ERROR_STOP=1 -c 'ALTER TABLE public.user_application_diary ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now()'
           docker run -d --rm --name apd-career-http --network host \
             -e PGRST_DB_URI=postgres://postgres:test_only@127.0.0.1:5432/apd_career_http \
             -e PGRST_DB_ANON_ROLE=service_role -e PGRST_DB_SCHEMAS=public \
