@@ -13,7 +13,7 @@ import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=2026
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-modulos';
+import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-account-sync1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -29,6 +29,7 @@ const state={
 const root=document.getElementById('apd-comparador-panel');
 const max=5;
 let disposePersonalHistory=null;
+let profileScheduleClient=null;
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
@@ -948,6 +949,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ profileScheduleClient=null;
  clearPersonalHistory();
  document.getElementById('apd-perfil-horarios')?.replaceChildren();
  window.APD_renderAlertScheduleControls?.({total:0});
@@ -1025,12 +1027,19 @@ window.APD_renderAlertScheduleControls=({planInfo,total,visible,active})=>{
  ));
 };
 
-window.APD_renderProfileSchedule=planInfo=>{
+window.APD_renderProfileSchedule=(planInfo,accountClient=undefined)=>{
  const host=document.getElementById('apd-perfil-horarios');
  if(!host)return;
  if(!hasInsignePlannerAccess(planInfo)){
+  profileScheduleClient=null;
   host.replaceChildren();
   return;
+ }
+ // The existing core app calls with one argument. Only the authenticated
+ // bootstrap supplies the optional opaque client; no bearer reaches this UI.
+ if(accountClient!==undefined&&accountClient!==profileScheduleClient){
+  profileScheduleClient=accountClient;
+  host.replaceChildren();
  }
  if(!host.firstElementChild)mountProfileSchedule(host);
 };
@@ -1043,7 +1052,7 @@ function refreshProfileSchedule(){
 }
 
 function mountProfileSchedule(host){
- host.appendChild(createWeeklyScheduleForm({onChanged:()=>{
+ host.appendChild(createWeeklyScheduleForm({accountClient:profileScheduleClient,onChanged:()=>{
   refreshAlertSchedule();
   render();
  }}));

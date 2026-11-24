@@ -314,19 +314,36 @@ document.addEventListener('DOMContentLoaded',function(){
  const comparison=document.getElementById('apd-comparador-panel');
  if(!panel||!comparison||typeof MutationObserver!=='function')return;
  let previousOwner=null,loading=false,mapLoading=false;
+ // Release gate: enable only after authenticated QA and Worker promotion.
+ const accountScheduleReleaseEnabled=false;
+ let accountScheduleClient=null,scheduleLoading=false;
  const sync=function(){
   // A bearer is never forwarded to the comparison module or stored on disk.
   const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
   if(owner!==previousOwner){
    previousOwner=owner;
+   accountScheduleClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
   }
   const allowed=!!owner&&typeof obtenerToken==='function'&&!!obtenerToken()&&
    typeof planActual!=='undefined'&&planActual?.access_active===true;
   if(!allowed){
+   accountScheduleClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
    comparison.hidden=true;
    return;
+  }
+  if(accountScheduleReleaseEnabled&&!accountScheduleClient&&!scheduleLoading){
+   scheduleLoading=true;
+   import('./scripts/apd-account-schedule-client.mjs?v=20261124-account-sync1').then(({createScheduleClient})=>{
+    scheduleLoading=false;
+    if(dashboardLoadedOwner!==owner||obtenerToken()!==owner||planActual?.access_active!==true)return;
+    accountScheduleClient=createScheduleClient({
+     base:API_URL,fetcher:(url,options)=>window.fetch(url,options),
+     getToken:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true?obtenerToken():null
+    });
+    sync();
+   }).catch(()=>{scheduleLoading=false;});
   }
   const offers=Array.isArray(window.alertasState?.items)?window.alertasState.items:[];
   const index=Number.isInteger(window.alertasState?.index)?window.alertasState.index:0;
@@ -339,11 +356,11 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual);}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&planActual?.access_active===true}});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient);}
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-vacancy1')
+   import('./apd_comparador_panel.mjs?v=20261124-account-sync1')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
