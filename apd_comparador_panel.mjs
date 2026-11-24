@@ -7,7 +7,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
-import {marginalPay} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
+import {marginalPay,mergeConfirmedCareerPlanner} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
@@ -15,7 +15,7 @@ import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=2026
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
+import {createPrivatePlannerForm,loadPrivatePlanner as loadLegacyPlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -32,6 +32,16 @@ const root=document.getElementById('apd-comparador-panel');
 const max=5;
 let disposePersonalHistory=null;
 let profileScheduleClient=null,profileScheduleRequired=true;
+let confirmedCareerContext=null;
+function loadPrivatePlanner(){
+ const base=loadLegacyPlanner();
+ if(!confirmedCareerContext||!confirmedCareerContext.isCurrent())return base;
+ const record=confirmedCareerContext.getRecord();
+ // A pending career read must not be advertised as a free week.
+ if(!record)return {...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]};
+ try{return mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey:verifiedSchoolKey});}
+ catch{return {...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]};}
+}
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
@@ -1036,8 +1046,9 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null,careerContext=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
+ confirmedCareerContext=entitled&&enabled&&careerContext?.enabled?careerContext:null;
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
@@ -1081,6 +1092,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ confirmedCareerContext=null;
  clearAccountFavorites();
  profileScheduleClient=null;
  clearPersonalHistory();
@@ -1121,6 +1133,7 @@ let scheduleFilterActive=false;
 function refreshAlertSchedule(){
  window.APD_setAlertScheduleFilter?.(scheduleFilterActive);
 }
+window.APD_refreshConfirmedCareer=()=>{if(state.enabled&&state.privatePlannerAllowed){refreshAlertSchedule();render();}};
 
 window.APD_filterAlertsBySchedule=(offers,planInfo)=>{
  if(!hasInsignePlannerAccess(planInfo))return null;
