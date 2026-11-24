@@ -12,7 +12,7 @@ const ORIGIN="https://alertasapd.com.ar";
 const TAG_CSS='<link rel="stylesheet" href="public-landing-v3.css?v=20261103" />';
 const TAG_JS='<script src="apd_panel_priority_v3.js?v=1"></script>';
 const RADAR='<script src="candidates/radar_provincia_live_20261102.js?v=2"></script>';
-const APP='<script src="app_v2.js?v=20&rev=20261114-compact1"></script>';
+const APP='<script src="app_v2.js?v=20&rev=20261124-perfil"></script>';
 const TABS='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
 const UI='<script src="apd_ui_v21.js?v=20261102-clean"></script>';
 const SHA=value=>createHash("sha256").update(value).digest("hex");
@@ -26,7 +26,11 @@ export function checkHtml(text,expected){
                     "google-btn-login","google-btn-registro"]){
   assert.equal(count(text,'id="'+id+'"'),1,"missing or duplicate: "+id);
  }
+ // Require precisely the approved tag and reject a second runtime regardless of its query string.
  assert.equal(count(text,APP),1,"app runtime script changed");
+ const appScripts=[...text.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi)]
+  .filter(match=>{try{return new URL(match[1],ORIGIN).pathname.endsWith('/app_v2.js');}catch{return false;}});
+ assert.equal(appScripts.length,1,"duplicate app runtime script");
  assert.equal(count(text,TABS),1,"tabs script changed");
  assert.equal(count(text,UI),1,"v2.1 UI script changed");
  assert.ok(text.indexOf(APP)<text.indexOf(TABS) &&
