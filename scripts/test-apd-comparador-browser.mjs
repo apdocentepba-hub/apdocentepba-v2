@@ -146,6 +146,7 @@ const server=createServer((req,res)=>{
   '/scripts/apd-mi-jornada-comparador.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-mi-jornada-comparador.mjs')},
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
   '/scripts/apd-favorite-offers.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-favorite-offers.mjs')},
+  '/scripts/apd-offer-recommendations.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-recommendations.mjs')},
   '/scripts/apd-offer-economics.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics.mjs')},
   '/scripts/apd-offer-economics-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-offer-economics-ui.mjs')},
   '/scripts/apd-home-georef.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-home-georef.mjs')},
@@ -301,6 +302,11 @@ try{
   assert.match(await js('document.querySelector(".apd-favorite-row").textContent'),/No visible en los filtros actuales/);
   await js(`(()=>{window.alertasState={items:window.__offers,index:0};document.getElementById('panel-alertas').innerHTML='<article class="alerta-main-card"><div class="alerta-actions"></div></article>';return true;})()`);
   await until('!!document.getElementById("apd-favorite-oferta")');
+  await js('document.querySelector(".apd-recommendations").open=true;true');
+  await until('document.querySelectorAll(".apd-recommendation-row").length===6');
+  assert.equal(await js('document.querySelectorAll(".apd-recommendation-observed").length'),0);
+  assert.equal(await js('document.querySelectorAll(".apd-recommendation-review").length'),6);
+  await js(`(()=>{const f=document.querySelector('.apd-recommendations select:last-of-type');return !!f;})()`);
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',
@@ -316,6 +322,7 @@ try{
    'Plus may compare offers but cannot open private work planner');
   assert.equal(await js('!!document.getElementById("apd-simular-oferta")'),false);
   assert.equal(await js('!!document.querySelector(".apd-favorites")'),false);
+  assert.equal(await js('!!document.querySelector(".apd-recommendations")'),false);
   assert.equal(await js('!!document.getElementById("apd-favorite-oferta")'),false);
   assert.equal(await js('sessionStorage.getItem("apd_comparador_jornada_solo_pestana_v1")'),null,
    'Downgrade must wipe domicile from the same browser tab');

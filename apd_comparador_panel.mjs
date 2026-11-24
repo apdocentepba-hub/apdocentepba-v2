@@ -8,6 +8,7 @@ import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
+import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -28,6 +29,7 @@ const root=document.getElementById('apd-comparador-panel');
 const max=5;
 const favorites=createFavoriteOffers();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
+let recommendOpen=false,recommendDistrict='',recommendTurn='',recommendSort='cierre',recommendGroup='',recommendLimit=10;
 const safeKey=key=>/^[A-Za-z0-9_.:|-]{1,160}$/.test(key);
 const codePattern=/^[0-9]{4}[A-Z]{2}[0-9]{4}$/;
 
@@ -630,6 +632,46 @@ function renderFavorites(){
  draw();return section;
 }
 
+function renderRecommendations(){
+ const section=node('details','apd-recommendations');section.open=recommendOpen;
+ section.appendChild(node('summary','apd-work-summary','Ofertas recomendadas para vos'));
+ section.appendChild(node('p','apd-comparator-hint','Orden orientativo de tus alertas visibles. Primero coincidencias observadas de horario y PID; después datos por revisar; al final cruces detectados. No certifica elegibilidad, traslado, sueldo ni adjudicación.'));
+ const tools=node('div','apd-comparator-tools');
+ const options=field=>[...new Set(state.available.map(x=>String(x[field]||'').trim()).filter(Boolean))].sort().map(v=>[v,v]);
+ const list=node('div','apd-recommendation-list');
+ const result=node('p','apd-comparator-hint');result.setAttribute('role','status');
+ const draw=()=>{
+  list.replaceChildren();
+  if(!state.enabled||!state.privatePlannerAllowed)return;
+  const offers=state.available.map(x=>({...x,source_offer_key:offerKey(x)}));
+  const data=recommendOffers({offers,profile:loadPrivatePlanner(),preferredDistricts:recommendDistrict?[recommendDistrict]:[],preferredTurns:recommendTurn?[recommendTurn]:[],sort:recommendSort,verifiedGeoByKey:state.geoByKey,applicantSummaries:readApplicantSummaries(offers)});
+  result.textContent=data.counts.observed+' coincidencias observadas · '+data.counts.review+' por revisar · '+data.counts.conflict+' con cruces · '+data.excluded.length+' excluidas';
+  const labels={observed:'Coincidencias observadas',review:'Datos por revisar',conflict:'Cruces detectados'};
+  const filtered=data.items.filter(x=>!recommendGroup||x.group===recommendGroup);
+  for(const item of filtered.slice(0,recommendLimit)){
+   const row=node('article','apd-recommendation-row apd-recommendation-'+item.group);
+   row.append(node('strong','',[item.cargo,item.distrito].filter(Boolean).join(' · ')),node('p','apd-favorite-status',labels[item.group]));
+   const why=node('ul','apd-offer-fit-reasons');for(const reason of item.reasons)why.appendChild(node('li','',reason));row.appendChild(why);
+   if(item.horas_hasta_cierre!==null)row.appendChild(node('p','apd-comparator-hint','Cierre informado en '+item.horas_hasta_cierre+' h'));
+   if(item.pid_puntaje_panel!==null)row.appendChild(node('p','apd-comparator-hint','Tu puntaje informado: '+item.pid_puntaje_panel+' · '+(item.pid_listado||'Listado sin confirmar')));
+   if(item.km!==null)row.appendChild(node('p','apd-comparator-hint',item.km+' km en línea recta desde domicilio verificado; no es distancia de viaje.'));
+   row.appendChild(button('Simular oferta',()=>{if(section.isConnected&&state.privatePlannerAllowed)openWeekSimulator(item.source_offer_key);}));
+   list.appendChild(row);
+  }
+  if(!filtered.length)list.appendChild(node('p','apd-comparator-hint','No hay ofertas en este grupo.'));
+  if(filtered.length>recommendLimit)list.appendChild(button('Mostrar más ('+(filtered.length-recommendLimit)+' restantes)',()=>{recommendLimit+=10;draw();}));
+ };
+ for(const [label,opts,current,change] of [
+ ['Distrito',[['','Cualquiera'],...options('distrito')],recommendDistrict,v=>{recommendDistrict=v;}],
+ ['Turno',[['','Cualquiera'],...options('turno')],recommendTurn,v=>{recommendTurn=v;}],
+ ['Orden dentro de cada grupo',[['cierre','Próximo cierre'],['distancia','Distancia conocida en línea recta']],recommendSort,v=>{recommendSort=v;}],
+ ['Mostrar',[['','Todas'],['observed','Coincidencias observadas'],['review','Por revisar'],['conflict','Cruces detectados']],recommendGroup,v=>{recommendGroup=v;}]])
+  tools.appendChild(makeSelect(label,opts,current,v=>{change(v);recommendLimit=10;draw();}));
+ section.append(tools,result,list);
+ section.addEventListener('toggle',()=>{if(section.isConnected){recommendOpen=section.open;if(section.open)draw();}});
+ if(section.open)draw();return section;
+}
+
 function render(){
  if(!root)return;
  // Editing an existing job invalidates previously verified distances.
@@ -640,6 +682,7 @@ function render(){
  if(root.hidden)return;
  if(state.privatePlannerAllowed)root.appendChild(renderFavorites());
  if(!state.available.length)return;
+ if(state.privatePlannerAllowed)root.appendChild(renderRecommendations());
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
  heading.tabIndex=-1;
@@ -863,7 +906,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null}={}) {
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
- if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';}
+ if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
  state.privatePlannerAllowed=entitled;
  state.enabled=enabled===true;
  if(!state.enabled){
@@ -905,6 +948,7 @@ function reset() {
  applicantObserver?.disconnect();
  observedApplicants.clear();
  favorites.clear();favoriteVisible=new Set();favoritesOpen=false;favoriteMessage='';
+ recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;
  closeComparisonDialog();
  invalidateGeo();
  state.enabled=false;state.privatePlannerAllowed=false;
