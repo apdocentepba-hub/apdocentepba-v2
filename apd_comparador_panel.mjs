@@ -6,6 +6,7 @@ import {assessOfferDecisionSignals} from './scripts/apd-offer-decision-signals.m
 import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluacion.mjs?v=20261112-dothour1';
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
+import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-economics1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -290,6 +291,7 @@ function openWeekSimulator(key){
    }
    body.appendChild(days);
   }
+  body.appendChild(createOfferEconomics());
  }
  dialog.appendChild(body);document.body.appendChild(dialog);
  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
