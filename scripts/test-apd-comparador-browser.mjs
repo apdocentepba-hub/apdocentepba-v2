@@ -187,6 +187,7 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-account-favorites-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-core.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
+  '/scripts/apd-application-diary-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary-client.mjs')},
   '/scripts/apd-application-diary-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary-ui.mjs')},
   '/scripts/apd-application-diary.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary.mjs')},
   '/scripts/apd-week-optimizer-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer-ui.mjs')},
@@ -1538,6 +1539,49 @@ try{
  await js('window.APD_comparatorReset();true');
  assert.equal(await js('window.APD_filterAlertsBySchedule(window.__careerOffers,window.__careerFilterPlan)'),null,'Reset clears private career context');
  results.push({confirmed_career_filter:true,career_revocation:true,legacy_storage_untouched:true});
+ // Candidate authenticated diary: exercise the real client and comparator UI.
+ await js(`(async()=>{
+  const {createApplicationDiaryClient}=await import('/scripts/apd-application-diary-client.mjs');
+  const {updateApplicationDiary}=await import('/scripts/apd-application-diary.mjs');
+  const database=new Map();
+  const fetcher=async (url,init)=>{
+   if(url!=='https://diary.example.invalid/api/account/application-diary')throw Error('Unexpected diary URL');
+   const owner=init.headers.Authorization.split(' ')[1].split(':')[0];
+   let row=database.get(owner)||{entries:[],revision:0};
+   if(init.method==='PUT'){
+    const result=updateApplicationDiary(row,JSON.parse(init.body));
+    if(!result.ok)return new Response('{}',{status:409});
+    row=result.record;
+    database.set(owner,row);
+   }
+   return Response.json({ok:true,diary:row});
+  };
+  window.__renderDiary=(token)=>{
+   const diaryClient=createApplicationDiaryClient({base:'https://diary.example.invalid',getToken:()=>token,fetcher});
+   window.APD_comparatorReset();
+   window.APD_comparatorRefresh({offers:[{source_offer_key:'D_901',descripcioncargo:'Matemática de ensayo'}],enabled:true,planInfo:window.__careerFilterPlan,diaryClient});
+   const diary=document.querySelector('.apd-application-diary');
+   diary.open=true;
+   diary.querySelector('button').click();
+  };
+  window.__renderDiary('a:first');
+  return true;
+ })()`);
+ await until('!document.querySelector(".apd-application-diary form").hidden');
+ await js(`(()=>{
+  const diary=document.querySelector('.apd-application-diary');
+  diary.querySelectorAll('select')[1].value='postulada';
+  diary.querySelector('form').requestSubmit();
+  return true;
+ })()`);
+ await until('document.querySelector(".apd-application-diary li").textContent.includes("Postulada")');
+ await js('window.__renderDiary("b:first");true');
+ await until('!document.querySelector(".apd-application-diary form").hidden');
+ assert.match(await js('document.querySelector(".apd-application-diary summary").textContent'),/\(0\)/);
+ await js('window.__renderDiary("a:second");true');
+ await until('document.querySelector(".apd-application-diary li").textContent.includes("Postulada")');
+ await js('window.APD_comparatorReset();true');
+ results.push({diary_account_client:true,other_account_isolated:true,new_session_readback:true});
  // Candidate persistent UI: explicit read, account removal, hidden offers, reset.
  await js(`(()=>{
   const plan={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};

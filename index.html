@@ -324,6 +324,8 @@ document.addEventListener('DOMContentLoaded',function(){
  const resetCareer=()=>{careerCoordinator?.reset();accountCareerClient=null;const host=document.getElementById('apd-perfil-carrera');if(host){host.hidden=true;host.replaceChildren();}};
  const accountFavoritesReleaseEnabled=true;
  let accountFavoriteClient=null,favoriteLoading=false;
+ const accountDiaryReleaseEnabled=false;
+ let accountDiaryClient=null,diaryLoading=false;
  const sync=function(){
   // A bearer is never forwarded to the comparison module or stored on disk.
   const owner=typeof dashboardLoadedOwner==='string'?dashboardLoadedOwner:null;
@@ -332,6 +334,7 @@ document.addEventListener('DOMContentLoaded',function(){
    previousOwner=owner;previousBearer=bearer;
    resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
+   accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
   }
   const allowed=!!owner&&!!bearer&&typeof obtenerToken==='function'&&obtenerToken()===owner&&
@@ -339,6 +342,7 @@ document.addEventListener('DOMContentLoaded',function(){
   if(!allowed){
    resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
+   accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
    comparison.hidden=true;
    return;
@@ -365,6 +369,16 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{favoriteLoading=false;});
   }
+  if(accountDiaryReleaseEnabled&&!accountDiaryClient&&!diaryLoading){
+   diaryLoading=true;
+   import('./scripts/apd-application-diary-client.mjs?v=20261124-diary2').then(({createApplicationDiaryClient})=>{
+    diaryLoading=false;
+    const getToken=()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true?bearer:null;
+    if(!getToken()){sync();return;}
+    accountDiaryClient=createApplicationDiaryClient({base:API_URL,getToken});
+    sync();
+   }).catch(()=>{diaryLoading=false;});
+  }
   if(accountCareerReleaseEnabled&&!accountCareerClient&&!careerLoading){
    careerLoading=true;
    Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261124-career2'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261124-career2'),import('./scripts/apd-career-school-loader.mjs?v=20261124-career2'),import('./scripts/apd-career-school-manifest.mjs?v=20261124-registry1')]).then(async ([{createCareerClient},{createCareerPanelCoordinator},{loadReviewedSchoolCatalog},{CAREER_SCHOOL_MANIFEST}])=>{
@@ -388,11 +402,11 @@ document.addEventListener('DOMContentLoaded',function(){
     .catch(()=>{mapLoading=false;});
   }
   if(typeof window.APD_comparatorRefresh==='function'){
-   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true},careerContext:accountCareerReleaseEnabled?{enabled:true,getRecord:()=>accountCareerClient?.peek()??null,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true}:null});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient,accountScheduleReleaseEnabled);}
+   try{window.APD_comparatorRefresh({offers,index,enabled:true,planInfo:planActual,favoriteMode:accountFavoritesReleaseEnabled,favoriteClient:accountFavoriteClient,historyContext:{fetchSummary:(days,signal)=>workerFetchJson('/api/historico-resumen?days='+encodeURIComponent(days),{signal,cache:'no-store',redirect:'error'}),isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true},careerContext:accountCareerReleaseEnabled?{enabled:true,getRecord:()=>accountCareerClient?.peek()??null,isCurrent:()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true}:null,diaryClient:accountDiaryClient});window.APD_renderProfileSchedule?.(planActual,accountScheduleClient,accountScheduleReleaseEnabled);}
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios'))&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-diary1')
+   import('./apd_comparador_panel.mjs?v=20261124-diary2')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
