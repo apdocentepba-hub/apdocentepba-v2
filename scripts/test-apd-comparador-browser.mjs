@@ -122,10 +122,10 @@ const liveScheduleHtml=html.replace(legacyBootstrap.replace('const accountSchedu
 const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
 assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
 const accountHomes=new Map([
- ['SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
+ ['BEARER_SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
   georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 123, Wilde, Buenos Aires',
    height:123,lat:-34.7,lon:-58.32,scope:'partido',reviewed:true}}],
- ['SYNTHETIC_HOME_B',{address_text:'Calle de prueba 456, Quilmes, Buenos Aires',
+ ['BEARER_SYNTHETIC_HOME_B',{address_text:'Calle de prueba 456, Quilmes, Buenos Aires',
   georef:{source:'GEOREF_AR_V2',label:'Calle de prueba 456, Quilmes, Buenos Aires',
    height:456,lat:-34.74,lon:-58.27,scope:'partido',reviewed:true}}]
 ]);
@@ -1218,8 +1218,8 @@ try{
   assert.equal(await js('window.APD_accountHome.peek()?.address_text'),
    'Calle de prueba 456, Quilmes, Buenos Aires',
    'Real document reload must recover the same saved account address');
-  assert.equal(accountRequests.filter(x=>x.bearer==='SYNTHETIC_HOME_A').length,1);
-  assert.equal(accountRequests.filter(x=>x.bearer==='SYNTHETIC_HOME_B').length,2);
+  assert.equal(accountRequests.filter(x=>x.bearer==='BEARER_SYNTHETIC_HOME_A').length,1);
+  assert.equal(accountRequests.filter(x=>x.bearer==='BEARER_SYNTHETIC_HOME_B').length,2);
   assert.equal(accountRequests.some(x=>!accountHomes.has(x.bearer)),false,
    'No account endpoint requests may run without a synthetic valid session');
 
