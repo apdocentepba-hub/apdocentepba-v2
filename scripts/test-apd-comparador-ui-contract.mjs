@@ -162,7 +162,7 @@ test('filtro horario conserva solo ofertas verificables que encajan con toda la 
 });
 
 test('la grilla semanal se monta en Mi cuenta aunque no haya ofertas',()=>{
-  assert.match(html,/<div class="panel-card span-4"><div class="card-lbl">[^<]*Mi cuenta<\/div><div id="panel-datos-docente">[\s\S]*?<\/div><div id="apd-perfil-horarios"><\/div><\/div>/);
+  assert.match(html,/<div class="panel-card span-4"><div class="card-lbl">[^<]*Mi cuenta<\/div><div id="panel-datos-docente">[\s\S]*?<\/div><div id="apd-perfil-horarios"><\/div><section id="apd-perfil-carrera" hidden><\/section><\/div>/);
   assert.equal((html.match(/id="apd-perfil-horarios"/g)||[]).length,1);
   assert.doesNotMatch(app,/<div id="apd-perfil-horarios"/);
   assert.match(html,/app_v2\.js\?v=20&rev=20261124-perfil/);
