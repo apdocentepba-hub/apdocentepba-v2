@@ -770,3 +770,42 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 #apd-alert-schedule-controls .apd-schedule-edit{border:0;background:transparent;color:#24538a;font:inherit;font-size:12px;font-weight:750;min-height:32px;padding:4px 6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 #apd-alert-schedule-controls button:focus-visible{outline:2px solid #2369b3;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){#apd-alert-schedule-controls .apd-schedule-thumb{transition:none}}
+
+/* Career simulator: shared time axis, concise semantic verdict, local manual pay comparison. */
+.apd-week-verdict{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid #cbd9e8;border-radius:12px;background:#f0f5fc;color:#23466e;margin:10px 0}
+.apd-week-verdict strong{font-size:16px}.apd-week-verdict span{font-size:12px}
+.apd-week-verdict-no-overlap{background:#eaf7ef;color:#185b3e;border-color:#b5dbc5}
+.apd-week-verdict-overlap{background:#fff1f1;color:#9e3030;border-color:#efc6c6}
+.apd-week-verdict-unverified,.apd-week-verdict-tight-transition{background:#fff8e8;color:#79511b;border-color:#efd8ad}
+.apd-week-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:12px 0}
+.apd-week-key{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#415772}
+.apd-week-key::before{content:'';width:11px;height:11px;border-radius:3px;background:#4878b8}
+.apd-week-key-offer::before,.apd-week-segment-offer{background:#159078!important}
+.apd-week-key-overlap::before,.apd-week-segment-overlap{background:#c94c4c!important}
+.apd-week-key-unknown::before,.apd-week-module-chip{background:#fae8b8;color:#79511b}
+.apd-week-days.apd-week-visual-days{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.apd-week-visual-day{padding:10px;min-width:0;border:1px solid #d7e2ee;border-radius:10px}
+.apd-week-visual-day h3{font-size:14px;margin:0 0 5px}
+.apd-week-ruler{font-size:10px;color:#586c82;margin-bottom:5px}
+.apd-week-bar-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(70px,auto);align-items:center;gap:7px;margin:4px 0}
+.apd-week-track{position:relative;height:9px;background:#eaf0f7;border-radius:3px;min-width:0;overflow:hidden}
+.apd-week-segment{position:absolute;height:100%;top:0;background:#4878b8;border-radius:2px}
+.apd-week-clock{font-size:10px;color:#334e6c;line-height:1.35;overflow-wrap:anywhere;max-width:124px}
+.apd-week-unknown{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.apd-week-module-chip{font-size:11px;padding:2px 5px;border-radius:4px}
+.apd-week-explanation{font-size:12px;color:#52677f;margin:12px 0}
+.apd-week-explanation summary{cursor:pointer}
+.apd-salary-compare{border:1px solid #ceddeb;border-radius:12px;padding:12px;margin:12px 0}
+.apd-salary-compare-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.apd-salary-compare-form .apd-week-metrics{grid-column:1/-1}
+.apd-salary-compare-form button{grid-column:1/-1}
+@media(max-width:680px){.apd-week-days.apd-week-visual-days,.apd-salary-compare-form{grid-template-columns:minmax(0,1fr)}}
+
+.apd-career-tools{margin-bottom:14px}
+.apd-career-tools h3{font-size:15px;color:#173454;margin:0 0 10px}
+.apd-career-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.apd-career-tool{display:flex;flex-direction:column;gap:5px;align-items:flex-start;min-width:0;min-height:65px;text-align:left;border:1px solid #ccdbea;background:white;color:#183d65;border-radius:11px;padding:10px 12px;cursor:pointer;font:inherit}
+.apd-career-tool strong{font-size:13px;overflow-wrap:anywhere}
+.apd-career-tool span{font-size:11px;color:#526c84;overflow-wrap:anywhere}
+.apd-career-tool:disabled{background:#f4f7fa;cursor:default;opacity:.8}
+.apd-career-tool:focus-visible{outline:2px solid #2369b3;outline-offset:2px}
