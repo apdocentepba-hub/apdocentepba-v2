@@ -1068,7 +1068,7 @@ try{
    toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));
    field.value='Rondeau 319';
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-account-sync1');
+   const {clearPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1');
    clearPrivatePlanner();
    return true;
   })()`);
@@ -1186,7 +1186,7 @@ try{
    await until('window.APD_accountHome.ready()');
    assert.equal(await js('window.APD_accountHome.peek()?.address_text'),expected);
    const retrieved=await js(`(async()=>{
-    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-account-sync1');
+    const {loadPrivatePlanner}=await import('/scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1');
     const profile=loadPrivatePlanner();
     return {address:profile.domicile,source:profile.homeLocation?.source,
       reviewed:profile.homeLocation?.reviewed};
