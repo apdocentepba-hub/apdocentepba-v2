@@ -1063,8 +1063,8 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  confirmedCareerContext=entitled&&enabled&&careerContext?.enabled?careerContext:null;
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
- if(!entitled){clearPrivatePlanner();applicationDiary=emptyDiary();}
- if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
+ if(!entitled)clearPrivatePlanner();
+ if(!entitled){applicationDiary=emptyDiary();favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
  const nextMode=entitled&&favoriteMode===true;
  const nextClient=nextMode?favoriteClient:null;
  if(nextMode!==permanentFavorites||nextClient!==accountFavorites){clearAccountFavorites();favorites.clear();favoritesOpen=false;favoriteMessage='';permanentFavorites=nextMode;accountFavorites=nextClient;}
