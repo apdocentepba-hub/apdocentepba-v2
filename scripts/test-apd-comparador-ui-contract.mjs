@@ -201,3 +201,9 @@ test('permanent favorites enabled after authenticated live QA',()=>{
  assert.match(html,/if\(accountFavoritesReleaseEnabled&&!accountFavoriteClient&&!favoriteLoading\)/);
  assert.match(html,/accountFavoriteClient\?\.reset\(\)/);
 });
+
+test('account clients use the secure session bearer rather than the user ID',()=>{
+ assert.match(html,/window\.obtenerAuthBearer\(\)/);
+ assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,2);
+ assert.doesNotMatch(html,/getToken:\(\)=>[^\n]*\?obtenerToken\(\):null/);
+});
