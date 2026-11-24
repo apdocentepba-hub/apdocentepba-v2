@@ -15,3 +15,5 @@ Next phases:
 - Personal history: authenticated preferences and historical records; expired records visibly separate from active alerts.
 
 Acceptance: no production changes until actual baseline, schema/permission verification and staging. Regression checks on login, expiry, alerts, all plans and all notification channels.
+
+Phase 1 follow-up: existing form supports an explicitly injected account client; production mount remains unchanged until release. Reads never upload tab drafts. Existing account record is authoritative after retrieval, server error preserves selection, conflict blocks save until retrieval. SQL constraints reject duplicates, noncanonical dimensions and invalid IDs. Isolated PG17 workflow validates permissions, CAS predicate and cascade, not production storage.

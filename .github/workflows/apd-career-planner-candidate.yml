@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/*account-schedule*'
+      - 'scripts/apd-mi-jornada-ui.mjs'
+      - 'tests/sql/apd_account_schedule_pg17*.sql'
       - 'docs/sql/APD_ACCOUNT_SCHEDULE*'
       - '.github/workflows/apd-career-planner-candidate.yml'
 permissions:
@@ -10,6 +12,19 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,3 +36,11 @@ jobs:
       - run: |
           node scripts/build-account-schedule-worker-candidate.mjs
           node --check tmp/apd-account-schedule/worker-schedule-candidate.mjs
+      - name: PostgreSQL 17 isolated schema and CAS proof
+        env:
+          PGPASSWORD: fixture-only
+        run: |
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f docs/sql/APD_ACCOUNT_SCHEDULE_CANDIDATE_20261124.sql
+          psql -h localhost -U postgres -d fixture -v ON_ERROR_STOP=1 -f tests/sql/apd_account_schedule_pg17_assert.sql
+      - run: node --check scripts/apd-mi-jornada-ui.mjs
