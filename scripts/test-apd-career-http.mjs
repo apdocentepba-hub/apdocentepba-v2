@@ -25,8 +25,13 @@ async function disposableDatabase(request){
  const headers=new Headers(request.headers);
  headers.delete('Authorization');
  headers.delete('apikey');
- return fetch(local,{method:request.method,headers,redirect:'error',
+ const response=await fetch(local,{method:request.method,headers,redirect:'error',
   ...(request.body?{body:await request.arrayBuffer()}:{}),signal:request.signal});
+ if(!response.ok&&local.pathname.includes('application_diary')){
+  const error=await response.clone().json().catch(()=>({}));
+  console.error('Disposable diary storage error',local.pathname,response.status,error.code,error.message);
+ }
+ return response;
 }
 const options=scriptPath=>({
  modules:true,scriptPath,compatibilityDate:'2026-04-01',
@@ -101,6 +106,7 @@ try{
   return response.json();
  }
  assert.equal((await diaryRequest(null)).status,401);
+ assert.deepEqual((await diaryResult(await diaryRequest(tokenA))).diary,{entries:[],revision:0});
  const set={action:'set',key:'D_121',status:'postulada',revision:0};
  const race=await Promise.all([diaryRequest(tokenA,set),diaryRequest(tokenA,{...set,status:'retirada'})]);
  assert.deepEqual(race.map(response=>response.status).sort(),[200,409]);
