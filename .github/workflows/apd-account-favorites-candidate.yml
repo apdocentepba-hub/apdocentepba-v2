@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-account-favorites.mjs scripts/test-apd-favorite-offers.mjs
+      - run: node --test scripts/test-apd-account-favorites.mjs scripts/test-apd-account-favorites-storage.mjs scripts/test-apd-favorite-offers.mjs
       - name: PostgreSQL isolated schema and concurrent writes
         env:
           PGPASSWORD: fixture-only
