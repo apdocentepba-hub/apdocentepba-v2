@@ -5,6 +5,8 @@ on:
       - 'scripts/apd-career-*.mjs'
       - 'scripts/test-apd-career-account.mjs'
       - 'scripts/test-apd-career-editor-browser.mjs'
+      - 'scripts/test-apd-career-full-worker.mjs'
+      - 'scripts/build-apd-career-worker-candidate.mjs'
       - 'docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql'
       - 'tests/sql/apd_career_profile_assert.sql'
       - '.github/workflows/apd-career-account-candidate.yml'
@@ -31,6 +33,11 @@ jobs:
         run: |
           node --check scripts/apd-career-editor-ui.mjs
           node --test scripts/test-apd-career-account.mjs scripts/test-apd-week-simulator.mjs
+      - name: Build isolated Worker and verify routing
+        run: |
+          node scripts/build-apd-career-worker-candidate.mjs
+          node --check tmp/apd-career/worker-career-candidate.mjs
+          node scripts/test-apd-career-full-worker.mjs
       - name: Real Chromium editor regression (synthetic accounts)
         run: node scripts/test-apd-career-editor-browser.mjs
       - name: PostgreSQL isolated CAS and grants
