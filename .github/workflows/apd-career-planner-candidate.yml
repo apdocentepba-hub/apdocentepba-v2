@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-account-schedule.mjs
+      - run: node --test scripts/test-apd-account-schedule.mjs scripts/test-apd-account-schedule-authenticated.mjs
       - run: |
           node scripts/build-account-schedule-worker-candidate.mjs
           node --check tmp/apd-account-schedule/worker-schedule-candidate.mjs
