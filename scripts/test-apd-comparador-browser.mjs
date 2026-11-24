@@ -306,7 +306,10 @@ try{
   await until('document.querySelectorAll(".apd-recommendation-row").length===6');
   assert.equal(await js('document.querySelectorAll(".apd-recommendation-observed").length'),0);
   assert.equal(await js('document.querySelectorAll(".apd-recommendation-review").length'),6);
-  await js(`(()=>{const f=document.querySelector('.apd-recommendations select:last-of-type');return !!f;})()`);
+  await js(`(()=>{const f=document.querySelectorAll('.apd-recommendations select')[3];f.value='observed';f.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  assert.equal(await js('document.querySelectorAll(".apd-recommendation-row").length'),0);
+  await js(`(()=>{const f=document.querySelectorAll('.apd-recommendations select')[3];f.value='';f.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  assert.equal(await js('document.querySelectorAll(".apd-recommendation-row").length'),6);
   // Simulated downgrade of SAME account; basic comparator remains available.
   await js(`(()=>{
    sessionStorage.setItem('apd_comparador_jornada_solo_pestana_v1',

@@ -21,10 +21,12 @@ test('full visible list beyond five; duplicates removed; no mutation',()=>{
  assert.equal(recommendOffers({now,profile,offers}).items.length,23);assert.equal(JSON.stringify(offers),before);
 });
 test('distance sort uses only exact ABC keys and exact home, unknown last',()=>{
- const p={...profile,homeLocation:{lat:-34.66,lon:-58.36,scope:'exacta',source:'manual',label:'Fixture'}};
+ const p={...profile,homeLocation:{lat:-34.66,lon:-58.36,scope:'exacta',source:'GEOREF_AR_V2',label:'Fixture 123, Avellaneda',height:123,reviewed:true}};
  const geo={clave:'0005MS0004',source:'ABC_WFS',exact_key_match:true,lat:-34.67,lon:-58.37};
  const r=recommendOffers({now,profile:p,sort:'distancia',verifiedGeoByKey:{'0005MS0004':geo,'0085MS0043':geo},offers:[offer('a',{escuela:'0085MS0043'}),offer('b',{escuela:'0005MS0004'})]});
  assert.equal(r.items.find(x=>x.source_offer_key==='a').km,null);
- // The existing home sanitizer owns the exact-home contract; a rejected point must stay unknown.
- assert.ok(r.items.find(x=>x.source_offer_key==='b').km===null||r.items[0].source_offer_key==='b');
+ assert.equal(r.items[0].source_offer_key,'b');
+ assert.ok(r.items[0].km>0);
+ const unverified=recommendOffers({now,profile:{...p,homeLocation:{...p.homeLocation,scope:'partido'}},verifiedGeoByKey:{'0005MS0004':geo},offers:[offer('b',{escuela:'0005MS0004'})]});
+ assert.equal(unverified.items[0].km,null);
 });
