@@ -187,6 +187,8 @@ const server=createServer(async(req,res)=>{
   '/scripts/apd-account-favorites-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-favorites-core.mjs')},
   '/scripts/apd-account-schedule-client.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-client.mjs')},
   '/scripts/apd-account-schedule-core.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-account-schedule-core.mjs')},
+  '/scripts/apd-application-diary-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary-ui.mjs')},
+  '/scripts/apd-application-diary.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-application-diary.mjs')},
   '/scripts/apd-week-optimizer-ui.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer-ui.mjs')},
   '/scripts/apd-week-optimizer.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-optimizer.mjs')},
   '/scripts/apd-week-simulator.mjs':{type:'text/javascript',body:readFileSync('scripts/apd-week-simulator.mjs')},
