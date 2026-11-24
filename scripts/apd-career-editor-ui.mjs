@@ -9,7 +9,8 @@ const field=(text,input)=>{const n=el('label',undefined,'apd-work-field');n.appe
 const input=(type,value='',max)=>{const n=el('input',undefined,'apd-work-input');n.type=type;n.value=value;if(max)n.maxLength=max;return n;};
 const select=(values,value)=>{const n=el('select',undefined,'apd-work-input');for(const [v,t] of values){const o=el('option',t);o.value=v;n.append(o);}n.value=value;return n;};
 export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>false,onConfirmed=()=>{}}){
- const legacy=validateModuleSchedule(legacyModules),root=el('section',undefined,'apd-career-editor');
+ let legacy=validateModuleSchedule(legacyModules);
+ const root=el('section',undefined,'apd-career-editor');
  const heading=el('h3','Mi carrera docente');const note=el('p','Cargos con horarios exactos. La grilla anterior se conserva; los módulos sin asignar quedan señalados.','apd-comparator-hint');
  const status=el('p','Recuperando carrera…');status.setAttribute('role','status');
  const form=el('form'),years=input('number');years.min='0';years.max='80';years.step='1';years.required=true;
@@ -29,6 +30,7 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
  function setBusy(v){busy=v;for(const n of form.querySelectorAll('input,select,button'))n.disabled=v||!loaded||!current();save.disabled=v||!loaded||!current()||conflict||!!uncertain||!client?.peek();reload.disabled=v||!current();discard.disabled=v||!current();verify.disabled=v||!current();}
  function preview(){
   grid.replaceChildren();
+  for(const caption of rows.querySelectorAll('[data-module-caption]'))caption.textContent=caption.dataset.baseCaption+(legacy.includes(caption.dataset.moduleCaption)?' · ocupado':'');
   const positions=[...rows.children].map(n=>n.read());
   const assigned=new Map();positions.forEach((p,i)=>p.modules.forEach(m=>{const a=assigned.get(m)||[];a.push(i);assigned.set(m,a);}));
   summary.textContent=positions.length+' cargos · '+legacy.filter(m=>!assigned.has(m)).length+' módulos anteriores sin asignar';
@@ -72,7 +74,7 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
    const section=el('div',undefined,'apd-career-module-choices');
    for(let m=shift==='M'?1:0;m<=5;m++)for(let d=1;d<=7;d++){
     const key=shift+m+'-'+d,check=input('checkbox',key);check.checked=p?.modules?.includes(key)||false;checks.push(check);
-    const label=el('label');label.append(check,el('span',days[d-1]+' '+shift+(m===0?' Pre':m)+(legacy.includes(key)?' · ocupado':'')));section.append(label);
+    const label=el('label');const caption=el('span',days[d-1]+' '+shift+(m===0?' Pre':m));caption.dataset.moduleCaption=key;caption.dataset.baseCaption=caption.textContent;label.append(check,caption);section.append(label);
    }
    modules.append(section);
   }
@@ -116,5 +118,7 @@ export function mountCareerEditor(host,{client,legacyModules=[],isCurrent=()=>fa
   finally{if(current()){setBusy(false);}}
  });
  setBusy(false);queueMicrotask(()=>void load(false));
- return ()=>{root.remove();};
+ const dispose=()=>{root.remove();};
+ dispose.updateLegacy=modules=>{if(!current())return;legacy=validateModuleSchedule(modules);preview();};
+ return dispose;
 }
