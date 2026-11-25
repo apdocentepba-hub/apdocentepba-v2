@@ -23,7 +23,8 @@ export function stageTrialHelpers(source){
   assert.match(old,/\bTRIAL_7D\b/);
   assert.match(old,/user_subscriptions/);
   assert.ok(old.endsWith('\n}'),'Unexpected closing boundary');
-  const fresh='async function '+m[1]+'(env, userId, email, source) {\n  return await apdClaimCompleteTrialV1(env,userId);\n}';
+  const legacy=old.replace('function '+m[1]+'(','function apdLegacy_'+m[1]+'(');
+  const fresh=legacy+'\nasync function '+m[1]+'(env, userId, email, source) {\n  const catalog=await supabaseSelect(env,"subscription_plans?select=code,price_ars,trial_days,max_distritos,max_cargos,is_active");\n  if(!apdCommercialCoreV1.ready(catalog))return await apdLegacy_'+m[1]+'(env,userId,email,source);\n  return await apdClaimCompleteTrialV1(env,userId);\n}';
   replacements.push({name:m[1],old,fresh});
  }
  assert.ok(!source.includes('apdClaimCompleteTrialV1'),'Candidate already inserted');

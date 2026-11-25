@@ -1,4 +1,5 @@
 import test from 'node:test';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {claimCompleteTrial as claim} from './apd-commercial-trial-adapter.mjs';
 import {stageTrialHelpers,verifyTrialCandidateSyntax,assertObservedFingerprint} from './apd-commercial-stage-trial.mjs';
@@ -13,6 +14,20 @@ test('network/HTTP errors cannot pretend trial created',async()=>{await assert.r
 test('bad identity, URL, or key rejected before network',async()=>{for(const [e,u] of [[env,'bad'],[{...env,SUPABASE_URL:'http://fixture.invalid'},id],[{...env,SUPABASE_URL:'https://fixture.invalid/x'},id],[{...env,SUPABASE_SERVICE_ROLE_KEY:''},id]])await assert.rejects(claim(e,u,async()=>assert.fail('network forbidden')));});
 const helper=n=>'async function '+n+'(env, userId) {\n  return env.insert("user_subscriptions", "TRIAL_7D");\n}\n__name('+n+', "'+n+'");\n';
 const source=helper('ensureTrialIfNoSubscriptions')+helper('ensureTrialIfNoSubscriptions2')+'export default {};\n';
-test('two helpers replaced and syntax checked, all unrelated source reversible',()=>{const result=stageTrialHelpers(source);assert.equal(result.helpers.length,2);assert.equal(result.unrelatedBytesPreserved,true);assert.doesNotMatch(result.candidate,/env.insert/);verifyTrialCandidateSyntax(result.candidate);});
+test('two helpers replaced and syntax checked, all unrelated source reversible',()=>{const result=stageTrialHelpers(source);assert.equal(result.helpers.length,2);assert.equal(result.unrelatedBytesPreserved,true);assert.match(result.candidate,/apdLegacy_ensureTrialIfNoSubscriptions/);verifyTrialCandidateSyntax(result.candidate);});
 test('unrecognized, duplicate, missing, or already patched helper fails closed',()=>{for(const s of ['export default {};',helper('ensureTrialIfNoSubscriptions3'),source+helper('ensureTrialIfNoSubscriptions'),source+'// apdClaimCompleteTrialV1'])assert.throws(()=>stageTrialHelpers(s));});
 test('reject changed active fingerprint',()=>{assert.throws(()=>assertObservedFingerprint(Buffer.from('x'),{version:'wrong'},{observed_active_version:'expected'}));});
+
+test('inactive catalog delegates exactly once to legacy; enabled catalog claims new trial; partial activation fails closed',async()=>{
+ let mode='inactive',legacyCalls=0,rpcCalls=0;
+ const ctx={__name:()=>{},supabaseSelect:async()=>mode,apdCommercialCoreV1:{ready:c=>{if(c==='partial')throw Error('Partial activation');return c==='enabled';}},URL,AbortSignal,fetch:async()=>{rpcCalls++;return reply(ok);}};
+ const input=source.replace('export default {};','');
+ vm.runInNewContext(stageTrialHelpers(input).candidate,ctx);
+ const fixtureEnv={...env,insert:()=>{legacyCalls++;return {legacy:true};}};
+ for(const name of ['ensureTrialIfNoSubscriptions','ensureTrialIfNoSubscriptions2']){
+  mode='inactive';assert.equal((await ctx[name](fixtureEnv,id)).legacy,true);
+  mode='enabled';assert.equal((await ctx[name](fixtureEnv,id)).created,true);
+  mode='partial';await assert.rejects(ctx[name](fixtureEnv,id));
+ }
+ assert.equal(legacyCalls,2);assert.equal(rpcCalls,2);
+});
