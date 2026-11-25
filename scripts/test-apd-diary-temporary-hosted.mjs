@@ -45,8 +45,28 @@ if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
   if(process.argv.includes('--self-test'))await selfTest();
   else{
    const t=temporaryTransport({base:process.env.APD_DIARY_QA_URL,key:process.env.APD_DIARY_QA_ACCESS_KEY});
-   const unauthenticated=await fetch(t.base+'/api/account/application-diary',{redirect:'error',signal:AbortSignal.timeout(15000)});
-   assert.equal(unauthenticated.status,404,'Preview must reject missing outer QA key');
+   const endpoint=t.base+'/api/account/application-diary';
+   const stage=r=>{const s=r.headers.get('X-APD-QA-Stage');return ['guard','configuration','application'].includes(s)?s:'edge';};
+   const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+   let ready=false;
+   for(let i=0;i<20;i++){
+    const outer=await fetch(endpoint,{redirect:'error',signal:AbortSignal.timeout(10000)});
+    const outerStage=stage(outer);
+    await outer.body?.cancel();
+    console.log('APD_QA_WORKER_OUTER '+JSON.stringify({status:outer.status,stage:outerStage,attempt:i+1}));
+    if(outerStage==='edge'){await delay(1500);continue;}
+    assert.equal(outerStage,'guard','Preview configuration or outer guard failed');
+    assert.equal(outer.status,404,'Preview must reject missing outer QA key');
+    const inner=await t.fetcher(endpoint,{method:'GET',headers:{Origin:'https://alertasapd.com.ar'},signal:AbortSignal.timeout(10000)});
+    const innerStage=stage(inner);
+    await inner.body?.cancel();
+    console.log('APD_QA_WORKER_INNER '+JSON.stringify({status:inner.status,stage:innerStage}));
+    assert.equal(innerStage,'application','Authenticated QA probe did not reach application');
+    assert.equal(inner.status,401,'Application must reject missing account session');
+    ready=true;break;
+   }
+   assert.ok(ready,'Preview route did not become ready');
+
    await verifyHostedDiary({...t,tokens:[process.env.APD_DIARY_QA_SESSION_A,process.env.APD_DIARY_QA_SESSION_A_NEW,process.env.APD_DIARY_QA_SESSION_B]});
    console.log('APD_DIARY_TEMPORARY_HOSTED_PASS');
   }
