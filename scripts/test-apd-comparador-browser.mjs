@@ -1,5 +1,6 @@
 // Standalone headless Chromium E2E. Only localhost requests; all offers synthetic.
 import assert from 'node:assert/strict';
+import {updateApplicationDiary} from './apd-application-diary.mjs';
 import {createServer} from 'node:http';
 import {spawn,spawnSync} from 'node:child_process';
 import {existsSync,mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -37,7 +38,7 @@ let dashboardLoadedOwner=null;
 let planActual={access_active:false};
 window.alertasState={items:[],index:0};
 window.__testToken=null;
-window.API_URL=location.search.includes('favorites=1')?'https://fixture.invalid':location.origin;
+window.API_URL=(location.search.includes('favorites=1')||location.search.includes('diary=1'))?'https://fixture.invalid':location.origin;
 function obtenerToken(){return window.__testToken;}
 window.obtenerAuthBearer=()=>window.__testToken?'BEARER_'+window.__testToken:'';
 window.__historyCalls=0;window.__historyHold=false;window.__historyRelease=null;
@@ -121,6 +122,10 @@ window.fetch=async (target,opts={})=>{
 <script>${legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;')}</script></body></html>`;
 const liveScheduleHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),legacyBootstrap);
 const liveFavoritesHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),bootstrap);
+const diaryBootstrap=legacyBootstrap.replace('const accountDiaryReleaseEnabled=false;','const accountDiaryReleaseEnabled=true;')
+ .replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;');
+const liveDiaryHtml=html.replace(legacyBootstrap.replace('const accountScheduleReleaseEnabled=true;','const accountScheduleReleaseEnabled=false;'),diaryBootstrap);
+assert.notEqual(liveDiaryHtml,html,'exercise the diary release flag in the isolated page only');
 assert.notEqual(liveScheduleHtml,html,'release-enabled bootstrap must be exercised separately');
 const accountHomes=new Map([
  ['BEARER_SYNTHETIC_HOME_A',{address_text:'Calle de prueba 123, Wilde, Buenos Aires',
@@ -133,8 +138,24 @@ const accountHomes=new Map([
 const accountRequests=[];
 const scheduleRequests=[],scheduleRows=new Map();
 const favoriteRequests=[],favoriteRows=new Map();
+const diaryRequests=[],diaryRows=new Map();
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
+ if(pathname==='/api/account/application-diary'){
+  const bearer=String(req.headers.authorization||'');
+  const owner=({'Bearer BEARER_DIARY_A':'A','Bearer BEARER_DIARY_A_NEW':'A','Bearer BEARER_DIARY_B':'B'})[bearer];
+  let status=owner?200:401;
+  let row=diaryRows.get(owner)||{entries:[],revision:0};
+  diaryRequests.push({method:req.method,owner});
+  if(owner&&req.method==='PUT'){
+   let raw='';for await(const chunk of req)raw+=chunk;
+   const result=updateApplicationDiary(row,JSON.parse(raw));
+   if(!result.ok)status=409;
+   else{row=result.record;diaryRows.set(owner,row);}
+  }
+  res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});
+  return res.end(JSON.stringify(status===200?{ok:true,diary:row}:{ok:false}));
+ }
  if(pathname==='/api/account/favorites'){
   const bearer=String(req.headers.authorization||'').replace(/^Bearer /,'');
   const allowed=['BEARER_SYNTHETIC_FAVORITES_A','BEARER_SYNTHETIC_FAVORITES_B'].includes(bearer);
@@ -175,7 +196,7 @@ const server=createServer(async(req,res)=>{
   return;
  }
  const paths={
-  '/':{type:'text/html',body:url.searchParams.has('favorites')?liveFavoritesHtml:url.searchParams.has('schedule')?liveScheduleHtml:html},
+  '/':{type:'text/html',body:url.searchParams.has('diary')?liveDiaryHtml:url.searchParams.has('favorites')?liveFavoritesHtml:url.searchParams.has('schedule')?liveScheduleHtml:html},
   '/account_home_reference_patch.js':{type:'text/javascript',body:readFileSync('account_home_reference_patch.js')},
   '/apd_comparador_panel.mjs':{type:'text/javascript',body:readFileSync('apd_comparador_panel.mjs')},
   '/apd_offer_school_map_overlay.mjs':{type:'text/javascript',body:readFileSync('apd_offer_school_map_overlay.mjs')},
@@ -1637,6 +1658,42 @@ try{
   assert.equal(favoriteRequests.filter(x=>x.method==='PUT').length,2);
   results.push({width,actual_favorites_bootstrap:true,account_switch_isolation:true,empty_carousel_access:true});
  }
+ // Use the actual gated bootstrap, including a fresh page with no visible offers.
+ const diaryPage='http://127.0.0.1:'+port+'/?diary=1';
+ const logIntoDiary=(owner,offers)=>js(`(()=>{
+  dashboardLoadedOwner=${JSON.stringify(owner)};window.__testToken=dashboardLoadedOwner;
+  planActual={ok:true,access_active:true,plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'active',source:'mercadopago_checkout'}};
+  window.alertasState={items:${JSON.stringify(offers)},index:0};
+  document.getElementById('panel-alertas').textContent='Cuenta de ensayo';
+  return true;
+ })()`);
+ const openDiary=async()=>{
+  await until('!!document.querySelector(".apd-application-diary button") && !document.getElementById("apd-comparador-panel").hidden');
+  await js('document.querySelector(".apd-application-diary").open=true;document.querySelector(".apd-application-diary button").click();true');
+  await until('document.querySelector(".apd-application-diary [role=status]").textContent.includes("actualizado")');
+ };
+ await cdp('Page.navigate',{url:diaryPage});
+ await until('document.readyState==="complete"');
+ await logIntoDiary('DIARY_A',[{source_offer_key:'D_123',cargo:'Matemática'}]);
+ assert.equal(diaryRequests.length,0);
+ await openDiary();
+ await js(`(()=>{
+  const diary=document.querySelector('.apd-application-diary');
+  diary.querySelectorAll('select')[1].value='postulada';
+  diary.querySelector('form').requestSubmit();
+  return true;
+ })()`);
+ await until('document.querySelector(".apd-application-diary li").textContent.includes("Postulada")');
+ await cdp('Page.navigate',{url:diaryPage});
+ await until('document.readyState==="complete"');
+ await logIntoDiary('DIARY_B',[]);
+ await openDiary();
+ assert.match(await js('document.querySelector(".apd-application-diary summary").textContent'),/\(0\)/);
+ await logIntoDiary('DIARY_A_NEW',[]);
+ await openDiary();
+ assert.match(await js('document.querySelector(".apd-application-diary li").textContent'),/Postulada/);
+ assert.equal(diaryRequests.filter(request=>request.method==='PUT').length,1);
+ results.push({actual_diary_bootstrap:true,no_offer_access:true,new_session_readback:true});
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
  for(const p of pending.values()){clearTimeout(p.t);p.reject(Error('Browser stopping'));}
