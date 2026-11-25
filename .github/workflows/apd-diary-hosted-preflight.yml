@@ -2,7 +2,7 @@ name: APD diary hosted preflight (read only)
 on:
   pull_request:
     types: [synchronize]
-    paths: ['.github/workflows/apd-diary-hosted-preflight.yml', 'scripts/apd-diary-qa-db-gateway.mjs', 'scripts/apd-diary-qa-worker-guard.mjs', 'scripts/test-apd-diary-qa-worker-guard.mjs']
+    paths: ['.github/workflows/apd-diary-hosted-preflight.yml', 'scripts/apd-diary-qa-db-gateway.mjs', 'scripts/apd-diary-qa-worker-guard.mjs', 'scripts/test-apd-diary-qa-worker-guard.mjs', 'scripts/test-apd-diary-temporary-hosted.mjs']
 permissions:
   contents: read
 jobs:
@@ -21,6 +21,8 @@ jobs:
         run: node scripts/apd-diary-qa-db-gateway.mjs --self-test
       - name: Verify preview Worker guard locally
         run: node scripts/test-apd-diary-qa-worker-guard.mjs
+      - name: Verify temporary host client rejects production
+        run: node scripts/test-apd-diary-temporary-hosted.mjs --self-test
       - name: Inspect Cloudflare account without writes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -59,7 +61,7 @@ jobs:
             writes:0
           };
           console.log('APD_DIARY_HOSTED_PREFLIGHT '+JSON.stringify(report));
-          if(!report.qa_name_available||!report.production_worker_present||!report.expected_subdomain||(!report.subscriptions&&report.default_usage_model!=='free'))
-            throw Error('Hosting prerequisites not established; no deployment attempted');
-          console.log('APD_DIARY_HOSTED_METADATA_READY; billing interpretation and write access still require verification');
+          if(!report.qa_name_available||!report.production_worker_present||!report.expected_subdomain||(!report.subscriptions&&report.default_usage_model!=='free')){
+            console.log('APD_DIARY_PERMANENT_ACCOUNT_BLOCKED; no deployment attempted');
+          }else console.log('APD_DIARY_HOSTED_METADATA_READY; billing interpretation and write access still require verification');
           JS
