@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialEffectivePreferences} from './apd-commercial-stage-preferences.mjs';
 import {stageCommercialCheckout} from './apd-commercial-stage-checkout.mjs';
 import {stageCommercialPayment} from './apd-commercial-stage-payment.mjs';
 import {stageCommercialTools} from './apd-commercial-stage-tools.mjs';
@@ -70,6 +71,9 @@ async function main(){
  const checkoutStage=stageCommercialCheckout(paymentStage.candidate);
  verifyTrialCandidateSyntax(checkoutStage.candidate);
  console.log('APD_COMMERCIAL_CHECKOUT_STAGE '+JSON.stringify({functions:checkoutStage.functions,unrelatedBytesPreserved:checkoutStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
+ const preferencesStage=stageCommercialEffectivePreferences(checkoutStage.candidate);
+ verifyTrialCandidateSyntax(preferencesStage.candidate);
+ console.log('APD_COMMERCIAL_PREFERENCES_STAGE '+JSON.stringify({alertBuilder:preferencesStage.alertBuilder,readOnlyProjection:preferencesStage.readOnlyProjection,unrelatedBytesPreserved:preferencesStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){
