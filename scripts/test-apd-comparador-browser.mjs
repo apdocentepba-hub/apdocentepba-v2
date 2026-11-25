@@ -15,9 +15,12 @@ const output=path.resolve('tmp/apd-comparator-browser');
 mkdirSync(output,{recursive:true});
 const profile=mkdtempSync(path.join(tmpdir(),'apd-compare-chrome-'));
 const indexSource=readFileSync('index.html','utf8');
-const bootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+const releaseBootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
  .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
-assert.ok(bootstrap,'actual dashboard observer bootstrap must be present');
+assert.ok(releaseBootstrap,'actual dashboard observer bootstrap must be present');
+assert.match(releaseBootstrap,/const accountDiaryReleaseEnabled=(true|false);/);
+// Existing fixture scenarios remain isolated from diary; dedicated diary page enables actual client.
+const bootstrap=releaseBootstrap.replace('const accountDiaryReleaseEnabled=true;','const accountDiaryReleaseEnabled=false;');
 const legacyBootstrap=bootstrap.replace('const accountFavoritesReleaseEnabled=true;','const accountFavoritesReleaseEnabled=false;');
 const html=`<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

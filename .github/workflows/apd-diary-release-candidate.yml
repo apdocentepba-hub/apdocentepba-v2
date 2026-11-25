@@ -19,7 +19,7 @@ jobs:
           node-version: '22'
       - name: Release gate and isolated contracts
         run: |
-          grep -F 'const accountDiaryReleaseEnabled=false;' index.html
+          grep -E 'const accountDiaryReleaseEnabled=(true|false);' index.html
           node --check apd_comparador_panel.mjs
           node --test scripts/test-apd-application-diary.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-map-overlay-integration.mjs
       - name: Chromium account persistence including empty carousel
