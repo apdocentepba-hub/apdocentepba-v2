@@ -2,7 +2,7 @@ name: APD diary hosted preflight (read only)
 on:
   pull_request:
     types: [synchronize]
-    paths: ['.github/workflows/apd-diary-hosted-preflight.yml', 'scripts/apd-diary-qa-db-gateway.mjs']
+    paths: ['.github/workflows/apd-diary-hosted-preflight.yml', 'scripts/apd-diary-qa-db-gateway.mjs', 'scripts/apd-diary-qa-worker-guard.mjs', 'scripts/test-apd-diary-qa-worker-guard.mjs']
 permissions:
   contents: read
 jobs:
@@ -19,6 +19,8 @@ jobs:
           node-version: '22'
       - name: Verify authenticated fixture gateway locally
         run: node scripts/apd-diary-qa-db-gateway.mjs --self-test
+      - name: Verify preview Worker guard locally
+        run: node scripts/test-apd-diary-qa-worker-guard.mjs
       - name: Inspect Cloudflare account without writes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
