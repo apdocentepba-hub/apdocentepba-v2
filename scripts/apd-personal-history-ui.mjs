@@ -4,7 +4,7 @@ const el=(tag,txt,cls)=>{const n=document.createElement(tag);if(txt!==undefined)
 const date=v=>v?new Date(v).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'Sin fecha verificable';
 export function mountPersonalHistory(host,{fetchSummary,isCurrent}){
  let generation=0,controller=null;
- const root=el('section',undefined,'apd-history-personal');
+ const root=el('div',undefined,'apd-history-personal');
  root.append(el('h3','Tus oportunidades anteriores'),el('p','Según tus preferencias guardadas y las capturas disponibles. No es un historial de postulaciones ni una lista de ofertas activas.','apd-comparator-hint'));
  const form=el('form',undefined,'apd-history-tools'),label=el('label','Período '),select=el('select');
  select.setAttribute('aria-label','Período histórico');

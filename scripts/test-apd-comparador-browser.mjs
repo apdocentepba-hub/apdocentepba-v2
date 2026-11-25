@@ -15,6 +15,19 @@ const output=path.resolve('tmp/apd-comparator-browser');
 mkdirSync(output,{recursive:true});
 const profile=mkdtempSync(path.join(tmpdir(),'apd-compare-chrome-'));
 const indexSource=readFileSync('index.html','utf8');
+const appSource=readFileSync('app_v2.js','utf8');
+const realNavigate=appSource.match(/function mostrarSeccion\(id\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(realNavigate,'actual page navigation source must be present');
+function productionHost(id){
+ const match=indexSource.match(new RegExp('<(div|section) id="'+id+'"[^>]*></\\1>'));
+ assert.ok(match,'actual empty host required: '+id);
+ return match[0];
+}
+const productionCareerCard=indexSource.match(/<div id="apd-career-tools-card"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)?.[0];
+// Compose from the actual static host markup; do not substitute a test-only div.
+const actualCareerCardStart=indexSource.match(/<div id="apd-career-tools-card"[^>]*>/)?.[0];
+assert.ok(actualCareerCardStart);
+const actualCareerCard=actualCareerCardStart+productionHost('apd-career-tools-host')+productionHost('apd-personal-history')+'</div>';
 const releaseBootstrap=[...indexSource.matchAll(/<script>([\s\S]*?)<\/script>/g)]
  .find(match=>match[1].includes('new MutationObserver(sync)'))?.[1];
 assert.ok(releaseBootstrap,'actual dashboard observer bootstrap must be present');
@@ -29,12 +42,13 @@ const html=`<!doctype html><html lang="es"><head>
 #fixture{max-width:1050px;margin:auto;padding:16px;border-radius:12px;background:white}
 #panel-alertas .alerta-actions{display:flex;gap:8px}
 .btn{border:1px solid #99b1db;border-radius:9px;padding:8px;background:white}
+.hidden{display:none!important}
 </style></head><body><div id="fixture">
 <h2>Panel de Alertas APD — laboratorio</h2>
 <div id="panel-datos-docente"></div>
 <div id="apd-alert-schedule-controls" hidden></div>
 <div id="panel-alertas"><article class="alerta-main-card"><div class="alerta-actions"></div></article></div>
-<section id="apd-comparador-panel" class="apd-comparator-panel" hidden></section><section id="apd-personal-history" hidden></section>
+${productionHost('apd-comparador-panel')}${productionHost('apd-personal-history')}
 </div>
 <script>
 let dashboardLoadedOwner=null;
@@ -1682,9 +1696,16 @@ try{
  results.push({actual_diary_bootstrap:true,no_offer_access:true,new_session_readback:true});
  // Exercise the dedicated production mount without duplicating data or requests.
  await js(`(()=>{
-  const card=document.createElement('section');card.id='apd-career-tools-card';card.hidden=true;
-  const host=document.createElement('section');host.id='apd-career-tools-host';host.hidden=true;
-  card.append(host,document.getElementById('apd-personal-history'));document.body.append(card);
+  const main=document.createElement('main'),page=document.createElement('section');page.id='panel-docente';
+  main.append(page);document.body.append(main);page.append(document.getElementById('fixture'));
+  const oldHistory=document.getElementById('apd-personal-history');
+  const template=document.createElement('template');template.innerHTML=${JSON.stringify(actualCareerCard)};
+  const card=template.content.firstElementChild;
+  card.querySelector('#apd-personal-history').replaceWith(oldHistory);
+  page.append(card);
+  // Exercise the actual legacy navigation, including its class-based hiding.
+  ${realNavigate}
+  mostrarSeccion('panel-docente');
   window.__toolTab=null;window.APD_activatePanelTab=(key)=>{window.__toolTab=key;};
   document.getElementById('panel-alertas').textContent='Navegación de ensayo';return true;
  })()`);
@@ -1693,13 +1714,16 @@ try{
  assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-application-diary").length'),0);
  assert.match(await js('document.querySelector("#apd-career-tools-host .apd-application-diary li").textContent'),/Postulada/);
  assert.equal(await js('document.getElementById("apd-career-tools-card").hidden'),false);
+ assert.equal(await js('document.querySelector("#apd-career-tools-host .apd-career-tool").getClientRects().length>0'),true,'career buttons must be visually rendered after real page navigation');
+ assert.equal(await js('document.querySelector("#apd-career-tools-host .apd-application-diary summary").getClientRects().length>0'),true,'diary must actually be visible, not just in the DOM');
+ assert.equal(await js('document.querySelector("#apd-comparador-panel .apd-career-nav button").getClientRects().length>0'),true,'contextual tools shortcut must be visually rendered');
  await js('document.querySelector(".apd-career-nav button").click();true');
  assert.equal(await js('window.__toolTab'), 'repo');
  await js('window.APD_comparatorReset();true');
  assert.equal(await js('document.getElementById("apd-career-tools-card").hidden'),true);
  assert.equal(await js('document.getElementById("apd-career-tools-host").childElementCount'),0);
  assert.equal(diaryRequests.filter(request=>request.method==='PUT').length,1);
- results.push({unified_tools_mount:true,no_duplicate_diary:true,tab_navigation:true,private_mount_cleared:true});
+ results.push({unified_tools_mount:true,no_duplicate_diary:true,tab_navigation:true,private_mount_cleared:true,actual_navigation_visible:true});
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
  for(const p of pending.values()){clearTimeout(p.t);p.reject(Error('Browser stopping'));}
