@@ -14,7 +14,11 @@ test("anonymous source baseline recognizes whether V3 has already shipped",()=>{
  const knownOld=['20261102-unverified-plan','20261114-compact1'].map(rev=>'<script src="app_v2.js?v=20&rev='+rev+'"></script>');
  const recognized=[approvedApp,...knownOld].filter(tag=>before.includes(tag));
  assert.equal(recognized.length,1,"Baseline must carry one known canonical app source");
- const normalizedBefore=before.replace(recognized[0],approvedApp);
+ const approvedTabs='<script src="panel_tabs_patch.js?v=finalvisual3"></script>';
+ const oldTabs='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
+ const recognizedTabs=[approvedTabs,oldTabs].filter(tag=>before.includes(tag));
+ assert.equal(recognizedTabs.length,1,"Baseline must carry one known tab adapter");
+ const normalizedBefore=before.replace(recognized[0],approvedApp).replace(recognizedTabs[0],approvedTabs);
  const result=checkHtml(normalizedBefore,v3AlreadyPresent?"after":"before");
  assert.equal(result.new_asset_links,v3AlreadyPresent?2:0);
  assert.equal(result.forms_preserved,true);
@@ -44,3 +48,8 @@ test("release rejects unapproved app version, duplicate runtime and reordered ap
  assert.throws(()=>checkHtml(after.replace(approved,approved+'<script src="./app_v2.js?v=other"></script>'),"after"),/duplicate app runtime/);
  assert.throws(()=>checkHtml(after.replace(approved,'').replace(tabs,tabs+approved),"after"),/legacy script ordering/);
 });
+
+ test("candidate rejects obsolete or unreviewed tabs adapter",()=>{
+  assert.throws(()=>checkHtml(after.replace('panel_tabs_patch.js?v=finalvisual3','panel_tabs_patch.js?v=finalvisual2'),"after"),/tabs script changed/);
+  assert.throws(()=>checkHtml(after.replace('panel_tabs_patch.js?v=finalvisual3','panel_tabs_patch.js?v=unknown'),"after"),/tabs script changed/);
+ });
