@@ -31,8 +31,8 @@ jobs:
           const id=process.env.CONFIGURED_ACCOUNT_ID|| (a.result.length===1?a.result[0].id:'');
           if(!id||!a.result.some(x=>x.id===id))throw Error('Account identity not established');
           const root='/accounts/'+encodeURIComponent(id);
-          const [scripts,subdomain,subscriptions]=await Promise.all([
-            get(root+'/workers/scripts'),get(root+'/workers/subdomain'),get(root+'/subscriptions')
+          const [scripts,subdomain,subscriptions,settings]=await Promise.all([
+            get(root+'/workers/scripts'),get(root+'/workers/subdomain'),get(root+'/subscriptions'),get(root+'/workers/account-settings')
           ]);
           if(!scripts.ok||!Array.isArray(scripts.result))throw Error('Worker listing unavailable');
           const report={
@@ -40,6 +40,8 @@ jobs:
             production_worker_present:scripts.result.some(s=>s.id==='ancient-wildflower-cd37'),
             expected_subdomain:subdomain.ok&&subdomain.result?.subdomain==='apdocentepba',
             billing_read_status:subscriptions.status,
+            workers_settings_status:settings.status,
+            default_usage_model:settings.ok?settings.result?.default_usage_model??null:null,
             subscriptions:subscriptions.ok&&Array.isArray(subscriptions.result)?subscriptions.result.map(s=>({
               product:s.rate_plan?.public_name||s.rate_plan?.id||'unknown',
               price:s.price??null,state:s.state??null
@@ -47,7 +49,7 @@ jobs:
             writes:0
           };
           console.log('APD_DIARY_HOSTED_PREFLIGHT '+JSON.stringify(report));
-          if(!report.qa_name_available||!report.production_worker_present||!report.expected_subdomain||report.subscriptions===null)
+          if(!report.qa_name_available||!report.production_worker_present||!report.expected_subdomain||(!report.subscriptions&&report.default_usage_model!=='free'))
             throw Error('Hosting prerequisites not established; no deployment attempted');
           console.log('APD_DIARY_HOSTED_METADATA_READY; billing interpretation and write access still require verification');
           JS
