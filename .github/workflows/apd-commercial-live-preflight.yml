@@ -1,0 +1,28 @@
+name: APD commercial live preflight (GET only)
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - 'scripts/apd-commercial-live-preflight.mjs'
+      - 'scripts/test-apd-commercial-live-preflight.mjs'
+      - '.github/workflows/apd-commercial-live-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 334 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/commercial-consolidation-20261125'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-commercial-live-preflight.mjs
+      - name: Inspect active production metadata and anonymous contracts without mutation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/apd-commercial-live-preflight.mjs

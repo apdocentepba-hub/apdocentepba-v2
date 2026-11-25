@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {activeVersion,inspectVersion} from './apd-commercial-live-preflight.mjs';
+const deploy=(versions)=>({deployments:[{versions}]});
+const v={version_id:'test-version',percentage:100};
+const manifest={version_id:'old',modules:[{sha256:'old'}],bindings:[{name:'DB',type:'secret_text'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
+const source='getSessionUserByBearer resolverPlanUsuario handleAccountProfileSecureV1 handleAccountPreferencesSecureV1 scheduled( TRIAL_7D INSIGNE /account/application-diary '+' '.repeat(100000);
+const fixture={id:'test-version',modules:[{name:'worker.js',content_base64:Buffer.from(source).toString('base64')}],bindings:[{name:'DB',type:'secret_text',text:'fixture-not-a-real-secret'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
+test('only one active 100 percent deployment',()=>{assert.equal(activeVersion(deploy([v])),'test-version');for(const x of [[],[{...v,percentage:90}],[{...v,percentage:50},{version_id:'other',percentage:50}]])assert.throws(()=>activeVersion(deploy(x)));});
+test('metadata report contains hash and counts but no source or binding values',()=>{const r=inspectVersion(fixture,'test-version',manifest);assert.equal(r.counts.TRIAL_7D,1);assert.equal(r.approved_for_deploy,false);assert.equal(r.canonical_match,false);assert.match(r.sha256,/^[a-f0-9]{64}$/);assert.doesNotMatch(JSON.stringify(r),/fixture-not-a-real-secret|getSessionUserByBearer/);});
+test('version and module shape fail closed',()=>{assert.throws(()=>inspectVersion(fixture,'other',manifest));assert.throws(()=>inspectVersion({...fixture,modules:[]},'test-version',manifest));});
+test('missing, duplicate and changed KV binding fail closed',()=>{for(const bindings of [[],[...fixture.bindings,fixture.bindings[0]],[fixture.bindings[0],{...fixture.bindings[1],namespace_id:'different'}]])assert.throws(()=>inspectVersion({...fixture,bindings},'test-version',manifest));});
+test('source with suspicious embedded key marker cannot pass',()=>{const content_base64=Buffer.from(source+'-----BEGIN PRIVATE KEY-----').toString('base64');assert.throws(()=>inspectVersion({...fixture,modules:[{name:'worker.js',content_base64}]},'test-version',manifest));});
