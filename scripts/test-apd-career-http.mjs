@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createApplicationDiaryClient} from './apd-application-diary-client.mjs';
+import {verifyHostedDiary} from './test-apd-diary-hosted.mjs';
 import {createCareerClient} from './apd-career-account-client.mjs';
 
 const requireRuntime=createRequire(new URL('../tmp/apd-career-runtime/package.json',import.meta.url));
@@ -149,6 +150,9 @@ try{
    const removed=await diaryFor(newTokenA).mutate({action:'remove',key:set.key,revision:current.revision});
    assert.deepEqual(removed.entries,[]);
    console.log('APD_DEPLOYED_DIARY_BROWSER_CLIENT_PASS_WITH_FIXTURE');
+   await verifyHostedDiary({base:workerOrigin,tokens:[tokenA,newTokenA,tokenB],fetcher:invoke});
+   console.log('APD_DIARY_HOSTED_CHECKS_PASS_WITH_FIXTURE');
+
   }
   // Reset any fixture data before exercising the packaged candidate.
   execFileSync('psql',['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','5432','-U','postgres','-d','apd_career_http','-c','TRUNCATE public.user_application_diary'],{stdio:'inherit'});
