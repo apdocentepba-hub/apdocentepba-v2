@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {commercialAccessCore} from './apd-commercial-access-core.mjs';
 import {APD_OFFER,resolveCommercialAccess} from './apd-commercial-policy.mjs';
 import {stageCommercialAccess} from './apd-commercial-stage-access.mjs';
-import {verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
+import {stageTrialHelpers,verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
 const now=Date.parse('2026-11-25T19:00:00Z'),user={id:'fixture',activo:true};
 const legacyActive=r=>r.subscription?.status==='ACTIVE'&&r.subscription?.source==='legacy_valid';
 const legacyChoose=rows=>rows.find(r=>legacyActive({subscription:r}));
@@ -23,3 +23,14 @@ test('free marker and matching plan required; premium cannot be forged through p
 const source=['function getPlanPreset(code) {\n return "TRIAL_7D";\n}', 'function elegirSuscripcionVigente(rows) {\n return rows[0]?.trial_ends_at;\n}', 'function isPlanActivo(resolved) {\n return resolved.current_period_ends_at;\n}', 'async function resolverPlanUsuario(env,userId) {\n return "user_subscriptions";\n}'].map(s=>s+'\n__name('+s.match(/function (\w+)/)[1]+', "fixture");\n').join('')+'export default {};';
 test('reversible exact-source stage, syntax, remaining references',()=>{const r=stageCommercialAccess(source);assert.equal(r.functions.length,4);assert.equal(r.unrelatedBytesPreserved,true);assert.equal(r.deployable,false);verifyTrialCandidateSyntax(r.candidate);});
 test('source anchor drift refuses candidate',()=>{assert.throws(()=>stageCommercialAccess(source.replace('trial_ends_at','unknown')));assert.throws(()=>stageCommercialAccess(source+'\n'+source));});
+
+test('access and trial stage compose in dependency order without duplicate-stage false positive',()=>{
+ const helper='async function ensureTrialIfNoSubscriptions(env,userId) {\n return env.insert("user_subscriptions","TRIAL_7D");\n}\n__name(ensureTrialIfNoSubscriptions,"fixture");\n';
+ const input=helper+source;
+ const a=stageCommercialAccess(input),b=stageTrialHelpers(a.candidate);
+ assert.equal(a.unrelatedBytesPreserved,true);assert.equal(b.unrelatedBytesPreserved,true);
+ assert.match(b.candidate,/const apdCommercialCoreV1=/);
+ assert.match(b.candidate,/apdCommercialCoreV1.ready\(catalog\)/);
+ verifyTrialCandidateSyntax(b.candidate);
+ assert.throws(()=>stageCommercialAccess(b.candidate));
+});

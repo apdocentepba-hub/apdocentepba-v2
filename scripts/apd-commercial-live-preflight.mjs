@@ -58,13 +58,13 @@ async function main(){
  const bytes=Buffer.from(details.modules[0].content_base64,'base64');
  const observation=JSON.parse(fs.readFileSync('docs/APD_COMMERCIAL_LIVE_OBSERVATION_20261125.json','utf8'));
  assertObservedFingerprint(bytes,report,observation);
- const staged=stageTrialHelpers(bytes.toString('utf8'));
- verifyTrialCandidateSyntax(staged.candidate);
- console.log('APD_COMMERCIAL_TRIAL_STAGE '+JSON.stringify({helpers:staged.helpers,unrelatedBytesPreserved:staged.unrelatedBytesPreserved,syntax:true,executed:false,deployed:false}));
- const accessStage=stageCommercialAccess(staged.candidate);
+ const accessStage=stageCommercialAccess(bytes.toString('utf8'));
  verifyTrialCandidateSyntax(accessStage.candidate);
  console.log('APD_COMMERCIAL_ACCESS_STAGE '+JSON.stringify({functions:accessStage.functions,unrelatedBytesPreserved:accessStage.unrelatedBytesPreserved,remainingPlanReferences:accessStage.remainingPlanReferences,syntax:true,deployable:false}));
- const toolsStage=stageCommercialTools(accessStage.candidate);
+ const staged=stageTrialHelpers(accessStage.candidate);
+ verifyTrialCandidateSyntax(staged.candidate);
+ console.log('APD_COMMERCIAL_TRIAL_STAGE '+JSON.stringify({helpers:staged.helpers,unrelatedBytesPreserved:staged.unrelatedBytesPreserved,syntax:true,executed:false,deployed:false}));
+ const toolsStage=stageCommercialTools(staged.candidate);
  verifyTrialCandidateSyntax(toolsStage.candidate);
  console.log('APD_COMMERCIAL_TOOLS_STAGE '+JSON.stringify({accountGates:toolsStage.accountGates,pidObjectGate:toolsStage.pidObjectGate,unrelatedBytesPreserved:toolsStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
  const paymentStage=stageCommercialPayment(toolsStage.candidate);

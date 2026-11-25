@@ -8,6 +8,7 @@ on:
       - 'scripts/apd-commercial-payment-fixture.sql'
       - 'scripts/test-apd-commercial-payment.sql'
       - 'scripts/test-apd-commercial-payment-review.sql'
+      - 'scripts/test-apd-commercial-lifecycle.sql'
       - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
       - 'scripts/test-apd-commercial-checkout.sql'
       - 'docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql'
@@ -119,3 +120,10 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-payment-review.sql
           echo 'PASS payment review: exact reversal, replay rejection and unrelated entitlement preservation'
+      - name: Integrated commercial lifecycle in disposable PostgreSQL
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-lifecycle.sql
+          echo 'PASS commercial lifecycle: trial, expiry, preference preservation, checkout, approval, replay and reversal'
