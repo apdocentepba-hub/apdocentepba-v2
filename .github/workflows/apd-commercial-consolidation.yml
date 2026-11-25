@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-commercial-policy.mjs'
+      - 'scripts/apd-commercial-checkout.mjs'
+      - 'scripts/test-apd-commercial-checkout.mjs'
       - 'scripts/test-apd-commercial-policy.mjs'
       - '.github/workflows/apd-commercial-consolidation.yml'
 permissions:
@@ -19,4 +21,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/apd-commercial-policy.mjs
-      - run: node --test scripts/test-apd-commercial-policy.mjs
+      - run: node --test scripts/test-apd-commercial-policy.mjs scripts/test-apd-commercial-checkout.mjs

@@ -7,6 +7,8 @@ on:
       - 'docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql'
       - 'scripts/apd-commercial-payment-fixture.sql'
       - 'scripts/test-apd-commercial-payment.sql'
+      - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
+      - 'scripts/test-apd-commercial-checkout.sql'
       - 'scripts/test-apd-commercial-db.sql'
       - '.github/workflows/apd-commercial-db-candidate.yml'
 permissions:
@@ -75,3 +77,17 @@ jobs:
           test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_payment_ledger")" = 2
           test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE plan_code='COMPLETO'")" = 2
           echo 'PASS commercial payment candidate: amount, currency, reference, release gate, replay, concurrency and preserved trial days'
+      - name: Verify reservation and checkout reuse
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-checkout.sql
+          claim="SET ROLE service_role; SELECT public.apd_reserve_complete_checkout('00000000-0000-4000-8000-000000000006');"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-checkout-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-checkout-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"mode": "create"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"reason": "checkout_in_progress"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
+          echo 'PASS checkout reservation, reuse, permissions and concurrent requests'
