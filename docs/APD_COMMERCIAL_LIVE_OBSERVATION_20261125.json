@@ -1,0 +1,11 @@
+{
+  "observed_active_version": "39270d55-e179-4c69-96a7-c1658d617a03",
+  "module": "worker-diary-candidate.js",
+  "bytes": 865831,
+  "sha256": "a8f35eaed5b003bf8f8a9c7ade63684e0f145d13814496be9050224c39ae08a8",
+  "bindings": 29,
+  "source_exported": false,
+  "approved_for_deploy": false,
+  "reference_run": 45677800973,
+  "scope": "read-only observation; must independently verify exact bytes before integration; not deployment approval"
+}

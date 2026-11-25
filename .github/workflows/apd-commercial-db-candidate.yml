@@ -1,0 +1,55 @@
+name: APD commercial database candidate (isolated PostgreSQL)
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql'
+      - 'scripts/apd-commercial-db-fixture.sql'
+      - 'scripts/test-apd-commercial-db.sql'
+      - '.github/workflows/apd-commercial-db-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: apd_commercial_qa
+      PGUSER: postgres
+      PGPASSWORD: fixture_only
+      PGOPTIONS: '-c statement_timeout=15000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply to disposable schema only
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-db.sql
+      - name: Concurrent claims in independent transactions
+        run: |
+          set -euo pipefail
+          claim="SET ROLE service_role; SELECT public.apd_claim_complete_trial('00000000-0000-4000-8000-000000000004');"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-claim-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-claim-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"ok": true' /tmp/apd-claim-a /tmp/apd-claim-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_trial_claims WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
+          echo 'PASS database candidate: release gate, legacy preservation, privileges, exact duration, concurrent claim'
