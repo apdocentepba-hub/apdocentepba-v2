@@ -1,0 +1,26 @@
+name: APD isolated diary release candidate (no deploy)
+on:
+  pull_request:
+    branches: [main]
+    paths: ['index.html','apd_comparador_panel.mjs','scripts/apd-application-diary*.mjs','scripts/test-apd-comparador*.mjs','.github/workflows/apd-diary-release-candidate.yml']
+permissions:
+  contents: read
+jobs:
+  candidate:
+    if: github.head_ref == 'release/diary-only-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Release gate and isolated contracts
+        run: |
+          grep -F 'const accountDiaryReleaseEnabled=false;' index.html
+          node --check apd_comparador_panel.mjs
+          node --test scripts/test-apd-application-diary.mjs scripts/test-apd-comparador-ui-contract.mjs scripts/test-apd-map-overlay-integration.mjs
+      - name: Chromium account persistence including empty carousel
+        run: node scripts/test-apd-comparador-browser.mjs
