@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageTrialHelpers,verifyTrialCandidateSyntax,assertObservedFingerprint} from './apd-commercial-stage-trial.mjs';
 const worker='ancient-wildflower-cd37';
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 export function activeVersion(deployments){
@@ -47,6 +48,12 @@ async function main(){
  if(manifest.worker_name!==worker)throw Error('Wrong repository Worker');
  const report=inspectVersion(details,version,manifest);
  if(activeVersion(await get(route))!==version)throw Error('Active version changed during inspection');
+ const bytes=Buffer.from(details.modules[0].content_base64,'base64');
+ const observation=JSON.parse(fs.readFileSync('docs/APD_COMMERCIAL_LIVE_OBSERVATION_20261125.json','utf8'));
+ assertObservedFingerprint(bytes,report,observation);
+ const staged=stageTrialHelpers(bytes.toString('utf8'));
+ verifyTrialCandidateSyntax(staged.candidate);
+ console.log('APD_COMMERCIAL_TRIAL_STAGE '+JSON.stringify({helpers:staged.helpers,unrelatedBytesPreserved:staged.unrelatedBytesPreserved,syntax:true,executed:false,deployed:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){

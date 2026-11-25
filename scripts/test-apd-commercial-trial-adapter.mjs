@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {claimCompleteTrial as claim} from './apd-commercial-trial-adapter.mjs';
+import {stageTrialHelpers,verifyTrialCandidateSyntax,assertObservedFingerprint} from './apd-commercial-stage-trial.mjs';
+const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-only'};
+const id='00000000-0000-4000-8000-000000000001';
+const ok={ok:true,plan_code:'TRIAL_14D',trial_ends_at:'2026-12-09T00:00:00Z'};
+const reply=(body,status=200)=>new Response(JSON.stringify(body),{status});
+test('claim sends only trusted identity and authenticated RPC',async()=>{let called=0;const result=await claim(env,id,async(url,req)=>{called++;assert.equal(url.href,'https://fixture.invalid/rest/v1/rpc/apd_claim_complete_trial');assert.equal(req.method,'POST');assert.equal(req.redirect,'error');assert.deepEqual(JSON.parse(req.body),{p_user_id:id});assert.equal(req.headers.Authorization,'Bearer fixture-only');return reply(ok);});assert.equal(called,1);assert.equal(result.created,true);});
+test('existing history is a successful no-op',async()=>{assert.deepEqual(await claim(env,id,async()=>reply({ok:false,reason:'existing_history'})),{ok:true,created:false});});
+test('disabled, unavailable, invalid responses fail closed without fallback',async()=>{for(const r of [{ok:false,reason:'release_disabled'},{ok:false,reason:'account_unavailable'},{ok:true,plan_code:'FREE'},{ok:true,plan_code:'TRIAL_14D',trial_ends_at:'invalid'}]){let calls=0;await assert.rejects(claim(env,id,async()=>{calls++;return reply(r);}));assert.equal(calls,1);}});
+test('network/HTTP errors cannot pretend trial created',async()=>{await assert.rejects(claim(env,id,async()=>{throw Error('fixture failure');}));await assert.rejects(claim(env,id,async()=>reply({},503)));});
+test('bad identity, URL, or key rejected before network',async()=>{for(const [e,u] of [[env,'bad'],[{...env,SUPABASE_URL:'http://fixture.invalid'},id],[{...env,SUPABASE_URL:'https://fixture.invalid/x'},id],[{...env,SUPABASE_SERVICE_ROLE_KEY:''},id]])await assert.rejects(claim(e,u,async()=>assert.fail('network forbidden')));});
+const helper=n=>'async function '+n+'(env, userId) {\n  return env.insert("user_subscriptions", "TRIAL_7D");\n}\n__name('+n+', "'+n+'");\n';
+const source=helper('ensureTrialIfNoSubscriptions')+helper('ensureTrialIfNoSubscriptions2')+'export default {};\n';
+test('two helpers replaced and syntax checked, all unrelated source reversible',()=>{const result=stageTrialHelpers(source);assert.equal(result.helpers.length,2);assert.equal(result.unrelatedBytesPreserved,true);assert.doesNotMatch(result.candidate,/env.insert/);verifyTrialCandidateSyntax(result.candidate);});
+test('unrecognized, duplicate, missing, or already patched helper fails closed',()=>{for(const s of ['export default {};',helper('ensureTrialIfNoSubscriptions3'),source+helper('ensureTrialIfNoSubscriptions'),source+'// apdClaimCompleteTrialV1'])assert.throws(()=>stageTrialHelpers(s));});
+test('reject changed active fingerprint',()=>{assert.throws(()=>assertObservedFingerprint(Buffer.from('x'),{version:'wrong'},{observed_active_version:'expected'}));});

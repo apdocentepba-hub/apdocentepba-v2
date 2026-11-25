@@ -4,6 +4,9 @@ on:
     types: [synchronize]
     paths:
       - 'scripts/apd-commercial-live-preflight.mjs'
+      - 'scripts/apd-commercial-trial-adapter.mjs'
+      - 'scripts/apd-commercial-stage-trial.mjs'
+      - 'scripts/test-apd-commercial-trial-adapter.mjs'
       - 'scripts/test-apd-commercial-live-preflight.mjs'
       - '.github/workflows/apd-commercial-live-preflight.yml'
 permissions:
@@ -20,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-commercial-live-preflight.mjs
+      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs
       - name: Inspect active production metadata and anonymous contracts without mutation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
