@@ -2091,7 +2091,7 @@ function planEstadoHumano(subscription, accessActive) {
   // Only the session-authenticated Worker can confirm expiry. Unknown is not expired.
   if (accessActive === false) return status === "available" ? "Sin plan vigente" : "Vencido";
   if (status === "beta") return "Beta abierta";
-  if (status === "trialing") return "En prueba";
+  if (status === "trialing" || (accessActive===true && String(subscription?.plan_code||"").toUpperCase()==="TRIAL_14D")) return "En prueba";
   if (status === "active" || status === "authorized") return "Activo";
   if (status === "paused") return "Pausado";
   if (status === "pending") return "Pendiente";
@@ -2103,7 +2103,7 @@ function planEstadoHumano(subscription, accessActive) {
 function planPrecioHumano(plan, subscription) {
   if (subscription?.source === "fallback_frontend") return "Sin verificar";
   if (subscription?.status === "beta" || plan?.beta) return "Gratis por ahora";
-  if (String(plan?.code || "").toUpperCase() === "TRIAL_7D") return "Gratis";
+  if (["FREE","TRIAL_14D","TRIAL_7D"].includes(String(plan?.code || "").toUpperCase())) return "Gratis";
   const n = Number(plan?.price_ars);
   if (Number.isFinite(n) && n > 0) {
     return n.toLocaleString("es-AR", {

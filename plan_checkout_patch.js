@@ -6,7 +6,7 @@
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
   const PLAN_SELECTOR_MSG_ID = 'plan-selector-msg';
-  let planesCache = null;
+  // Revalidate catalog on each render, including after commercial activation.
   let renderSeq = 0;
 
   function normalizePlanCodeSafe(code) {
@@ -166,11 +166,17 @@
   }
 
   async function obtenerPlanesDisponiblesUI() {
-    if (Array.isArray(planesCache) && planesCache.length) return planesCache;
     const data = await window.workerFetchJson('/api/planes');
-    const planes = Array.isArray(data?.planes) ? data.planes : [];
-    planesCache = planes.filter(plan => plan?.public_visible !== false);
-    return planesCache;
+    const planes = Array.isArray(data?.planes) ? data.planes.filter(plan => plan?.public_visible !== false) : [];
+    if (data?.commercial_model !== 'free_complete_v1') {
+      if (planes.some(p => ['FREE','COMPLETO','TRIAL_14D'].includes(normalizePlanCodeSafe(p?.code)))) throw Error('Catálogo comercial sin verificar');
+      return planes;
+    }
+    if (data.ok !== true || data.trial_days !== 14 || planes.length !== 2 ||
+        new Set(planes.map(p=>p.code)).size !== 2 ||
+        !planes.some(p=>p.code==='FREE' && Number(p.price_ars)===0 && Number(p.max_distritos)===1 && Number(p.max_cargos)===1) ||
+        !planes.some(p=>p.code==='COMPLETO' && Number(p.price_ars)===2000 && Number(p.max_distritos)===5 && Number(p.max_cargos)===10)) throw Error('Catálogo comercial inconsistente');
+    return ['FREE','COMPLETO'].map(code=>({...planes.find(p=>p.code===code),commercial_model:'free_complete_v1'}));
   }
 
   function planActualCode(planInfo) {
@@ -193,6 +199,17 @@
   function transitionPolicy(plan, planInfo) {
     const currentCode = planActualCode(planInfo);
     const targetCode = normalizePlanCodeSafe(plan?.code || plan?.display_code || '');
+    if (plan?.commercial_model === 'free_complete_v1') {
+      const deny=(mode,label,reason)=>({allowed:false,mode,label,actionLabel:label,reason});
+      const sub=planInfo?.subscription;
+      if (!sub || planInfo.ok===false || typeof planInfo.access_active!=='boolean' || String(sub.source||'').toLowerCase()==='fallback_frontend' || normalizePlanCodeSafe(sub.plan_code)!==currentCode)
+        return deny('unverified','Actualizar plan','Primero necesitamos verificar tu cuenta.');
+      if (targetCode==='FREE') return deny('free','Acceso gratuito','Al vencer tu acceso completo, continuás con Gratis sin perder tus datos.');
+      if (targetCode!=='COMPLETO' || Number(plan.price_ars)!==2000) return deny('unavailable','No disponible','El catálogo no está confirmado.');
+      if (sub.mercadopago_preapproval_id || (planInfo.access_active===true && !['FREE','TRIAL_14D','TRIAL_7D'].includes(currentCode)))
+        return deny('current','Acceso vigente','Conservás las condiciones de tu acceso actual.');
+      return {allowed:true,mode:'checkout',label:'Contratar Completo',actionLabel:'Contratar por $2.000',reason:'30 días de acceso completo, sin renovación automática. El pago se confirma en Mercado Pago.'};
+    }
     const currentPrice = currentPlanPrice(planInfo);
     const targetPrice = Number(plan?.price_ars || 0) || 0;
     const targetName = String(plan?.display_name || plan?.nombre || plan?.code || 'este plan');
@@ -353,7 +370,7 @@
           </div>
         </div>
         <p class="prefs-hint">Acá comparás planes y, si corresponde, te abrimos Mercado Pago en una pestaña nueva.</p>
-        <div class="soft-meta" style="margin:8px 0 12px 0;">
+        <div data-plan-transition-note class="soft-meta" style="margin:8px 0 12px 0;">
           Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio queda programado para el próximo ciclo.
         </div>
         <div id="${PLAN_SELECTOR_MSG_ID}" class="msg" style="margin:8px 0 12px 0"></div>
@@ -373,6 +390,20 @@
       return '<p class="ph">No pudimos cargar los planes disponibles.</p>';
     }
 
+    if (planes.every(p=>p.commercial_model==='free_complete_v1')) {
+      return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;align-items:stretch;">'+planes.map(plan=>{
+        const full=plan.code==='COMPLETO';
+        const active=isCurrentPlan(plan,planInfo);
+        const features=full?['Hasta 5 distritos y 10 cargos/materias','Alertas por email, Telegram y WhatsApp por consulta','Comparador y compatibilidad horaria','Favoritos, postulaciones y herramientas de carrera']:['1 distrito y 1 cargo/materia','Alertas básicas por email','Acceso permanente a recursos públicos'];
+        return '<div style="padding:16px;border:1px solid rgba(15,52,96,.18);border-radius:14px;background:#fff;display:flex;flex-direction:column;gap:10px;">'+
+          '<div class="plan-title">'+(full?'Completo':'Gratis')+'</div>'+
+          '<div style="font-size:28px;font-weight:800;color:#123b72;">'+(full?'$2.000':'$0')+'</div>'+
+          '<p class="plan-note">'+(full?'Por 30 días · 14 días de prueba para nuevas cuentas':'Sin vencimiento')+'</p>'+
+          (active?'<span class="plan-pill">Plan actual</span>':'')+
+          '<ul style="margin:0 0 0 18px;padding:0;line-height:1.6;font-size:13px;">'+features.map(f=>'<li>'+f+'</li>').join('')+'</ul>'+
+          '<div style="margin-top:auto;">'+planCardButtonHtml(plan,planInfo)+'</div></div>';
+      }).join('')+'</div>';
+    }
     return `${planes.map(plan => {
       const limits = window.getPlanLimits ? window.getPlanLimits({ plan }) : {
         maxDistritos: Number(plan?.max_distritos || 1),
@@ -416,6 +447,10 @@
     const body = selectorBody();
     if (!body) return;
     body.innerHTML = buildPlanCards(planInfo, planes);
+    const note=selectorCard()?.querySelector('[data-plan-transition-note]');
+    if (note) note.textContent=planes?.length && planes.every(p=>p.commercial_model==='free_complete_v1')
+      ? '14 días sin tarjeta para cuentas nuevas. Si no contratás, pasás a Gratis. No hay renovación automática del plan Completo; se conservan las condiciones anteriores.'
+      : 'Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio queda programado para el próximo ciclo.';
     if (typeof window.APD_refreshPanelTabs === 'function') {
       setTimeout(() => window.APD_refreshPanelTabs(), 0);
     }
@@ -516,7 +551,8 @@
     try {
       const data = await window.workerFetchJson('/api/mercadopago/create-checkout-link', {
         method: 'POST',
-        body: JSON.stringify({ user_id: userId, plan_code: String(planCode || '').trim().toUpperCase() })
+        body: JSON.stringify(String(planCode || '').trim().toUpperCase()==='COMPLETO'
+          ? {plan_code:'COMPLETO'} : {user_id:userId,plan_code:String(planCode || '').trim().toUpperCase()})
       });
 
       if (data?.scheduled) {
@@ -532,6 +568,11 @@
         return;
       }
 
+      if (String(planCode || '').trim().toUpperCase()==='COMPLETO') {
+        let url;
+        try { url=new URL(data.checkout_url); } catch { throw Error('Enlace de pago no verificado'); }
+        if (data.ok!==true || url.protocol!=='https:' || !['mercadopago.com.ar','www.mercadopago.com.ar'].includes(url.hostname) || url.port || url.username || url.password || !url.pathname.startsWith('/checkout/')) throw Error('Enlace de pago no verificado');
+      }
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
       const successMsg = data?.message || 'Mercado Pago se abrió en una pestaña nueva.';
 
