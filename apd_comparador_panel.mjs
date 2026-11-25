@@ -7,15 +7,16 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
-import {marginalPay} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
+import {marginalPay,mergeConfirmedCareerPlanner} from './scripts/apd-career-profile-core.mjs?v=20261124-career2';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
+import {createApplicationDiarySection} from './scripts/apd-application-diary-ui.mjs?v=20261124-diary2';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
 import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-vacancy1';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
+import {createPrivatePlannerForm,loadPrivatePlanner as loadLegacyPlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -32,8 +33,23 @@ const root=document.getElementById('apd-comparador-panel');
 const max=5;
 let disposePersonalHistory=null;
 let profileScheduleClient=null,profileScheduleRequired=true;
+let confirmedCareerContext=null;
+function loadPrivatePlanner(){
+ const base=loadLegacyPlanner();
+ if(!confirmedCareerContext)return base;
+ // A pending, invalid or revoked account scope must not certify a free week.
+ const unavailable=()=>({...base,jobs:[...base.jobs,{school:'Carrera sin confirmar',days:[],start:'',end:''}]});
+ try{
+  if(!confirmedCareerContext.isCurrent())return unavailable();
+  const record=confirmedCareerContext.getRecord();
+  return record?mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey:verifiedSchoolKey}):unavailable();
+ }catch{return unavailable();}
+}
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
+const emptyDiary=(client=null)=>({client,record:{entries:[],revision:0},titles:new Map(),open:false,loaded:false,busy:false,message:''});
+function resetDiary(client=null){applicationDiary.client?.reset();applicationDiary=emptyDiary(client);}
+let applicationDiary=emptyDiary();
 let favoriteVisible=new Set(),favoritesOpen=false,favoriteMessage='';
 let permanentFavorites=false,accountFavorites=null,favoriteEpoch=0,favoriteBusy=false;
 function clearAccountFavorites(){
@@ -791,7 +807,7 @@ function render(){
  if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
- root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count())));
+ root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count()||applicationDiary.client||applicationDiary.record.entries.length)));
  if(root.hidden)return;
  if(state.privatePlannerAllowed){
   const hub=node('section','apd-career-tools');
@@ -802,6 +818,7 @@ function render(){
    ['Recomendaciones',count?count+' alertas para analizar':'Sin alertas para analizar','.apd-recommendations',count>0],
    ['Optimizar ofertas',count?'Combinar hasta 12':'Esperando nuevas ofertas','.apd-week-optimizer',count>0],
    ['Mis favoritos','Ofertas guardadas en tu cuenta','.apd-favorites',true],
+   ['Mis postulaciones',applicationDiary.client?'Registro manual en tu cuenta':'Registro manual de esta sesión','.apd-application-diary',true],
    ['Historial','Oportunidades anteriores','#apd-personal-history',true]
   ]){
    const control=button('',()=>{
@@ -814,7 +831,13 @@ function render(){
    control.disabled=!enabled;
    control.append(node('strong','',title),node('span','',detail));grid.append(control);
   }
-  hub.append(grid);root.append(hub,renderFavorites());
+  const session=applicationDiary;
+  const diary=createApplicationDiarySection({
+   offers:state.available.map(offer=>({key:offerKey(offer),title:[offer.descripcioncargo||offer.cargo||'Oferta',offer.escuela,offer.distrito].filter(Boolean).join(' · ')})),
+   session,onChanged:render,
+   isCurrent:()=>state.enabled&&state.privatePlannerAllowed&&session===applicationDiary
+  });
+  hub.append(grid);root.append(hub,renderFavorites(),diary);
  }
  if(!state.available.length)return;
  if(state.privatePlannerAllowed){root.appendChild(renderRecommendations());root.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
@@ -1036,11 +1059,14 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null,careerContext=null,diaryClient=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
+ confirmedCareerContext=entitled&&enabled&&careerContext?.enabled?careerContext:null;
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
+ const nextDiaryClient=entitled&&enabled?diaryClient:null;
+ if(!entitled||applicationDiary.client!==nextDiaryClient)resetDiary(nextDiaryClient);
  if(!entitled){favorites.clear();favoritesOpen=false;favoriteMessage='';recommendOpen=false;recommendDistrict='';recommendTurn='';recommendSort='cierre';recommendGroup='';recommendLimit=10;}
  const nextMode=entitled&&favoriteMode===true;
  const nextClient=nextMode?favoriteClient:null;
@@ -1081,6 +1107,8 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ confirmedCareerContext=null;
+ resetDiary();
  clearAccountFavorites();
  profileScheduleClient=null;
  clearPersonalHistory();
@@ -1121,6 +1149,7 @@ let scheduleFilterActive=false;
 function refreshAlertSchedule(){
  window.APD_setAlertScheduleFilter?.(scheduleFilterActive);
 }
+window.APD_refreshConfirmedCareer=()=>{if(state.enabled&&state.privatePlannerAllowed){refreshAlertSchedule();render();}};
 
 window.APD_filterAlertsBySchedule=(offers,planInfo)=>{
  if(!hasInsignePlannerAccess(planInfo))return null;

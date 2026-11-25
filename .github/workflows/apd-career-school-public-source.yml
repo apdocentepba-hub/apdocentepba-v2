@@ -1,0 +1,54 @@
+name: APD school registry official CSV (read only, no deploy)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/apd-career-school-public-source.yml'
+      - 'scripts/apd_school_catalog_import.py'
+      - 'scripts/test-apd-career-real-school-index.mjs'
+      - 'scripts/apd-career-school-*.mjs'
+permissions:
+  contents: read
+jobs:
+  official-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download exact dated public CSV
+        run: |
+          mkdir -p /tmp/apd-school-catalog
+          curl --fail --silent --show-error --proto '=https' --max-time 100 --max-filesize 83886080 --retry 1 \
+            'https://catalogo.datos.gba.gob.ar/dataset/4becb4b7-0a21-4fef-8f2c-30df7f345a01/resource/3951210e-7e0e-4fed-bbf1-0183e704c9ae/download/establecimientos-educativos-16112026.csv' \
+            -o /tmp/apd-school-catalog/source.csv
+          test -s /tmp/apd-school-catalog/source.csv
+          sha256sum /tmp/apd-school-catalog/source.csv
+      - name: Validate and compile minimal school index
+        run: |
+          python3 scripts/apd_school_catalog_import.py /tmp/apd-school-catalog/source.csv \
+            --resource-id 3951210e-7e0e-4fed-bbf1-0183e704c9ae \
+            --catalog-modified 2026-11-18 \
+            --output /tmp/apd-school-catalog/index.json
+          python3 -c "import json; p=json.load(open('/tmp/apd-school-catalog/index.json')); assert len(p['schools'])>1000; print('APD_SCHOOL_INDEX_REVIEW_REQUIRED',p['counts'])"
+          sha256sum /tmp/apd-school-catalog/index.json
+          python3 - <<'PY'
+          import json, collections
+          p=json.load(open('/tmp/apd-school-catalog/index.json'))
+          assert p['sha256']=='36a3809e7173611030cdcd4bbd2d606eedcc7d366479ba3c4075c1523beeef7e', 'Dated source changed; review again'
+          for field in ('classification','area','surveyPeriod'):
+              counts=collections.Counter(r[field] for r in p['schools'])
+              print('APD_SCHOOL_FIELD_REVIEW',field,json.dumps(dict(counts),ensure_ascii=False))
+          print('APD_SCHOOL_PINNED_SOURCE_PASS')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify real catalog search and integrity loader
+        run: node scripts/test-apd-career-real-school-index.mjs /tmp/apd-school-catalog/index.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apd-school-registry-review-only
+          path: /tmp/apd-school-catalog/index.json
+          retention-days: 7
+          if-no-files-found: error

@@ -1,0 +1,52 @@
+name: APD diary temporary hosted trial (one shot)
+on:
+  pull_request:
+    types: [synchronize]
+    paths: ['.github/workflows/apd-diary-temporary-hosted-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: apd-diary-temporary-hosted-once
+  cancel-in-progress: false
+jobs:
+  temporary:
+    # Single approved transition; future commits and reruns cannot provision accounts.
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 330 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/career-account-persistence-20261124' && github.event.before == '1a8151c27f05a5bbd51880424a2455ffd2c65d34' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test_only
+          POSTGRES_DB: apd_diary_qa
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture live code read only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/inspect-account-schedule-live.mjs career
+      - name: One-shot preview with isolated fixture database and no permanent credentials
+        env:
+          APD_QA_TEMPORARY_AUTHORIZED: 'yes'
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: test_only
+          PGDATABASE: apd_diary_qa
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          bash -n scripts/run-apd-diary-temporary-qa.sh
+          bash scripts/run-apd-diary-temporary-qa.sh
+      - name: Remove local captured source
+        if: always()
+        run: rm -rf tmp/apd-career
