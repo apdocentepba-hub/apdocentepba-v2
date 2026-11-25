@@ -11,7 +11,7 @@ concurrency:
 jobs:
   temporary:
     # Single approved transition; future commits and reruns cannot provision accounts.
-    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 330 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/career-account-persistence-20261124' && github.event.before == '7ac7d99abc2de430ce50f12b7f62bae2bad05504' && github.run_attempt == 1
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 330 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/career-account-persistence-20261124' && github.event.before == '1a8151c27f05a5bbd51880424a2455ffd2c65d34' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
