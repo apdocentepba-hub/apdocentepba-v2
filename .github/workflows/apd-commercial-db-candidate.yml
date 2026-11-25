@@ -9,6 +9,9 @@ on:
       - 'scripts/test-apd-commercial-payment.sql'
       - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
       - 'scripts/test-apd-commercial-checkout.sql'
+      - 'docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql'
+      - 'scripts/apd-commercial-preferences-fixture.sql'
+      - 'scripts/test-apd-commercial-preferences.sql'
       - 'scripts/test-apd-commercial-db.sql'
       - '.github/workflows/apd-commercial-db-candidate.yml'
 permissions:
@@ -91,3 +94,20 @@ jobs:
           test "$(grep -h -c '"mode": "create"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
           test "$(grep -h -c '"reason": "checkout_in_progress"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
           echo 'PASS checkout reservation, reuse, permissions and concurrent requests'
+      - name: Verify concurrent preference compare and save
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-preferences.sql
+          for label in A B; do
+            psql -X -Atq -v ON_ERROR_STOP=1 -c "SET ROLE service_role; SELECT public.apd_save_free_preferences('00000000-0000-4000-8000-000000000005',snapshot,snapshot||jsonb_build_object('distrito_principal','$label')) FROM public.apd_pref_qa_snapshot;" > "/tmp/apd-pref-$label" &
+            if [ "$label" = A ]; then a=$!; else b=$!; fi
+          done
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"ok": true' /tmp/apd-pref-A /tmp/apd-pref-B | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"reason": "conflict"' /tmp/apd-pref-A /tmp/apd-pref-B | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_preferences WHERE distrito_principal IN ('A','B') AND otros_distritos=ARRAY['QUILMES'] AND cargos=ARRAY['MAT','FIS'] AND alertas_whatsapp AND alertas_telegram")" = 1
+          echo 'PASS preferences compare-and-save: concurrent conflict and hidden settings preserved'

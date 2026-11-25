@@ -4,6 +4,9 @@ on:
     types: [synchronize]
     paths:
       - 'scripts/apd-commercial-live-preflight.mjs'
+      - 'scripts/apd-commercial-persist-preferences.mjs'
+      - 'scripts/apd-commercial-stage-concurrent-save.mjs'
+      - 'scripts/test-apd-commercial-persist-preferences.mjs'
       - 'scripts/apd-commercial-preserve-preferences.mjs'
       - 'scripts/apd-commercial-stage-save-preferences.mjs'
       - 'scripts/test-apd-commercial-preserve-preferences.mjs'
@@ -40,7 +43,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs scripts/test-apd-commercial-stage-checkout.mjs scripts/test-apd-commercial-effective-preferences.mjs scripts/test-apd-commercial-preserve-preferences.mjs
+      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs scripts/test-apd-commercial-stage-checkout.mjs scripts/test-apd-commercial-effective-preferences.mjs scripts/test-apd-commercial-preserve-preferences.mjs scripts/test-apd-commercial-persist-preferences.mjs
       - name: Inspect active production metadata and anonymous contracts without mutation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

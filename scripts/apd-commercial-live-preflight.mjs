@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-save.mjs';
 import {stageCommercialSavePreferences} from './apd-commercial-stage-save-preferences.mjs';
 import {stageCommercialEffectivePreferences} from './apd-commercial-stage-preferences.mjs';
 import {stageCommercialCheckout} from './apd-commercial-stage-checkout.mjs';
@@ -78,6 +79,9 @@ async function main(){
  const saveStage=stageCommercialSavePreferences(preferencesStage.candidate);
  verifyTrialCandidateSyntax(saveStage.candidate);
  console.log('APD_COMMERCIAL_SAVE_STAGE '+JSON.stringify({hiddenPreferencesPreserved:saveStage.hiddenPreferencesPreserved,unrelatedBytesPreserved:saveStage.unrelatedBytesPreserved,transactional:false,syntax:true,deployable:false}));
+ const concurrentStage=stageCommercialConcurrentSave(saveStage.candidate);
+ verifyTrialCandidateSyntax(concurrentStage.candidate);
+ console.log('APD_COMMERCIAL_CONCURRENT_SAVE_STAGE '+JSON.stringify({compareAndSave:concurrentStage.compareAndSave,unrelatedBytesPreserved:concurrentStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){
