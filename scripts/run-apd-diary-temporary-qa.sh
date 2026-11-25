@@ -57,22 +57,58 @@ curl --silent --show-error --fail --location --max-time 60 \
  https://github.com/cloudflare/cloudflared/releases/download/2026.11.0/cloudflared-linux-amd64 -o "$work/cloudflared"
 printf '%s  %s\n' 51f7c68b57ed7269164075d7e789efce5b59355982f06392deeb037d982a51fd "$work/cloudflared" | sha256sum -c -
 chmod 700 "$work/cloudflared"
-"$work/cloudflared" tunnel --no-autoupdate --protocol http2 --url http://127.0.0.1:3302 >"$work/tunnel.log" 2>&1 &
+# Use cloudflared's automatic transport fallback and wait for actual edge readiness.
+"$work/cloudflared" tunnel --no-autoupdate --protocol auto --metrics 127.0.0.1:3303 --url http://127.0.0.1:3302 >"$work/tunnel.log" 2>&1 &
 tunnel_pid=$!
-for i in $(seq 1 35); do
- export APD_QA_DB_URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$work/tunnel.log" | head -n1 || true)"
+export APD_QA_DB_URL=""
+for i in $(seq 1 45); do
+ # Avoid extracting the quick-tunnel API/documentation URL from the logs.
+ export APD_QA_DB_URL="$(grep -Eo 'https://[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com' "$work/tunnel.log" | head -n1 || true)"
  [[ -n "$APD_QA_DB_URL" ]] && break
  kill -0 "$tunnel_pid" 2>/dev/null || break
  sleep 1
 done
-[[ "$APD_QA_DB_URL" =~ ^https://[a-z0-9-]+\.trycloudflare\.com$ ]] || { echo 'Quick Tunnel failed'; exit 1; }
+tunnel_diagnostic(){
+ node --input-type=module - "$work/tunnel.log" <<'JS'
+import fs from 'node:fs';
+const s=fs.readFileSync(process.argv[2],'utf8');
+console.log('APD_QA_TUNNEL_DIAGNOSTIC '+JSON.stringify({
+ registered:/Registered tunnel connection/i.test(s),
+ transportFailure:/handshake|Unable to establish|failed to dial|connection refused|port 7844/i.test(s),
+ dnsFailure:/lookup .*no such host|DNS.*failed/i.test(s),
+ errors:s.split('\n').filter(x=>/\bERR\b/.test(x)).length
+}));
+JS
+}
+[[ "$APD_QA_DB_URL" =~ ^https://[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com$ ]] || { tunnel_diagnostic; echo 'Quick Tunnel failed'; exit 1; }
 printf '::add-mask::%s\n' "$APD_QA_DB_URL"
-for i in $(seq 1 20); do
- code="$(curl --silent --max-time 5 -o /dev/null -w '%{http_code}' "$APD_QA_DB_URL/rest/v1/sessions" || true)"
- [[ "$code" == 401 ]] && break
+ready=000
+for i in $(seq 1 45); do
+ ready="$(curl --silent --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:3303/ready || true)"
+ [[ "$ready" == 200 ]] && break
+ kill -0 "$tunnel_pid" 2>/dev/null || break
  sleep 1
 done
-[[ "$code" == 401 ]] || { echo 'Tunnel authentication check failed'; exit 1; }
+echo "APD_QA_EDGE_READY_HTTP $ready"
+[[ "$ready" == 200 ]] || { tunnel_diagnostic; exit 1; }
+# Allow DNS and public edge route propagation; no credentials in error logs.
+code=000
+for i in $(seq 1 45); do
+ code="$(curl --silent --max-time 5 -o /dev/null -w '%{http_code}' "$APD_QA_DB_URL/rest/v1/sessions" || true)"
+ [[ "$code" == 401 ]] && break
+ kill -0 "$tunnel_pid" 2>/dev/null || break
+ sleep 2
+done
+echo "APD_QA_TUNNEL_ANONYMOUS_HTTP $code"
+[[ "$code" == 401 ]] || { tunnel_diagnostic; echo 'Tunnel authentication check failed'; exit 1; }
+code="$(curl --silent --max-time 10 -o "$work/offer.json" -w '%{http_code}' -H "Authorization: Bearer $APD_DIARY_QA_DB_KEY" "$APD_QA_DB_URL/rest/v1/apd_ofertas_global_current?source_offer_key=eq.D_121&select=source_offer_key")"
+echo "APD_QA_TUNNEL_AUTHENTICATED_HTTP $code"
+[[ "$code" == 200 ]] || { tunnel_diagnostic; exit 1; }
+node --input-type=module - "$work/offer.json" <<'JS'
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+assert.deepEqual(JSON.parse(fs.readFileSync(process.argv[2],'utf8')),[{source_offer_key:'D_121'}]);
+JS
 echo APD_DIARY_QA_TUNNEL_AUTH_PASS
 test -s tmp/apd-career/active-worker.mjs
 APD_CAREER_LIVE_SOURCE=tmp/apd-career/active-worker.mjs node scripts/build-apd-career-worker-candidate.mjs
