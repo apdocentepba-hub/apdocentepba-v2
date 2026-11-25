@@ -1,4 +1,4 @@
--- Isolated candidate. Approval-only ledger; refunds/disputes and checkout creation are separate release blockers.
+-- Isolated candidate. Approval and review ledger; unresolved disputes require manual reconciliation.
 BEGIN;
 CREATE TABLE public.apd_complete_payment_ledger (
  payment_id text PRIMARY KEY,
@@ -70,7 +70,7 @@ CREATE FUNCTION public.apd_review_complete_payment(p_payment_id text,p_reference
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $fn$
 DECLARE s public.mercadopago_checkout_sessions%ROWTYPE; l public.apd_complete_payment_ledger%ROWTYPE; r public.apd_complete_payment_review%ROWTYPE; v_user uuid;
 BEGIN
- IF p_payment_id IS NULL OR p_payment_id !~ '^[0-9]{1,30}
+ IF p_payment_id IS NULL OR p_payment_id !~ '^[0-9]{1,30}$'
  OR p_reference IS NULL OR length(p_reference)>180 OR p_disposition IS NULL OR p_disposition NOT IN ('review','revoke') THEN
   RETURN jsonb_build_object('ok',false,'reason','invalid_review'); END IF;
  SELECT user_id INTO v_user FROM public.mercadopago_checkout_sessions WHERE external_reference=p_reference AND plan_code='COMPLETO' AND provider='mercadopago';
