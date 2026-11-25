@@ -8,13 +8,15 @@ import {commercialRpc} from './apd-commercial-stage-checkout.mjs';
 import {applyCompleteApproval} from './apd-commercial-payment-adapter.mjs';
 import {effectiveCommercialPreferences} from './apd-commercial-effective-preferences.mjs';
 
-function extract(source,name){
+export function extract(source,name){
  const matches=[...source.matchAll(new RegExp('^(?:async )?function '+name+'\\([^\\n]*\\) \\{','gm'))];
  assert.equal(matches.length,1,'Runtime function anchor: '+name);
  const start=matches[0].index,end=source.indexOf('\n__name('+name+',',start);
  assert.ok(end>start,'Runtime boundary: '+name);
  const body=source.slice(start,end);
- assert.ok(body.endsWith('\n}'),'Runtime closing boundary: '+name);
+ assert.ok(body.endsWith('}'),'Runtime closing boundary: '+name);
+ // A one-line wrapper is valid; reject a boundary spanning multiple top-level declarations.
+ assert.equal([...body.matchAll(/^(?:async )?function [A-Za-z_$][\w$]*\(/gm)].length,1,'Runtime boundary includes another declaration');
  return body;
 }
 export async function verifyCommercialRuntime(source){
@@ -23,11 +25,11 @@ export async function verifyCommercialRuntime(source){
  const coreEnd=source.indexOf('\n})();\n',coreStart);
  assert.ok(coreEnd>coreStart);
  const core=source.slice(coreStart,coreEnd+7);
- const names=['getPlanPreset','resolverPlanUsuario','isPlanActivo','normalizePlanOut','normalizeSubscriptionOut','canonicalPlanCode','clampPlanLimit','buildPlanFeatures','buildPlanDistrictSlots','buildPlanCargoSlots','calculateSubscriptionDaysRemaining','resolveSubscriptionEndDate','ensureTrialIfNoSubscriptions','handlePlanes','handleMercadoPagoCreateCheckoutLink','applyMercadoPagoPayment'];
+ const names=['getPlanPreset','resolverPlanUsuario','isPlanActivo','normalizePlanOut','normalizeSubscriptionOut','canonicalPlanCode','clampPlanLimit','buildPlanFeatures','buildPlanDistrictSlots','buildPlanCargoSlots','calculateSubscriptionDaysRemaining','resolveSubscriptionEndDate','ensureTrialIfNoSubscriptions','handlePlanes','handleMercadoPagoCreateCheckoutLink','createMercadoPagoCheckoutPreference','applyMercadoPagoPayment'];
  const uid='00000000-0000-4000-8000-000000000007';
  const now=Date.parse('2026-11-25T20:00:00Z');
  let clock=now,rows=[],session=null,reversed=false,providerCalls=0,networkCalls=0,active=true,authenticated=true;
- const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-only',MERCADOPAGO_CURRENCY_ID:'ARS'};
+ const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-only',MERCADOPAGO_CURRENCY_ID:'ARS',MERCADOPAGO_ACCESS_TOKEN:'fixture-only'};
  const catalog=[{code:'FREE',price_ars:0,trial_days:0,max_distritos:1,max_cargos:1,public_visible:true},{code:'TRIAL_14D',price_ars:0,trial_days:14,max_distritos:5,max_cargos:10,public_visible:false},{code:'COMPLETO',price_ars:2000,trial_days:0,max_distritos:5,max_cargos:10,public_visible:true}];
  const iso=t=>new Date(t).toISOString();
  const user={id:uid,activo:true};
@@ -35,6 +37,16 @@ export async function verifyCommercialRuntime(source){
  const checkoutUrl='https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=fixture';
  const ok=v=>new Response(JSON.stringify(v));
  const transport=async(url,request)=>{
+  url=new URL(url);
+  if(url.href==='https://api.mercadopago.com/checkout/preferences'){
+   providerCalls++;
+   assert.equal(request.method,'POST');
+   const body=JSON.parse(request.body);
+   assert.equal(body.items.length,1);assert.equal(body.items[0].unit_price,2000);assert.equal(body.items[0].currency_id,'ARS');assert.equal(body.items[0].id,'COMPLETO');assert.equal(body.external_reference,reference);
+   assert.equal(request.headers.Authorization,'Bearer fixture-only');
+   assert.equal(body.notification_url,'https://fixture.invalid/api/mercadopago/webhook');
+   return ok({id:'fixture',init_point:checkoutUrl});
+  }
   networkCalls++;
   assert.equal(url.origin,'https://fixture.invalid');
   assert.equal(request.method,'POST');
@@ -79,7 +91,6 @@ export async function verifyCommercialRuntime(source){
    throw Error('Unexpected synthetic select');
   },
   getSessionUserByBearer:async()=>authenticated?user:null,
-  createMercadoPagoCheckoutPreference:async(_env,c)=>{providerCalls++;assert.equal(c.plan.price_ars,2000);assert.equal(c.externalReference,reference);return {checkout_url:checkoutUrl,preference_id:'fixture'};},
   json:(body,status=200)=>({body,status}),
   parseFechaFlexible:v=>new Date(v),
   parseMercadoPagoExternalReference:v=>({plan_code:v?.split(':')[1]}),
