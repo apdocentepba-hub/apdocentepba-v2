@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-10-24-mp-return-12';
+  const PLAN_PATCH_VERSION = '2026-11-25-commercial-v5';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -649,10 +649,24 @@
     await iniciarCheckoutPlan(checkoutBtn.dataset.planCheckout, checkoutBtn);
   });
 
+  function normalizeCommercialSummary(planInfo) {
+    const code=normalizePlanCodeSafe(planInfo?.subscription?.plan_code);
+    if (planInfo?.ok===false || planInfo?.access_active!==true ||
+        normalizePlanCodeSafe(planInfo?.plan?.code)!==code ||
+        String(planInfo?.subscription?.source||'').toLowerCase()==='fallback_frontend' ||
+        !['FREE','TRIAL_14D','COMPLETO'].includes(code)) return;
+    const row=document.querySelector('#panel-plan .plan-stack .plan-pill-row');
+    const pills=row?.querySelectorAll('.plan-pill');
+    if (!pills || pills.length!==2) return;
+    if (code==='TRIAL_14D') pills[0].textContent='En prueba';
+    pills[1].textContent=code==='COMPLETO'?'$2.000 por 30 días':'Gratis';
+  }
+
   const originalRenderPlanUI = window.renderPlanUI;
   if (typeof originalRenderPlanUI === 'function') {
     window.renderPlanUI = function patchedRenderPlanUI(planInfo) {
       const result = originalRenderPlanUI(planInfo);
+      normalizeCommercialSummary(planInfo);
       const currentRender = ++renderSeq;
 
       Promise.resolve().then(async () => {
