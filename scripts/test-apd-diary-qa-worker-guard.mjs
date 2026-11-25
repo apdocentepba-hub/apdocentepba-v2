@@ -14,7 +14,10 @@ const guarded=wrapDiaryQA({async fetch(req,bindings,ctx){
 }},{now:()=>current});
 const path='/api/account/application-diary';
 const req=(p=path,method='GET',secret=key)=>new Request('https://fixture.invalid'+p,{method,headers:secret?{'X-APD-QA-Key':secret}:{}});
-assert.equal((await guarded.fetch(req(path,'GET',''),env)).status,404);
+const denied=await guarded.fetch(req(path,'GET',''),env);
+assert.equal(denied.status,404);
+assert.equal(denied.headers.get('X-APD-QA-Stage'),'guard');
+assert.equal((await guarded.fetch(req(),{...env,APD_QA_DB_KEY:key})).headers.get('X-APD-QA-Stage'),'configuration');
 assert.equal((await guarded.fetch(req('/api/login','POST'),env)).status,404);
 assert.equal((await guarded.fetch(req(path+'?x=1'),env)).status,404);
 assert.equal((await guarded.fetch(req(path,'DELETE'),env)).status,404);
@@ -27,7 +30,11 @@ for(const change of [
  {APD_QA_DB_URL:'https://example.trycloudflare.com.evil.invalid'}
 ]) assert.equal((await guarded.fetch(req(),{...env,...change})).status,503);
 assert.equal(calls.length,0);
-for(const method of ['GET','PUT','OPTIONS'])assert.equal((await guarded.fetch(req(path,method),env)).status,200);
+for(const method of ['GET','PUT','OPTIONS']){
+ const response=await guarded.fetch(req(path,method),env);
+ assert.equal(response.status,200);
+ assert.equal(response.headers.get('X-APD-QA-Stage'),'application');
+}
 assert.equal(calls.length,3);
 assert.equal(guarded.scheduled,undefined);
 console.log('APD_DIARY_QA_WORKER_GUARD_PASS');
