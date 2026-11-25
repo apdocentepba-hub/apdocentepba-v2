@@ -7,6 +7,7 @@ on:
       - 'docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql'
       - 'scripts/apd-commercial-payment-fixture.sql'
       - 'scripts/test-apd-commercial-payment.sql'
+      - 'scripts/test-apd-commercial-payment-review.sql'
       - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
       - 'scripts/test-apd-commercial-checkout.sql'
       - 'docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql'
@@ -111,3 +112,10 @@ jobs:
           test "$(grep -h -c '"reason": "conflict"' /tmp/apd-pref-A /tmp/apd-pref-B | awk '{s+=$1} END{print s}')" = 1
           test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_preferences WHERE distrito_principal IN ('A','B') AND otros_distritos=ARRAY['QUILMES'] AND cargos=ARRAY['MAT','FIS'] AND alertas_whatsapp AND alertas_telegram")" = 1
           echo 'PASS preferences compare-and-save: concurrent conflict and hidden settings preserved'
+      - name: Verify payment review and reversal
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-payment-review.sql
+          echo 'PASS payment review: exact reversal, replay rejection and unrelated entitlement preservation'

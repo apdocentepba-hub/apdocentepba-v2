@@ -7,3 +7,5 @@ INSERT INTO public.mercadopago_checkout_sessions(user_id,plan_code,status,extern
  ('00000000-0000-4000-8000-000000000001','COMPLETO','ready','qa-a','{"price_ars":2000,"plan_code":"COMPLETO"}'),
  ('00000000-0000-4000-8000-000000000001','COMPLETO','ready','qa-b','{"price_ars":2000,"plan_code":"COMPLETO"}'),
  ('00000000-0000-4000-8000-000000000001','COMPLETO','ready','qa-invalid','{"price_ars":1,"plan_code":"COMPLETO"}');
+
+GRANT UPDATE ON public.user_subscriptions TO service_role;

@@ -20,5 +20,5 @@ export function stageCommercialPayment(source){
  const syncOld=sync[0][0],syncNew=syncOld.replace('return await applyMercadoPagoPayment','if (parseMercadoPagoExternalReference(payment?.external_reference).plan_code==="COMPLETO" && String(payment?.id)!==String(resourceId)) return {processed:false,reason:"provider_payment_id_mismatch"};\n  return await applyMercadoPagoPayment');
  const candidate=prefix+source.replace(old,()=>fresh).replace(syncOld,()=>syncNew);
  assert.equal(candidate.slice(prefix.length).replace(fresh,()=>old).replace(syncNew,()=>syncOld),source,'Unrelated bytes changed');
- return {candidate,unrelatedBytesPreserved:true,legacyPreserved:true,approvalOnly:true,deployable:false};
+ return {candidate,unrelatedBytesPreserved:true,legacyPreserved:true,approvalOnly:false,deployable:false};
 }

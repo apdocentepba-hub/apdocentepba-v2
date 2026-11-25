@@ -10,6 +10,15 @@ CREATE TABLE public.apd_complete_payment_ledger (
 ALTER TABLE public.apd_complete_payment_ledger ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.apd_complete_payment_ledger FROM PUBLIC,anon,authenticated;
 GRANT SELECT,INSERT,UPDATE ON public.apd_complete_payment_ledger TO service_role;
+CREATE TABLE public.apd_complete_payment_review (
+ payment_id text PRIMARY KEY,
+ checkout_id uuid NOT NULL REFERENCES public.mercadopago_checkout_sessions(id) ON DELETE RESTRICT,
+ disposition text NOT NULL CHECK(disposition IN ('review','revoke')),
+ observed_at timestamptz NOT NULL
+);
+ALTER TABLE public.apd_complete_payment_review ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.apd_complete_payment_review FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,UPDATE ON public.apd_complete_payment_review TO service_role;
 CREATE FUNCTION public.apd_apply_complete_approval(p_payment_id text,p_reference text,p_status text,p_amount numeric,p_currency text,p_approved_at timestamptz)
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $fn$
 DECLARE s public.mercadopago_checkout_sessions%ROWTYPE; v_user uuid; v_sub uuid; v_end timestamptz; v_start timestamptz; v_insert text;
@@ -28,6 +37,9 @@ BEGIN
  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','account_unavailable'); END IF;
  SELECT * INTO s FROM public.mercadopago_checkout_sessions WHERE external_reference=p_reference AND user_id=v_user AND plan_code='COMPLETO' AND provider='mercadopago' FOR UPDATE;
  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','unknown_checkout'); END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_payment_id,0));
+ IF EXISTS(SELECT 1 FROM public.apd_complete_payment_review WHERE payment_id=p_payment_id)
+ THEN RETURN jsonb_build_object('ok',false,'reason','payment_under_review'); END IF;
  IF EXISTS(SELECT 1 FROM public.apd_complete_payment_ledger WHERE payment_id=p_payment_id AND checkout_id=s.id AND subscription_id IS NOT NULL)
  THEN RETURN jsonb_build_object('ok',true,'duplicate',true); END IF;
  IF EXISTS(SELECT 1 FROM public.apd_complete_payment_ledger WHERE payment_id=p_payment_id OR checkout_id=s.id)
@@ -54,4 +66,37 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION public.apd_apply_complete_approval(text,text,text,numeric,text,timestamptz) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.apd_apply_complete_approval(text,text,text,numeric,text,timestamptz) TO service_role;
+CREATE FUNCTION public.apd_review_complete_payment(p_payment_id text,p_reference text,p_disposition text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $fn$
+DECLARE s public.mercadopago_checkout_sessions%ROWTYPE; l public.apd_complete_payment_ledger%ROWTYPE; r public.apd_complete_payment_review%ROWTYPE; v_user uuid;
+BEGIN
+ IF p_payment_id IS NULL OR p_payment_id !~ '^[0-9]{1,30}
+ OR p_reference IS NULL OR length(p_reference)>180 OR p_disposition IS NULL OR p_disposition NOT IN ('review','revoke') THEN
+  RETURN jsonb_build_object('ok',false,'reason','invalid_review'); END IF;
+ SELECT user_id INTO v_user FROM public.mercadopago_checkout_sessions WHERE external_reference=p_reference AND plan_code='COMPLETO' AND provider='mercadopago';
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','unknown_checkout'); END IF;
+ IF (SELECT count(*) FROM public.mercadopago_checkout_sessions WHERE external_reference=p_reference)<>1 THEN RETURN jsonb_build_object('ok',false,'reason','ambiguous_checkout'); END IF;
+ PERFORM 1 FROM public.users WHERE id=v_user FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','account_unavailable'); END IF;
+ SELECT * INTO s FROM public.mercadopago_checkout_sessions WHERE external_reference=p_reference AND user_id=v_user AND plan_code='COMPLETO' AND provider='mercadopago' FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','unknown_checkout'); END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_payment_id,0));
+ SELECT * INTO l FROM public.apd_complete_payment_ledger WHERE payment_id=p_payment_id;
+ IF FOUND AND l.checkout_id<>s.id THEN RETURN jsonb_build_object('ok',false,'reason','payment_or_checkout_conflict'); END IF;
+ SELECT * INTO r FROM public.apd_complete_payment_review WHERE payment_id=p_payment_id;
+ IF FOUND AND r.checkout_id<>s.id THEN RETURN jsonb_build_object('ok',false,'reason','payment_or_checkout_conflict'); END IF;
+ IF r.disposition='revoke' OR r.disposition=p_disposition THEN RETURN jsonb_build_object('ok',true,'duplicate',true,'disposition',r.disposition); END IF;
+ INSERT INTO public.apd_complete_payment_review(payment_id,checkout_id,disposition,observed_at)
+ VALUES(p_payment_id,s.id,p_disposition,clock_timestamp())
+ ON CONFLICT(payment_id) DO UPDATE SET disposition=EXCLUDED.disposition,observed_at=EXCLUDED.observed_at;
+ IF p_disposition='revoke' AND l.subscription_id IS NOT NULL THEN
+  UPDATE public.user_subscriptions SET status='CANCELLED',updated_at=clock_timestamp()
+  WHERE id=l.subscription_id AND user_id=v_user AND plan_code='COMPLETO' AND external_reference=p_reference;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Payment entitlement linkage mismatch'; END IF;
+  UPDATE public.mercadopago_checkout_sessions SET status='reversed',updated_at=clock_timestamp() WHERE id=s.id;
+ END IF;
+ RETURN jsonb_build_object('ok',true,'duplicate',false,'disposition',p_disposition);
+END $fn$;
+REVOKE ALL ON FUNCTION public.apd_review_complete_payment(text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.apd_review_complete_payment(text,text,text) TO service_role;
 COMMIT;

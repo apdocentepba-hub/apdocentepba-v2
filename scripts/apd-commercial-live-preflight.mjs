@@ -69,7 +69,7 @@ async function main(){
  console.log('APD_COMMERCIAL_TOOLS_STAGE '+JSON.stringify({accountGates:toolsStage.accountGates,pidObjectGate:toolsStage.pidObjectGate,unrelatedBytesPreserved:toolsStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
  const paymentStage=stageCommercialPayment(toolsStage.candidate);
  verifyTrialCandidateSyntax(paymentStage.candidate);
- console.log('APD_COMMERCIAL_PAYMENT_STAGE '+JSON.stringify({legacyPreserved:paymentStage.legacyPreserved,unrelatedBytesPreserved:paymentStage.unrelatedBytesPreserved,approvalOnly:true,syntax:true,deployable:false}));
+ console.log('APD_COMMERCIAL_PAYMENT_STAGE '+JSON.stringify({legacyPreserved:paymentStage.legacyPreserved,unrelatedBytesPreserved:paymentStage.unrelatedBytesPreserved,approvalOnly:paymentStage.approvalOnly,syntax:true,deployable:false}));
  const checkoutStage=stageCommercialCheckout(paymentStage.candidate);
  verifyTrialCandidateSyntax(checkoutStage.candidate);
  console.log('APD_COMMERCIAL_CHECKOUT_STAGE '+JSON.stringify({functions:checkoutStage.functions,unrelatedBytesPreserved:checkoutStage.unrelatedBytesPreserved,syntax:true,deployable:false}));

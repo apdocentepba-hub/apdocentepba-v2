@@ -16,8 +16,8 @@ test('provider-approved payment maps only required fields to atomic RPC',async()
  });
  assert.deepEqual(result,{processed:true,duplicate:false,plan_code:'COMPLETO'});
 });
-test('reject pending, refunded, partially refunded, incorrect amount, malformed dates, sandbox or reference before RPC',async()=>{
- for(const overrides of [{status:'pending'},{status:'refunded'},{transaction_amount_refunded:1},{transaction_amount_refunded:undefined},{transaction_amount:1999},{currency_id:'USD'},{date_approved:'2026-11-25'},{live_mode:false},{external_reference:'bad:COMPLETO:1'},{id:1e30}]){
+test('reject pending, incorrect amount, malformed dates, sandbox or reference before RPC',async()=>{
+ for(const overrides of [{status:'pending'},{transaction_amount_refunded:undefined},{transaction_amount:1999},{currency_id:'USD'},{date_approved:'2026-11-25'},{live_mode:false},{external_reference:'bad:COMPLETO:1'},{id:1e30}]){
   const result=await apply(env,{...valid,...overrides},async()=>assert.fail('RPC must not run'));
   assert.equal(result.processed,false);
  }
@@ -38,3 +38,11 @@ test('legacy still delegates, provider ID mismatch cannot activate Completo',asy
  assert.equal((await ctx.applyMercadoPagoPayment({}, {external_reference:'a:PLUS:1'})).legacy,true);
  assert.equal((await ctx.syncMercadoPagoWebhook({},'101')).reason,'provider_payment_id_mismatch');
 });
+
+test('refund and dispute dispositions use review RPC, never initiate a refund',async()=>{
+ for(const [overrides,disposition] of [[{status:'refunded',transaction_amount_refunded:2000},'revoke'],[{status:'charged_back',status_detail:'settled'},'revoke'],[{status:'charged_back',status_detail:'in_process'},'review'],[{status:'charged_back',status_detail:'reimbursed'},'review'],[{status:'in_mediation'},'review'],[{status_detail:'partially_refunded',transaction_amount_refunded:1},'review']]){
+  const r=await apply(env,{...valid,...overrides},async(url,req)=>{assert.equal(url.pathname,'/rest/v1/rpc/apd_review_complete_payment');assert.deepEqual(JSON.parse(req.body),{p_payment_id:'100',p_reference:valid.external_reference,p_disposition:disposition});return reply({ok:true,duplicate:false,disposition});});
+  assert.equal(r.disposition,disposition);
+ }
+});
+test('reversed or disputed payment approval is not reactivated',async()=>{assert.equal((await apply(env,valid,async()=>reply({ok:false,reason:'payment_under_review'}))).processed,false);});
