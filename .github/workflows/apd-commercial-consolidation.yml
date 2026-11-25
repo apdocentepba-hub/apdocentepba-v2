@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/apd-commercial-policy.mjs'
+      - 'scripts/apd-insigne-planner-entitlement.mjs'
+      - 'scripts/test-apd-insigne-planner-entitlement.mjs'
       - 'plan_checkout_patch.js'
       - 'app_v2.js'
       - 'index.html'
@@ -26,5 +28,5 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/apd-commercial-policy.mjs
-      - run: node --test scripts/test-apd-commercial-policy.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-ui.mjs scripts/test-plan-reactivation-ui.mjs
+      - run: node --test scripts/test-apd-commercial-policy.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-ui.mjs scripts/test-plan-reactivation-ui.mjs scripts/test-apd-insigne-planner-entitlement.mjs
       - run: node --check plan_checkout_patch.js && node --check app_v2.js
