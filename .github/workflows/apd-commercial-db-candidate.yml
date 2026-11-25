@@ -4,6 +4,9 @@ on:
     paths:
       - 'docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql'
       - 'scripts/apd-commercial-db-fixture.sql'
+      - 'docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql'
+      - 'scripts/apd-commercial-payment-fixture.sql'
+      - 'scripts/test-apd-commercial-payment.sql'
       - 'scripts/test-apd-commercial-db.sql'
       - '.github/workflows/apd-commercial-db-candidate.yml'
 permissions:
@@ -53,3 +56,22 @@ jobs:
           test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_trial_claims WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
           test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
           echo 'PASS database candidate: release gate, legacy preservation, privileges, exact duration, concurrent claim'
+      - name: Verify payment reconciliation on disposable database
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-payment-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-payment.sql
+          claim="SET ROLE service_role; SELECT public.apd_apply_complete_approval('102','qa-b','approved',2000,'ARS',now());"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-payment-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-payment-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"duplicate": false' /tmp/apd-payment-a /tmp/apd-payment-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"duplicate": true' /tmp/apd-payment-a /tmp/apd-payment-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_payment_ledger")" = 2
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE plan_code='COMPLETO'")" = 2
+          echo 'PASS commercial payment candidate: amount, currency, reference, release gate, replay, concurrency and preserved trial days'
