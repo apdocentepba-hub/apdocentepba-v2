@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {verifyCommercialRuntime} from './apd-commercial-runtime-qa.mjs';
 import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-save.mjs';
 import {stageCommercialSavePreferences} from './apd-commercial-stage-save-preferences.mjs';
 import {stageCommercialEffectivePreferences} from './apd-commercial-stage-preferences.mjs';
@@ -82,6 +83,8 @@ async function main(){
  const concurrentStage=stageCommercialConcurrentSave(saveStage.candidate);
  verifyTrialCandidateSyntax(concurrentStage.candidate);
  console.log('APD_COMMERCIAL_CONCURRENT_SAVE_STAGE '+JSON.stringify({compareAndSave:concurrentStage.compareAndSave,unrelatedBytesPreserved:concurrentStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
+ const runtime=await verifyCommercialRuntime(concurrentStage.candidate);
+ console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){

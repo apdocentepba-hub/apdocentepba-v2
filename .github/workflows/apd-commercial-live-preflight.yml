@@ -4,6 +4,7 @@ on:
     types: [synchronize]
     paths:
       - 'scripts/apd-commercial-live-preflight.mjs'
+      - 'scripts/apd-commercial-runtime-qa.mjs'
       - 'scripts/apd-commercial-persist-preferences.mjs'
       - 'scripts/apd-commercial-stage-concurrent-save.mjs'
       - 'scripts/test-apd-commercial-persist-preferences.mjs'
