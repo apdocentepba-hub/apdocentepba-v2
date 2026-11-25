@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialPayment} from './apd-commercial-stage-payment.mjs';
 import {stageCommercialTools} from './apd-commercial-stage-tools.mjs';
 import {stageCommercialAccess} from './apd-commercial-stage-access.mjs';
 import {stageTrialHelpers,verifyTrialCandidateSyntax,assertObservedFingerprint} from './apd-commercial-stage-trial.mjs';
@@ -62,6 +63,9 @@ async function main(){
  const toolsStage=stageCommercialTools(accessStage.candidate);
  verifyTrialCandidateSyntax(toolsStage.candidate);
  console.log('APD_COMMERCIAL_TOOLS_STAGE '+JSON.stringify({accountGates:toolsStage.accountGates,pidObjectGate:toolsStage.pidObjectGate,unrelatedBytesPreserved:toolsStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
+ const paymentStage=stageCommercialPayment(toolsStage.candidate);
+ verifyTrialCandidateSyntax(paymentStage.candidate);
+ console.log('APD_COMMERCIAL_PAYMENT_STAGE '+JSON.stringify({legacyPreserved:paymentStage.legacyPreserved,unrelatedBytesPreserved:paymentStage.unrelatedBytesPreserved,approvalOnly:true,syntax:true,deployable:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){

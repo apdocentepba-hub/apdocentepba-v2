@@ -4,6 +4,9 @@ on:
     types: [synchronize]
     paths:
       - 'scripts/apd-commercial-live-preflight.mjs'
+      - 'scripts/apd-commercial-payment-adapter.mjs'
+      - 'scripts/apd-commercial-stage-payment.mjs'
+      - 'scripts/test-apd-commercial-payment-adapter.mjs'
       - 'scripts/apd-commercial-stage-tools.mjs'
       - 'scripts/test-apd-commercial-stage-tools.mjs'
       - 'scripts/apd-commercial-access-core.mjs'
@@ -28,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs
+      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs
       - name: Inspect active production metadata and anonymous contracts without mutation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
