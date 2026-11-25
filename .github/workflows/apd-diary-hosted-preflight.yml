@@ -1,0 +1,53 @@
+name: APD diary hosted preflight (read only)
+on:
+  push:
+    branches: [feat/career-account-persistence-20261124]
+    paths: ['.github/workflows/apd-diary-hosted-preflight.yml']
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.ref == 'refs/heads/feat/career-account-persistence-20261124'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect Cloudflare account without writes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(!token) throw Error('Cloudflare credential absent');
+          async function get(path){
+            const r=await fetch('https://api.cloudflare.com/client/v4'+path,{
+              headers:{Authorization:'Bearer '+token},redirect:'error',signal:AbortSignal.timeout(15000)
+            });
+            const j=await r.json();
+            return {status:r.status,ok:r.ok&&j.success===true,result:j.result};
+          }
+          const a=await get('/accounts?per_page=50');
+          if(!a.ok||!Array.isArray(a.result))throw Error('Account listing unavailable');
+          const id=process.env.CONFIGURED_ACCOUNT_ID|| (a.result.length===1?a.result[0].id:'');
+          if(!id||!a.result.some(x=>x.id===id))throw Error('Account identity not established');
+          const root='/accounts/'+encodeURIComponent(id);
+          const [scripts,subdomain,subscriptions]=await Promise.all([
+            get(root+'/workers/scripts'),get(root+'/workers/subdomain'),get(root+'/subscriptions')
+          ]);
+          if(!scripts.ok||!Array.isArray(scripts.result))throw Error('Worker listing unavailable');
+          const report={
+            qa_name_available:!scripts.result.some(s=>s.id==='apd-diary-qa'),
+            production_worker_present:scripts.result.some(s=>s.id==='ancient-wildflower-cd37'),
+            expected_subdomain:subdomain.ok&&subdomain.result?.subdomain==='apdocentepba',
+            billing_read_status:subscriptions.status,
+            subscriptions:subscriptions.ok&&Array.isArray(subscriptions.result)?subscriptions.result.map(s=>({
+              product:s.rate_plan?.public_name||s.rate_plan?.id||'unknown',
+              price:s.price??null,state:s.state??null
+            })):null,
+            writes:0
+          };
+          console.log('APD_DIARY_HOSTED_PREFLIGHT '+JSON.stringify(report));
+          if(!report.qa_name_available||!report.production_worker_present||!report.expected_subdomain||report.subscriptions===null)
+            throw Error('Hosting prerequisites not established; no deployment attempted');
+          console.log('APD_DIARY_HOSTED_METADATA_READY; billing interpretation and write access still require verification');
+          JS
