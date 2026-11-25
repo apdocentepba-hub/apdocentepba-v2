@@ -12,7 +12,7 @@ import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {createApplicationDiarySection} from './scripts/apd-application-diary-ui.mjs?v=20261124-diary2';
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
-import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-vacancy1';
+import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-tools2';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
@@ -804,7 +804,7 @@ function render(){
  root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count()||applicationDiary.client||applicationDiary.record.entries.length)));
  if(root.hidden&&!careerAllowed)return;
  if(careerAllowed){
-  const hub=node('section','apd-career-tools');
+  const hub=node('div','apd-career-tools');
   hub.append(node('h3','',careerHost?'Gestión de cargos y postulaciones':'Herramientas para elegir cargos'));
   if(careerHost)hub.append(node('p','apd-comparator-hint','Guardá oportunidades, registrá tus postulaciones y analizá alternativas en un solo lugar. Las postulaciones oficiales se realizan en ABC.'));
   const grid=node('div','apd-career-tools-grid');
