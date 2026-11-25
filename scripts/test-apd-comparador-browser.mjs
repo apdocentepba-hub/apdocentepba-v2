@@ -1680,6 +1680,26 @@ try{
  assert.match(await js('document.querySelector(".apd-application-diary li").textContent'),/Postulada/);
  assert.equal(diaryRequests.filter(request=>request.method==='PUT').length,1);
  results.push({actual_diary_bootstrap:true,no_offer_access:true,new_session_readback:true});
+ // Exercise the dedicated production mount without duplicating data or requests.
+ await js(`(()=>{
+  const card=document.createElement('section');card.id='apd-career-tools-card';card.hidden=true;
+  const host=document.createElement('section');host.id='apd-career-tools-host';host.hidden=true;
+  card.append(host,document.getElementById('apd-personal-history'));document.body.append(card);
+  window.__toolTab=null;window.APD_activatePanelTab=(key)=>{window.__toolTab=key;};
+  document.getElementById('panel-alertas').textContent='Navegación de ensayo';return true;
+ })()`);
+ await until('!!document.querySelector("#apd-career-tools-host .apd-application-diary")');
+ assert.equal(await js('document.querySelectorAll(".apd-application-diary").length'),1);
+ assert.equal(await js('document.querySelectorAll("#apd-comparador-panel .apd-application-diary").length'),0);
+ assert.match(await js('document.querySelector("#apd-career-tools-host .apd-application-diary li").textContent'),/Postulada/);
+ assert.equal(await js('document.getElementById("apd-career-tools-card").hidden'),false);
+ await js('document.querySelector(".apd-career-nav button").click();true');
+ assert.equal(await js('window.__toolTab'), 'repo');
+ await js('window.APD_comparatorReset();true');
+ assert.equal(await js('document.getElementById("apd-career-tools-card").hidden'),true);
+ assert.equal(await js('document.getElementById("apd-career-tools-host").childElementCount'),0);
+ assert.equal(diaryRequests.filter(request=>request.method==='PUT').length,1);
+ results.push({unified_tools_mount:true,no_duplicate_diary:true,tab_navigation:true,private_mount_cleared:true});
  console.log('APD_COMPARATOR_REAL_BROWSER '+JSON.stringify({success:true,results,network:'localhost_only',auth:'synthetic'}));
 }finally{
  for(const p of pending.values()){clearTimeout(p.t);p.reject(Error('Browser stopping'));}

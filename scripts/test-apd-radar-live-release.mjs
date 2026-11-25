@@ -44,7 +44,13 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const newAccount='<script src="account_profile_patch.js?v=20261124-perfil2"></script>';
  const accountTransition=oldScripts.includes(oldAccount)&&proposed.includes(newAccount);
  if(accountTransition)assert.equal(proposed.filter(tag=>tag===newAccount).length,1);
- const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tag);
+ // The unified tools release changes only the cache revision of the existing
+ // tab adapter. The radar asset, all other URLs and load order stay protected.
+ const oldTabs='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
+ const newTabs='<script src="panel_tabs_patch.js?v=finalvisual3"></script>';
+ const tabsTransition=oldScripts.includes(oldTabs)&&proposed.includes(newTabs);
+ if(tabsTransition)assert.equal(proposed.filter(tag=>tag===newTabs).length,1);
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:tag);
  assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
@@ -89,6 +95,13 @@ test("a visual redesign cannot change radar code, script order or radar card",()
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace('auth_session_patch.js?v=3','auth_session_patch.js?v=4')),
    /script tags\/order/);
+  // A cache bump is permitted only for the exact reviewed revision.
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace(/panel_tabs_patch\.js\?v=finalvisual[23]/,'panel_tabs_patch.js?v=unreviewed')),
+   /script tags\/order/);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace(/(<script src="panel_tabs_patch\.js[^"]+"><\/script>)/,'$1$1')),
+   /script tags\/order|Expected values/);
 
  }
 });

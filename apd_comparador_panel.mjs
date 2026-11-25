@@ -795,11 +795,18 @@ function render(){
  if(state.geoRequested&&state.geoSignature!==schoolGeoSignature())invalidateGeo();
  closeComparisonDialog();
  root.replaceChildren();
+ const careerHost=document.getElementById('apd-career-tools-host');
+ const careerCard=careerHost?.closest('#apd-career-tools-card');
+ const careerAllowed=state.enabled&&state.privatePlannerAllowed;
+ if(careerHost){careerHost.replaceChildren();careerHost.hidden=!careerAllowed;}
+ if(careerCard)careerCard.hidden=!careerAllowed;
+ const toolsRoot=careerHost||root;
  root.hidden=!state.enabled||(!state.available.length&&!(state.privatePlannerAllowed&&(permanentFavorites||favorites.count()||applicationDiary.client||applicationDiary.record.entries.length)));
- if(root.hidden)return;
- if(state.privatePlannerAllowed){
+ if(root.hidden&&!careerAllowed)return;
+ if(careerAllowed){
   const hub=node('section','apd-career-tools');
-  hub.append(node('h3','','Herramientas para elegir cargos'));
+  hub.append(node('h3','',careerHost?'Gestión de cargos y postulaciones':'Herramientas para elegir cargos'));
+  if(careerHost)hub.append(node('p','apd-comparator-hint','Guardá oportunidades, registrá tus postulaciones y analizá alternativas en un solo lugar. Las postulaciones oficiales se realizan en ABC.'));
   const grid=node('div','apd-career-tools-grid');
   const count=state.available.length;
   for(const [title,detail,target,enabled] of [
@@ -810,7 +817,7 @@ function render(){
    ['Historial','Oportunidades anteriores','#apd-personal-history',true]
   ]){
    const control=button('',()=>{
-    const destination=target.startsWith('#')?document.querySelector(target):root.querySelector(target);
+    const destination=target.startsWith('#')?document.querySelector(target):toolsRoot.querySelector(target);
     if(!destination||destination.hidden)return;
     if(destination.tagName==='DETAILS')destination.open=true;
     destination.scrollIntoView?.({block:'start'});
@@ -825,10 +832,20 @@ function render(){
    session,onChanged:render,
    isCurrent:()=>state.enabled&&state.privatePlannerAllowed&&session===applicationDiary
   });
-  hub.append(grid);root.append(hub,renderFavorites(),diary);
+  hub.append(grid);toolsRoot.append(hub,renderFavorites(),diary);
+  if(careerHost&&!root.hidden){
+   const nav=node('div','apd-career-nav');
+   nav.append(node('p','apd-comparator-hint','Favoritos, postulaciones, recomendaciones e historial ahora están juntos en Herramientas.'));
+   nav.append(button('Ir a Herramientas · Gestión de cargos',()=>{
+    window.APD_activatePanelTab?.('repo',true);
+    careerHost.scrollIntoView?.({block:'start'});
+    careerHost.querySelector('button')?.focus({preventScroll:true});
+   },'btn btn-secondary'));
+   root.append(nav);
+  }
  }
- if(!state.available.length)return;
- if(state.privatePlannerAllowed){root.appendChild(renderRecommendations());root.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
+ if(careerAllowed&&state.available.length){toolsRoot.appendChild(renderRecommendations());toolsRoot.appendChild(createWeekOptimizerSection({offers:state.available.map(o=>({...o,source_offer_key:offerKey(o)})),loadProfile:loadPrivatePlanner,isCurrent:()=>state.enabled&&state.privatePlannerAllowed}));}
+ if(root.hidden||!state.available.length)return;
  const head=node('div','apd-comparator-head');
  const heading=node('h3','', 'Comparar ofertas');
  heading.tabIndex=-1;
@@ -1116,6 +1133,10 @@ function reset() {
  document.querySelectorAll('#apd-comparar-oferta,#apd-ver-comparacion,#apd-simular-oferta,#apd-favorite-oferta')
   .forEach(control=>control.remove());
  if(root){root.hidden=true;root.replaceChildren();}
+ const careerHost=document.getElementById('apd-career-tools-host');
+ if(careerHost){careerHost.hidden=true;careerHost.replaceChildren();}
+ const careerCard=document.getElementById('apd-career-tools-card');
+ if(careerCard)careerCard.hidden=true;
 }
 document.getElementById('btn-logout')?.addEventListener('click',clearPrivatePlanner,true);
 window.addEventListener('APD_accountHomeUpdated',()=>{
