@@ -5,12 +5,12 @@
 
   const TAB_STORAGE_KEY='apd_panel_tab_v1';
   const TABS=[
-    ['inicio','Inicio'],['alertas','Alertas'],['perfil','Listados'],['repo','Repositorio'],['plan','Plan'],['mercado','Estadísticas'],['preferencias','Preferencias'],['admin','Admin']
+    ['inicio','Inicio'],['alertas','Alertas'],['perfil','Listados'],['repo','Herramientas'],['plan','Plan'],['mercado','Estadísticas'],['preferencias','Preferencias'],['admin','Admin']
   ];
   const INTRO={
     alertas:['🔔','Alertas APD activas','Una bandeja clara para revisar oportunidades compatibles, publicaciones recientes y coincidencias con tu perfil docente.',['Oportunidades','Compatibilidad','Seguimiento']],
     perfil:['🪪','Listados y perfil docente','Datos personales, PID, cargos, materias y accesos rápidos para ordenar tu información docente.',['PID docente','Perfil','Listados']],
-    repo:['📚','Repositorio docente PBA','Biblioteca de recursos, normativa, guías y materiales útiles para docentes y secretarías escolares.',['Normativa','Modelos','Guías']],
+    repo:['🧰','Herramientas docentes','Un solo lugar para organizar tus cargos y postulaciones, consultar recursos y realizar trámites docentes.',['Gestión de cargos','Recursos y trámites']],
     plan:['💳','Mi plan y suscripción','Estado del plan, beneficios activos, vencimiento y opciones para actualizar o gestionar la suscripción.',['Plan activo','Beneficios','Pagos']],
     mercado:['📊','Radar docente PBA','Lectura rápida de movimiento provincial, distritos, cargos y tendencias para decidir mejor.',['Radar','Tendencias','Mercado']],
     preferencias:['⚙️','Preferencias de alertas','Configurá distritos, cargos, niveles, turnos y canales para que las alertas lleguen con más precisión.',['Distritos','Cargos','Canales']],
@@ -91,7 +91,11 @@
     moveByContent('panel-datos-docente','inicio');moveByContent('panel-preferencias-resumen','inicio');moveByContent('panel-plan','inicio');moveByContent('panel-canales','inicio');
     moveByContent('panel-alertas','alertas');moveByContent('panel-estadisticas','alertas');
     moveByContent('panel-perfil-docente','perfil');moveByContent('panel-listados-docente','perfil');moveById('panel-listados-pid-card','perfil');
-    moveById('panel-repositorio-card','repo');moveById('panel-plan-selector-card','plan');moveByContent('panel-historico-apd','mercado');moveById('panel-radar-combinado-card','mercado');moveById('panel-radar-provincia','mercado');
+    moveById('apd-career-tools-card','repo');moveById('apd-general-tools-card','repo');moveById('panel-repositorio-card','repo');
+    // Keep private career management first; move existing nodes, never clone state.
+    const toolsGrid=grid('repo'),toolsIntro=document.getElementById('apd-tab-intro-repo'),careerCard=document.getElementById('apd-career-tools-card'),generalCard=document.getElementById('apd-general-tools-card');
+    if(toolsGrid&&toolsIntro&&careerCard&&careerCard.previousElementSibling!==toolsIntro)toolsIntro.insertAdjacentElement('afterend',careerCard);
+    if(toolsGrid&&careerCard&&generalCard&&generalCard.previousElementSibling!==careerCard)careerCard.insertAdjacentElement('afterend',generalCard);moveById('panel-plan-selector-card','plan');moveByContent('panel-historico-apd','mercado');moveById('panel-radar-combinado-card','mercado');moveById('panel-radar-provincia','mercado');
     movePrefs();moveById('admin-panel-card','admin');moveByContent('panel-backfill-provincia','admin');refreshVisibility();
   }
 
@@ -105,7 +109,7 @@
   function boot(){ if(!document.getElementById('panel-docente')||!getContent()) return; if(!localStorage.getItem(TAB_STORAGE_KEY)) localStorage.setItem(TAB_STORAGE_KEY,'inicio'); repartition(); ensureFooter(); }
   function schedule(){ if(booting) return; booting=true; requestAnimationFrame(()=>{booting=false;boot();}); }
   function observers(){const c=getContent(); if(c&&!observer){observer=new MutationObserver(schedule);observer.observe(c,{childList:true});} const a=document.getElementById('admin-panel-card'); if(a&&!adminObserver){adminObserver=new MutationObserver(refreshVisibility);adminObserver.observe(a,{attributes:true,attributeFilter:['class']});}}
-  function ensureFooter(){const f=document.querySelector('.footer-inner'); if(!f||f.dataset.visualReady) return; f.dataset.visualReady='1'; f.innerHTML='<div style="display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:22px;align-items:start"><div><strong style="font-size:20px;color:#fff">🔔 APDocentePBA</strong><p style="margin:8px 0;color:#b9d7ff">Alertas de Actos Públicos Digitales<br>Provincia de Buenos Aires</p></div><div><strong style="color:#fff">Navegación</strong><a href="#" data-apd-footer-tab="inicio">Inicio</a><a href="#" data-apd-footer-tab="alertas">Alertas</a><a href="#" data-apd-footer-tab="perfil">Listados</a><a href="#" data-apd-footer-tab="repo">Repositorio</a></div><div><strong style="color:#fff">Herramientas</strong><a href="./herramientas-docentes.html">Herramientas</a><a href="./licencias-docentes.html">Licencias</a><a href="./pid-docente.html">PID docente</a></div><div><strong style="color:#fff">Legal</strong><a href="./terminos.html">Términos</a><a href="./privacidad.html">Privacidad</a><a href="./suscripciones.html">Suscripciones</a><a href="./soporte.html">Soporte</a></div></div><div style="border-top:1px solid rgba(255,255,255,.12);margin-top:22px;padding-top:14px;text-align:center;color:#9fb9dc">© 2026 APDocentePBA. Todos los derechos reservados.</div>'; f.querySelectorAll('[data-apd-footer-tab]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();activateTab(a.dataset.apdFooterTab,{scrollTop:true});}));}
+  function ensureFooter(){const f=document.querySelector('.footer-inner'); if(!f||f.dataset.visualReady) return; f.dataset.visualReady='1'; f.innerHTML='<div style="display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:22px;align-items:start"><div><strong style="font-size:20px;color:#fff">🔔 APDocentePBA</strong><p style="margin:8px 0;color:#b9d7ff">Alertas de Actos Públicos Digitales<br>Provincia de Buenos Aires</p></div><div><strong style="color:#fff">Navegación</strong><a href="#" data-apd-footer-tab="inicio">Inicio</a><a href="#" data-apd-footer-tab="alertas">Alertas</a><a href="#" data-apd-footer-tab="perfil">Listados</a><a href="#" data-apd-footer-tab="repo">Herramientas</a></div><div><strong style="color:#fff">Herramientas</strong><a href="./herramientas-docentes.html">Herramientas</a><a href="./licencias-docentes.html">Licencias</a><a href="./pid-docente.html">PID docente</a></div><div><strong style="color:#fff">Legal</strong><a href="./terminos.html">Términos</a><a href="./privacidad.html">Privacidad</a><a href="./suscripciones.html">Suscripciones</a><a href="./soporte.html">Soporte</a></div></div><div style="border-top:1px solid rgba(255,255,255,.12);margin-top:22px;padding-top:14px;text-align:center;color:#9fb9dc">© 2026 APDocentePBA. Todos los derechos reservados.</div>'; f.querySelectorAll('[data-apd-footer-tab]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();activateTab(a.dataset.apdFooterTab,{scrollTop:true});}));}
 
   window.APD_refreshPanelTabs=schedule;
   window.APD_activatePanelTab=function(key,userInitiated){activateTab(key,{scrollTop:!!userInitiated});};

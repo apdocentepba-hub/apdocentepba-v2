@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-favorite-sync1|20261124-optimizer1|20261124-calendar1|20261124-schedulefix1|20261124-filterux1|20261124-career1|20261124-diary2)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-favorite-sync1|20261124-optimizer1|20261124-calendar1|20261124-schedulefix1|20261124-filterux1|20261124-career1|20261124-diary2|20261124-tools1)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -214,4 +214,17 @@ test('schedule compatibility switch exposes active state and edit shortcut',()=>
  assert.match(ui,/toggle\.disabled=!hasJobs/);
  assert.match(ui,/window\.APD_setAlertScheduleFilter\?\.\(!active\)/);
  assert.match(css,/\.apd-schedule-switch\[aria-checked=true\]/);
+});
+
+
+test('unified tools use one authenticated mount and preserve the alert carousel',()=>{
+ const tabs=fs.readFileSync(new URL('../panel_tabs_patch.js',import.meta.url),'utf8');
+ for(const id of ['apd-career-tools-card','apd-career-tools-host','apd-general-tools-card','apd-personal-history'])assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+ assert.match(tabs,/moveById\('apd-career-tools-card','repo'\)/);
+ assert.match(tabs,/moveById\('apd-general-tools-card','repo'\)/);
+ assert.match(tabs,/moveByContent\('panel-alertas','alertas'\)/);
+ assert.match(ui,/const toolsRoot=careerHost\|\|root/);
+ assert.match(ui,/const careerAllowed=state.enabled&&state.privatePlannerAllowed/);
+ assert.match(ui,/APD_activatePanelTab\?\.\('repo',true\)/);
+ assert.match(ui,/careerHost\.hidden=true;careerHost\.replaceChildren\(\)/);
 });

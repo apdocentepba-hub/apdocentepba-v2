@@ -39,7 +39,7 @@ test("pre-deploy baseline rejects a candidate accidentally published",()=>{
 
 test("release rejects unapproved app version, duplicate runtime and reordered approved runtime",()=>{
  const approved='<script src="app_v2.js?v=20&rev=20261124-perfil"></script>';
- const tabs='<script src="panel_tabs_patch.js?v=finalvisual2"></script>';
+ const tabs='<script src="panel_tabs_patch.js?v=finalvisual3"></script>';
  assert.throws(()=>checkHtml(after.replace(approved,approved.replace('20261124-perfil','unknown')),"after"),/app runtime script changed/);
  assert.throws(()=>checkHtml(after.replace(approved,approved+'<script src="./app_v2.js?v=other"></script>'),"after"),/duplicate app runtime/);
  assert.throws(()=>checkHtml(after.replace(approved,'').replace(tabs,tabs+approved),"after"),/legacy script ordering/);

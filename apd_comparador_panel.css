@@ -809,3 +809,16 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 .apd-career-tool span{font-size:11px;color:#526c84;overflow-wrap:anywhere}
 .apd-career-tool:disabled{background:#f4f7fa;cursor:default;opacity:.8}
 .apd-career-tool:focus-visible{outline:2px solid #2369b3;outline-offset:2px}
+
+/* Unified authenticated tools: a separate mount, not a copy of account data. */
+#apd-career-tools-card[hidden],#apd-career-tools-host[hidden]{display:none!important}
+#apd-career-tools-host{scroll-margin-top:100px;min-width:0;margin:0;border:0;padding:0;background:transparent;box-shadow:none}
+#apd-career-tools-host .apd-career-tools-grid{grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:10px}
+#apd-career-tools-host .apd-career-tools h3{font-size:19px;margin:0 0 6px}
+#apd-career-tools-host .apd-career-tool{min-height:78px}
+.apd-career-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;border:1px solid #d5e1ed;border-radius:12px;padding:10px;margin:12px 0}
+.apd-career-nav p{margin:0;flex:1 1 210px}
+#apd-career-tools-host .apd-application-diary{border:1px solid #cbdbea;border-radius:12px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+#apd-career-tools-host .apd-application-diary form:not([hidden]){display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+#apd-career-tools-host .apd-application-diary label{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%}
+#apd-career-tools-host .apd-application-diary select{max-width:100%;min-width:0;padding:8px}
