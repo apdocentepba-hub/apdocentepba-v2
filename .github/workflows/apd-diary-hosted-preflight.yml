@@ -1,13 +1,13 @@
 name: APD diary hosted preflight (read only)
 on:
-  push:
-    branches: [feat/career-account-persistence-20261124]
+  pull_request:
+    types: [synchronize]
     paths: ['.github/workflows/apd-diary-hosted-preflight.yml']
 permissions:
   contents: read
 jobs:
   preflight:
-    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.ref == 'refs/heads/feat/career-account-persistence-20261124'
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 330 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/career-account-persistence-20261124'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
