@@ -388,3 +388,27 @@ test('authorization cannot be treated as delivery and malformed RPC results fail
  });
  assert.equal(await denied.prepareDispatch({eventKey:EVENT,leaseId:LEASE}),null);
 });
+
+test('private Expo recipient read is owner scoped, minimal, and consumption validates RPC result',async()=>{
+ const dispatchId='33333333-3333-4333-8333-333333333333',tokenHash='a'.repeat(64);
+ const row={id:DEVICE,user_id:USER,platform:'android',transport:'expo',enabled:true,opted_in:true,revoked_at:null,token_hash:tokenHash,token_ciphertext:'Q'.repeat(80)};
+ let calls=0;
+ const db=createMobilePushPostgrestAdapterLab({projectUrl:HOST,secretKey:SECRET,fetchImpl:async(url,opts)=>{
+  calls++;const u=new URL(url);
+  if(calls===1){assert.equal(u.pathname,'/rest/v1/apd_mobile_push_devices');assert.equal(u.searchParams.get('user_id'),'eq.'+USER);assert.equal(u.searchParams.get('id'),'eq.'+DEVICE);assert.equal(u.searchParams.get('revoked_at'),'is.null');return response([{...row,private_extra:'not returned'}]);}
+  assert.equal(u.pathname,'/rest/v1/rpc/apd_mobile_consume_dispatch_lab');
+  assert.deepEqual(JSON.parse(opts.body),{p_event_key:EVENT,p_dispatch_id:dispatchId,p_token_hash:tokenHash});return response(calls===2?true:false);
+ }});
+ assert.deepEqual(await db.readOwnedExpoRecipient({userId:USER,deviceId:DEVICE}),row);
+ assert.equal(await db.consumeDispatch({eventKey:EVENT,dispatchId,tokenHash}),true);
+ assert.equal(await db.consumeDispatch({eventKey:EVENT,dispatchId,tokenHash}),false);
+ await assert.rejects(db.consumeDispatch({eventKey:EVENT,dispatchId,tokenHash:'invalid'}),/invalid_dispatch_consumption/);
+ assert.equal(calls,3);
+});
+test('private recipient rejects foreign account and malformed ciphertext',async()=>{
+ for(const row of [{user_id:DEVICE},{token_ciphertext:'bad'}]){
+ const base={id:DEVICE,user_id:USER,platform:'android',transport:'expo',enabled:true,opted_in:true,revoked_at:null,token_hash:'a'.repeat(64),token_ciphertext:'Q'.repeat(80)};
+ const db=createMobilePushPostgrestAdapterLab({projectUrl:HOST,secretKey:SECRET,fetchImpl:async()=>response([{...base,...row}])});
+ await assert.rejects(db.readOwnedExpoRecipient({userId:USER,deviceId:DEVICE}),/invalid_private_recipient/);
+ }
+});
