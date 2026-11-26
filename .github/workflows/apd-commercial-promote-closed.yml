@@ -1,0 +1,49 @@
+name: APD commercial exact Worker promotion - closed admission
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-promote-closed.mjs'
+      - 'scripts/test-apd-commercial-promote-closed.mjs'
+      - 'scripts/apd-commercial-release-contracts.mjs'
+      - '.github/workflows/apd-commercial-promote-closed.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apd-commercial-promote-closed.mjs'
+      - '.github/workflows/apd-commercial-promote-closed.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-commercial-zero-traffic
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-commercial-promote-closed.mjs
+  promote:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          command -v psql
+          node scripts/apd-commercial-promote-closed.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_SUPABASE_DB_URL: ${{ secrets.APD_SUPABASE_DB_URL }}
+          APD_PROMOTE_CLOSED: '1'
