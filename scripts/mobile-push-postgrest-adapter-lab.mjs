@@ -96,6 +96,24 @@ export function createMobilePushPostgrestAdapterLab({
  }
 
  return Object.freeze({
+  async registerDeviceLab({userId,deviceId,platform,transport,tokenHash,tokenCiphertext}={}){
+   if(!UUID.test(userId||'')||!UUID.test(deviceId||'')||!['android','ios'].includes(platform)||transport!=='expo'||!HEX.test(tokenHash||'')||typeof tokenCiphertext!=='string'||!/^[-_A-Za-z0-9]{48,4096}$/.test(tokenCiphertext))throw Error('invalid_registration');
+   const row=expectOne(await request('rpc/apd_mobile_register_device_lab',{method:'POST',body:{p_user:userId,p_device:deviceId,p_platform:platform,p_transport:transport,p_hash:tokenHash,p_ciphertext:tokenCiphertext}}));
+   if(!row||row.id!==deviceId||row.platform!==platform||row.transport!==transport||row.enabled!==true||row.opted_in!==true)throw Error('registration_not_confirmed');
+   return {id:row.id,platform:row.platform,transport:row.transport,enabled:true,opted_in:true};
+  },
+  async revokeDeviceLab({userId,deviceId}={}){
+   if(!UUID.test(userId||'')||!UUID.test(deviceId||''))throw Error('invalid_device');
+   const value=await request('rpc/apd_mobile_revoke_device_lab',{method:'POST',body:{p_user:userId,p_device:deviceId}});
+   if(typeof value!=='boolean')throw Error('invalid_revocation');
+   return value;
+  },
+  async listOwnedDevicesLab({userId,deviceId}={}){
+   if(!UUID.test(userId||'')||(deviceId!==undefined&&!UUID.test(deviceId||'')))throw Error('invalid_device');
+   const rows=await request('apd_mobile_push_devices',{query:{select:'id,user_id,platform,transport,enabled,opted_in',user_id:'eq.'+userId,...(deviceId?{id:'eq.'+deviceId}:{}),limit:101}});
+   if(!Array.isArray(rows)||rows.length>100||rows.some(r=>r.user_id!==userId||!UUID.test(r.id||'')||(deviceId&&r.id!==deviceId)||!['android','ios'].includes(r.platform)||!['expo','fcm','apns'].includes(r.transport)||typeof r.enabled!=='boolean'||typeof r.opted_in!=='boolean'))throw Error('invalid_device_list');
+   return rows.map(({id,platform,transport,enabled,opted_in})=>({id,platform,transport,enabled,opted_in}));
+  },
   async inboxPageLab({userId,after=0,limit=5}={}){
    if(typeof userId!=='string'||!UUID.test(userId)||
       !Number.isSafeInteger(after)||after<0||after>100000||
