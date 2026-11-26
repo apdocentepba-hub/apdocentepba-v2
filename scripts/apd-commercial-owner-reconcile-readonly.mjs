@@ -28,7 +28,8 @@ async function get(path,params={}){
 const me=await get('/users/me');
 assert.ok(/^\d+$/.test(String(me.id))&&me.site_id==='MLA','Credential seller/site not verified');
 const merchant=String(me.id);
-console.log('APD_OWNER_PROVIDER_AUTHENTICATED '+JSON.stringify({site:'MLA'}));
+const prefixes=[...new Set(data.rows.filter(r=>r.status==='ready').map(r=>/^([0-9]+)-/.exec(String(r.preference))?.[1]||''))];
+console.log('APD_OWNER_PROVIDER_AUTHENTICATED '+JSON.stringify({site:'MLA',authenticatedSellerSuffix:merchant.slice(-4),historicalPreferencePrefixSuffixes:prefixes.filter(Boolean).map(x=>x.slice(-4)),preferencePrefixMatch:prefixes.length===1&&prefixes[0]===merchant}));
 const known=data.rows.find(x=>x.status==='approved');
 let historicalPaymentVerified=false;
 let historicalLookup='unverified';
