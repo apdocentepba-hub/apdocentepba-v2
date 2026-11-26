@@ -1,0 +1,26 @@
+name: APD native checkout RPC diagnostic (no writes)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-native-rpc-diagnose.mjs'
+      - '.github/workflows/apd-commercial-native-rpc-diagnose.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 343 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - run: node --check scripts/apd-commercial-native-rpc-diagnose.mjs
+      - run: node scripts/apd-commercial-native-rpc-diagnose.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
