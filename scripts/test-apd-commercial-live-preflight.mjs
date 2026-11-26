@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {activeVersion,inspectVersion,inspectCrons} from './apd-commercial-live-preflight.mjs';
+import {activeVersion,inspectVersion,inspectCrons,prepareReleaseEnvelope} from './apd-commercial-live-preflight.mjs';
 const deploy=(versions)=>({deployments:[{versions}]});
 const v={version_id:'test-version',percentage:100};
 const manifest={version_id:'old',modules:[{sha256:'old'}],bindings:[{name:'DB',type:'secret_text'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
@@ -14,3 +14,5 @@ test('source with suspicious embedded key marker cannot pass',()=>{const content
 
 test('exact four approved schedules; order independent; reject drift and duplicates',()=>{const cron=['0 01 * * *','0 17 * * *','0 21 * * *','1-59/2 * * * *'];assert.deepEqual(inspectCrons({schedules:cron.slice().reverse().map(cron=>({cron}))}),cron.slice().sort());assert.deepEqual(inspectCrons(cron),cron.slice().sort());for(const x of [null,[],cron.slice(1),[...cron,cron[0]],[...cron.slice(1),'0 02 * * *']])assert.throws(()=>inspectCrons(x));});
 test('extra bindings, duplicate names with different type, missing identity and wrong entrypoint fail closed',()=>{for(const details of [{...fixture,bindings:[...fixture.bindings,{name:'EXTRA',type:'plain_text'}]},{...fixture,bindings:[...fixture.bindings,{name:'DB',type:'plain_text'}]},{...fixture,id:undefined},{...fixture,main_module:'other.js'}])assert.throws(()=>inspectVersion(details,'test-version',manifest));});
+
+test('release package refuses any candidate or baseline fingerprint drift',()=>{const input={candidate:'not the approved bytes',report:{version:'v',sha256:'h',binding_count:29},observation:{observed_active_version:'v',sha256:'h'},manifest:{bindings:Array.from({length:29})},config:'',crons:[]};assert.throws(()=>prepareReleaseEnvelope(input),/fingerprint drift/);assert.throws(()=>prepareReleaseEnvelope({...input,report:{...input.report,version:'other'}}),/fingerprint drift/);});

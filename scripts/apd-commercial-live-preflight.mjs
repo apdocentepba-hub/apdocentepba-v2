@@ -1,6 +1,8 @@
 // Read-only preflight: no source or binding values leave the runner.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {stageCommercialLegacyBilling} from './apd-commercial-stage-legacy-billing.mjs';
 import {stageCommercialQaStats} from './apd-commercial-stage-qa-stats.mjs';
@@ -52,6 +54,43 @@ export function inspectVersion(details,version,manifest){
  const identifiers=['TRIAL_7D','INSIGNE','PREMIUM','PLUS','access_active','trial_ends_at','current_period_ends_at','mercadopago_preapproval_id','/account/application-diary','/account/favorites','/account/schedule','/mercadopago/create-checkout-link','handleMercadoPagoWebhook'];
  const counts=Object.fromEntries(identifiers.map(key=>[key,code.split(key).length-1]));
  return {version,module:modules[0].name,bytes:bytes.length,sha256:hash(bytes),binding_count:bindings.size,counts,canonical_match:version===manifest.version_id&&hash(bytes)===manifest.modules?.[0]?.sha256,approved_for_deploy:false};
+}
+// The release envelope is an attestation, never an authorization or upload.
+export function prepareReleaseEnvelope({candidate,report,observation,manifest,config,crons}){
+ const bytes=Buffer.from(candidate,'utf8');
+ const sha256=hash(bytes);
+ if(report.version!==observation.observed_active_version||report.sha256!==observation.sha256||
+    report.binding_count!==29||report.binding_count!==manifest.bindings.length||
+    bytes.length!==902908||sha256!=='65006ce5607cd348bff9fd7a606381b7c4fda1af2f9e27f7b473faad99f162ac')throw Error('Release fingerprint drift');
+ inspectCrons(crons);inspectCrons(manifest.schedules);
+ const main='main = "worker-live/worker_hotfix.js"';
+ const cronLine=config.match(/^crons = (.+)$/m);
+ const kv=manifest.bindings.filter(b=>b.type==='kv_namespace');
+ if(config.split(main).length!==2||!config.includes('PRODUCTION_SOURCE_GUARD_V1')||
+    !/^name = "ancient-wildflower-cd37"$/m.test(config)||!/^keep_vars = true$/m.test(config)||
+    /^\s*\[\s*vars\s*\]/m.test(config)||!cronLine||
+    (config.match(/^main\s*=/gm)||[]).length!==1||
+    (config.match(/^crons\s*=/gm)||[]).length!==1||
+    kv.length!==1||!config.includes('binding = "'+kv[0].name+'"')||
+    !config.includes('id = "'+kv[0].namespace_id+'"'))throw Error('Release config drift');
+ inspectCrons(JSON.parse(cronLine[1]));
+ if((config.match(/^\[\[kv_namespaces\]\]$/gm)||[]).length!==1)throw Error('Unexpected KV configuration');
+ const candidateConfig=config.replace(main,'main = "worker-diary-candidate.js"');
+ return {candidateConfig,receipt:{baseVersion:report.version,rollbackVersion:report.version,
+    candidateSha256:sha256,candidateBytes:bytes.length,bindings:report.binding_count,crons:inspectCrons(crons),
+    configSha256:hash(Buffer.from(candidateConfig)),productionTrafficChanged:false,approvedForDeploy:false}};
+}
+function verifyReleaseEnvelopeOnDisk(candidate,candidateConfig,receipt){
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'apd-commercial-release-'));
+ try{
+  const modulePath=path.join(dir,'worker-diary-candidate.js');
+  const configPath=path.join(dir,'wrangler.toml');
+  fs.writeFileSync(modulePath,candidate,{mode:0o600,flag:'wx'});
+  fs.writeFileSync(configPath,candidateConfig,{mode:0o600,flag:'wx'});
+  if(hash(fs.readFileSync(modulePath))!==receipt.candidateSha256||
+     hash(fs.readFileSync(configPath))!==receipt.configSha256)throw Error('Release package readback mismatch');
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+ return true;
 }
 async function main(){
  const token=process.env.CLOUDFLARE_API_TOKEN;
@@ -130,6 +169,9 @@ async function main(){
   console.log('APD_COMMERCIAL_REAL_PG_QA '+JSON.stringify(integrated));
  }
  console.log('APD_COMMERCIAL_CANDIDATE_FINGERPRINT '+JSON.stringify({baseVersion:version,baseSha256:report.sha256,candidateSha256:hash(Buffer.from(billingStage.candidate)),candidateBytes:Buffer.byteLength(billingStage.candidate),approvedForDeploy:false}));
+ const envelope=prepareReleaseEnvelope({candidate:billingStage.candidate,report,observation,manifest,config:fs.readFileSync('wrangler.toml','utf8'),crons});
+ verifyReleaseEnvelopeOnDisk(billingStage.candidate,envelope.candidateConfig,envelope.receipt);
+ console.log('APD_COMMERCIAL_RELEASE_ENVELOPE '+JSON.stringify({...envelope.receipt,localReadback:true,temporaryFilesRemoved:true,uploadExecuted:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){
