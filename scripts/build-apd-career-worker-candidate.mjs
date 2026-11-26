@@ -26,7 +26,17 @@ function apdCareerCorsV1(request,response){
 }
 async function hasAccountCareerAccessV1(env,id){
  const p=await resolverPlanUsuario(env,id);
- return isPlanActivo(p)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(p?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(p?.subscription?.status||'').toUpperCase());
+ const code=String(p?.subscription?.plan_code||'').trim().toUpperCase();
+ const planCode=String(p?.plan?.code||'').trim().toUpperCase();
+ const status=String(p?.subscription?.status||'').trim().toUpperCase();
+ if(!['ACTIVE','AUTHORIZED','APPROVED'].includes(status)||!isPlanActivo(p))return false;
+ if(['COMPLETO','TRIAL_14D'].includes(code)){
+  const sub=p.subscription;
+  const end=code==='TRIAL_14D'?sub.trial_ends_at:sub.current_period_ends_at;
+  return sub.user_id===id&&String(sub.source||'').toUpperCase()!=='FALLBACK_FRONTEND'&&planCode===code&&typeof end==='string'&&Number.isFinite(Date.parse(end))&&Date.parse(end)>Date.now();
+ }
+ const legacy=['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'];
+ return legacy.includes(code)&&(!planCode||legacy.includes(planCode));
 }
 async function handleAccountCareerSecureV1(request,env,diary=false){
  try{
