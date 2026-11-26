@@ -46,7 +46,7 @@ export function createLabHandler({db,provider,operatorKey='',webhookSecret='',se
    if(!ready)return page('<h2>Laboratorio instalado</h2><p>Los pagos están bloqueados hasta configurar las credenciales de prueba.</p>');
    if(!logged(request))return page('<form action="/session" method="post"><label>Clave del laboratorio<br><input name="key" type="password" required autocomplete="off"></label><br><button>Entrar</button></form>');
    const form=(route,label,input='')=>`<form action="${route}" method="post"><input type="hidden" name="csrf" value="${csrf}">${input}<button>${label}</button></form>`;
-   return page('<h2>Prueba habilitada</h2>'+form('/checkout','Abrir pago ficticio de $2.000')+form('/reconcile','Comprobar pago','<label>Número del pago de prueba<br><input name="payment_id" inputmode="numeric" required></label><br>')+form('/refund','Devolver los $2.000 ficticios')+'<p><a href="/status">Ver resultado del plan</a></p>');
+   return page('<h2>Prueba habilitada</h2>'+"<form action=\"/diagnose\" method=\"get\"><label>Número del pago para diagnóstico<br><input name=\"payment_id\" inputmode=\"numeric\" required></label><br><button>Diagnosticar pago (sólo lectura)</button></form>"+form('/checkout','Abrir pago ficticio de $2.000')+form('/reconcile','Comprobar pago','<label>Número del pago de prueba<br><input name="payment_id" inputmode="numeric" required></label><br>')+form('/refund','Devolver los $2.000 ficticios')+'<p><a href="/status">Ver resultado del plan</a></p>');
   }
   if(!ready||now()-boot>=90*60*1000)return json({ok:false,reason:'laboratory_locked'},503);
   if(path==='/webhook'&&request.method==='POST'){
@@ -67,6 +67,19 @@ export function createLabHandler({db,provider,operatorKey='',webhookSecret='',se
    if(!direct&&!same(body.csrf||'',csrf))return json({ok:false},403);
   }
   try{
+   if(path==='/diagnose'&&request.method==='GET'){
+    const id=url.searchParams.get('payment_id')||'';
+    if(!/^[0-9]{1,30}$/.test(id))return json({ok:false,reason:'invalid_payment_id'},400);
+    let stage='seller_check';
+    try{
+     await verifySeller();stage='payment_read';const payment=await provider('/v1/payments/'+id);
+     stage='reference_read';const reference=await db.reference();
+     const checks={sellerTestVerified:true,paymentIdMatches:String(payment?.id)===id,testMode:payment?.live_mode===false,collectorMatches:String(payment?.collector_id)===sellerId,fixtureKnown:typeof reference==='string'&&referencePattern.test(reference),referenceMatches:payment?.external_reference===reference,amountMatches:payment?.transaction_amount===2000,currencyMatches:payment?.currency_id==='ARS',commandAccepted:false};
+     try{paymentCommand(payment,{sellerId,reference});checks.commandAccepted=true;}catch{}
+     const paymentStatus=['approved','refunded','pending','rejected','cancelled','in_process','in_mediation','charged_back','authorized'].includes(payment?.status)?payment.status:'other';
+     return json({ok:true,checks,eligible:Object.values(checks).every(v=>v===true),paymentStatus});
+    }catch{return json({ok:false,reason:'sandbox_diagnostics_unconfirmed',stage},503);}
+   }
    if(path==='/buyer'&&request.method==='GET'){await verifySeller();const buyer=await provider('/users/3298351140');if(String(buyer.id)!=='3298351140'||buyer.site_id!=='MLA'||!Array.isArray(buyer.tags)||!buyer.tags.includes('test_user')||!/^TESTUSER[0-9]+$/.test(buyer.nickname))throw Error('Unverified fixture buyer');return json({ok:true,nickname:buyer.nickname});}
    if(path==='/status'&&request.method==='GET')return json({ok:true,...await db.status()});
    if(path==='/reconcile'&&request.method==='POST')return json(await reconcile(String(body?.payment_id||'')));
