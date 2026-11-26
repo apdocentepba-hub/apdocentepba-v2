@@ -17,12 +17,12 @@ function refs(readFile){
  return [plan[0].match(/src="([^"]+)"/)[1],comp[0].match(/'\.\/([^']+)'/)[1],ent[0].match(/'\.\/([^']+)'/)[1]];
 }
 const current=refs(n=>read(n));
-assert.deepEqual(current,['plan_checkout_patch.js?v=6','apd_comparador_panel.mjs?v=20261126-commercial1','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
+assert.deepEqual(current,['plan_checkout_patch.js?v=7','apd_comparador_panel.mjs?v=20261126-commercial1','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
 console.log('APD_FRONTEND_CACHE_CHAIN_CONTRACT_PASS');
 const baseline=process.argv.includes('--baseline');
-const ref=baseline?'f8fa40ddc8e69472bc5bdf856e2df202e812b4cc':null;
+const ref=baseline?'0c9bddd5a4193e487b85c2c824f388683974ed2e':null;
 const expected=refs(n=>read(n,ref));
-const revision=baseline?'baselinef8fa40dd':String(process.env.GITHUB_SHA||'').slice(0,12);
+const revision=baseline?'baseline0c9bddd5':String(process.env.GITHUB_SHA||'').slice(0,12);
 async function get(url){
  const r=await fetch(url,{method:'GET',redirect:'error',cache:'no-store',headers:{'Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
  if(r.status!==200)throw Error('HTTP '+r.status+' at '+new URL(url).pathname);

@@ -81,7 +81,7 @@ test('payment redirect alone is never proof of payment',()=>{
 
 test('page loads the refreshed plan checkout patch',()=>{
   const html=fs.readFileSync('index.html','utf8');
-  assert.equal((html.match(/<script src="plan_checkout_patch\.js\?v=6"><\/script>/g)||[]).length,1);
-  assert.doesNotMatch(html,/plan_checkout_patch\.js\?v=5/);
+  assert.equal((html.match(/<script src="plan_checkout_patch\.js\?v=7"><\/script>/g)||[]).length,1);
+  assert.doesNotMatch(html,/plan_checkout_patch\.js\?v=[56]/);
   assert.doesNotMatch(html,/plan_checkout_patch\.js\?v=3/);
 });

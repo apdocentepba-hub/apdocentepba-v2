@@ -61,7 +61,11 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const newResume='<script src="plan_checkout_patch.js?v=6"></script>';
  const resumeTransition=oldScripts.includes(oldResume)&&proposed.includes(newResume);
  if(resumeTransition)assert.equal(proposed.filter(tag=>tag===newResume).length,1);
- const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:planTransition&&tag===oldPlan?newPlan:resumeTransition&&tag===oldResume?newResume:tag);
+ const oldDirect='<script src="plan_checkout_patch.js?v=6"></script>';
+ const newDirect='<script src="plan_checkout_patch.js?v=7"></script>';
+ const directTransition=oldScripts.includes(oldDirect)&&proposed.includes(newDirect);
+ if(directTransition)assert.equal(proposed.filter(tag=>tag===newDirect).length,1);
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:planTransition&&tag===oldPlan?newPlan:resumeTransition&&tag===oldResume?newResume:directTransition&&tag===oldDirect?newDirect:tag);
  assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
@@ -107,7 +111,7 @@ test("a visual redesign cannot change radar code, script order or radar card",()
    source.replace('auth_session_patch.js?v=3','auth_session_patch.js?v=4')),
    /script tags\/order/);
   assert.throws(()=>assertExistingRadarUnchanged(prior,
-   source.replace(/plan_checkout_patch\.js\?v=[456]/,'plan_checkout_patch.js?v=unreviewed')),
+   source.replace(/plan_checkout_patch\.js\?v=[4567]/,'plan_checkout_patch.js?v=unreviewed')),
    /script tags\/order/);
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace(/(<script src="plan_checkout_patch\.js[^"]+"><\/script>)/,'$1$1')),

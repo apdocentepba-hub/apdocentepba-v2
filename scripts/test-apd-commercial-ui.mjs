@@ -26,3 +26,23 @@ test('summary correction is limited to verified new plans',()=>{
 });
 
 test('paused or unverified commercial admission never displays a purchase action',async()=>{for(const open of [false,undefined]){const api=ctx({...payload,commercial_enrollment_open:open});const plans=await api.obtenerPlanesDisponiblesUI();assert.equal(api.transitionPolicy(plans[1],info('FREE')).allowed,false);assert.doesNotMatch(api.buildPlanCards(info('FREE'),plans),/data-plan-checkout="COMPLETO"/);}});
+
+test('complete checkout navigates same tab after verified response, no popup, one POST',async()=>{
+ const url='https://www.mercadopago.com/mla/checkout/start?pref_id=fixture';
+ const code=extract('async function iniciarCheckoutPlan(','function openPlanTab(');
+ for(const variant of ['ok','blocked','invalid','unverified']){
+  const calls=[],nodes=[{children:[],append(...items){this.children.push(...items)}},{children:[],append(...items){this.children.push(...items)}}];
+  const errors=[],nav=[];
+  const data={ok:variant!=='unverified',checkout_url:variant==='invalid'?'https://evil.invalid/checkout/':url};
+  const window={obtenerToken:()=> 'fixture',workerFetchJson:async(path,options)=>{calls.push({path,options});return data;},open:()=>{throw Error('popup must not be attempted');},location:{assign:v=>{nav.push(v);if(variant==='blocked')throw Error('navigation blocked');}}};
+  const start=vm.runInNewContext(code+'\niniciarCheckoutPlan',{window,URL,document:{createElement:tag=>({tag})},clearPlanMsg(){},clearSelectorMsg(){},setPlanMsg:(m,t)=>{if(t==='error')errors.push(m)},setSelectorMsg(){},setMsg(){},ensurePlanMsgNode:()=>nodes[0],ensureSelectorMsgNode:()=>nodes[1],console:{error(){}}});
+  await start('COMPLETO',null);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].path,'/api/mercadopago/create-checkout-link');
+  assert.equal(calls[0].options.body,'{"plan_code":"COMPLETO"}');
+  if(variant==='ok'||variant==='blocked'){
+   assert.deepEqual(nav,[url]);assert.equal(errors.length,0);
+   for(const node of nodes){assert.equal(node.children[1].href,url);assert.equal(node.children[1].target,undefined);}
+  }else{assert.equal(nav.length,0);assert.equal(errors.length,1);assert.ok(nodes.every(n=>n.children.length===0));}
+ }
+});
