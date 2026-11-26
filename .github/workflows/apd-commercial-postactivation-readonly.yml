@@ -1,0 +1,25 @@
+name: APD commercial postactivation native verification
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'scripts/apd-commercial-postactivation-readonly.mjs'
+      - '.github/workflows/apd-commercial-postactivation-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/commercial-postactivation-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/apd-commercial-postactivation-readonly.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
