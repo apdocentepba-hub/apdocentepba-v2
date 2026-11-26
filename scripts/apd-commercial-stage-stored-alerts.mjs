@@ -37,15 +37,28 @@ export function stageCommercialStoredAlerts(source){
   within(name,fn=>exact(fn,'return (Array.isArray(rows) ? rows : []).map((row) => ({','return (await apdFilterStoredCommercialV1(env2,userId,rows)).map((row) => ({'));
  }
  within('fetchStoredOffers',fn=>exact(fn,'return (Array.isArray(rows) ? rows : []).map((row) => ({','return (await apdFilterStoredCommercialV1(env,userId,rows)).map((row) => ({'));
+ // Inventory current active reads rather than assume the older direct-mail route exists.
+ const decl=[...original.matchAll(/^[ ]*(?:async )?function ([A-Za-z_$][\w$]*)\(/gm)];
+ const reads=[...original.matchAll(/user_offer_state\?[^\n\x60"']*is_active=eq\.true[^\n\x60"']*/g)].map(m=>decl.findLast(d=>d.index<m.index)?.[1]||'unknown');
+ const expected=['loadStoredEmailAlerts','loadTelegramStoredAlerts','waLoadStoredAlerts','fetchStoredOffers'];
+ const other=reads.filter(n=>!expected.includes(n));
  const direct='const nuevas = rows.filter((x) => x && x.is_active !== false)';
- assert.equal(source.split(direct).length,2,'Direct stored email anchor changed');
+ const directCount=original.split(direct).length-1;
+ console.log('APD_COMMERCIAL_STORED_INVENTORY '+JSON.stringify({owners:reads,directCount}));
+ assert.ok(directCount<=1,'Duplicate direct mail route');
+ assert.ok(expected.every(n=>reads.filter(r=>r===n).length===1),'Unverified reader coverage');
+ assert.equal(other.length,directCount,'Unknown stored-alert read; inspect owner');
  const nextDirect='const nuevas = (await apdFilterStoredCommercialV1(env,user.id,rows)).filter((x) => x && x.is_active !== false)';
- source=source.replace(direct,()=>nextDirect);
+ if(directCount){
+  const owner=decl.findLast(d=>d.index<original.indexOf(direct))?.[1];
+  assert.equal(other[0],owner,'Direct read owner mismatch');
+  source=source.replace(direct,()=>nextDirect);
+ }
  const prefix=filterCommercialStoredRows.toString().replace(/^async function filterCommercialStoredRows\(/,'async function apdFilterStoredRowsCoreV1(')+'\n'+
  'async function apdFilterStoredCommercialV1(env,userId,rows){return await apdFilterStoredRowsCoreV1(env,userId,rows,{resolve:resolverPlanUsuario,active:isPlanActivo,preferences:obtenerPreferenciasUsuario,project:apdEffectiveCommercialPrefsV1,canonical:canonizarPreferenciasConCatalogo,catalog:cargarCatalogos,districts:distritosPrefsAPD,match:coincideOfertaConPreferenciasAPD});}\n';
  assert.ok(!original.includes('apdFilterStoredCommercialV1'),'Already staged');
  let reversed=source.replace(nextDirect,()=>direct);
  for(const c of changes.toReversed())reversed=reversed.replace(c.next,()=>c.fn);
  assert.equal(reversed,original,'Unrelated source changed');
- return {candidate:prefix+source,storedReaders:5,preferenceReader:true,unrelatedBytesPreserved:true,deployable:false};
+ return {candidate:prefix+source,storedReaders:4+directCount,preferenceReader:true,unrelatedBytesPreserved:true,deployable:false};
 }
