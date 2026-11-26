@@ -17,6 +17,8 @@ on:
       - 'scripts/apd_gha_public_inventory.sh'
       - 'scripts/apd_gha_prepare_public_dump.py'
       - 'scripts/apd_gha_restore_diagnostic.py'
+      - 'scripts/apd_gha_local_restore.sh'
+      - 'scripts/test-apd-gha-local-supabase-restore.sh'
 
 permissions:
   contents: read
@@ -56,6 +58,18 @@ jobs:
         run: bash scripts/test-apd-gha-backup-restore-sql.sh
       - name: Verify real PostgreSQL 17 single-snapshot dump & restore
         run: bash scripts/test-apd-gha-consistent-pg17.sh
+
+  local-supabase-restore-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
+      - name: Verify restricted-role failure and privileged restore on actual local Supabase
+        run: bash scripts/test-apd-gha-local-supabase-restore.sh
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
