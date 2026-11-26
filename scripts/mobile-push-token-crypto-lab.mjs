@@ -66,3 +66,21 @@ export async function openMobilePushToken({
  cleanToken(token);
  return token;
 }
+
+/** Decrypt only a server-owned device record and authenticate its token digest.
+ * The durable consumption gate must still compare the digest to the current DB row.
+ * Never accept row/keys from an HTTP client. Never log the returned token.
+ */
+export async function openBoundMobilePushRecipient({row,userId,deviceId,encryptionKey,hmacKey}={}){
+ if(!row||row.id!==deviceId||row.user_id!==userId||row.platform!=="android"||row.transport!=="expo"||row.enabled!==true||row.opted_in!==true||row.revoked_at!==null||typeof row.token_hash!=="string"||!/^[0-9a-f]{64}$/.test(row.token_hash)||!encryptionKey||!hmacKey||encryptionKey===hmacKey)throw Error("recipient_unverified");
+ try{
+  const token=await openMobilePushToken({token_ciphertext:row.token_ciphertext,encryptionKey,hmacKey});
+  if(!/^(?:ExpoPushToken|ExponentPushToken)\[[A-Za-z0-9_-]{16,200}\]$/.test(token))throw Error("invalid");
+  const {hashKey}=await importKeys({encryptionKey,hmacKey});
+  const digest=new Uint8Array(await crypto.subtle.sign("HMAC",hashKey,cleanToken(token)));
+  let diff=0;
+  for(let i=0;i<32;i++)diff|=digest[i]^parseInt(row.token_hash.slice(i*2,i*2+2),16);
+  if(diff!==0)throw Error("invalid");
+  return Object.freeze({userId,deviceId,token,tokenHash:row.token_hash});
+ }catch{throw Error("recipient_unverified");}
+}
