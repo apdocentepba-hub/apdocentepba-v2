@@ -21,5 +21,5 @@ export async function buildAndroidExpoPayload({claim,context,recipient,hmacSecre
  return {action:"ready",payload:Object.freeze({to:recipient.token,title:"AlertasAPD",
   body:"Hay una nueva oportunidad docente. Consultá las ofertas vigentes.",
   priority:"high",channelId:"apd-alertas",sound:"default",ttl,
-  data:Object.freeze({type:"apd_offer",offerKey:claim.source_offer_key})})};
+  data:Object.freeze({type:"apd_refresh"})})};
 }
