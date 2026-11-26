@@ -11,10 +11,18 @@ const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"
 <script>
 const plans=[{code:'FREE',price_ars:0,max_distritos:1,max_cargos:1},{code:'COMPLETO',price_ars:2000,max_distritos:5,max_cargos:10}];
 let catalog={ok:true,commercial_model:'free_complete_v1',trial_days:14,commercial_enrollment_open:true,planes:plans};
-let checkoutCalls=0,mode='safe',opened=[];
+let checkoutCalls=0,mode='safe',opened=[],navigated=[];
 window.obtenerToken=()=> 'fixture';
 window.renderPlanUI=()=>{};
 window.open=(url)=>{opened.push(url);return null;};
+// Observe actual same-tab navigation and cancel it before any provider request.
+window.navigation.addEventListener('navigate', event=>{
+ const target=new URL(event.destination.url);
+ if(target.origin!==location.origin){
+  navigated.push({url:target.href,cancelable:event.cancelable});
+  event.preventDefault();
+ }
+});
 window.workerFetchJson=async(url,opts)=>{
  if(url==='/api/planes')return catalog;
  if(url==='/api/mercadopago/create-checkout-link'){
@@ -43,10 +51,11 @@ window.workerFetchJson=async(url,opts)=>{
  verify(!body().querySelector('[data-plan-checkout="FREE"]'),'no free checkout');
  verify(document.documentElement.scrollWidth<=innerWidth+1,'viewport overflow');
  button().click();await settle();
- verify(checkoutCalls===1&&opened.length===1,'only one checkout');
- verify(document.querySelector('#plan-selector-msg a')?.hostname==='www.mercadopago.com','fallback link');
+ verify(checkoutCalls===1&&opened.length===0&&navigated.length===1,'only one checkout and same-tab navigation');
+ verify(navigated[0].url==='https://www.mercadopago.com/mla/checkout/start?pref_id=fixture'&&navigated[0].cancelable,'verified navigation intercepted');
+ verify(document.querySelector('#plan-selector-msg a')?.hostname==='www.mercadopago.com'&&!document.querySelector('#plan-selector-msg a')?.target,'same-tab fallback link');
  verify(!document.querySelector('#plan-selector-msg img'),'provider text not HTML');
- mode='unsafe';button().click();await settle();verify(opened.length===1,'unsafe URL blocked');
+ mode='unsafe';button().click();await settle();verify(opened.length===0&&navigated.length===1&&checkoutCalls===2,'unsafe URL blocked');
  await render('COMPLETO');verify(!button(),'paid cannot buy again');
  await render('FREE');verify(button(),'free may buy');
  await render('FREE',true,'fallback_frontend');verify(!button(),'unverified cannot buy');
