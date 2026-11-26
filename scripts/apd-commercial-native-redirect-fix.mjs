@@ -85,3 +85,17 @@ try{
 }finally{await mf.dispose();}
 const full=await verifyCommercialFullModule(fixed.candidate);
 console.log('APD_FULL_MODULE_REDIRECT_REGRESSION_PASS '+JSON.stringify({sha256:sha,checks:full,productionWrites:0,providerCalls:0}));
+
+if(process.argv.includes('--stage')){
+ assert.equal(sha,'c291a47c6bc58ed6b9f0510d4b443ce8be2efb11280a045763c75a2a62b28113');
+ const fs=await import('node:fs');
+ const cfg=fs.readFileSync('wrangler.toml','utf8');
+ assert.ok(cfg.includes('PRODUCTION_SOURCE_GUARD_V1'));
+ const anchor='main = "worker-live/worker_hotfix.js"';
+ assert.equal(cfg.split(anchor).length,2);
+ const candidateConfig=cfg.replace(anchor,'main = "worker-diary-candidate.js"');
+ const configSha256=createHash('sha256').update(candidateConfig).digest('hex');
+ assert.equal(configSha256,'6d5a3846d6513986be8ad36cd689cfa4b46a4e0bea2e6ddc9d1fb2c2d87cb0be');
+ const {stageZeroTraffic}=await import('./apd-commercial-stage-redirect-fix.mjs');
+ await stageZeroTraffic({candidate:fixed.candidate,envelope:{candidateConfig,receipt:{candidateSha256:sha,configSha256,baseVersion:NEXT,rollbackVersion:NEXT}},details:d,account,worker,get,root,activeVersion,inspectCrons});
+}
