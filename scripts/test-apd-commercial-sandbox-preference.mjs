@@ -59,7 +59,7 @@ test('filesystem intent survives retry and never overwrites original evidence',a
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'apd-qa-private-'));
  try{
   const f=fixture(),receipt=privateReceipt(dir,ref);
-  await createSandboxPreference({...f.opts,receipt});
+  await createSandboxPreference({...f.opts,receipt:{begin:v=>{receipt.begin(v);f.receipts.push(v)},complete:v=>{receipt.complete(v);f.receipts.push(v)}}});
   const next=fixture();await assert.rejects(createSandboxPreference({...next.opts,receipt}));
   assert.ok(next.calls.every(c=>c[0]==='GET'));assert.equal(JSON.parse(fs.readFileSync(path.join(dir,ref+'.intent.json'))).status,'intent');
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir,ref+'.ready.json'))).paymentCreated,false);
