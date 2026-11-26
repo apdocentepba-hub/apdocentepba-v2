@@ -63,4 +63,41 @@ for(const row of data.rows.filter(x=>x.status==='ready')){
  }catch(e){counts.unverified++;const msg=String(e.message);const k=/^(?:preference (?:HTTP \d{3}|lookup_failed|identity)|identity|incomplete search|Provider read returned HTTP \d{3})$/.test(msg)?msg:'other';failures[k]=(failures[k]||0)+1;}
 }
 console.log('APD_OWNER_RECONCILIATION_READONLY '+JSON.stringify({legacyReady:25,historicalPaymentVerified,historicalLookup,matchedSellerPreferences,...counts,paymentStatuses:statuses,failures,productionWrites:0,providerWrites:0}));
-if(counts.unverified||!historicalPaymentVerified)process.exitCode=1;
+if(counts.unverified||!historicalPaymentVerified)process.exit(1);
+if(process.argv.includes('--expire-one-owner-link')){
+ assert.equal(process.env.APD_OWNER_EXPIRY_PILOT,'1');
+ assert.equal(process.env.GITHUB_REPOSITORY,'apdocentepba-hub/apdocentepba-v2');
+ assert.equal(process.env.GITHUB_HEAD_REF,'qa/owner-payment-reconciliation-20261126');
+ assert.equal(process.env.GITHUB_EVENT_NAME,'pull_request');
+ assert.equal(counts.hasPayments,0);
+ assert.equal(counts.expiredNoPayments+counts.openNoPayments,25);
+ assert.equal(matchedSellerPreferences,25);
+ const pilot=data.rows.filter(x=>x.status==='ready').sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)||a.preference.localeCompare(b.preference))[0];
+ const endpoint='/checkout/preferences/'+encodeURIComponent(pilot.preference);
+ const assertIdentity=pref=>{
+  assert.equal(pref.id,pilot.preference);
+  assert.equal(pref.external_reference,pilot.reference);
+  assert.equal(String(pref.collector_id),merchant);
+ };
+ const assertNoPayments=async()=>{
+  const search=await get('/v1/payments/search',{external_reference:pilot.reference,sort:'date_created',criteria:'desc',limit:'50',offset:'0'});
+  assert.equal(search.paging?.total,0,'Pilot has associated payment; stop');
+  assert.ok(Array.isArray(search.results)&&search.results.length===0,'Incomplete search');
+ };
+ const isExpired=pref=>pref.expires===true&&Number.isFinite(Date.parse(pref.expiration_date_to))&&Date.parse(pref.expiration_date_to)<Date.now();
+ const before=await get(endpoint);assertIdentity(before);await assertNoPayments();
+ if(isExpired(before)){console.log('APD_OWNER_EXPIRY_PILOT_PASS '+JSON.stringify({expired:1,alreadyExpired:true,providerWrites:0,databaseWrites:0,scope:'owner_only'}));process.exit(0);}
+ assert.ok(counts.expiredNoPayments===0,'Unexpected partially expired inventory; stop');
+ const created=Date.parse(before.date_created);
+ assert.ok(Number.isFinite(created)&&created<Date.now()-86400000*30,'Only old preferences');
+ const terms=pref=>JSON.stringify([pref.id,pref.external_reference,String(pref.collector_id),pref.items,pref.notification_url,pref.back_urls,pref.marketplace_fee,pref.payment_methods]);
+ const body={expires:true,expiration_date_from:new Date(created).toISOString(),expiration_date_to:new Date(Date.now()-3600000).toISOString()};
+ const response=await fetch(new URL(endpoint,'https://api.mercadopago.com'),{method:'PUT',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ console.log('APD_OWNER_EXPIRY_PILOT_PUT '+JSON.stringify({http:response.status,attempted:1}));
+ // Never retry a failed/uncertain write automatically; verify authoritative GET.
+ const after=await get(endpoint);assertIdentity(after);
+ assert.equal(terms(after),terms(before),'Unexpected preference terms drift');
+ await assertNoPayments();
+ assert.ok(response.ok&&isExpired(after),'Expiration not verified; stop');
+ console.log('APD_OWNER_EXPIRY_PILOT_PASS '+JSON.stringify({expired:1,alreadyExpired:false,providerWrites:1,databaseWrites:0,scope:'owner_only'}));
+}
