@@ -54,13 +54,23 @@ const dbSql=`SELECT CASE WHEN
  NOT EXISTS(SELECT 1 FROM public.apd_complete_payment_ledger) AND
  NOT EXISTS(SELECT 1 FROM public.apd_complete_payment_review)
  THEN 'APD_GATE_CLOSED' ELSE 'APD_GATE_UNSAFE' END;`;
+export function verifyDbGuardResult(r){
+ if(r.status!==0){
+  // Only SQLSTATE and fixed process metadata. Never print raw stderr, URI, SQL or credentials.
+  const state=String(r.stderr||'').match(/(?:ERROR|FATAL):\s+([0-9A-Z]{5})\b/)?.[1]||'unavailable';
+  const kind=r.error?.code==='ETIMEDOUT'?'timeout':r.error?'spawn_error':'psql_error';
+  throw Error('Production DB guard connection/query failed: '+kind+' sqlstate='+state+' exit='+String(r.status??'none'));
+ }
+ if(String(r.stdout||'').trim()!=='APD_GATE_CLOSED')throw Error('Production admission or obligations unsafe; no promotion');
+}
 function checkDb(){
  const uri=process.env.APD_SUPABASE_DB_URL||'';
  validateDbUrl(uri);
- const r=spawnSync('psql',['-X','-Atq','-v','ON_ERROR_STOP=1','-c',dbSql],{
-  env:{...process.env,PGDATABASE:uri,PGOPTIONS:'-c default_transaction_read_only=on -c statement_timeout=15000',PGCONNECT_TIMEOUT:'10'},
+ const r=spawnSync('psql',[uri,'-X','-Atq','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate','-c',"BEGIN READ ONLY; SET LOCAL statement_timeout='15s'; "+dbSql+" COMMIT;"],{
+  env:{...process.env,PGCONNECT_TIMEOUT:'10',PGSSLMODE:'require'},
   encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:25000});
- if(r.status!==0||r.stdout.trim()!=='APD_GATE_CLOSED')throw Error('Production admission/obligation guard failed (details withheld)');
+ verifyDbGuardResult(r);
+ console.log('APD_PRODUCTION_ADMISSION_CLOSED_VERIFIED');
 }
 async function main(){
  if(process.env.GITHUB_REPOSITORY!=='apdocentepba-hub/apdocentepba-v2'||process.env.GITHUB_EVENT_NAME!=='push'||process.env.GITHUB_REF!=='refs/heads/main'||process.env.APD_PROMOTE_CLOSED!=='1')throw Error('Unapproved production release context');
