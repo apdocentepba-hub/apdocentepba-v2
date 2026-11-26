@@ -1,0 +1,46 @@
+name: APD Android web client APK (lab only)
+on:
+  pull_request:
+    paths:
+      - 'android-web-client/**'
+      - '.github/workflows/apd-android-web-client-lab.yml'
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build debug APK
+        run: gradle -p android-web-client --no-daemon assembleDebug lintDebug
+      - name: Verify package and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android-web-client/build/outputs/apk/debug/android-web-client-debug.apk
+          test -s "$apk"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose --print-certs "$apk"
+          "$tools/aapt" dump badging "$apk" | tee /tmp/apd-badging.txt
+          grep -F "package: name='ar.com.alertasapd.webclient.lab'" /tmp/apd-badging.txt
+          "$tools/aapt" dump permissions "$apk" | tee /tmp/apd-permissions.txt
+          ! grep -E 'POST_NOTIFICATIONS|READ_CONTACTS|ACCESS_FINE_LOCATION|RECORD_AUDIO|CAMERA' /tmp/apd-permissions.txt
+          sha256sum "$apk" | tee android-web-client/build/outputs/apk/debug/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AlertasAPD-Android-Web-LAB
+          path: |
+            android-web-client/build/outputs/apk/debug/*.apk
+            android-web-client/build/outputs/apk/debug/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
