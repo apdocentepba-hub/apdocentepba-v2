@@ -44,3 +44,6 @@ Preflight 228da78: 79/79, 6 escenarios integrales PASS. Se incorporó bloqueo de
 
 ## Verificación c88a2a2 y ensayo integrado adicional
 24/24 controles aplicables, 83/83 preflight, 42/42 política, 7/7 escenarios sintéticos, Chromium 390/1280, PostgreSQL confirma ACL reales, activación y rechazo de replay. Nuevo ensayo: módulo completo en VM contra PostgREST localhost y PostgreSQL 17 descartable, mismas migraciones, identidades sintéticas, reloj real, vencimiento de trial en fixture, pausa y conciliación. Mercado Pago sigue simulado; ningún pago real, credencial de proveedor real ni acceso a la DB de producción desde el transportador. Estado de la nueva revisión pendiente de CI. No declara validación Cloudflare nativa ni del proveedor.
+
+## Ensayo 309e748 — 26/11
+23 controles aprobados, uno omitido, uno falló. 83/83 unitarios y 7/7 escenarios simulados; integración HTTP real llegó hasta reserva de checkout y falló por permiso INSERT ausente en fixture (SQLSTATE 42501, PostgreSQL). La fixture de pagos sólo concedía SELECT/UPDATE; el otro ensayo hereda INSERT mediante ACL por defecto. Se corrige únicamente permiso mínimo en fixture, añade precondición explícita y diagnóstico HTTP sanitizado. No modifica ACL ni registros de producción. Pendiente nueva ejecución.

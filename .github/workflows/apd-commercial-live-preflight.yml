@@ -18,6 +18,7 @@ on:
       - 'scripts/apd-commercial-full-module-qa.mjs'
       - 'scripts/apd-commercial-pg-qa.mjs'
       - 'scripts/apd-commercial-full-pg-fixture.sql'
+      - 'scripts/apd-commercial-payment-fixture.sql'
       - 'scripts/apd-commercial-sandbox-payment-probe.mjs'
       - 'scripts/test-apd-commercial-sandbox-payment-probe.mjs'
       - 'scripts/test-apd-commercial-runtime-qa.mjs'

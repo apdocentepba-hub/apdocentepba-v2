@@ -8,6 +8,7 @@ export function createCommercialPgQa(){
  const sql=query=>execFileSync('psql',['-X','-A','-t','-q','-v','ON_ERROR_STOP=1','-c',query],{env,encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe']}).trim();
  assert.equal(sql("SELECT current_database()||':'||current_user"),'apd_commercial_full_qa:postgres');
  assert.equal(sql("SELECT count(*) FROM public.apd_commercial_qa_guard WHERE marker='disposable-full-module'"),'1');
+ assert.equal(sql("SELECT has_table_privilege('service_role','public.mercadopago_checkout_sessions','INSERT')"),'t','Missing checkout INSERT in fixture');
  const readTables=new Set(['subscription_plans','apd_commercial_release_control','sessions','users','user_subscriptions','user_preferences','notification_delivery_logs','worker_runs','errores_sistema']);
  const postTables=new Set(['mercadopago_webhook_events','rpc/apd_reserve_complete_checkout','rpc/apd_finalize_complete_checkout','rpc/apd_apply_complete_approval','rpc/apd_review_complete_payment']);
  return {
@@ -19,7 +20,9 @@ export function createCommercialPgQa(){
    assert.equal(headers.get('authorization'),'Bearer fixture-db-only');
    headers.delete('authorization');headers.delete('apikey');
    const url=new URL(name+search,base);assert.equal(url.origin,new URL(base).origin);
-   return fetch(url,{method,headers,body:method==='POST'?init.body:undefined,redirect:'error',signal:AbortSignal.timeout(8000)});
+   const result=await fetch(url,{method,headers,body:method==='POST'?init.body:undefined,redirect:'error',signal:AbortSignal.timeout(8000)});
+   if(!result.ok){let code='unknown';try{const error=await result.clone().json();if(/^[A-Z0-9]{5,10}$/.test(String(error.code)))code=String(error.code);}catch{}console.warn('APD_ISOLATED_HTTP_ERROR '+JSON.stringify({method,route:name,status:result.status,code}));}
+   return result;
   },
   expireTrial(){sql("UPDATE public.user_subscriptions SET started_at=clock_timestamp()-interval '15 days',trial_ends_at=clock_timestamp()-interval '1 day' WHERE user_id='"+uid+"' AND plan_code='TRIAL_14D'");},
   pause(){sql("BEGIN; SELECT pg_advisory_xact_lock(170394,20261125); UPDATE public.apd_commercial_release_control SET enrollment_open=false WHERE singleton; COMMIT;");},
