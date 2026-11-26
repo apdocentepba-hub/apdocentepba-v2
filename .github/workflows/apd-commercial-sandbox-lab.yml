@@ -2,7 +2,15 @@ name: APD isolated sandbox laboratory (no production)
 on:
   push:
     branches: ['lab/mercadopago-isolated-20261126']
-    paths: ['sandbox/mercadopago/**', '.github/workflows/apd-commercial-sandbox-lab.yml']
+    paths:
+      - 'sandbox/mercadopago/**'
+      - '.github/workflows/apd-commercial-sandbox-lab.yml'
+      - 'scripts/apd-commercial-checkout.mjs'
+      - 'scripts/apd-commercial-db-fixture.sql'
+      - 'scripts/apd-commercial-payment-fixture.sql'
+      - 'scripts/apd-commercial-preferences-fixture.sql'
+      - 'scripts/apd-commercial-full-pg-fixture.sql'
+      - 'docs/sql/APD_COMMERCIAL_*_CANDIDATE.sql'
 permissions:
   contents: read
 jobs:
