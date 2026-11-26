@@ -22,3 +22,17 @@ Cada línea exige evidencia propia, no se presume implementada. No usar Nexo ni 
 - 53 pruebas de preflight y 40 de política/UI; 22 workflows exitosos, 1 omitido. PostgreSQL descartable pasó ciclo comercial y concurrencia. Runtime de 17 funciones extraídas pasó con servicios simulados.
 - Bloqueantes: auditar alertas almacenadas y todos los canales/crons tras downgrade; permisos PID y radar por ruta; prueba navegador con catálogo nuevo; reconciliación de checkout incierto/expirado y disputas, compatibilidad de webhook con reintento; preservar recurrencias; migración y rollback; ensayo integral con Worker completo y base descartable, sin credenciales reales; autorización de publicación.
 - Mejoras competitivas posteriores no condicionan el cierre comercial salvo las que se anuncien como incluidas.
+
+## Matriz de avance para el cierre (25/11/2026)
+Porcentajes de avance son estimaciones de ingeniería, no mediciones de cobertura ni garantía de producción. Cada módulo usa cuatro hitos: implementación 40%, pruebas aisladas 30%, integración acumulativa 20%, verificación de producción 10%. El último hito requiere publicación autorizada. No sumar suites duplicadas como cobertura total.
+- Catálogo y modelo de acceso: 90%, integración de funciones extraídas verificada anteriormente.
+- Prueba 14 días y vencimiento: 90%, ciclo de PostgreSQL y runtime extraído.
+- Compra y reversión: 90%, pendiente comprobación del proveedor real y recuperación operativa de sesiones inciertas.
+- Conservación de preferencias: 90%, concurrencia de PostgreSQL y ensamblado.
+- Alertas y canales: 70%, cinco lectores de fuente activa ensamblados, aún sin ejecución integrada de canales.
+- PID y radar: 40%, permisos parciales, anclaje de correo pendiente.
+- Interfaz y herramientas: 70%, regresiones aisladas, falta navegador con catálogo nuevo.
+- Recuperación de checkout incierto: 40%, reserva y exclusión duplicadas; falta procedimiento de resolución con evidencia del proveedor.
+- Ensayo integral Worker: 40%, 17 funciones extraídas aprobadas, módulo completo no ejecutado.
+- Publicación y rollback: 0%, sin cambios ni autorización de publicación.
+Estimación de conjunto con módulos ponderados por igual: 62%. No confundir con pruebas unitarias aprobadas (101/101 en la última ejecución; 61 preflight + 40 política/UI). No declarar terminado por conteo de pruebas.

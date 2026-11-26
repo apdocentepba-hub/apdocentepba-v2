@@ -10,4 +10,10 @@ const fixture=[
  'function telegram(){applyPidVisibilityToAlerts(\n      visibleAlerts,\n      entitlement?.plan_code\n    );}',
  'function whatsapp(){applyPidVisibilityToAlerts(\n            visibleAlerts,\n            entitlement?.plan_code\n          );}'
 ].join('\n');
-test('PID visibility carries server-verified result to all three channel renderers',()=>{const r=stageCommercialPidChannels(fixture);assert.equal(r.channels,3);assert.equal(r.unrelatedBytesPreserved,true);verifyTrialCandidateSyntax(r.candidate);assert.throws(()=>stageCommercialPidChannels(fixture.replace('canShowPidForPlan(initialEmailPlanCode)','unknown()')));});
+test('PID visibility carries server-verified result to all three channel renderers',()=>{const r=stageCommercialPidChannels(fixture);assert.equal(r.channels,3);assert.equal(r.unrelatedBytesPreserved,true);verifyTrialCandidateSyntax(r.candidate);assert.throws(()=>stageCommercialPidChannels(fixture.replace('initialEmailPlanCode\n  );','otherCode\n  );')));});
+
+test('optional redundant email visibility computation is not required but actual rendering must be verified',()=>{
+ const r=stageCommercialPidChannels(fixture.replace('canShowPidForPlan(emailPlanCode);',''));
+ assert.equal(r.channels,3);assert.match(r.candidate,/applyPidVisibilityToAlerts\(visibleAlerts, resolvedPlanForEmail\)/);
+ assert.throws(()=>stageCommercialPidChannels(fixture.replace('emailPlanCode\n    );','unknownCode\n    );')));
+});

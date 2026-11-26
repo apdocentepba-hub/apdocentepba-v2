@@ -6,10 +6,18 @@ export function stageCommercialPidChannels(source){
   assert.equal(source.split(old).length,2,'PID channel anchor changed');
   source=source.replace(old,()=>next);changes.push({old,next});
  };
- swap('canShowPidForPlan(initialEmailPlanCode)','canShowPidForPlan(resolvedPlanForInitialEmail)');
- swap('alerts,\n    initialEmailPlanCode\n  );','alerts,\n    resolvedPlanForInitialEmail\n  );');
- swap('canShowPidForPlan(emailPlanCode)','canShowPidForPlan(resolvedPlanForEmail)');
- swap('visibleAlerts,\n      emailPlanCode\n    );','visibleAlerts,\n      resolvedPlanForEmail\n    );');
+ const emailPaths=[['initialEmailPlanCode','resolvedPlanForInitialEmail'],['emailPlanCode','resolvedPlanForEmail']];
+ for(const [code,resolved] of emailPaths){
+  // The exact active source can omit a redundant visibility calculation, but
+  // all actual calls with the old code must be replaced.
+  const calls=[...source.matchAll(new RegExp('canShowPidForPlan\\(\\s*'+code+'\\s*\\)','g'))];
+  assert.ok(calls.length<=1,'Duplicate PID visibility calculation');
+  for(const c of calls)swap(c[0],'canShowPidForPlan('+resolved+')');
+  const renders=[...source.matchAll(new RegExp('applyPidVisibilityToAlerts\\(\\s*([\\w$]+)\\s*,\\s*'+code+'\\s*\\)','g'))];
+  assert.equal(renders.length,1,'PID email rendering anchor '+code);
+  swap(renders[0][0],'applyPidVisibilityToAlerts('+renders[0][1]+', '+resolved+')');
+  assert.ok(!new RegExp('canShowPidForPlan\\(\\s*'+code+'\\s*\\)').test(source),'Unconverted visibility');
+ }
  for(const name of ['resolveTelegramEntitlement','resolveWhatsAppEntitlement']){
   const m=[...source.matchAll(new RegExp('^async function '+name+'\\([^\\n]*\\) \\{','gm'))];assert.equal(m.length,1);
   const start=m[0].index,end=source.indexOf('\n__name('+name+',',start);assert.ok(end>start);
