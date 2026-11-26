@@ -48,3 +48,10 @@ test('native login forms retain a same-origin Origin and still reject opaque or 
  assert.equal(accepted.status,303);assert.match(accepted.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Strict/);
  for(const other of ['null','https://foreign.example'])assert.equal((await h(new Request(origin+'/session',{method:'POST',headers:{origin:other},body:login()}))).status,403);
 });
+test('authenticated buyer lookup returns only the fixed test nickname after seller validation',async()=>{
+ const key='x'.repeat(48),calls=[];
+ const provider=async path=>{calls.push(path);return path==='/users/me'?{id:456,site_id:'MLA',tags:['test_user']}:{id:3298351140,site_id:'MLA',tags:['test_user'],nickname:'TESTUSER123456789',email:'not-exposed@example.invalid'};};
+ const h=m.createLabHandler({db:{},provider,operatorKey:key,webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:'https://lab.example'});
+ assert.equal((await h(new Request('https://lab.example/buyer'))).status,401);assert.equal(calls.length,0);
+ const r=await h(new Request('https://lab.example/buyer',{headers:{authorization:'Bearer '+key}}));assert.equal(r.status,200);assert.deepEqual(await r.json(),{ok:true,nickname:'TESTUSER123456789'});assert.deepEqual(calls,['/users/me','/users/3298351140']);
+});

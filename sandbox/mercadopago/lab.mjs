@@ -67,6 +67,7 @@ export function createLabHandler({db,provider,operatorKey='',webhookSecret='',se
    if(!direct&&!same(body.csrf||'',csrf))return json({ok:false},403);
   }
   try{
+   if(path==='/buyer'&&request.method==='GET'){await verifySeller();const buyer=await provider('/users/3298351140');if(String(buyer.id)!=='3298351140'||buyer.site_id!=='MLA'||!Array.isArray(buyer.tags)||!buyer.tags.includes('test_user')||!/^TESTUSER[0-9]+$/.test(buyer.nickname))throw Error('Unverified fixture buyer');return json({ok:true,nickname:buyer.nickname});}
    if(path==='/status'&&request.method==='GET')return json({ok:true,...await db.status()});
    if(path==='/reconcile'&&request.method==='POST')return json(await reconcile(String(body?.payment_id||'')));
    if(path==='/checkout'&&request.method==='POST'){
