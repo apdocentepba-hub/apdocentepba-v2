@@ -1,5 +1,5 @@
 /**
- * APDocentePBA — offline-only Expo demonstration.
+ * APDocentePBA — Offline Expo demonstration with explicit system-browser access.
  * NO AUTH, NO ABC/WORKER NETWORK, NO REMOTE PUSH DELIVERY.
  * Local notification demonstration ONLY on explicit tap + OS permission.
  * All offers below are explicitly fictional. No production features implied.
@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {
  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
- StatusBar, Platform
+ StatusBar, Platform, Linking
 } from "react-native";
 const {
  DEMO_OFFERS, DISTRICTS, SHIFTS, SCHOOLS, filterDemoOffers, toggleSaved, demoCounters, toggleDemoSchool, prioritizeDemoOffers
@@ -106,6 +106,14 @@ function PrimaryButton({label,onPress,secondary=false,disabled=false}){
   <Text style={[styles.primaryText,secondary&&styles.secondaryText]}>{label}</Text>
  </Pressable>;
 }
+function OfficialWebAccess({note,openOfficialWeb}){
+ return <View style={styles.statusCard}>
+  <Text style={styles.statusHeading}>Acceso a la web real</Text>
+  <Text style={styles.help}>Abrí tu cuenta, ofertas y preferencias reales en el navegador del teléfono. La demostración de esta app sigue separada y no recibe tu sesión.</Text>
+  <PrimaryButton label="Abrir mi cuenta en el navegador" onPress={openOfficialWeb}/>
+  <Text style={styles.help} accessibilityRole="text" accessibilityLiveRegion="polite">{note}</Text>
+ </View>;
+}
 function DemoInboxCard({notice,onRead,disabled=false}){
  const offer=DEMO_OFFERS.find(o=>o.id===notice.offerId);
  const cancelled=notice.status==="cancelled";
@@ -137,6 +145,15 @@ function DemoInboxCard({notice,onRead,disabled=false}){
  </View>;
 }
 export default function App(){
+ const [webAccessNote,setWebAccessNote]=useState("La cuenta real se abre en tu navegador. La app no recibe tu sesión.");
+ const openOfficialWeb=async()=>{
+  try {
+   await Linking.openURL("https://alertasapd.com.ar/");
+   setWebAccessNote("La cuenta real se abre en tu navegador. La app no recibe tu sesión.");
+  }catch{
+   setWebAccessNote("No se pudo abrir el navegador. Entrá a alertasapd.com.ar desde Chrome.");
+  }
+ };
  const [tab,setTab]=useState("inicio");
  const [district,setDistrict]=useState("Todos");
  const [shift,setShift]=useState("Todos");
@@ -258,6 +275,7 @@ export default function App(){
      <>
       <SectionHeading title="Todo en un solo lugar"
        sub="Una vista previa de cómo vas a seguir tus oportunidades docentes."/>
+      <OfficialWebAccess note={webAccessNote} openOfficialWeb={openOfficialWeb}/>
       <View style={styles.metricsRow}>
        <Metric number={String(counters.matching)} label="Ofertas de ejemplo"/>
        <Metric number={String(counters.saved)} label="Guardadas en esta sesión"/>
@@ -352,6 +370,7 @@ export default function App(){
        onPress={()=>{setDistrict("Todos");setShift("Todos");setQuery("");}}/>
      </>:
      <>
+      <OfficialWebAccess note={webAccessNote} openOfficialWeb={openOfficialWeb}/>
       <SectionHeading title="Cuenta y notificaciones"
        sub="La autenticación segura y los avisos reales todavía no están activados."/>
       <View style={styles.statusCard}>
