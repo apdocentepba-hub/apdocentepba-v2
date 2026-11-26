@@ -17,3 +17,9 @@ test('optional redundant email visibility computation is not required but actual
  assert.equal(r.channels,3);assert.match(r.candidate,/applyPidVisibilityToAlerts\(visibleAlerts, resolvedPlanForEmail\)/);
  assert.throws(()=>stageCommercialPidChannels(fixture.replace('emailPlanCode\n    );','unknownCode\n    );')));
 });
+
+test('messaging renderer formatting and local variable names may differ, both calls remain mandatory',()=>{
+ const compact=fixture.replace('visibleAlerts,\n            entitlement?.plan_code\n          );','storedVisible, entitlement.plan_code);');
+ const r=stageCommercialPidChannels(compact);assert.match(r.candidate,/applyPidVisibilityToAlerts\(storedVisible, entitlement \/\* apd_channel_1 \*\/\)/);
+ assert.throws(()=>stageCommercialPidChannels(compact.replace('entitlement.plan_code','unknownCode')));
+});

@@ -36,3 +36,6 @@ Porcentajes de avance son estimaciones de ingeniería, no mediciones de cobertur
 - Ensayo integral Worker: 40%, 17 funciones extraídas aprobadas, módulo completo no ejecutado.
 - Publicación y rollback: 0%, sin cambios ni autorización de publicación.
 Estimación de conjunto con módulos ponderados por igual: 62%. No confundir con pruebas unitarias aprobadas (101/101 en la última ejecución; 61 preflight + 40 política/UI). No declarar terminado por conteo de pruebas.
+
+## Recuperación de contratación incierta
+El helper `recoverCompletePreference` consulta únicamente por ID de preferencia conocido y comprueba referencia, propietario, precio, moneda, cantidad, URL y vencimiento antes de llamar al RPC existente de finalización. No genera cobro, no concede acceso ni crea otra preferencia. Sin ID verificable no libera la reserva automáticamente; se requiere conciliación del proveedor. No está conectado a una ruta pública ni se ejecutó contra Mercado Pago. Pendiente: procedimiento operativo autenticado, prueba con proveedor sandbox y resolución de reservas expiradas sin pago.

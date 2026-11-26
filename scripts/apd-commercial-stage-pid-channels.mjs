@@ -27,8 +27,16 @@ export function stageCommercialPidChannels(source){
   const next=old.replace('return {','return {\n    pid_visible: canShowPidForPlan(resolved),');
   swap(old,next);
  }
- swap('visibleAlerts,\n      entitlement?.plan_code\n    );','visibleAlerts,\n      entitlement\n    );');
- swap('visibleAlerts,\n            entitlement?.plan_code\n          );','visibleAlerts,\n            entitlement\n          );');
+ const renders=[...source.matchAll(/applyPidVisibilityToAlerts\(\s*([\w$]+)\s*,\s*entitlement(?:\?\.|\.)plan_code\s*\)/g)];
+ // Replace by position to handle identical formatting without ambiguous replacement.
+ assert.equal(renders.length,2,'PID bot rendering inventory');
+ for(const [i,m] of renders.entries()){
+  const next='applyPidVisibilityToAlerts('+m[1]+', entitlement /* apd_channel_'+i+' */)';
+  const offset=source.indexOf(m[0]);
+  assert.ok(offset>=0);
+  source=source.slice(0,offset)+next+source.slice(offset+m[0].length);
+  changes.push({old:m[0],next});
+ }
  swap('return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && apdCommercialNewToolsV1(value));','return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && value!==null && (apdCommercialNewToolsV1(value) || (value.pid_visible===true && ["COMPLETO","TRIAL_14D"].includes(getPlanCodeValue(value)))));');
  let reversed=source;for(const c of changes.toReversed())reversed=reversed.replace(c.next,()=>c.old);
  assert.equal(reversed,original,'Unrelated source changed');
