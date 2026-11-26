@@ -1,0 +1,17 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "candidate": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "APD_ANDROID_PROFILE": "validated-pilot"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
