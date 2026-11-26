@@ -3,7 +3,7 @@ const path=require("node:path");
 if(process.env.APD_ANDROID_PROFILE!=="validated-pilot"){
  module.exports=require("./app.json").expo;
 }else{
-"c032c89f-7c44-49c7-a30f-d8ea0b223053";
+const PROJECT_ID="c032c89f-7c44-49c7-a30f-d8ea0b223053";
 const FIREBASE_ID="alertasapd-dd3df";
 const PACKAGE="ar.com.alertasapd.pilot";
 const file=process.env.GOOGLE_SERVICES_JSON||"./google-services.json";
