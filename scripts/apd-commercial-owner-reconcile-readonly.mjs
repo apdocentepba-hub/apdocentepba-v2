@@ -9,7 +9,7 @@ assert.equal(db.protocol,'postgresql:');assert.equal(db.port,'5432');assert.equa
 const sql=`BEGIN READ ONLY;
 SELECT jsonb_build_object('gate_closed', (SELECT NOT enrollment_open FROM public.apd_commercial_release_control WHERE singleton),
 'owner_count',(SELECT count(*) FROM public.users WHERE activo AND es_admin AND md5(id::text)='2e9596824e588c6f47e538068efe970b'),
-'rows',coalesce(jsonb_agg(jsonb_build_object('reference',c.external_reference,'preference',c.provider_payload->>'preference_id','payment',c.provider_payload->>'payment_id','status',c.status,'created_at',c.created_at,'plan',c.plan_code)),'[]'::jsonb))
+'rows',coalesce(jsonb_agg(jsonb_build_object('id',c.id,'reference',c.external_reference,'preference',c.provider_payload->>'preference_id','payment',c.provider_payload->>'payment_id','status',c.status,'created_at',c.created_at,'plan',c.plan_code)),'[]'::jsonb))
 FROM public.mercadopago_checkout_sessions c JOIN public.users u ON u.id=c.user_id
 WHERE u.activo AND u.es_admin AND md5(u.id::text)='2e9596824e588c6f47e538068efe970b' AND c.plan_code<>'COMPLETO' AND c.status IN ('ready','approved');
 COMMIT;`;
@@ -143,4 +143,40 @@ if(process.argv.includes('--expire-remaining-owner-links')){
  for(const row of rows)assert.ok(isExpired((await check(row)).pref),'Final verification failed');
  assert.equal(writes+skipped,25);
  console.log('APD_OWNER_EXPIRY_BATCH_PASS '+JSON.stringify({expired:25,alreadyExpired:skipped,providerWrites:writes,databaseWrites:0,associatedPayments:0,scope:'owner_only'}));
+}
+
+if(process.argv.includes('--record-owner-expiry')){
+ assert.equal(process.env.APD_OWNER_RECORD_EXPIRY,'1');
+ assert.equal(process.env.GITHUB_REPOSITORY,'apdocentepba-hub/apdocentepba-v2');
+ assert.equal(process.env.GITHUB_HEAD_REF,'qa/owner-payment-reconciliation-20261126');
+ assert.equal(process.env.GITHUB_EVENT_NAME,'pull_request');
+ assert.equal(counts.expiredNoPayments,25);assert.equal(counts.hasPayments,0);assert.equal(counts.unverified,0);
+ const rows=data.rows.filter(x=>x.status==='ready');
+ assert.equal(new Set(rows.map(x=>x.id)).size,25);
+ assert.ok(rows.every(x=>/^[0-9a-f-]{36}$/i.test(x.id)));
+ // Only verified exact rows. SQL is passed on stdin, never printed.
+ const snapshot=JSON.stringify(rows.map(x=>({id:x.id,reference:x.reference,preference:x.preference})));
+ const quoted="'"+snapshot.replaceAll("'","''")+"'";
+ const update=`BEGIN;
+ SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='20s';
+ SELECT pg_advisory_xact_lock(170394,20261125);
+ DO $guard$
+ DECLARE uid uuid; n integer;
+ BEGIN
+ SELECT id INTO STRICT uid FROM public.users WHERE activo AND es_admin AND md5(id::text)='2e9596824e588c6f47e538068efe970b' FOR UPDATE;
+ IF (SELECT enrollment_open FROM public.apd_commercial_release_control WHERE singleton) IS DISTINCT FROM false THEN RAISE EXCEPTION 'Gate not closed'; END IF;
+ IF (SELECT count(*) FROM public.mercadopago_checkout_sessions WHERE user_id=uid AND plan_code<>'COMPLETO' AND status='ready')<>25 THEN RAISE EXCEPTION 'Owner inventory changed'; END IF;
+ UPDATE public.mercadopago_checkout_sessions c SET status='expired',updated_at=clock_timestamp()
+ FROM jsonb_to_recordset(${quoted}::jsonb) AS v(id uuid,reference text,preference text)
+ WHERE c.id=v.id AND c.user_id=uid AND c.plan_code<>'COMPLETO' AND c.status='ready'
+ AND c.external_reference=v.reference AND c.provider_payload->>'preference_id'=v.preference
+ AND c.provider_payload->>'payment_id' IS NULL;
+ GET DIAGNOSTICS n=ROW_COUNT;
+ IF n<>25 THEN RAISE EXCEPTION 'Snapshot drift'; END IF;
+ IF (SELECT count(*) FROM public.mercadopago_checkout_sessions WHERE user_id=uid AND status='approved')<>1 THEN RAISE EXCEPTION 'Approved history drift'; END IF;
+ END $guard$;
+ COMMIT;`;
+ const applied=spawnSync('psql',[uri,'-X','-Atq','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate'],{input:update,env:{...process.env,PGSSLMODE:'require',PGCONNECT_TIMEOUT:'10'},encoding:'utf8',stdio:['pipe','pipe','pipe'],timeout:30000});
+ if(applied.status!==0)throw Error('Guarded DB expiry recording failed; inspect inventory before retry');
+ console.log('APD_OWNER_EXPIRY_RECORD_PASS '+JSON.stringify({expired:25,approvedPreserved:1,providerWrites:0,globalAdmissionOpen:false}));
 }

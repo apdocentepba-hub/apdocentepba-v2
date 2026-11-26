@@ -1,0 +1,29 @@
+name: APD owner record verified expiry
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-owner-record-expiry.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-owner-expiry-pilot
+  cancel-in-progress: false
+jobs:
+  record:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 342 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/owner-payment-reconciliation-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/apd-commercial-owner-reconcile-readonly.mjs
+      - run: node scripts/apd-commercial-owner-reconcile-readonly.mjs --record-owner-expiry
+        env:
+          APD_SUPABASE_DB_URL: ${{ secrets.APD_SUPABASE_DB_URL }}
+          MERCADOPAGO_ACCESS_TOKEN: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
+          APD_OWNER_RECORD_EXPIRY: '1'
