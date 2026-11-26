@@ -1,4 +1,5 @@
 import test from 'node:test';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {stageCommercialPidChannels} from './apd-commercial-stage-pid-channels.mjs';
 import {verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
@@ -22,4 +23,17 @@ test('messaging renderer formatting and local variable names may differ, both ca
  const compact=fixture.replace('visibleAlerts,\n            entitlement?.plan_code\n          );','storedVisible, entitlement.plan_code);');
  const r=stageCommercialPidChannels(compact);assert.match(r.candidate,/applyPidVisibilityToAlerts\(storedVisible, entitlement \/\* apd_channel_1 \*\/\)/);
  assert.throws(()=>stageCommercialPidChannels(compact.replace('entitlement.plan_code','unknownCode')));
+});
+
+test('a serialized or forged bot entitlement cannot unlock PID; expiry rechecked',async()=>{
+ let active=true;
+ const resolved={plan:{code:'COMPLETO'},subscription:{plan_code:'COMPLETO'}};
+ const ctx={__name:()=>{},getPlanCodeValue:v=>typeof v==='string'?v:v?.plan_code||v?.plan?.code||'',apdCommercialNewToolsV1:v=>active&&v===resolved,resolverPlanUsuario:async()=>resolved};
+ vm.runInNewContext(stageCommercialPidChannels(fixture).candidate,ctx);
+ const actual=await ctx.resolveTelegramEntitlement({},'fixture');
+ assert.equal(ctx.canShowPidForPlan(actual),true);
+ assert.equal(ctx.canShowPidForPlan({plan_code:'COMPLETO',pid_visible:true}),false);
+ assert.equal(ctx.canShowPidForPlan({...actual,plan_code:'COMPLETO'}),false);
+ assert.equal(ctx.canShowPidForPlan('COMPLETO'),false);
+ active=false;assert.equal(ctx.canShowPidForPlan(actual),false);
 });

@@ -29,3 +29,6 @@ Verificar que el catálogo mantiene FREE, TRIAL_14D y COMPLETO activos, que las 
 
 ## Estadísticas de usuarios
 Cuentas QA históricas: 8 desactivadas, sin admin; 50 cuentas activas no administrativas confirmadas por consulta agregada de producción, sin modificación. Se excluyen exclusivamente cuentas desactivadas que coincidan con los cuatro marcadores de QA conocidos (nombre, apellido, dirección ficticia y ausencia de admin). Se conservan para auditoría; el listado administrativo puede incluirlas explícitamente con include_qa=1. Totales comerciales no incluyen administradores. No borrar registros sin revisar dependencias y autorización. Nuevas pruebas exclusivamente en aislamiento. Candidato de filtros pendiente de pruebas acumulativas.
+
+## Verificación 1fbef78
+78/78 preflight, dos endpoints de administración ensamblados, seis escenarios completos aprobados; 23 controles generales exitosos, uno omitido, uno falló por arranque de Chrome sin puerto DevTools. Corrección de infraestructura: consumir stderr, plazo de arranque de 25 segundos, perfil limpio y un único reintento de arranque; nunca reintentar aserciones fallidas. PID: marca privada WeakMap de identidad de objeto y reevaluación de vigencia, no confiar en pid_visible serializado. Pendiente validación de esta revisión. No se modificó producción.

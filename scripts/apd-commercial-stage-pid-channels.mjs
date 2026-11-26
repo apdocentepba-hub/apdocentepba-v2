@@ -24,7 +24,8 @@ export function stageCommercialPidChannels(source){
   const old=source.slice(start,end);
   assert.equal(old.split('const resolved = await resolverPlanUsuario(env, userId);').length,2);
   assert.equal(old.split('return {').length,2);
-  const next=old.replace('return {','return {\n    pid_visible: canShowPidForPlan(resolved),');
+  const next=old.replace('return {','return apdMarkPidEntitlementV1({\n    pid_visible: canShowPidForPlan(resolved),').replace(/};\s*}$/, '}, resolved);\n}');
+  assert.ok(next.endsWith('}, resolved);\n}'),'Bot entitlement return boundary');
   swap(old,next);
  }
  const renders=[...source.matchAll(/applyPidVisibilityToAlerts\(\s*([\w$]+)\s*,\s*entitlement(?:\?\.|\.)plan_code\s*\)/g)];
@@ -37,8 +38,9 @@ export function stageCommercialPidChannels(source){
   source=source.slice(0,offset)+next+source.slice(offset+m[0].length);
   changes.push({old:m[0],next});
  }
- swap('return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && apdCommercialNewToolsV1(value));','return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && value!==null && (apdCommercialNewToolsV1(value) || (value.pid_visible===true && ["COMPLETO","TRIAL_14D"].includes(getPlanCodeValue(value)))));');
+ swap('return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && apdCommercialNewToolsV1(value));','return getPlanCodeValue(value) === "INSIGNE" || (typeof value==="object" && value!==null && (apdCommercialNewToolsV1(value) || (apdPidEntitlementsV1.has(value) && apdCommercialNewToolsV1(apdPidEntitlementsV1.get(value)))));');
  let reversed=source;for(const c of changes.toReversed())reversed=reversed.replace(c.next,()=>c.old);
  assert.equal(reversed,original,'Unrelated source changed');
- return {candidate:source,channels:3,unrelatedBytesPreserved:true,deployable:false};
+ const prefix='const apdPidEntitlementsV1=new WeakMap();\nfunction apdMarkPidEntitlementV1(value,resolved){ apdPidEntitlementsV1.set(value,resolved); return value; }\n';
+ return {candidate:prefix+source,channels:3,unrelatedBytesPreserved:true,deployable:false};
 }
