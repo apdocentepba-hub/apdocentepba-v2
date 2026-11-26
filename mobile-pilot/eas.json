@@ -1,0 +1,11 @@
+{
+  "build": {
+    "pilot": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
