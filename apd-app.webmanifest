@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "AlertasAPD · APDocentePBA",
+  "short_name": "AlertasAPD",
+  "description": "Alertas y herramientas docentes de Provincia de Buenos Aires",
+  "lang": "es-AR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f6fb",
+  "theme_color": "#082c43",
+  "icons": [
+    {
+      "src": "./icons/apd-app-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/apd-app-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
