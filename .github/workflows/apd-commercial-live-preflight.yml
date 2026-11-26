@@ -9,6 +9,7 @@ on:
       - 'scripts/test-apd-commercial-pid-channels.mjs'
       - 'scripts/test-apd-commercial-stored-alerts.mjs'
       - 'scripts/apd-commercial-runtime-qa.mjs'
+      - 'scripts/apd-commercial-full-module-qa.mjs'
       - 'scripts/test-apd-commercial-runtime-qa.mjs'
       - 'scripts/apd-commercial-persist-preferences.mjs'
       - 'scripts/apd-commercial-stage-concurrent-save.mjs'
@@ -58,4 +59,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/apd-commercial-live-preflight.mjs
+        run: node --experimental-vm-modules scripts/apd-commercial-live-preflight.mjs

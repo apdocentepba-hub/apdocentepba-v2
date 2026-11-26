@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {stageCommercialPidChannels} from './apd-commercial-stage-pid-channels.mjs';
 import {stageCommercialStoredAlerts} from './apd-commercial-stage-stored-alerts.mjs';
+import {verifyCommercialFullModule} from './apd-commercial-full-module-qa.mjs';
 import {verifyCommercialRuntime} from './apd-commercial-runtime-qa.mjs';
 import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-save.mjs';
 import {stageCommercialSavePreferences} from './apd-commercial-stage-save-preferences.mjs';
@@ -97,6 +98,8 @@ async function main(){
  console.log('APD_COMMERCIAL_PID_CHANNELS '+JSON.stringify({channels:pidStage.channels,unrelatedBytesPreserved:pidStage.unrelatedBytesPreserved,deployable:false}));
  const runtime=await verifyCommercialRuntime(pidStage.candidate);
  console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
+ const fullModule=await verifyCommercialFullModule(pidStage.candidate);
+ console.log('APD_COMMERCIAL_FULL_MODULE_QA '+JSON.stringify(fullModule));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){
