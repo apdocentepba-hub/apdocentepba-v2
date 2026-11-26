@@ -4,6 +4,8 @@ on:
     paths:
       - 'scripts/apd-commercial-sandbox-preference.mjs'
       - 'scripts/test-apd-commercial-sandbox-preference.mjs'
+      - 'scripts/apd-commercial-sandbox-reconcile-reference.mjs'
+      - 'scripts/test-apd-commercial-sandbox-reconcile-reference.mjs'
       - '.github/workflows/apd-commercial-sandbox-local-qa.yml'
 permissions:
   contents: read
@@ -19,4 +21,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --check scripts/apd-commercial-sandbox-preference.mjs
-      - run: node --test scripts/test-apd-commercial-sandbox-preference.mjs scripts/test-apd-commercial-sandbox-payment-probe.mjs scripts/test-apd-commercial-sandbox-lifecycle.mjs
+      - run: node --test scripts/test-apd-commercial-sandbox-preference.mjs scripts/test-apd-commercial-sandbox-payment-probe.mjs scripts/test-apd-commercial-sandbox-lifecycle.mjs scripts/test-apd-commercial-sandbox-reconcile-reference.mjs
