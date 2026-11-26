@@ -1,0 +1,6 @@
+# AlertasAPD Android · candidato 0.1.0
+Cliente ligero que abre exclusivamente https://alertasapd.com.ar/ mediante Custom Tabs del navegador, con fallback a ACTION_VIEW. No es WebView ni el prototipo Expo con datos ficticios. No recibe credenciales, no solicita permisos propios de red o push, no guarda información personal ni acepta enlaces externos como entrada. El navegador conserva su propia sesión y maneja HTTPS, OAuth y navegación a terceros. No se presupone que esos flujos estén probados en Android.
+
+Compilar con JDK 17, SDK 35 y Gradle 8.11.1: `gradle -p android-web-client assembleDebug`. Firma debug exclusivamente de laboratorio, identificador distinto de una futura versión comercial. No publicar en Play Store ni distribuir a docentes sin revisión.
+
+Aceptación: compilación, firma y hash verificables; instalación en dispositivo; apertura del dominio exacto con barra de origen visible; login/logout, filtros, herramientas y vuelta desde enlace externo; sin compra real, sin notificaciones, sin modificación del servicio. Si no hay navegador, mostrar mensaje sin cerrar la app. TWA sin barra de dirección y push nativo requieren pasos separados, identidad de firma estable, asociación del dominio y autorización.
