@@ -118,6 +118,9 @@ bash "$GITHUB_WORKSPACE/scripts/apd_gha_backup_crypto.sh" seal "$root/plain" "$e
 bash "$GITHUB_WORKSPACE/scripts/apd_gha_backup_crypto.sh" verify "$encrypted" "$root/restored"
 
 echo 'Starting isolated Supabase local Postgres restore; production will NOT be modified.'
+if docker inspect supabase_db_restore_project >/dev/null 2>&1; then
+  echo 'Refusing to use pre-existing restore container.' >&2; exit 5
+fi
 supabase init >/dev/null 2>"$root/local-init.log" ||
   { echo 'Could not initialize isolated Supabase project.' >&2; exit 5; }
 supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor \
@@ -130,10 +133,7 @@ major="$(psql "$local_url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SHOW server_versio
 [[ "$major" =~ ^17[0-9]{4}$ ]] ||
   { echo 'Isolated PostgreSQL version is not 17; cannot approve restoration.' >&2; exit 5; }
 
-if ! psql "$local_url" -X -q -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate --single-transaction \
-      -f "$root/restored/roles.sql" \
-      -f "$root/restored/app.sql" \
-      >/dev/null 2>"$root/restore-error.log"; then
+if ! bash "$GITHUB_WORKSPACE/scripts/apd_gha_local_restore.sh" supabase_db_restore_project "$root/restored" "$root/restore-error.log"; then
   python3 "$GITHUB_WORKSPACE/scripts/apd_gha_restore_diagnostic.py" "$root/restore-error.log" >&2
   echo 'Isolated PostgreSQL restore failed. No artifact will be uploaded.' >&2
   exit 6
