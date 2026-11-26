@@ -95,9 +95,10 @@ fi
   { echo 'Empty combined application SQL snapshot; refused.' >&2; exit 4; }
 # Existing Supabase local/Postgres databases already contain schema public.
 # Only adjust the pg_dump schema creation statement, never drop source objects.
-[[ "$(grep -Fxc 'CREATE SCHEMA public;' "$root/plain/app.sql")" == 1 ]] ||
-  { echo 'Unexpected public schema DDL in dump; restoration not safe.' >&2; exit 4; }
-sed -i 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' "$root/plain/app.sql"
+public_extensions="$(psql "$SUPABASE_DB_URL" -X -q -At -v ON_ERROR_STOP=1 -c "SELECT extname||':'||extversion FROM pg_extension WHERE extnamespace='public'::regnamespace ORDER BY extname;" 2>/dev/null)" ||
+  { echo 'Cannot inspect public extensions.' >&2; exit 4; }
+python3 "$GITHUB_WORKSPACE/scripts/apd_gha_prepare_public_dump.py" "$root/plain/app.sql" "$public_extensions"
+echo 'Public extension restore prerequisites embedded in encrypted SQL snapshot.'
 after_dump="$(read_counts "$SUPABASE_DB_URL")" ||
   { echo 'Post-export count read failed.' >&2; exit 4; }
 [[ "$baseline" == "$after_dump" ]] ||
@@ -129,10 +130,11 @@ major="$(psql "$local_url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SHOW server_versio
 [[ "$major" =~ ^17[0-9]{4}$ ]] ||
   { echo 'Isolated PostgreSQL version is not 17; cannot approve restoration.' >&2; exit 5; }
 
-if ! psql "$local_url" -X -q -v ON_ERROR_STOP=1 --single-transaction \
+if ! psql "$local_url" -X -q -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate --single-transaction \
       -f "$root/restored/roles.sql" \
       -f "$root/restored/app.sql" \
       >/dev/null 2>"$root/restore-error.log"; then
+  python3 "$GITHUB_WORKSPACE/scripts/apd_gha_restore_diagnostic.py" "$root/restore-error.log" >&2
   echo 'Isolated PostgreSQL restore failed. No artifact will be uploaded.' >&2
   exit 6
 fi
