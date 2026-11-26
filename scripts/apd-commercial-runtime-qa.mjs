@@ -85,6 +85,7 @@ export async function verifyCommercialRuntime(source){
  const context=vm.createContext({
   URL,Request,Response,AbortSignal,Date:class extends Date{static now(){return clock;}},fetch:transport,
   supabaseSelect:async(_env,path)=>{
+   if(path.startsWith('apd_commercial_release_control?'))return [{enrollment_open:true}];
    if(path.startsWith('subscription_plans?'))return catalog.map(p=>({...p,is_active:active}));
    if(path.startsWith('user_subscriptions?')){assert.ok(path.includes(uid));return rows.map(r=>({...r}));}
    if(path.startsWith('users?')){assert.ok(path.includes(uid));return [user];}

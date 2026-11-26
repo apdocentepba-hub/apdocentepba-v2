@@ -13,6 +13,7 @@ BEGIN
  IF (SELECT count(*) FROM public.subscription_plans WHERE code IN ('FREE','COMPLETO','TRIAL_14D') AND is_active)<>3
  OR NOT EXISTS (SELECT 1 FROM public.subscription_plans WHERE code='COMPLETO' AND price_ars=2000)
  THEN RETURN jsonb_build_object('ok',false,'reason','release_disabled'); END IF;
+ IF NOT public.apd_commercial_enrollment_open() THEN RETURN jsonb_build_object('ok',false,'reason','release_paused'); END IF;
  -- Do not replace any live contract or unresolved recurring arrangement.
  IF EXISTS(SELECT 1 FROM public.user_subscriptions WHERE user_id=p_user_id AND
    (mercadopago_preapproval_id IS NOT NULL OR

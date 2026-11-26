@@ -49,6 +49,7 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -c "UPDATE public.apd_commercial_release_control SET enrollment_open=true WHERE singleton;"
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-db.sql
       - name: Concurrent claims in independent transactions
         run: |
@@ -127,3 +128,11 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-lifecycle.sql
           echo 'PASS commercial lifecycle: trial, expiry, preference preservation, checkout, approval, replay and reversal'
+
+      - name: Freeze new admissions without losing paid rights or pending settlements
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-release-freeze.sql
+          echo 'PASS commercial admission freeze: new claims blocked, pending payment settled, legacy and paid rights preserved'

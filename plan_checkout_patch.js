@@ -176,7 +176,7 @@
         new Set(planes.map(p=>p.code)).size !== 2 ||
         !planes.some(p=>p.code==='FREE' && Number(p.price_ars)===0 && Number(p.max_distritos)===1 && Number(p.max_cargos)===1) ||
         !planes.some(p=>p.code==='COMPLETO' && Number(p.price_ars)===2000 && Number(p.max_distritos)===5 && Number(p.max_cargos)===10)) throw Error('Catálogo comercial inconsistente');
-    return ['FREE','COMPLETO'].map(code=>({...planes.find(p=>p.code===code),commercial_model:'free_complete_v1'}));
+    return ['FREE','COMPLETO'].map(code=>({...planes.find(p=>p.code===code),commercial_model:'free_complete_v1',commercial_enrollment_open:data.commercial_enrollment_open===true}));
   }
 
   function planActualCode(planInfo) {
@@ -208,6 +208,7 @@
       if (targetCode!=='COMPLETO' || Number(plan.price_ars)!==2000) return deny('unavailable','No disponible','El catálogo no está confirmado.');
       if (sub.mercadopago_preapproval_id || (planInfo.access_active===true && !['FREE','TRIAL_14D','TRIAL_7D'].includes(currentCode)))
         return deny('current','Acceso vigente','Conservás las condiciones de tu acceso actual.');
+      if (plan.commercial_enrollment_open!==true) return deny('paused','Contrataciones pausadas','Las nuevas contrataciones están pausadas temporalmente. Tu acceso actual se conserva.');
       return {allowed:true,mode:'checkout',label:'Contratar Completo',actionLabel:'Contratar por $2.000',reason:'30 días de acceso completo, sin renovación automática. El pago se confirma en Mercado Pago.'};
     }
     const currentPrice = currentPlanPrice(planInfo);
@@ -451,7 +452,7 @@
     const commercial=!!planes?.length && planes.every(p=>p.commercial_model==='free_complete_v1');
     if (note) note.toggleAttribute('data-apd-commercial-terms',commercial);
     if (note) note.textContent=commercial
-      ? '14 días sin tarjeta para cuentas nuevas. Si no contratás, pasás a Gratis. No hay renovación automática del plan Completo; se conservan las condiciones anteriores.'
+      ? (planes.every(p=>p.commercial_enrollment_open===true)?'14 días sin tarjeta para cuentas nuevas. Si no contratás, pasás a Gratis. No hay renovación automática del plan Completo; se conservan las condiciones anteriores.':'Las nuevas contrataciones y pruebas están pausadas. Se mantienen los derechos vigentes.')
       : 'Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio queda programado para el próximo ciclo.';
     if (typeof window.APD_refreshPanelTabs === 'function') {
       setTimeout(() => window.APD_refreshPanelTabs(), 0);

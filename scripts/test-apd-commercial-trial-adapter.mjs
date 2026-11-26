@@ -31,3 +31,5 @@ test('inactive catalog delegates exactly once to legacy; enabled catalog claims 
  }
  assert.equal(legacyCalls,2);assert.equal(rpcCalls,2);
 });
+
+test('paused enrollment is an explicit no-op without breaking new basic accounts',async()=>{assert.deepEqual(await claim(env,id,async()=>reply({ok:false,reason:'release_paused'})),{ok:true,created:false,reason:'release_paused'});});

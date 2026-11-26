@@ -10,7 +10,7 @@ export async function verifyCommercialFullModule(source){
  const origin='https://fixture.invalid',secret='fixture-webhook-only',token='fixture-session-only';
  const dbkey='fixture-db-only',mpkey='fixture-mp-only';
  const env=Object.freeze({SUPABASE_URL:origin,SUPABASE_SERVICE_ROLE_KEY:dbkey,MERCADOPAGO_ACCESS_TOKEN:mpkey,MERCADOPAGO_WEBHOOK_SECRET:secret,MERCADOPAGO_CURRENCY_ID:'ARS',MERCADOPAGO_WEBHOOK_URL:origin+'/api/mercadopago/webhook'});
- let clock=Date.parse('2026-11-25T20:00:00Z'),payment=null,session=null,providerCreates=0,dbMutations=0,webhookEvents=0,unexpected=0,failFinalize=false,failPayment=false,refunded=false;
+ let clock=Date.parse('2026-11-25T20:00:00Z'),payment=null,session=null,providerCreates=0,dbMutations=0,webhookEvents=0,unexpected=0,failFinalize=false,failPayment=false,refunded=false,enrollment=true;
  const ref=uid+':COMPLETO:123',prefId='fixture-pref-123',checkoutUrl='https://www.mercadopago.com/mla/checkout/start?pref_id='+prefId;
  const iso=ms=>new Date(ms).toISOString();
  const rows=[{id:'trial-qa',user_id:uid,plan_code:'TRIAL_14D',status:'ACTIVE',source:'trial_complete_14d',started_at:iso(clock),trial_ends_at:iso(clock+336*3600000)}];
@@ -25,6 +25,7 @@ export async function verifyCommercialFullModule(source){
    const name=url.pathname.slice('/rest/v1/'.length);
    if(method==='GET'){
     if(name==='subscription_plans')return response(catalog);
+    if(name==='apd_commercial_release_control')return response([{enrollment_open:enrollment}]);
     if(name==='sessions')return response(url.searchParams.get('token')==='eq.'+token?[{token,user_id:uid,activo:true,expires_at:iso(clock+86400000)}]:[]);
     if(name==='users')return response(url.searchParams.get('id')==='eq.'+uid?[user]:[]);
     if(name==='user_subscriptions'){assert.equal(url.searchParams.get('user_id'),'eq.'+uid);return response(rows);}
@@ -37,6 +38,7 @@ export async function verifyCommercialFullModule(source){
    if(name==='mercadopago_webhook_events'){webhookEvents++;return response([{}],201);}
    if(name==='rpc/apd_reserve_complete_checkout'){
     assert.equal(args.p_user_id,uid);
+    if(!enrollment)return response({ok:false,reason:'release_paused'});
     if(session==='ready')return response({ok:true,mode:'reuse',reference:ref,checkout_url:checkoutUrl});
     if(session==='creating')return response({ok:false,reason:'checkout_in_progress',reference:ref});
     session='creating';return response({ok:true,mode:'create',reference:ref});
@@ -111,6 +113,12 @@ export async function verifyCommercialFullModule(source){
   const ts=String(Math.floor(clock/1000)),requestId='fixture-event',signature=createHmac('sha256',secret).update('id:700;request-id:'+requestId+';ts:'+ts+';').digest('hex');
   return call('/api/mercadopago/webhook?data.id=700',{method:'POST',body:{type:'payment',action:'payment.updated',data:{id:'700'}},headers:{'x-request-id':requestId,'x-signature':'ts='+ts+',v1='+(signed?signature:'0'.repeat(64))}});
  };
+ await check('pause new admission without invalidating outstanding checkout',async()=>{
+  enrollment=false;
+  const r=await call('/api/planes');assert.equal(r.status,200);assert.equal(r.data.commercial_enrollment_open,false);
+  const denied=await buy();assert.equal(denied.status,409);assert.equal(denied.data.reason,'release_paused');
+  assert.equal(await plan(),'FREE');assert.equal(providerCreates,1);
+ });
  await check('signed webhook retries transient failure then applies exact payment once',async()=>{
   payment={id:700,external_reference:ref,live_mode:true,status:'approved',transaction_amount:2000,currency_id:'ARS',transaction_amount_refunded:0,date_approved:iso(clock)};
   assert.equal((await notify(false)).status,401);

@@ -10,7 +10,7 @@ const source=fs.readFileSync('plan_checkout_patch.js','utf8');
 const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:8px;font:16px Arial}*{box-sizing:border-box}.panel-card{width:100%;padding:8px}</style></head><body><main id="panel-content"><section id="panel-plan"><div class="plan-stack"><div class="plan-pill-row"><span class="plan-pill">Activo</span><span class="plan-pill">Precio anterior</span></div></div></section><section id="panel-canales"></section></main><pre id="qa-result">PENDING</pre>
 <script>
 const plans=[{code:'FREE',price_ars:0,max_distritos:1,max_cargos:1},{code:'COMPLETO',price_ars:2000,max_distritos:5,max_cargos:10}];
-let catalog={ok:true,commercial_model:'free_complete_v1',trial_days:14,planes:plans};
+let catalog={ok:true,commercial_model:'free_complete_v1',trial_days:14,commercial_enrollment_open:true,planes:plans};
 let checkoutCalls=0,mode='safe',opened=[];
 window.obtenerToken=()=> 'fixture';
 window.renderPlanUI=()=>{};
@@ -50,12 +50,16 @@ window.workerFetchJson=async(url,opts)=>{
  await render('COMPLETO');verify(!button(),'paid cannot buy again');
  await render('FREE');verify(button(),'free may buy');
  await render('FREE',true,'fallback_frontend');verify(!button(),'unverified cannot buy');
+ catalog={...catalog,commercial_enrollment_open:false};await render('FREE');verify(!button(),'paused cannot buy');
+ verify(document.querySelector('[data-apd-commercial-terms]')?.textContent.includes('pausadas'),'pause terms');
  catalog={...catalog,trial_days:7};await render('FREE');verify(!button(),'invalid catalog fails closed');
- document.getElementById('qa-result').textContent='PASS_COMMERCIAL_BROWSER '+innerWidth;
-})().catch(e=>document.getElementById('qa-result').textContent='FAIL_COMMERCIAL_BROWSER '+e.message);
+ report('PASS_COMMERCIAL_BROWSER '+innerWidth);
+})().catch(e=>report('FAIL_COMMERCIAL_BROWSER '+e.message));
+function report(text){document.getElementById('qa-result').textContent=text;if(parent!==window)parent.postMessage(text,location.origin);}
 </script></body></html>`;
 const server=http.createServer((req,res)=>{
  if(req.url==='/patch.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.end(source);}
+ else if(req.url==='/mobile'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end('<!doctype html><pre id="qa-result">PENDING</pre><script>addEventListener("message",e=>{if(e.origin===location.origin&&e.source===document.querySelector("iframe").contentWindow&&typeof e.data==="string")document.getElementById("qa-result").textContent=e.data;});</script><iframe src="/" style="width:390px;height:850px;border:0"></iframe>');}
  else if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'"});res.end(html);}
  else{res.writeHead(404);res.end();}
 });
@@ -67,13 +71,13 @@ try{
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'apd-commercial-chrome-'));
   try{
    const result=await new Promise((resolve,reject)=>{
-    const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--no-first-run','--no-default-browser-check','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--window-size='+width+',1000','--force-device-scale-factor=1','--virtual-time-budget=5000','--dump-dom','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+'/'],{stdio:['ignore','pipe','ignore']});
+    const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--no-first-run','--no-default-browser-check','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--window-size='+width+',1000','--force-device-scale-factor=1','--virtual-time-budget=5000','--dump-dom','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+(width===390?'/mobile':'/')],{stdio:['ignore','pipe','ignore']});
     let out='';child.stdout.on('data',b=>out+=b);const timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error('Chrome timeout'));},30000);
     child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);resolve({out,code});});
    });
    assert.equal(result.code,0);
    const status=result.out.match(/<pre id="qa-result">([^<]+)<\/pre>/)?.[1];
-   assert.match(status||'',/^PASS_COMMERCIAL_BROWSER /,'Browser '+width+': '+status);
+   assert.equal(status,'PASS_COMMERCIAL_BROWSER '+width,'Browser viewport '+width+': '+status);
    console.log('APD_COMMERCIAL_BROWSER '+JSON.stringify({requestedWidth:width,status,productionWrites:0,providerCalls:0}));
   }finally{fs.rmSync(profile,{recursive:true,force:true});}
  }

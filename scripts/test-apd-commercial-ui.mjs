@@ -6,7 +6,7 @@ const src=fs.readFileSync('plan_checkout_patch.js','utf8');
 const extract=(a,b)=>{const start=src.indexOf(a),end=src.indexOf(b,start+a.length);assert.ok(start>=0&&end>start);return src.slice(start,end);};
 const bundle=[extract('function normalizePlanCodeSafe(','function canalesBox('),extract('async function obtenerPlanesDisponiblesUI()','function planActualCode('),extract('function planActualCode(','function buildPlanFeatureList('),extract('function buildPlanCards(','function renderSelectorCard(')].join('\n');
 const plans=[{code:'FREE',price_ars:0,max_distritos:1,max_cargos:1},{code:'COMPLETO',price_ars:2000,max_distritos:5,max_cargos:10}];
-const payload={ok:true,commercial_model:'free_complete_v1',trial_days:14,planes:plans};
+const payload={ok:true,commercial_model:'free_complete_v1',trial_days:14,commercial_enrollment_open:true,planes:plans};
 const ctx=data=>vm.runInNewContext(bundle+'\n({obtenerPlanesDisponiblesUI,transitionPolicy,buildPlanCards})',{window:{workerFetchJson:async()=>data}});
 const info=(code,active=true,source='server')=>({ok:true,access_active:active,plan:{code},subscription:{plan_code:code,source,status:'ACTIVE'}});
 test('only verified exact catalog enables commercial presentation',async()=>{const r=await ctx(payload).obtenerPlanesDisponiblesUI();assert.equal(r.length,2);assert.equal(r[1].commercial_model,'free_complete_v1');for(const data of [{...payload,trial_days:7},{...payload,planes:[...plans,{code:'PLUS'}]},{...payload,planes:[plans[0],{...plans[1],price_ars:1}]},{planes:plans}])await assert.rejects(ctx(data).obtenerPlanesDisponiblesUI());});
@@ -24,3 +24,5 @@ test('summary correction is limited to verified new plans',()=>{
  assert.equal(pills[0].textContent,'Activo');assert.equal(pills[1].textContent,'Precio original');
  correct(info('FREE'));assert.equal(pills[1].textContent,'Gratis');
 });
+
+test('paused or unverified commercial admission never displays a purchase action',async()=>{for(const open of [false,undefined]){const api=ctx({...payload,commercial_enrollment_open:open});const plans=await api.obtenerPlanesDisponiblesUI();assert.equal(api.transitionPolicy(plans[1],info('FREE')).allowed,false);assert.doesNotMatch(api.buildPlanCards(info('FREE'),plans),/data-plan-checkout="COMPLETO"/);}});

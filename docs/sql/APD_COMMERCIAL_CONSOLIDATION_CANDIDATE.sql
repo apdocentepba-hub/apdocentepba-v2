@@ -1,6 +1,26 @@
 -- Candidate ONLY: run against isolated PostgreSQL fixture, not production.
 -- Keep all legacy catalog rows unchanged; activate new rows only after Worker migration.
 BEGIN;
+-- Separate admission from existing rights. Freeze does not deactivate the catalog.
+CREATE TABLE public.apd_commercial_release_control (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+ enrollment_open boolean NOT NULL DEFAULT false
+);
+INSERT INTO public.apd_commercial_release_control(singleton,enrollment_open) VALUES(true,false);
+ALTER TABLE public.apd_commercial_release_control ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.apd_commercial_release_control FROM PUBLIC,anon,authenticated;
+GRANT SELECT ON public.apd_commercial_release_control TO service_role;
+CREATE FUNCTION public.apd_commercial_enrollment_open()
+RETURNS boolean LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $gate$
+DECLARE enabled boolean;
+BEGIN
+ -- Operators must acquire the corresponding exclusive advisory lock before changing admission.
+ PERFORM pg_advisory_xact_lock_shared(170394,20261125);
+ SELECT enrollment_open INTO enabled FROM public.apd_commercial_release_control WHERE singleton;
+ RETURN coalesce(enabled,false);
+END $gate$;
+REVOKE ALL ON FUNCTION public.apd_commercial_enrollment_open() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.apd_commercial_enrollment_open() TO service_role;
 INSERT INTO public.subscription_plans
  (code,nombre,descripcion,price_ars,trial_days,max_distritos,max_cargos,is_active,public_visible,sort_order,feature_flags)
 VALUES
@@ -34,6 +54,7 @@ BEGIN
  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','account_unavailable'); END IF;
  IF NOT EXISTS (SELECT 1 FROM public.subscription_plans WHERE code='TRIAL_14D' AND is_active IS TRUE AND trial_days=14 AND price_ars=0)
  THEN RETURN jsonb_build_object('ok',false,'reason','release_disabled'); END IF;
+ IF NOT public.apd_commercial_enrollment_open() THEN RETURN jsonb_build_object('ok',false,'reason','release_paused'); END IF;
  IF EXISTS (SELECT 1 FROM public.apd_complete_trial_claims WHERE user_id=p_user_id)
  OR EXISTS (SELECT 1 FROM public.user_subscriptions WHERE user_id=p_user_id)
  THEN RETURN jsonb_build_object('ok',false,'reason','existing_history'); END IF;

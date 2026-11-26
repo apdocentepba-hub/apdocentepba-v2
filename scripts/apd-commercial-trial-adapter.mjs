@@ -18,6 +18,7 @@ export async function claimCompleteTrial(env,userId,transport=fetch){
  try{r=await response.json();}catch{throw Error('Unverified trial response');}
  if(r?.ok===true&&r.plan_code==='TRIAL_14D'&&typeof r.trial_ends_at==='string'&&Number.isFinite(Date.parse(r.trial_ends_at)))return {ok:true,created:true,trial_ends_at:r.trial_ends_at};
  if(r?.ok===false&&r.reason==='existing_history')return {ok:true,created:false};
+ if(r?.ok===false&&r.reason==='release_paused')return {ok:true,created:false,reason:'release_paused'};
  // No silent success, no automatic fallback INSERT, no accidental charge.
  throw Error('Trial claim not confirmed');
 }
