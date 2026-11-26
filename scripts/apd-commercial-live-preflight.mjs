@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialStoredAlerts} from './apd-commercial-stage-stored-alerts.mjs';
 import {verifyCommercialRuntime} from './apd-commercial-runtime-qa.mjs';
 import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-save.mjs';
 import {stageCommercialSavePreferences} from './apd-commercial-stage-save-preferences.mjs';
@@ -87,7 +88,10 @@ async function main(){
  const concurrentStage=stageCommercialConcurrentSave(saveStage.candidate);
  verifyTrialCandidateSyntax(concurrentStage.candidate);
  console.log('APD_COMMERCIAL_CONCURRENT_SAVE_STAGE '+JSON.stringify({compareAndSave:concurrentStage.compareAndSave,unrelatedBytesPreserved:concurrentStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
- const runtime=await verifyCommercialRuntime(concurrentStage.candidate);
+ const storedStage=stageCommercialStoredAlerts(concurrentStage.candidate);
+ verifyTrialCandidateSyntax(storedStage.candidate);
+ console.log('APD_COMMERCIAL_STORED_STAGE '+JSON.stringify({storedReaders:storedStage.storedReaders,preferenceReader:storedStage.preferenceReader,unrelatedBytesPreserved:storedStage.unrelatedBytesPreserved,deployable:false}));
+ const runtime=await verifyCommercialRuntime(storedStage.candidate);
  console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
