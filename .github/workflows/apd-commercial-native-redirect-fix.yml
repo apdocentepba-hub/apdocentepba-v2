@@ -1,0 +1,26 @@
+name: APD native redirect correction and full module regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-native-redirect-fix.mjs'
+      - '.github/workflows/apd-commercial-native-redirect-fix.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 343 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund miniflare@4.20260515.0
+      - run: node --check scripts/apd-commercial-native-redirect-fix.mjs
+      - run: node --experimental-vm-modules scripts/apd-commercial-native-redirect-fix.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
