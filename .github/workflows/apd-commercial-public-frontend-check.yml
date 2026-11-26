@@ -1,0 +1,37 @@
+name: APD commercial frontend exact public verification
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'apd_comparador_panel.mjs'
+      - 'scripts/apd-commercial-public-frontend-check.mjs'
+      - '.github/workflows/apd-commercial-public-frontend-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'apd_comparador_panel.mjs'
+      - 'scripts/apd-commercial-public-frontend-check.mjs'
+      - '.github/workflows/apd-commercial-public-frontend-check.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify cache chain and exact public bytes without mutations
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            node scripts/apd-commercial-public-frontend-check.mjs --baseline
+          else
+            node scripts/apd-commercial-public-frontend-check.mjs
+          fi
