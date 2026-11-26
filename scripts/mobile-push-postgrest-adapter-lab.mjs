@@ -402,6 +402,32 @@ export function createMobilePushPostgrestAdapterLab({
    if(typeof stored!=='boolean')throw Error('postgrest_invalid_expo_receipt_result');
    return stored;
   },
+  // Private sender boundary; never returned by the public device API.
+  async readOwnedExpoRecipient({userId,deviceId}={}){
+   if(!UUID.test(userId||'')||!UUID.test(deviceId||''))throw Error('invalid_recipient_reference');
+   const row=expectOne(await request('apd_mobile_push_devices',{query:{
+    select:'id,user_id,platform,transport,enabled,opted_in,revoked_at,token_hash,token_ciphertext',
+    id:'eq.'+deviceId,user_id:'eq.'+userId,platform:'eq.android',transport:'eq.expo',
+    enabled:'eq.true',opted_in:'eq.true',revoked_at:'is.null',limit:2
+   }}));
+   if(!row)return null;
+   if(row.id!==deviceId||row.user_id!==userId||row.platform!=='android'||row.transport!=='expo'||
+    row.enabled!==true||row.opted_in!==true||row.revoked_at!==null||
+    typeof row.token_hash!=='string'||!HEX.test(row.token_hash)||
+    typeof row.token_ciphertext!=='string'||!/^[-_A-Za-z0-9]{48,4096}$/.test(row.token_ciphertext))
+    throw Error('invalid_private_recipient');
+   const {id,user_id,platform,transport,enabled,opted_in,revoked_at,token_hash,token_ciphertext}=row;
+   return Object.freeze({id,user_id,platform,transport,enabled,opted_in,revoked_at,token_hash,token_ciphertext});
+  },
+  async consumeDispatch({eventKey,dispatchId,tokenHash}={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||!HEX.test(tokenHash||''))
+    throw Error('invalid_dispatch_consumption');
+   const value=await request('rpc/apd_mobile_consume_dispatch_lab',{method:'POST',body:{
+    p_event_key:eventKey,p_dispatch_id:dispatchId,p_token_hash:tokenHash
+   }});
+   if(typeof value!=='boolean')throw Error('invalid_dispatch_consumption_response');
+   return value;
+  },
   async prepareDispatch({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
    const ticket=await request('rpc/apd_mobile_prepare_dispatch',{
