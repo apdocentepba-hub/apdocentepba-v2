@@ -183,5 +183,9 @@ async function main(){
  inspectCrons(await get(scheduleRoute));
  console.log('APD_COMMERCIAL_LIVE_PREFLIGHT '+JSON.stringify({...report,crons,checks,writes:0,source_exported:false}));
  if(Object.values(checks).some(c=>!c.pass))throw Error('Anonymous contract mismatch');
+ if(process.argv.includes('--stage-zero-traffic')){
+  const {stageZeroTraffic}=await import('./apd-commercial-zero-traffic-stage.mjs');
+  await stageZeroTraffic({candidate:billingStage.candidate,envelope,details,manifest,account:id,worker,get,root,activeVersion,inspectCrons});
+ }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)await main();

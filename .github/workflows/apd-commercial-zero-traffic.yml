@@ -1,0 +1,36 @@
+name: APD commercial guarded zero-traffic stage
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-commercial-zero-traffic.yml'
+      - 'scripts/apd-commercial-zero-traffic-stage.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: apd-commercial-zero-traffic
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 334 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/commercial-consolidation-20261125'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check staging syntax and envelope tests
+        run: |
+          node --check scripts/apd-commercial-zero-traffic-stage.mjs
+          node --test scripts/test-apd-commercial-live-preflight.mjs
+      - name: Install existing Wrangler tooling without credentials
+        run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - name: Stage verified exact candidate without traffic or data changes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_STAGE_COMMERCIAL_ZERO_TRAFFIC: '1'
+        run: node --experimental-vm-modules scripts/apd-commercial-live-preflight.mjs --stage-zero-traffic
