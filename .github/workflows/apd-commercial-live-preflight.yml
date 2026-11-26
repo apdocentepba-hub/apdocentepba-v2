@@ -16,6 +16,8 @@ on:
       - 'scripts/test-apd-commercial-stored-alerts.mjs'
       - 'scripts/apd-commercial-runtime-qa.mjs'
       - 'scripts/apd-commercial-full-module-qa.mjs'
+      - 'scripts/apd-commercial-sandbox-payment-probe.mjs'
+      - 'scripts/test-apd-commercial-sandbox-payment-probe.mjs'
       - 'scripts/test-apd-commercial-runtime-qa.mjs'
       - 'scripts/apd-commercial-persist-preferences.mjs'
       - 'scripts/apd-commercial-stage-concurrent-save.mjs'
@@ -60,7 +62,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs scripts/test-apd-commercial-stage-checkout.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-effective-preferences.mjs scripts/test-apd-commercial-preserve-preferences.mjs scripts/test-apd-commercial-persist-preferences.mjs scripts/test-apd-commercial-runtime-qa.mjs scripts/test-apd-commercial-webhook-retry.mjs scripts/test-apd-commercial-stored-alerts.mjs scripts/test-apd-commercial-pid-channels.mjs scripts/test-apd-commercial-recover-checkout.mjs scripts/test-apd-commercial-pid-enrichment.mjs scripts/test-apd-commercial-qa-stats.mjs scripts/test-apd-commercial-legacy-billing.mjs
+      - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs scripts/test-apd-commercial-stage-checkout.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-effective-preferences.mjs scripts/test-apd-commercial-preserve-preferences.mjs scripts/test-apd-commercial-persist-preferences.mjs scripts/test-apd-commercial-runtime-qa.mjs scripts/test-apd-commercial-webhook-retry.mjs scripts/test-apd-commercial-stored-alerts.mjs scripts/test-apd-commercial-pid-channels.mjs scripts/test-apd-commercial-recover-checkout.mjs scripts/test-apd-commercial-pid-enrichment.mjs scripts/test-apd-commercial-qa-stats.mjs scripts/test-apd-commercial-legacy-billing.mjs scripts/test-apd-commercial-sandbox-payment-probe.mjs
       - name: Inspect active production metadata and anonymous contracts without mutation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

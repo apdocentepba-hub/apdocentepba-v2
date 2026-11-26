@@ -7,6 +7,9 @@ export async function verifyCommercialFullModule(source){
  assert.equal(typeof vm.SourceTextModule,'function','Run with --experimental-vm-modules');
  const uid='00000000-0000-4000-8000-000000000007',other='00000000-0000-4000-8000-000000000099';
  const user={id:uid,nombre:'Fixture',apellido:'QA',email:'fixture@example.invalid',activo:true,es_admin:false};
+ const admin={id:other,nombre:'Admin QA',apellido:'Fixture',email:'admin@example.invalid',activo:true,es_admin:true};
+ const testAccount={id:'00000000-0000-4000-8000-000000000088',nombre:'APD QA a',apellido:'QA322-123',email:'apd-diary-qa-a@example.invalid',activo:false,es_admin:false};
+ const adminToken='fixture-admin-only',accounts=[user,admin,testAccount];
  const origin='https://fixture.invalid',secret='fixture-webhook-only',token='fixture-session-only';
  const dbkey='fixture-db-only',mpkey='fixture-mp-only';
  const env=Object.freeze({SUPABASE_URL:origin,SUPABASE_SERVICE_ROLE_KEY:dbkey,MERCADOPAGO_ACCESS_TOKEN:mpkey,MERCADOPAGO_WEBHOOK_SECRET:secret,MERCADOPAGO_CURRENCY_ID:'ARS',MERCADOPAGO_WEBHOOK_URL:origin+'/api/mercadopago/webhook'});
@@ -26,8 +29,17 @@ export async function verifyCommercialFullModule(source){
    if(method==='GET'){
     if(name==='subscription_plans')return response(catalog);
     if(name==='apd_commercial_release_control')return response([{enrollment_open:enrollment}]);
-    if(name==='sessions')return response(url.searchParams.get('token')==='eq.'+token?[{token,user_id:uid,activo:true,expires_at:iso(clock+86400000)}]:[]);
-    if(name==='users')return response(url.searchParams.get('id')==='eq.'+uid?[user]:[]);
+    if(name==='sessions'){
+     const t=url.searchParams.get('token');if(!t)return response([]);
+     const id=t==='eq.'+token?uid:t==='eq.'+adminToken?other:null;
+     return response(id?[{token:t.slice(3),user_id:id,activo:true,expires_at:iso(clock+86400000)}]:[]);
+    }
+    if(name==='users'){
+     const id=url.searchParams.get('id');
+     if(id)return response(accounts.filter(a=>'eq.'+a.id===id));
+     const offset=Number(url.searchParams.get('offset')||0);return response(accounts.slice(offset));
+    }
+    if(['notification_delivery_logs','worker_runs','errores_sistema'].includes(name))return response([]);
     if(name==='user_subscriptions'){assert.equal(url.searchParams.get('user_id'),'eq.'+uid);return response(rows);}
     if(name==='user_preferences'){assert.equal(url.searchParams.get('user_id'),'eq.'+uid);return response([{user_id:uid,distrito_principal:'AVELLANEDA',otros_distritos:['QUILMES'],cargos:['MAT','FIS'],materias:[],niveles:[],turnos:[],alertas_activas:true,alertas_email:true}]);}
     return reject();
@@ -83,7 +95,7 @@ export async function verifyCommercialFullModule(source){
  const worker=module.namespace.default;assert.equal(typeof worker?.fetch,'function');
  const queued=[],ctx={waitUntil:p=>queued.push(Promise.resolve(p)),passThroughOnException:()=>{throw Error('Pass-through forbidden');}};
  const call=async(path,{method='GET',body,auth=false,headers={}}={})=>{
-  const h=new Headers(headers);if(auth)h.set('Authorization','Bearer '+token);if(body!==undefined)h.set('Content-Type','application/json');
+  const h=new Headers(headers);if(auth)h.set('Authorization','Bearer '+(auth==='admin'?adminToken:token));if(body!==undefined)h.set('Content-Type','application/json');
   const request=new Request(origin+path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
   let timeout;
   try{
@@ -100,6 +112,15 @@ export async function verifyCommercialFullModule(source){
   assert.equal((await call('/api/version')).status,200);
   const r=await call('/api/planes');assert.equal(r.status,200);assert.equal(r.data.commercial_model,'free_complete_v1');assert.deepEqual(r.data.planes.map(p=>p.code),['FREE','COMPLETO']);
   for(const path of ['/api/mi-plan','/api/account/profile','/api/account/preferences','/api/account/application-diary'])assert.equal((await call(path)).status,401,path);
+ });
+ await check('admin statistics respect authorization and exclude disabled QA',async()=>{
+  for(const path of ['/api/admin/resumen','/api/admin/usuarios']){
+   assert.equal((await call(path)).status,401);assert.equal((await call(path,{auth:true})).status,403);
+  }
+  const summary=await call('/api/admin/resumen',{auth:'admin'});assert.equal(summary.status,200);
+  assert.equal(summary.data.resumen.usuarios_total,1);assert.equal(summary.data.resumen.usuarios_activos,1);assert.equal(summary.data.resumen.admins_total,1);assert.equal(summary.data.resumen.qa_total,1);
+  const list=await call('/api/admin/usuarios',{auth:'admin'});assert.equal(list.status,200);assert.equal(list.data.total,1);assert.equal(list.data.qa_total,1);assert.equal(list.data.items.length,2);assert.ok(!list.data.items.some(r=>r.id===testAccount.id));
+  const audit=await call('/api/admin/usuarios?include_qa=1',{auth:'admin'});assert.equal(audit.status,200);assert.equal(audit.data.items.length,3);assert.equal(audit.data.total,1);
  });
  const plan=async()=>{const r=await call('/api/mi-plan?user_id='+other,{auth:true});assert.equal(r.status,200);assert.equal(r.data.user_id,uid);assert.equal(r.data.access_active,true);return r.data.subscription.plan_code;};
  await check('bearer ownership and trial expiry',async()=>{assert.equal(await plan(),'TRIAL_14D');clock+=336*3600000;assert.equal(await plan(),'FREE');});
