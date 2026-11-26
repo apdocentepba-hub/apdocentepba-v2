@@ -1,0 +1,22 @@
+name: APD sandbox preference operator tool (offline only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-sandbox-preference.mjs'
+      - 'scripts/test-apd-commercial-sandbox-preference.mjs'
+      - '.github/workflows/apd-commercial-sandbox-local-qa.yml'
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/apd-commercial-sandbox-preference.mjs
+      - run: node --test scripts/test-apd-commercial-sandbox-preference.mjs scripts/test-apd-commercial-sandbox-payment-probe.mjs scripts/test-apd-commercial-sandbox-lifecycle.mjs
