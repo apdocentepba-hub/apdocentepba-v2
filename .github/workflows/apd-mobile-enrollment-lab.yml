@@ -7,6 +7,9 @@ on:
       - 'mobile/src/native-push-enrollment*'
       - 'mobile/src/expo-push-port*'
       - 'scripts/mobile-push-endpoint-lab.mjs'
+      - 'scripts/mobile-device-persistent-registry-lab.mjs'
+      - 'scripts/test-mobile-device-persistent-registry-lab.mjs'
+      - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
       - '.github/workflows/apd-mobile-enrollment-lab.yml'
 permissions:
   contents: read
@@ -29,7 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test mobile/src/native-push-enrollment.test.cjs mobile/src/expo-push-port.test.cjs scripts/test-mobile-push-endpoint-lab.mjs
+      - run: node --test mobile/src/native-push-enrollment.test.cjs mobile/src/expo-push-port.test.cjs scripts/test-mobile-push-endpoint-lab.mjs scripts/test-mobile-device-persistent-registry-lab.mjs
       - name: Disposable PostgreSQL
         env:
           PGHOST: localhost
