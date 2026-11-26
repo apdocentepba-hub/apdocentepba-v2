@@ -12,13 +12,22 @@ export function canonicalPlannerPlanCode(raw){
     value==='SIGNATURE'||value==='SIGNATURE_ANUAL')return 'INSIGNE';
  return value;
 }
-export function hasInsignePlannerAccess(snapshot){
+export function hasInsignePlannerAccess(snapshot,now=Date.now()){
  if(!snapshot||typeof snapshot!=='object'||
     snapshot.ok===false||snapshot.access_active!==true)return false;
  const subscription=snapshot.subscription;
  if(!subscription||typeof subscription!=='object'||
     normalized(subscription.source)==='FALLBACK_FRONTEND')return false;
- // Require the actual subscription's paid plan, not just a plan card.
+ // New complete access requires a matching verified subscription and strict expiry.
+ const code=normalized(subscription.plan_code);
+ if(['COMPLETO','TRIAL_14D'].includes(code)){
+  if(snapshot.ok!==true||normalized(snapshot.plan?.code)!==code||!Number.isFinite(now))return false;
+  if(!['ACTIVE','AUTHORIZED','APPROVED'].includes(normalized(subscription.status)))return false;
+  const end=code==='TRIAL_14D'?subscription.trial_ends_at:subscription.current_period_ends_at;
+  if(typeof end!=='string'||!Number.isFinite(Date.parse(end))||Date.parse(end)<=now)return false;
+  return true;
+ }
+ // Legacy access retains exactly the existing Insigne/Signature checks.
  if(canonicalPlannerPlanCode(subscription.plan_code)!=='INSIGNE')return false;
  const status=normalized(subscription.status);
  if(!['ACTIVE','AUTHORIZED','APPROVED'].includes(status))return false;
