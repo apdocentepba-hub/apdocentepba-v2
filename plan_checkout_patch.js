@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const PLAN_PATCH_VERSION = '2026-11-26-commercial-v6';
+  const PLAN_PATCH_VERSION = '2026-11-26-commercial-v7';
   const PLAN_SELECTOR_CARD_ID = 'panel-plan-selector-card';
   const PLAN_SELECTOR_BODY_ID = 'panel-plan-selector-body';
   const PLAN_MSG_ID = 'plan-checkout-msg';
@@ -576,6 +576,17 @@
         let url;
         try { url=new URL(data.checkout_url); } catch { throw Error('Enlace de pago no verificado'); }
         if (data.ok!==true || url.protocol!=='https:' || url.port || url.username || url.password || !((['mercadopago.com.ar','www.mercadopago.com.ar'].includes(url.hostname)&&url.pathname.startsWith('/checkout/'))||(url.hostname==='www.mercadopago.com'&&url.pathname==='/mla/checkout/start'))) throw Error('Enlace de pago no verificado');
+        // Complete checkout uses same-tab navigation, not an asynchronous popup.
+        for (const node of [ensurePlanMsgNode(), ensureSelectorMsgNode()]) {
+          if (!node) continue;
+          setMsg(node, 'Enlace de pago verificado. Si no se abre automáticamente, usá el enlace.', 'info');
+          const anchor = document.createElement('a');
+          anchor.href=url.href;
+          anchor.textContent='Abrir Mercado Pago';
+          node.append(document.createElement('br'),anchor);
+        }
+        try { window.location.assign(url.href); } catch { /* keep the verified manual link */ }
+        return;
       }
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
       const successMsg = data?.message || 'Mercado Pago se abrió en una pestaña nueva.';
