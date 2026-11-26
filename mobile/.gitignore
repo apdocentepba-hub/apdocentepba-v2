@@ -7,3 +7,10 @@ ios/
 .env
 .env.*
 !example.env
+
+google-services.json
+*service-account*.json
+*firebase-adminsdk*.json
+credentials.json
+*.jks
+*.keystore
