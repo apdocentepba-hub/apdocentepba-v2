@@ -47,3 +47,12 @@ Preflight 228da78: 79/79, 6 escenarios integrales PASS. Se incorporó bloqueo de
 
 ## Ensayo 309e748 — 26/11
 23 controles aprobados, uno omitido, uno falló. 83/83 unitarios y 7/7 escenarios simulados; integración HTTP real llegó hasta reserva de checkout y falló por permiso INSERT ausente en fixture (SQLSTATE 42501, PostgreSQL). La fixture de pagos sólo concedía SELECT/UPDATE; el otro ensayo hereda INSERT mediante ACL por defecto. Se corrige únicamente permiso mínimo en fixture, añade precondición explícita y diagnóstico HTTP sanitizado. No modifica ACL ni registros de producción. Pendiente nueva ejecución.
+
+## Work: inspección de Mercado Pago y evidencia sandbox — 26/11
+Se verificó en Developers la existencia de cuentas compradora/vendedora y credenciales de prueba de APDocentePBA. La URL para prueba de Webhooks está vacía; el simulador ofrece la URL productiva. No se enviaron eventos ni se guardó configuración. El conciliador de producción exige live_mode=true de manera intencional: un pago sandbox no debe activar una suscripción real.
+
+El probe ampliado es sólo GET: verifica /users/me como vendedor de test argentino (id exacto y test_user), collector_id, live_mode=false, ARS 2000, referencia exacta y fase explícita approved/refunded. Sólo acepta referencias apd-sandbox-* o la identidad sintética fija del laboratorio; no acepta referencias de otros usuarios. Las observaciones de aprobación y devolución son independientes, no prueban por sí mismas la transición del plan. No modifica el adapter de producción ni crea compras, reembolsos, despliegues o secretos.
+
+Para observación real: configurar exclusivamente APD_MP_SANDBOX_ACCESS_TOKEN, APD_MP_SANDBOX_SELLER_ID, APD_MP_SANDBOX_PAYMENT_ID, APD_MP_SANDBOX_REFERENCE y APD_MP_SANDBOX_PHASE (approved o refunded) en un ejecutor privado; ejecutar node scripts/apd-commercial-sandbox-payment-probe.mjs. No copiar tokens al chat, código, logs ni artifacts. No configurar el token de test en el Worker productivo.
+
+Sigue pendiente implementar y validar el endpoint público aislado de checkout/webhook y su conciliación de sandbox con PostgreSQL descartable, antes de generar el pago de test. No se ha creado ni pagado una preferencia del proveedor.
