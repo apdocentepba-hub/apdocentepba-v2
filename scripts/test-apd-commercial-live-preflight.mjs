@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {activeVersion,inspectVersion} from './apd-commercial-live-preflight.mjs';
+import {activeVersion,inspectVersion,inspectCrons} from './apd-commercial-live-preflight.mjs';
 const deploy=(versions)=>({deployments:[{versions}]});
 const v={version_id:'test-version',percentage:100};
 const manifest={version_id:'old',modules:[{sha256:'old'}],bindings:[{name:'DB',type:'secret_text'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
 const source='getSessionUserByBearer resolverPlanUsuario handleAccountProfileSecureV1 handleAccountPreferencesSecureV1 scheduled( TRIAL_7D INSIGNE /account/application-diary '+' '.repeat(100000);
-const fixture={id:'test-version',modules:[{name:'worker.js',content_base64:Buffer.from(source).toString('base64')}],bindings:[{name:'DB',type:'secret_text',text:'fixture-not-a-real-secret'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
+const fixture={id:'test-version',main_module:'worker.js',modules:[{name:'worker.js',content_base64:Buffer.from(source).toString('base64')}],bindings:[{name:'DB',type:'secret_text',text:'fixture-not-a-real-secret'},{name:'KV',type:'kv_namespace',namespace_id:'fixture'}]};
 test('only one active 100 percent deployment',()=>{assert.equal(activeVersion(deploy([v])),'test-version');for(const x of [[],[{...v,percentage:90}],[{...v,percentage:50},{version_id:'other',percentage:50}]])assert.throws(()=>activeVersion(deploy(x)));});
 test('metadata report contains hash and counts but no source or binding values',()=>{const r=inspectVersion(fixture,'test-version',manifest);assert.equal(r.counts.TRIAL_7D,1);assert.equal(r.approved_for_deploy,false);assert.equal(r.canonical_match,false);assert.match(r.sha256,/^[a-f0-9]{64}$/);assert.doesNotMatch(JSON.stringify(r),/fixture-not-a-real-secret|getSessionUserByBearer/);});
 test('version and module shape fail closed',()=>{assert.throws(()=>inspectVersion(fixture,'other',manifest));assert.throws(()=>inspectVersion({...fixture,modules:[]},'test-version',manifest));});
 test('missing, duplicate and changed KV binding fail closed',()=>{for(const bindings of [[],[...fixture.bindings,fixture.bindings[0]],[fixture.bindings[0],{...fixture.bindings[1],namespace_id:'different'}]])assert.throws(()=>inspectVersion({...fixture,bindings},'test-version',manifest));});
 test('source with suspicious embedded key marker cannot pass',()=>{const content_base64=Buffer.from(source+'-----BEGIN PRIVATE KEY-----').toString('base64');assert.throws(()=>inspectVersion({...fixture,modules:[{name:'worker.js',content_base64}]},'test-version',manifest));});
+
+test('exact four approved schedules; order independent; reject drift and duplicates',()=>{const cron=['0 01 * * *','0 17 * * *','0 21 * * *','1-59/2 * * * *'];assert.deepEqual(inspectCrons({schedules:cron.slice().reverse().map(cron=>({cron}))}),cron.slice().sort());assert.deepEqual(inspectCrons(cron),cron.slice().sort());for(const x of [null,[],cron.slice(1),[...cron,cron[0]],[...cron.slice(1),'0 02 * * *']])assert.throws(()=>inspectCrons(x));});
+test('extra bindings, duplicate names with different type, missing identity and wrong entrypoint fail closed',()=>{for(const details of [{...fixture,bindings:[...fixture.bindings,{name:'EXTRA',type:'plain_text'}]},{...fixture,bindings:[...fixture.bindings,{name:'DB',type:'plain_text'}]},{...fixture,id:undefined},{...fixture,main_module:'other.js'}])assert.throws(()=>inspectVersion(details,'test-version',manifest));});
