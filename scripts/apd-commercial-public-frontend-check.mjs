@@ -17,12 +17,12 @@ function refs(readFile){
  return [plan[0].match(/src="([^"]+)"/)[1],comp[0].match(/'\.\/([^']+)'/)[1],ent[0].match(/'\.\/([^']+)'/)[1]];
 }
 const current=refs(n=>read(n));
-assert.deepEqual(current,['plan_checkout_patch.js?v=5','apd_comparador_panel.mjs?v=20261126-commercial1','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
+assert.deepEqual(current,['plan_checkout_patch.js?v=6','apd_comparador_panel.mjs?v=20261126-commercial1','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
 console.log('APD_FRONTEND_CACHE_CHAIN_CONTRACT_PASS');
 const baseline=process.argv.includes('--baseline');
-const ref=baseline?'93be1dd9ac9ccf3e9e17ec4e17fccaa581127292':null;
+const ref=baseline?'f8fa40ddc8e69472bc5bdf856e2df202e812b4cc':null;
 const expected=refs(n=>read(n,ref));
-const revision=baseline?'baseline93be1dd9':String(process.env.GITHUB_SHA||'').slice(0,12);
+const revision=baseline?'baselinef8fa40dd':String(process.env.GITHUB_SHA||'').slice(0,12);
 async function get(url){
  const r=await fetch(url,{method:'GET',redirect:'error',cache:'no-store',headers:{'Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
  if(r.status!==200)throw Error('HTTP '+r.status+' at '+new URL(url).pathname);
@@ -41,10 +41,16 @@ async function verify(){
   checks.push({asset:files[i],sha256:want});
  }
  const data=JSON.parse((await get(worker+'/api/planes')).toString('utf8'));
- assert.ok(Array.isArray(data.planes)&&data.planes.length===7,'Legacy catalog not preserved');
- assert.ok(!data.planes.some(p=>['FREE','COMPLETO','TRIAL_14D'].includes(String(p.code))),'New plans prematurely visible');
- assert.notEqual(data.commercial_enrollment_open,true,'Admission opened');
- console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,legacyPublicPlans:7,admissionOpen:false,requests:'GET only'}));
+ assert.equal(data.ok,true);
+ assert.equal(data.commercial_model,'free_complete_v1');
+ assert.equal(data.trial_days,14);
+ assert.equal(data.commercial_enrollment_open,false,'Admission opened');
+ assert.notEqual(data.commercial_checkout_resume,true,'Anonymous checkout resume leaked');
+ if(!baseline)assert.equal(data.commercial_checkout_resume,false,'Anonymous resume flag missing');
+ assert.ok(Array.isArray(data.planes)&&data.planes.length===2,'Unexpected commercial catalog');
+ const plans=data.planes.map(p=>[String(p.code),Number(p.price_ars),Number(p.max_distritos),Number(p.max_cargos)]).sort((a,b)=>a[0].localeCompare(b[0]));
+ assert.deepEqual(plans,[['COMPLETO',2000,5,10],['FREE',0,1,1]]);
+ console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,commercialPlans:2,admissionOpen:false,anonymousResume:false,requests:'GET only'}));
 }
 let last;
 for(let i=0;i<(baseline?2:12);i++){
