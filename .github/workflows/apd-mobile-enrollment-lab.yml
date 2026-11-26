@@ -1,0 +1,48 @@
+name: APD mobile enrollment isolated PostgreSQL and client
+on:
+  pull_request:
+    paths:
+      - 'sql/apd_mobile_device_enrollment_lab_20261126.sql'
+      - 'scripts/test-apd-mobile-device-enrollment-pg17.sql'
+      - 'mobile/src/native-push-enrollment*'
+      - 'mobile/src/expo-push-port*'
+      - 'scripts/mobile-push-endpoint-lab.mjs'
+      - '.github/workflows/apd-mobile-enrollment-lab.yml'
+permissions:
+  contents: read
+jobs:
+  enrollment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test mobile/src/native-push-enrollment.test.cjs mobile/src/expo-push-port.test.cjs scripts/test-mobile-push-endpoint-lab.mjs
+      - name: Disposable PostgreSQL
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: fixture_only
+          PGDATABASE: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE anon;
+          CREATE ROLE authenticated;
+          CREATE ROLE service_role BYPASSRLS;
+          CREATE TABLE public.users(id uuid PRIMARY KEY);
+          SQL
+          psql -v ON_ERROR_STOP=1 -f sql/apd_mobile_push_private_candidate_20261103.sql
+          psql -v ON_ERROR_STOP=1 -f sql/apd_mobile_device_enrollment_lab_20261126.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-device-enrollment-pg17.sql
