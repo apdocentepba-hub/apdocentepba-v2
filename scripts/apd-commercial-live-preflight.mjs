@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialLegacyBilling} from './apd-commercial-stage-legacy-billing.mjs';
 import {stageCommercialQaStats} from './apd-commercial-stage-qa-stats.mjs';
 import {stageCommercialPidEnrichment} from './apd-commercial-stage-pid-enrichment.mjs';
 import {stageCommercialPidChannels} from './apd-commercial-stage-pid-channels.mjs';
@@ -104,10 +105,14 @@ async function main(){
  const statsStage=stageCommercialQaStats(richStage.candidate);
  verifyTrialCandidateSyntax(statsStage.candidate);
  console.log('APD_COMMERCIAL_QA_STATS '+JSON.stringify({adminEndpoints:statsStage.adminEndpoints,unrelatedBytesPreserved:statsStage.unrelatedBytesPreserved,deployable:false}));
- const runtime=await verifyCommercialRuntime(statsStage.candidate);
+ const billingStage=stageCommercialLegacyBilling(statsStage.candidate);
+ verifyTrialCandidateSyntax(billingStage.candidate);
+ console.log('APD_COMMERCIAL_LEGACY_BILLING '+JSON.stringify({legacyAutoRenewBlocked:billingStage.legacyAutoRenewBlocked,obsoleteExpiryNoticeSuppressed:billingStage.obsoleteExpiryNoticeSuppressed,cancellationPreserved:billingStage.cancellationPreserved,deployable:false}));
+ const runtime=await verifyCommercialRuntime(billingStage.candidate);
  console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
- const fullModule=await verifyCommercialFullModule(statsStage.candidate);
+ const fullModule=await verifyCommercialFullModule(billingStage.candidate);
  console.log('APD_COMMERCIAL_FULL_MODULE_QA '+JSON.stringify(fullModule));
+ console.log('APD_COMMERCIAL_CANDIDATE_FINGERPRINT '+JSON.stringify({baseVersion:version,baseSha256:report.sha256,candidateSha256:hash(Buffer.from(billingStage.candidate)),candidateBytes:Buffer.byteLength(billingStage.candidate),approvedForDeploy:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
  for(const [endpoint,expected] of [['/api/version',200],['/api/planes',200],['/api/mi-plan',401],['/api/account/profile',401],['/api/account/application-diary',401]]){

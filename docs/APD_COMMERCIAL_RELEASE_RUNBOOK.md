@@ -32,3 +32,6 @@ Cuentas QA históricas: 8 desactivadas, sin admin; 50 cuentas activas no adminis
 
 ## Verificación 1fbef78
 78/78 preflight, dos endpoints de administración ensamblados, seis escenarios completos aprobados; 23 controles generales exitosos, uno omitido, uno falló por arranque de Chrome sin puerto DevTools. Corrección de infraestructura: consumir stderr, plazo de arranque de 25 segundos, perfil limpio y un único reintento de arranque; nunca reintentar aserciones fallidas. PID: marca privada WeakMap de identidad de objeto y reevaluación de vigencia, no confiar en pid_visible serializado. Pendiente validación de esta revisión. No se modificó producción.
+
+## Cierre adicional de facturación heredada
+Preflight 228da78: 79/79, 6 escenarios integrales PASS. Se incorporó bloqueo de nuevas renovaciones automáticas heredadas al activar catálogo comercial; no se cambia cancelación existente ni se anulan contratos vigentes. Se suspenden avisos de vencimiento obsoletos para evitar comunicaciones engañosas (no enviar un texto nuevo sin aprobación). El preflight registra SHA-256 del módulo acumulativo sin exportar código ni secretos. Validación de nueva revisión pendiente. La consulta de metadatos de secretos GitHub no está permitida por el conector; no se ha comprobado credencial sandbox de Mercado Pago. No usar credenciales de producción para simular pagos.
