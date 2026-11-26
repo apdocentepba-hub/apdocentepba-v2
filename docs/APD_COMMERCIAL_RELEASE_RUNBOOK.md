@@ -26,3 +26,6 @@ Verificar que el catálogo mantiene FREE, TRIAL_14D y COMPLETO activos, que las 
 - Auditoría completa de permisos de radar/PID, caducidad, crons y registro real pendiente.
 - No hay aún ensayo integrado de Cloudflare + PostgreSQL + proveedor de prueba ni autorización de activación.
 - Una reserva sin preferencia identificable queda en revisión, nunca se libera por mero timeout.
+
+## Estadísticas de usuarios
+Cuentas QA históricas: 8 desactivadas, sin admin; 50 cuentas activas no administrativas confirmadas por consulta agregada de producción, sin modificación. Se excluyen exclusivamente cuentas desactivadas que coincidan con los cuatro marcadores de QA conocidos (nombre, apellido, dirección ficticia y ausencia de admin). Se conservan para auditoría; el listado administrativo puede incluirlas explícitamente con include_qa=1. Totales comerciales no incluyen administradores. No borrar registros sin revisar dependencias y autorización. Nuevas pruebas exclusivamente en aislamiento. Candidato de filtros pendiente de pruebas acumulativas.

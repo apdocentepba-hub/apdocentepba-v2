@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {stageCommercialQaStats} from './apd-commercial-stage-qa-stats.mjs';
 import {stageCommercialPidEnrichment} from './apd-commercial-stage-pid-enrichment.mjs';
 import {stageCommercialPidChannels} from './apd-commercial-stage-pid-channels.mjs';
 import {stageCommercialStoredAlerts} from './apd-commercial-stage-stored-alerts.mjs';
@@ -100,9 +101,12 @@ async function main(){
  const richStage=stageCommercialPidEnrichment(pidStage.candidate);
  verifyTrialCandidateSyntax(richStage.candidate);
  console.log('APD_COMMERCIAL_PID_ENRICHMENT '+JSON.stringify({richChannelGuard:richStage.richChannelGuard,nestedRedaction:richStage.nestedRedaction,unrelatedBytesPreserved:richStage.unrelatedBytesPreserved,deployable:false}));
- const runtime=await verifyCommercialRuntime(richStage.candidate);
+ const statsStage=stageCommercialQaStats(richStage.candidate);
+ verifyTrialCandidateSyntax(statsStage.candidate);
+ console.log('APD_COMMERCIAL_QA_STATS '+JSON.stringify({adminEndpoints:statsStage.adminEndpoints,unrelatedBytesPreserved:statsStage.unrelatedBytesPreserved,deployable:false}));
+ const runtime=await verifyCommercialRuntime(statsStage.candidate);
  console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
- const fullModule=await verifyCommercialFullModule(richStage.candidate);
+ const fullModule=await verifyCommercialFullModule(statsStage.candidate);
  console.log('APD_COMMERCIAL_FULL_MODULE_QA '+JSON.stringify(fullModule));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};
