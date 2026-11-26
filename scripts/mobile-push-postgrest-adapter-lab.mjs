@@ -385,6 +385,13 @@ export function createMobilePushPostgrestAdapterLab({
    if(typeof recorded!=='boolean')throw Error('postgrest_invalid_expo_ticket_result');
    return recorded;
   },
+  async settleConsumedExpoReceipt({eventKey,dispatchId,ticketId,outcome}={}){
+   if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId)||!['pending','provider_accepted','provider_rejected','invalid_device','uncertain'].includes(outcome))
+    throw Error('invalid_consumed_receipt_reference');
+   const value=await request('rpc/apd_mobile_expo_settle_consumed_receipt_lab',{method:'POST',body:{p_event_key:eventKey,p_dispatch_id:dispatchId,p_ticket_id:ticketId,p_outcome:outcome}});
+   if(typeof value!=='boolean')throw Error('invalid_consumed_receipt_result');
+   return value;
+  },
   async recordExpoReceiptAudit({eventKey,dispatchId,ticketId,outcome}={}){
    if(!HEX.test(eventKey||'')||!UUID.test(dispatchId||'')||
       typeof ticketId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(ticketId))
