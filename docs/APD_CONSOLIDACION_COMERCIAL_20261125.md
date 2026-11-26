@@ -17,3 +17,8 @@ Estado: candidato aislado, NO desplegar. Oferta acordada: Gratis permanente (1 d
 - Referidos: crédito por pago verificado, antifraude, no modificar facturación sin autorización.
 - Compartir tarjetas: solo datos públicos de ofertas, enlace oficial y marca; sin datos personales.
 Cada línea exige evidencia propia, no se presume implementada. No usar Nexo ni servicios pagos.
+
+## Cierre verificable del candidato (head 0dbfba8)
+- 53 pruebas de preflight y 40 de política/UI; 22 workflows exitosos, 1 omitido. PostgreSQL descartable pasó ciclo comercial y concurrencia. Runtime de 17 funciones extraídas pasó con servicios simulados.
+- Bloqueantes: auditar alertas almacenadas y todos los canales/crons tras downgrade; permisos PID y radar por ruta; prueba navegador con catálogo nuevo; reconciliación de checkout incierto/expirado y disputas, compatibilidad de webhook con reintento; preservar recurrencias; migración y rollback; ensayo integral con Worker completo y base descartable, sin credenciales reales; autorización de publicación.
+- Mejoras competitivas posteriores no condicionan el cierre comercial salvo las que se anuncien como incluidas.

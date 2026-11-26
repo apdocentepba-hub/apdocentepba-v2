@@ -7,6 +7,7 @@ import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-s
 import {stageCommercialSavePreferences} from './apd-commercial-stage-save-preferences.mjs';
 import {stageCommercialEffectivePreferences} from './apd-commercial-stage-preferences.mjs';
 import {stageCommercialCheckout} from './apd-commercial-stage-checkout.mjs';
+import {stageCommercialWebhookRetry} from './apd-commercial-stage-webhook-retry.mjs';
 import {stageCommercialPayment} from './apd-commercial-stage-payment.mjs';
 import {stageCommercialTools} from './apd-commercial-stage-tools.mjs';
 import {stageCommercialAccess} from './apd-commercial-stage-access.mjs';
@@ -71,7 +72,10 @@ async function main(){
  const paymentStage=stageCommercialPayment(toolsStage.candidate);
  verifyTrialCandidateSyntax(paymentStage.candidate);
  console.log('APD_COMMERCIAL_PAYMENT_STAGE '+JSON.stringify({legacyPreserved:paymentStage.legacyPreserved,unrelatedBytesPreserved:paymentStage.unrelatedBytesPreserved,approvalOnly:paymentStage.approvalOnly,syntax:true,deployable:false}));
- const checkoutStage=stageCommercialCheckout(paymentStage.candidate);
+ const retryStage=stageCommercialWebhookRetry(paymentStage.candidate);
+ verifyTrialCandidateSyntax(retryStage.candidate);
+ console.log('APD_COMMERCIAL_WEBHOOK_RETRY '+JSON.stringify({retryable:retryStage.retryable,unrelatedBytesPreserved:retryStage.unrelatedBytesPreserved,deployable:false}));
+ const checkoutStage=stageCommercialCheckout(retryStage.candidate);
  verifyTrialCandidateSyntax(checkoutStage.candidate);
  console.log('APD_COMMERCIAL_CHECKOUT_STAGE '+JSON.stringify({functions:checkoutStage.functions,unrelatedBytesPreserved:checkoutStage.unrelatedBytesPreserved,syntax:true,deployable:false}));
  const preferencesStage=stageCommercialEffectivePreferences(checkoutStage.candidate);
