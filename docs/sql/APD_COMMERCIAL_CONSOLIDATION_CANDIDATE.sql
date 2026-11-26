@@ -8,7 +8,7 @@ CREATE TABLE public.apd_commercial_release_control (
 );
 INSERT INTO public.apd_commercial_release_control(singleton,enrollment_open) VALUES(true,false);
 ALTER TABLE public.apd_commercial_release_control ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.apd_commercial_release_control FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.apd_commercial_release_control FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT ON public.apd_commercial_release_control TO service_role;
 CREATE FUNCTION public.apd_commercial_enrollment_open()
 RETURNS boolean LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $gate$
@@ -34,7 +34,7 @@ CREATE TABLE public.apd_complete_trial_claims (
  subscription_id uuid NOT NULL UNIQUE REFERENCES public.user_subscriptions(id) ON DELETE RESTRICT
 );
 ALTER TABLE public.apd_complete_trial_claims ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.apd_complete_trial_claims FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.apd_complete_trial_claims FROM PUBLIC, anon, authenticated,service_role;
 GRANT SELECT, INSERT ON public.apd_complete_trial_claims TO service_role;
 CREATE UNIQUE INDEX apd_one_complete_trial_per_user ON public.user_subscriptions(user_id)
  WHERE plan_code='TRIAL_14D';

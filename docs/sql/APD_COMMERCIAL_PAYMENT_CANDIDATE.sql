@@ -8,7 +8,7 @@ CREATE TABLE public.apd_complete_payment_ledger (
  amount_ars numeric NOT NULL CHECK (amount_ars=2000)
 );
 ALTER TABLE public.apd_complete_payment_ledger ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.apd_complete_payment_ledger FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.apd_complete_payment_ledger FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT,UPDATE ON public.apd_complete_payment_ledger TO service_role;
 CREATE TABLE public.apd_complete_payment_review (
  payment_id text PRIMARY KEY,
@@ -17,7 +17,7 @@ CREATE TABLE public.apd_complete_payment_review (
  observed_at timestamptz NOT NULL
 );
 ALTER TABLE public.apd_complete_payment_review ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.apd_complete_payment_review FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.apd_complete_payment_review FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT,UPDATE ON public.apd_complete_payment_review TO service_role;
 CREATE FUNCTION public.apd_apply_complete_approval(p_payment_id text,p_reference text,p_status text,p_amount numeric,p_currency text,p_approved_at timestamptz)
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $fn$

@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql'
+      - 'docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql'
+      - 'scripts/test-apd-commercial-default-acl.sql'
       - 'scripts/apd-commercial-db-fixture.sql'
       - 'docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql'
       - 'scripts/apd-commercial-payment-fixture.sql'
@@ -48,7 +50,16 @@ jobs:
           test "$PGHOST" = 127.0.0.1
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          # Reproduce the actual Supabase default ACL (including service_role writes).
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role;"
           psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          # This activation rehearsal is disposable. Restore initial fixture state only.
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM public.subscription_plans WHERE is_active AND public_visible AND code IN ('FREE','COMPLETO'))<>2 OR (SELECT count(*) FROM public.subscription_plans WHERE is_active AND NOT public_visible AND code='TRIAL_14D')<>1 OR EXISTS(SELECT 1 FROM public.apd_commercial_release_control WHERE enrollment_open) OR NOT EXISTS(SELECT 1 FROM public.subscription_plans WHERE code='INSIGNE' AND price_ars=3000 AND is_active) THEN RAISE EXCEPTION 'Activation contract mismatch'; END IF; END \$\$;"
+          if psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql; then echo "Unexpected activation replay"; exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -c "UPDATE public.subscription_plans SET is_active=false,public_visible=false WHERE code IN ('FREE','COMPLETO','TRIAL_14D');"
+          echo 'PASS staged catalog activation, visibility and replay guard'
           psql -X -v ON_ERROR_STOP=1 -c "UPDATE public.apd_commercial_release_control SET enrollment_open=true WHERE singleton;"
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-db.sql
       - name: Concurrent claims in independent transactions
@@ -136,3 +147,11 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-release-freeze.sql
           echo 'PASS commercial admission freeze: new claims blocked, pending payment settled, legacy and paid rights preserved'
+
+      - name: Verify explicit grants override actual Supabase default ACL
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-default-acl.sql
+          echo 'PASS least privilege under Supabase default grants'
