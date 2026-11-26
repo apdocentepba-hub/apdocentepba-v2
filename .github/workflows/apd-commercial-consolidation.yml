@@ -9,6 +9,7 @@ on:
       - 'app_v2.js'
       - 'index.html'
       - 'scripts/test-apd-commercial-ui.mjs'
+      - 'scripts/test-apd-commercial-browser.mjs'
       - 'scripts/test-plan-reactivation-ui.mjs'
       - 'scripts/apd-commercial-checkout.mjs'
       - 'scripts/test-apd-commercial-checkout.mjs'
@@ -30,3 +31,5 @@ jobs:
       - run: node --check scripts/apd-commercial-policy.mjs
       - run: node --test scripts/test-apd-commercial-policy.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-ui.mjs scripts/test-plan-reactivation-ui.mjs scripts/test-apd-insigne-planner-entitlement.mjs
       - run: node --check plan_checkout_patch.js && node --check app_v2.js
+
+      - run: node scripts/test-apd-commercial-browser.mjs

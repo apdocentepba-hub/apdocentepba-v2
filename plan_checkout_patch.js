@@ -142,7 +142,7 @@
     });
 
     [...root.querySelectorAll('span,p,div,small,strong')].forEach(node => {
-      if (node.id === PLAN_MSG_ID || node.id === PLAN_SELECTOR_MSG_ID) return;
+      if (node.id === PLAN_MSG_ID || node.id === PLAN_SELECTOR_MSG_ID || node.closest('[data-apd-commercial-terms]') || node.querySelector('[data-apd-commercial-terms]')) return;
       if (node.querySelector('button,[data-plan-open-tab],[data-plan-refresh],[data-plan-checkout],[data-plan-info]')) return;
       const text = String(node.textContent || '').trim();
       if (!text) return;
@@ -394,7 +394,7 @@
       return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;align-items:stretch;">'+planes.map(plan=>{
         const full=plan.code==='COMPLETO';
         const active=isCurrentPlan(plan,planInfo);
-        const features=full?['Hasta 5 distritos y 10 cargos/materias','Alertas por email, Telegram y WhatsApp por consulta','Comparador y compatibilidad horaria','Favoritos, postulaciones y herramientas de carrera']:['1 distrito y 1 cargo/materia','Alertas básicas por email','Acceso permanente a recursos públicos'];
+        const features=full?['Hasta 5 distritos y 10 cargos/materias','Alertas por email, Telegram y WhatsApp por consulta','Comparador y compatibilidad horaria','Favoritos, postulaciones y herramientas de carrera']:['1 distrito y 1 cargo/materia','Alertas básicas por email y Telegram por consulta','Acceso permanente a recursos públicos'];
         return '<div style="padding:16px;border:1px solid rgba(15,52,96,.18);border-radius:14px;background:#fff;display:flex;flex-direction:column;gap:10px;">'+
           '<div class="plan-title">'+(full?'Completo':'Gratis')+'</div>'+
           '<div style="font-size:28px;font-weight:800;color:#123b72;">'+(full?'$2.000':'$0')+'</div>'+
@@ -448,7 +448,9 @@
     if (!body) return;
     body.innerHTML = buildPlanCards(planInfo, planes);
     const note=selectorCard()?.querySelector('[data-plan-transition-note]');
-    if (note) note.textContent=planes?.length && planes.every(p=>p.commercial_model==='free_complete_v1')
+    const commercial=!!planes?.length && planes.every(p=>p.commercial_model==='free_complete_v1');
+    if (note) note.toggleAttribute('data-apd-commercial-terms',commercial);
+    if (note) note.textContent=commercial
       ? '14 días sin tarjeta para cuentas nuevas. Si no contratás, pasás a Gratis. No hay renovación automática del plan Completo; se conservan las condiciones anteriores.'
       : 'Si subís de plan, pagás la diferencia ahora. Si bajás de plan, el cambio queda programado para el próximo ciclo.';
     if (typeof window.APD_refreshPanelTabs === 'function') {
@@ -582,10 +584,16 @@
         return;
       }
 
-      const safeUrl = window.esc ? window.esc(data.checkout_url) : String(data.checkout_url);
-      const html = `${successMsg}<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Abrir Mercado Pago</a>`;
-      setPlanMsgHtml(html, 'info');
-      setSelectorMsgHtml(html, 'info');
+      const link = new URL(data.checkout_url);
+      if (link.protocol !== 'https:' || link.username || link.password) throw Error('Enlace de pago no verificado');
+      for (const node of [ensurePlanMsgNode(), ensureSelectorMsgNode()]) {
+        if (!node) continue;
+        setMsg(node, successMsg, 'info');
+        const anchor = document.createElement('a');
+        anchor.href=link.href; anchor.target='_blank'; anchor.rel='noopener noreferrer';
+        anchor.textContent='Abrir Mercado Pago';
+        node.append(document.createElement('br'),anchor);
+      }
     } catch (err) {
       console.error('ERROR CHECKOUT PLAN:', err);
       const msg = err?.message || 'No se pudo iniciar el cambio de plan.';
