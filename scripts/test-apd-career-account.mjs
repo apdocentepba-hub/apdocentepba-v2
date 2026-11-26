@@ -147,3 +147,30 @@ test('salary cap warnings are aggregate and never apply an invented deduction',(
  assert.deepEqual(c.warnings.map(x=>x.id),['cargo-cap','teaching-cap','mixed-units']);
  assert.throws(()=>payrollCapReview({positions:[p('cargo',2)]}));
 });
+
+
+import {readFileSync as readCareerBuilder} from 'node:fs';
+import {runInNewContext as careerVm} from 'node:vm';
+import {hasInsignePlannerAccess as uiCareerAccess} from './apd-insigne-planner-entitlement.mjs';
+test('career Worker and UI agree for verified new plans, reject expired and contradictory plans',async()=>{
+ const source=readCareerBuilder(new URL('./build-apd-career-worker-candidate.mjs',import.meta.url),'utf8');
+ const fragment=source.slice(source.indexOf('async function hasAccountCareerAccessV1('),source.indexOf('async function handleAccountCareerSecureV1('));
+ assert.ok(fragment.startsWith('async function hasAccountCareerAccessV1('));
+ const now=Date.now(),future=new Date(now+60000).toISOString(),past=new Date(now-60000).toISOString();
+ for(const code of ['COMPLETO','TRIAL_14D']){
+  const snapshot={ok:true,access_active:true,plan:{code},subscription:{user_id:'A',plan_code:code,status:'ACTIVE',source:'fixture',trial_ends_at:future,current_period_ends_at:future}};
+  const check=async(p,active=true,id='A')=>careerVm(fragment+'\n hasAccountCareerAccessV1({},id)',{resolverPlanUsuario:async()=>p,isPlanActivo:()=>active,Date,id});
+  assert.equal(await check(snapshot),true);assert.equal(uiCareerAccess(snapshot,now),true);
+  for(const patch of [{status:'PENDING'},{source:'FALLBACK_FRONTEND'},{trial_ends_at:past,current_period_ends_at:past},{trial_ends_at:null,current_period_ends_at:null}]){
+   const invalid={...snapshot,subscription:{...snapshot.subscription,...patch}};
+   assert.equal(await check(invalid),false);assert.equal(uiCareerAccess(invalid,now),false);
+  }
+  const mismatch={...snapshot,plan:{code:'FREE'}};
+  assert.equal(await check(mismatch),false);assert.equal(uiCareerAccess(mismatch,now),false);
+  assert.equal(await check(snapshot,true,'B'),false);
+  assert.equal(await check(snapshot,false),false);
+ }
+ const legacy={plan:{code:'INSIGNE'},subscription:{plan_code:'INSIGNE',status:'ACTIVE'}};
+ const free={plan:{code:'FREE'},subscription:{plan_code:'FREE',status:'ACTIVE'}};
+ for(const [p,expected] of [[legacy,true],[free,false]])assert.equal(await careerVm(fragment+'\n hasAccountCareerAccessV1({}, "A")',{resolverPlanUsuario:async()=>p,isPlanActivo:()=>true,Date}),expected);
+});
