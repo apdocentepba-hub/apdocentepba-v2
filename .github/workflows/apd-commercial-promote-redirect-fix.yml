@@ -1,0 +1,30 @@
+name: APD promote exact verified redirect fix
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-commercial-promote-redirect-fix.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-production-worker-release
+  cancel-in-progress: false
+jobs:
+  promote:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 343 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/scoped-checkout-pilot-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/apd-commercial-promote-redirect-fix.mjs
+      - run: node scripts/apd-commercial-promote-redirect-fix.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_SUPABASE_DB_URL: ${{ secrets.APD_SUPABASE_DB_URL }}
+          APD_PROMOTE_REDIRECT: '1'

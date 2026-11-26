@@ -1,0 +1,44 @@
+name: APD scoped checkout pilot (isolated)
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_COMMERCIAL_SCOPED_CHECKOUT_PILOT.sql'
+      - 'scripts/test-apd-commercial-scoped-checkout.sql'
+      - '.github/workflows/apd-commercial-scoped-checkout.yml'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_pilot_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: apd_pilot_qa
+      PGUSER: postgres
+      PGPASSWORD: fixture_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_pilot_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          awk '/^INSERT INTO public.mercadopago_checkout_sessions/{exit} {print}' scripts/apd-commercial-payment-fixture.sql > /tmp/pilot-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/pilot-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_SCOPED_CHECKOUT_PILOT.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-scoped-checkout.sql
