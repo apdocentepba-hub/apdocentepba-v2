@@ -27,12 +27,18 @@ export function patch(source){
  candidate=once(candidate,reply,'commercial_enrollment_open:enrollment,commercial_checkout_resume:!enrollment&&await apdCheckoutResumeV1(env,request),founder_price_policy');
  // Catalog response shape is preserved; verify the live JSON helper's cache policy separately.
  const end='founder_price_policy:{active:false},planes});';
- assert.equal(candidate.split(end).length,2);
+ const startReply='return json({ok:true,commercial_model:"free_complete_v1",trial_days:14,';
+ const privateReply='const response=json({ok:true,commercial_model:"free_complete_v1",trial_days:14,';
+ const privateEnd='founder_price_policy:{active:false},planes}); response.headers.set("Cache-Control","private, no-store"); response.headers.set("Vary","Authorization, Origin"); return response;';
+ candidate=once(candidate,startReply,privateReply);
+ candidate=once(candidate,end,privateEnd);
  assert.ok(!source.includes('apdCheckoutResumeV1'));
  candidate=helper+'\n'+candidate;
  let reverse=candidate.slice(helper.length+1);
  reverse=once(reverse,'async function handlePlanes(env,request) {\n try {\n const catalog=',start);
  reverse=once(reverse,'return await handlePlanes(env,request);',route);
+ reverse=once(reverse,privateReply,startReply);
+ reverse=once(reverse,privateEnd,end);
  reverse=once(reverse,'commercial_enrollment_open:enrollment,commercial_checkout_resume:!enrollment&&await apdCheckoutResumeV1(env,request),founder_price_policy',reply);
  assert.equal(reverse,source);
  return candidate;
