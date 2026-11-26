@@ -1,0 +1,211 @@
+name: APD commercial database candidate (isolated PostgreSQL)
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql'
+      - 'docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql'
+      - 'scripts/test-apd-commercial-default-acl.sql'
+      - 'scripts/apd-commercial-db-fixture.sql'
+      - 'docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql'
+      - 'scripts/apd-commercial-payment-fixture.sql'
+      - 'scripts/test-apd-commercial-payment.sql'
+      - 'scripts/test-apd-commercial-payment-review.sql'
+      - 'scripts/test-apd-commercial-lifecycle.sql'
+      - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
+      - 'scripts/test-apd-commercial-checkout.sql'
+      - 'docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql'
+      - 'scripts/apd-commercial-preferences-fixture.sql'
+      - 'scripts/test-apd-commercial-preferences.sql'
+      - 'scripts/test-apd-commercial-db.sql'
+      - 'scripts/build-apd-commercial-atomic-install.mjs'
+      - '.github/workflows/apd-commercial-db-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: apd_commercial_qa
+      PGUSER: postgres
+      PGPASSWORD: fixture_only
+      PGOPTIONS: '-c statement_timeout=15000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply to disposable schema only
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          # Reproduce the actual Supabase default ACL (including service_role writes).
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          # This activation rehearsal is disposable. Restore initial fixture state only.
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM public.subscription_plans WHERE is_active AND public_visible AND code IN ('FREE','COMPLETO'))<>2 OR (SELECT count(*) FROM public.subscription_plans WHERE is_active AND NOT public_visible AND code='TRIAL_14D')<>1 OR EXISTS(SELECT 1 FROM public.apd_commercial_release_control WHERE enrollment_open) OR NOT EXISTS(SELECT 1 FROM public.subscription_plans WHERE code='INSIGNE' AND price_ars=3000 AND is_active) THEN RAISE EXCEPTION 'Activation contract mismatch'; END IF; END \$\$;"
+          if psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql; then echo "Unexpected activation replay"; exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -c "UPDATE public.subscription_plans SET is_active=false,public_visible=false WHERE code IN ('FREE','COMPLETO','TRIAL_14D');"
+          echo 'PASS staged catalog activation, visibility and replay guard'
+          psql -X -v ON_ERROR_STOP=1 -c "UPDATE public.apd_commercial_release_control SET enrollment_open=true WHERE singleton;"
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-db.sql
+      - name: Concurrent claims in independent transactions
+        run: |
+          set -euo pipefail
+          claim="SET ROLE service_role; SELECT public.apd_claim_complete_trial('00000000-0000-4000-8000-000000000004');"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-claim-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-claim-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"ok": true' /tmp/apd-claim-a /tmp/apd-claim-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_trial_claims WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE user_id='00000000-0000-4000-8000-000000000004'")" = 1
+          echo 'PASS database candidate: release gate, legacy preservation, privileges, exact duration, concurrent claim'
+      - name: Verify payment reconciliation on disposable database
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-payment-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-payment.sql
+          claim="SET ROLE service_role; SELECT public.apd_apply_complete_approval('102','qa-b','approved',2000,'ARS',now());"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-payment-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-payment-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"duplicate": false' /tmp/apd-payment-a /tmp/apd-payment-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"duplicate": true' /tmp/apd-payment-a /tmp/apd-payment-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.apd_complete_payment_ledger")" = 2
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions WHERE plan_code='COMPLETO'")" = 2
+          echo 'PASS commercial payment candidate: amount, currency, reference, release gate, replay, concurrency and preserved trial days'
+      - name: Verify reservation and checkout reuse
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-checkout.sql
+          claim="SET ROLE service_role; SELECT public.apd_reserve_complete_checkout('00000000-0000-4000-8000-000000000006');"
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-checkout-a &
+          a=$!
+          psql -X -Atq -v ON_ERROR_STOP=1 -c "$claim" > /tmp/apd-checkout-b &
+          b=$!
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"mode": "create"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"reason": "checkout_in_progress"' /tmp/apd-checkout-a /tmp/apd-checkout-b | awk '{s+=$1} END{print s}')" = 1
+          echo 'PASS checkout reservation, reuse, permissions and concurrent requests'
+      - name: Verify concurrent preference compare and save
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-preferences.sql
+          for label in A B; do
+            psql -X -Atq -v ON_ERROR_STOP=1 -c "SET ROLE service_role; SELECT public.apd_save_free_preferences('00000000-0000-4000-8000-000000000005',snapshot,snapshot||jsonb_build_object('distrito_principal','$label')) FROM public.apd_pref_qa_snapshot;" > "/tmp/apd-pref-$label" &
+            if [ "$label" = A ]; then a=$!; else b=$!; fi
+          done
+          wait "$a"; wait "$b"
+          test "$(grep -h -c '"ok": true' /tmp/apd-pref-A /tmp/apd-pref-B | awk '{s+=$1} END{print s}')" = 1
+          test "$(grep -h -c '"reason": "conflict"' /tmp/apd-pref-A /tmp/apd-pref-B | awk '{s+=$1} END{print s}')" = 1
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_preferences WHERE distrito_principal IN ('A','B') AND otros_distritos=ARRAY['QUILMES'] AND cargos=ARRAY['MAT','FIS'] AND alertas_whatsapp AND alertas_telegram")" = 1
+          echo 'PASS preferences compare-and-save: concurrent conflict and hidden settings preserved'
+      - name: Verify payment review and reversal
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-payment-review.sql
+          echo 'PASS payment review: exact reversal, replay rejection and unrelated entitlement preservation'
+      - name: Integrated commercial lifecycle in disposable PostgreSQL
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-lifecycle.sql
+          echo 'PASS commercial lifecycle: trial, expiry, preference preservation, checkout, approval, replay and reversal'
+
+      - name: Freeze new admissions without losing paid rights or pending settlements
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-release-freeze.sql
+          echo 'PASS commercial admission freeze: new claims blocked, pending payment settled, legacy and paid rights preserved'
+
+      - name: Verify explicit grants override actual Supabase default ACL
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-default-acl.sql
+          echo 'PASS least privilege under Supabase default grants'
+
+  atomic-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_atomic_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: apd_commercial_atomic_qa
+      PGUSER: postgres
+      PGPASSWORD: fixture_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify atomic install and rollback on disposable database
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_atomic_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text; INSERT INTO public.users(id) VALUES('00000000-0000-4000-8000-000000000005'); ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role;"
+          # Create pre-existing checkout schema, not its new-plan test records.
+          awk '/^INSERT INTO public.mercadopago_checkout_sessions/{exit} {print}' scripts/apd-commercial-payment-fixture.sql > /tmp/apd-existing-checkout.sql
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-existing-checkout.sql
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT UPDATE ON public.user_subscriptions TO service_role; INSERT INTO public.mercadopago_checkout_sessions(user_id,plan_code,status,external_reference) VALUES('00000000-0000-4000-8000-000000000002','INSIGNE','ready','legacy-fixture');"
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          node scripts/build-apd-commercial-atomic-install.mjs > /tmp/apd-atomic-install.sql
+          # Failure after all four migrations but before commit must leave no commercial objects.
+          sed '$d' /tmp/apd-atomic-install.sql > /tmp/apd-atomic-failure.sql
+          printf '\nSELECT 1/0;\nCOMMIT;\n' >> /tmp/apd-atomic-failure.sql
+          if psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-failure.sql; then echo 'Expected injected failure'; exit 1; fi
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 2
+          test "$(psql -X -Atq -c "SELECT to_regclass('public.apd_commercial_release_control') IS NULL")" = t
+          test "$(psql -X -Atq -c "SELECT to_regprocedure('public.apd_save_free_preferences(uuid,jsonb,jsonb)') IS NULL")" = t
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-install.sql
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 5
+          test "$(psql -X -Atq -c "SELECT public.apd_commercial_enrollment_open()")" = f
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions")" = 1
+          if psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-install.sql; then echo 'Unexpected install replay'; exit 1; fi
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 5
+          echo 'APD_ATOMIC_INSTALL_PASS: failure rollback, inactive catalog, exact legacy rows, ACL and replay guard'

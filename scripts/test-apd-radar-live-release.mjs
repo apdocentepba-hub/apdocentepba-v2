@@ -50,7 +50,13 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const newTabs='<script src="panel_tabs_patch.js?v=finalvisual3"></script>';
  const tabsTransition=oldScripts.includes(oldTabs)&&proposed.includes(newTabs);
  if(tabsTransition)assert.equal(proposed.filter(tag=>tag===newTabs).length,1);
- const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:tag);
+ // Commercial selector release: only this exact existing asset revision.
+ // Commercial behavior has its own regression suite; no changes to app_v2.js.
+ const oldPlan='<script src="plan_checkout_patch.js?v=4"></script>';
+ const newPlan='<script src="plan_checkout_patch.js?v=5"></script>';
+ const planTransition=oldScripts.includes(oldPlan)&&proposed.includes(newPlan);
+ if(planTransition)assert.equal(proposed.filter(tag=>tag===newPlan).length,1);
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:planTransition&&tag===oldPlan?newPlan:tag);
  assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
@@ -95,6 +101,12 @@ test("a visual redesign cannot change radar code, script order or radar card",()
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace('auth_session_patch.js?v=3','auth_session_patch.js?v=4')),
    /script tags\/order/);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace(/plan_checkout_patch\.js\?v=[45]/,'plan_checkout_patch.js?v=unreviewed')),
+   /script tags\/order/);
+  assert.throws(()=>assertExistingRadarUnchanged(prior,
+   source.replace(/(<script src="plan_checkout_patch\.js[^"]+"><\/script>)/,'$1$1')),
+   /script tags\/order|Expected values/);
   // A cache bump is permitted only for the exact reviewed revision.
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace(/panel_tabs_patch\.js\?v=finalvisual[23]/,'panel_tabs_patch.js?v=unreviewed')),

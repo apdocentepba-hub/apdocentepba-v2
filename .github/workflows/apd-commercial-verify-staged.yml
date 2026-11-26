@@ -1,0 +1,32 @@
+name: APD exact staged Worker native read-only QA
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - 'scripts/apd-commercial-verify-staged.mjs'
+      - 'scripts/test-apd-commercial-verify-staged.mjs'
+      - '.github/workflows/apd-commercial-verify-staged.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-commercial-zero-traffic
+  cancel-in-progress: false
+jobs:
+  native-preview:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 334 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/commercial-consolidation-20261125'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify fail-closed contracts
+        run: node --test scripts/test-apd-commercial-verify-staged.mjs
+      - name: Exact uploaded version and native read-only HTTP verification
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/apd-commercial-verify-staged.mjs

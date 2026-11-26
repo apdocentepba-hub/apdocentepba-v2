@@ -181,12 +181,12 @@ function focusComparison() {
   createPrivatePlannerForm({onChanged:()=>{refreshAlertSchedule(); refreshProfileSchedule();render();focusComparison()}})
  );
  else body.appendChild(node('p','apd-comparator-insigne-locked',
-  'Domicilio y compatibilidad de jornadas: exclusivo del Plan Insigne vigente. '+
+  'Domicilio y compatibilidad de jornadas: disponible con Completo, la prueba vigente o Insigne vigente. '+
   'La comparación básica de ofertas sigue disponible.'));
  if(state.privatePlannerAllowed&&selectedSchoolKeys().length&&!state.geoRequested){
   body.appendChild(node('p','apd-comparator-hint',
    hasSavedVerifiedHome()?
-    'Insigne consulta automáticamente en ABC la ubicación oficial de estas escuelas.':
+    'El comparador consulta automáticamente en ABC la ubicación oficial de estas escuelas.':
     'Todavía no consultaste la ubicación oficial de estas escuelas en ABC. '+
     'Usá «Consultar ABC» en la cabecera de esta ventana.'));
  }else if(state.privatePlannerAllowed&&state.geoWorking){
@@ -858,7 +858,7 @@ function render(){
  if(state.privatePlannerAllowed)
   root.appendChild(createPrivatePlannerForm({onChanged:()=>{refreshAlertSchedule();refreshProfileSchedule();render()}}));
  else root.appendChild(node('p','apd-comparator-insigne-locked',
-  'Comparación con domicilio y jornadas actuales: exclusiva del Plan Insigne. '+
+  'Comparación con domicilio y jornadas actuales: disponible con Completo, la prueba vigente o Insigne vigente. '+
   'Revisá Mi plan si querés acceder a esta función.'));
  if(state.selected.size){
   const selected=selectedOffers();
@@ -895,7 +895,7 @@ function render(){
   }
   if(hasSavedVerifiedHome()&&!state.geoRequested&&codes.length)
    root.appendChild(node('p','apd-comparator-hint',
-    'Con tu domicilio guardado, Insigne consulta automáticamente en ABC '+
+    'Con tu domicilio guardado, el comparador consulta automáticamente en ABC '+
     'la ubicación de las escuelas seleccionadas. No envía tu domicilio a ABC.'));
   if(state.geoStatus){
    const hint=node('p','apd-comparator-geo-status',state.geoStatus);

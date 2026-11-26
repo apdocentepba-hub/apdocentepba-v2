@@ -1,0 +1,35 @@
+name: APD commercial consolidation policy (offline only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-policy.mjs'
+      - 'scripts/apd-insigne-planner-entitlement.mjs'
+      - 'scripts/test-apd-insigne-planner-entitlement.mjs'
+      - 'plan_checkout_patch.js'
+      - 'app_v2.js'
+      - 'index.html'
+      - 'scripts/test-apd-commercial-ui.mjs'
+      - 'scripts/test-apd-commercial-browser.mjs'
+      - 'scripts/test-plan-reactivation-ui.mjs'
+      - 'scripts/apd-commercial-checkout.mjs'
+      - 'scripts/test-apd-commercial-checkout.mjs'
+      - 'scripts/test-apd-commercial-policy.mjs'
+      - '.github/workflows/apd-commercial-consolidation.yml'
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/apd-commercial-policy.mjs
+      - run: node --test scripts/test-apd-commercial-policy.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-ui.mjs scripts/test-plan-reactivation-ui.mjs scripts/test-apd-insigne-planner-entitlement.mjs
+      - run: node --check plan_checkout_patch.js && node --check app_v2.js
+
+      - run: node scripts/test-apd-commercial-browser.mjs

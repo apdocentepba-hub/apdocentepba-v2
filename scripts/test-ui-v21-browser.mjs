@@ -6,17 +6,39 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 const CHROME=['google-chrome','google-chrome-stable','chromium','chromium-browser'].find(c=>spawnSync('which',[c],{stdio:'ignore'}).status===0);
 if(!CHROME)throw Error('Chrome/Chromium no instalado');
-const profile=mkdtempSync(path.join(tmpdir(),'apd-ui21-'));
 const out=path.resolve('tmp/ui-v21-browser');mkdirSync(out,{recursive:true});
-const chrome=spawn(CHROME,['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--disable-background-networking','--no-first-run','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-let ws,seq=0;const pending=new Map();
-async function port(){for(let i=0;i<120;i++){const file=path.join(profile,'DevToolsActivePort');if(existsSync(file))return Number(readFileSync(file,'utf8').split('\n')[0]);if(chrome.exitCode!==null)throw Error('Chrome finalizó');await sleep(100);}throw Error('Chrome no expuso debugging');}
+let chrome,profile,ws,seq=0;const pending=new Map();
+async function cleanup(){
+ if(chrome&&chrome.exitCode===null&&chrome.signalCode===null){chrome.kill('SIGTERM');for(let i=0;i<20&&chrome.exitCode===null&&chrome.signalCode===null;i++)await sleep(100);if(chrome.exitCode===null&&chrome.signalCode===null)chrome.kill('SIGKILL');}
+ if(profile){rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});profile=null;}
+}
+async function launch(){
+ for(let attempt=1;attempt<=2;attempt++){
+  profile=mkdtempSync(path.join(tmpdir(),'apd-ui21-'));
+  let tail='',failure=null;
+  chrome=spawn(CHROME,['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--no-first-run','--no-default-browser-check','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
+  chrome.stderr.on('data',b=>{tail=(tail+b.toString()).slice(-2000);});chrome.on('error',e=>{failure=e;});
+  for(let i=0;i<250;i++){
+   const file=path.join(profile,'DevToolsActivePort');
+   if(existsSync(file)){
+    const port=Number(readFileSync(file,'utf8').split('\n')[0]);
+    if(Number.isInteger(port)&&port>0&&port<65536)return port;
+   }
+   if(failure||chrome.exitCode!==null||chrome.signalCode!==null)break;
+   await sleep(100);
+  }
+  // Retry browser startup only, never failed application assertions.
+  console.warn('APD_UI_V21_CHROME_STARTUP_FAILURE attempt='+attempt+' exit='+chrome.exitCode+' stderr='+tail.replace(/[\r\n]+/g,' ').slice(-1000));
+  await cleanup();
+ }
+ throw Error('Chrome no expuso debugging tras dos arranques aislados');
+}
 function cdp(method,params={}){const id=++seq;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);reject(Error('Timeout CDP '+method));},10000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params}));});}
 async function js(code){const r=await cdp('Runtime.evaluate',{expression:code,returnByValue:true,awaitPromise:true,userGesture:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
 async function ready(){for(let i=0;i<60;i++){if(await js('document.readyState==="complete"'))return;await sleep(100);}throw Error('Document no terminó');}
 try{
- const dport=await port();const targets=await(await fetch('http://127.0.0.1:'+dport+'/json/list')).json();
+ const dport=await launch();const targets=await(await fetch('http://127.0.0.1:'+dport+'/json/list')).json();
  ws=new WebSocket(targets.find(x=>x.type==='page').webSocketDebuggerUrl);
  ws.addEventListener('message',event=>{const d=JSON.parse(event.data);if(!d.id)return;const p=pending.get(d.id);if(!p)return;pending.delete(d.id);clearTimeout(p.timer);d.error?p.reject(Error(JSON.stringify(d.error))):p.resolve(d.result||{});});
  await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
@@ -44,4 +66,4 @@ try{
   writeFileSync(path.join(out,'apd-ui-v21-'+width+'.png'),Buffer.from(shot.data,'base64'));
   console.log('APD_UI_V21_BROWSER_OK width='+width+' botones='+state.buttons+' admin=oculto');
  }
-}finally{ws?.close();chrome.kill('SIGTERM');await sleep(200);rmSync(profile,{recursive:true,force:true});}
+}finally{ws?.close();await cleanup();}

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {persistFreePreferences as save} from './apd-commercial-persist-preferences.mjs';
+import {stageCommercialConcurrentSave} from './apd-commercial-stage-concurrent-save.mjs';
+import {verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
+const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-only'},expected={user_id:'u',updated_at:'2026-11-25T19:00:00Z'},next={user_id:'u',cargos:['MAT','FIS']};
+test('compare and save RPC sends exact snapshot and returns confirmed own row',async()=>{const result=await save(env,'u',expected,next,async(url,req)=>{assert.equal(url.pathname,'/rest/v1/rpc/apd_save_free_preferences');assert.equal(req.redirect,'error');assert.deepEqual(JSON.parse(req.body),{p_user_id:'u',p_expected:expected,p_next:next});return new Response(JSON.stringify({ok:true,preferences:next}));});assert.deepEqual(result,[next]);});
+test('stale or uncertain writes cannot silently succeed',async()=>{for(const r of [{ok:false,reason:'conflict'},{ok:true,preferences:{user_id:'other'}}])await assert.rejects(save(env,'u',expected,next,async()=>new Response(JSON.stringify(r))));await assert.rejects(save(env,'u',{user_id:'other'},next,async()=>assert.fail('cross-account request')));});
+const source='async function handleGuardarPreferencias(request, env) {\n let limpias = sanitizarPreferenciasEntrada(preferencias, resolved.plan);\n limpias=apdPreserveFreePrefsV1(limpias,saved[0]||null);\n const rows = await supabaseUpsertReturning(\n env,"user_preferences",[limpias],"user_id"\n  );\n return rows;\n}\n__name(handleGuardarPreferencias,"fixture");';
+test('scoped persistence replacement is reversible and syntax valid',()=>{const r=stageCommercialConcurrentSave(source);assert.equal(r.compareAndSave,true);assert.equal(r.unrelatedBytesPreserved,true);verifyTrialCandidateSyntax(r.candidate);assert.throws(()=>stageCommercialConcurrentSave(source.replace('supabaseUpsertReturning','unknownWrite')));});

@@ -47,3 +47,17 @@ test('approved and authorized status accepted only when backend says active',()=
  assert.equal(hasInsignePlannerAccess(live('INSIGNE','authorized')),true);
  assert.equal(hasInsignePlannerAccess(live('INSIGNE','approved')),true);
 });
+
+test('verified Completo and fourteen-day trial unlock planner only before expiry',()=>{
+ const now=Date.parse('2026-11-25T20:00:00Z'),end='2026-12-09T20:00:00Z';
+ for(const code of ['COMPLETO','TRIAL_14D']){
+  const info={ok:true,access_active:true,plan:{code},subscription:{plan_code:code,status:'ACTIVE',source:'verified',trial_ends_at:end,current_period_ends_at:end}};
+  assert.equal(hasInsignePlannerAccess(info,now),true);
+  assert.equal(hasInsignePlannerAccess(info,Date.parse(end)),false);
+  assert.equal(hasInsignePlannerAccess({...info,access_active:false},now),false);
+  assert.equal(hasInsignePlannerAccess({...info,plan:{code:'FREE'}},now),false);
+  assert.equal(hasInsignePlannerAccess({...info,subscription:{...info.subscription,status:'PENDING'}},now),false);
+  assert.equal(hasInsignePlannerAccess({...info,subscription:{...info.subscription,trial_ends_at:null,current_period_ends_at:null}},now),false);
+ }
+ const free=live('FREE');free.plan.code='FREE';assert.equal(hasInsignePlannerAccess(free,now),false);
+});
