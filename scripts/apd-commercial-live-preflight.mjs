@@ -112,6 +112,11 @@ async function main(){
  console.log('APD_COMMERCIAL_RUNTIME_QA '+JSON.stringify(runtime));
  const fullModule=await verifyCommercialFullModule(billingStage.candidate);
  console.log('APD_COMMERCIAL_FULL_MODULE_QA '+JSON.stringify(fullModule));
+ if(process.env.APD_COMMERCIAL_REAL_PG_QA==='1'){
+  const {createCommercialPgQa}=await import('./apd-commercial-pg-qa.mjs');
+  const integrated=await verifyCommercialFullModule(billingStage.candidate,createCommercialPgQa());
+  console.log('APD_COMMERCIAL_REAL_PG_QA '+JSON.stringify(integrated));
+ }
  console.log('APD_COMMERCIAL_CANDIDATE_FINGERPRINT '+JSON.stringify({baseVersion:version,baseSha256:report.sha256,candidateSha256:hash(Buffer.from(billingStage.candidate)),candidateBytes:Buffer.byteLength(billingStage.candidate),approvedForDeploy:false}));
  // Anonymous GET only. No checkout, registration, cron, or mutation.
  const checks={};

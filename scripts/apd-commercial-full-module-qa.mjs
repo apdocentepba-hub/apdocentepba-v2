@@ -3,7 +3,7 @@
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createHmac,webcrypto} from 'node:crypto';
-export async function verifyCommercialFullModule(source){
+export async function verifyCommercialFullModule(source,realDb=null){
  assert.equal(typeof vm.SourceTextModule,'function','Run with --experimental-vm-modules');
  const uid='00000000-0000-4000-8000-000000000007',other='00000000-0000-4000-8000-000000000099';
  const user={id:uid,nombre:'Fixture',apellido:'QA',email:'fixture@example.invalid',activo:true,es_admin:false};
@@ -13,8 +13,8 @@ export async function verifyCommercialFullModule(source){
  const origin='https://fixture.invalid',secret='fixture-webhook-only',token='fixture-session-only';
  const dbkey='fixture-db-only',mpkey='fixture-mp-only';
  const env=Object.freeze({SUPABASE_URL:origin,SUPABASE_SERVICE_ROLE_KEY:dbkey,MERCADOPAGO_ACCESS_TOKEN:mpkey,MERCADOPAGO_WEBHOOK_SECRET:secret,MERCADOPAGO_CURRENCY_ID:'ARS',MERCADOPAGO_WEBHOOK_URL:origin+'/api/mercadopago/webhook'});
- let clock=Date.parse('2026-11-25T20:00:00Z'),payment=null,session=null,providerCreates=0,dbMutations=0,webhookEvents=0,unexpected=0,failFinalize=false,failPayment=false,refunded=false,enrollment=true;
- const ref=uid+':COMPLETO:123',prefId='fixture-pref-123',checkoutUrl='https://www.mercadopago.com/mla/checkout/start?pref_id='+prefId;
+ let clock=realDb?Date.now():Date.parse('2026-11-25T20:00:00Z'),payment=null,session=null,providerCreates=0,dbMutations=0,webhookEvents=0,unexpected=0,failFinalize=false,failPayment=false,refunded=false,enrollment=true;
+ let ref=realDb?null:uid+':COMPLETO:123';const prefId='fixture-pref-123',checkoutUrl='https://www.mercadopago.com/mla/checkout/start?pref_id='+prefId;
  const iso=ms=>new Date(ms).toISOString();
  const rows=[{id:'trial-qa',user_id:uid,plan_code:'TRIAL_14D',status:'ACTIVE',source:'trial_complete_14d',started_at:iso(clock),trial_ends_at:iso(clock+336*3600000)}];
  const catalog=[['FREE',0,0,1,1],['TRIAL_14D',0,14,5,10],['COMPLETO',2000,0,5,10]].map(([code,price_ars,trial_days,max_distritos,max_cargos])=>({code,nombre:code,price_ars,trial_days,max_distritos,max_cargos,is_active:true,public_visible:code!=='TRIAL_14D',feature_flags:{email:true,telegram:true,whatsapp:code!=='FREE',provincia:code!=='FREE',insights_plus:code!=='FREE'}}));
@@ -26,6 +26,15 @@ export async function verifyCommercialFullModule(source){
   if(url.origin===origin&&url.pathname.startsWith('/rest/v1/')){
    assert.equal(headers.get('authorization'),'Bearer '+dbkey);
    const name=url.pathname.slice('/rest/v1/'.length);
+   if(realDb){
+    if(method==='POST'){
+     dbMutations++;
+     if(name==='rpc/apd_finalize_complete_checkout'&&failFinalize){failFinalize=false;return response({},503);}
+     if(name==='rpc/apd_apply_complete_approval'&&failPayment){failPayment=false;return response({},503);}
+     if(name==='mercadopago_webhook_events')webhookEvents++;
+    }else if(method!=='GET')return reject();
+    return await realDb.request(name,url.search,init);
+   }
    if(method==='GET'){
     if(name==='subscription_plans')return response(catalog);
     if(name==='apd_commercial_release_control')return response([{enrollment_open:enrollment}]);
@@ -77,7 +86,9 @@ export async function verifyCommercialFullModule(source){
   if(url.origin==='https://api.mercadopago.com'){
    assert.equal(headers.get('authorization'),'Bearer '+mpkey);
    if(method==='POST'&&url.pathname==='/checkout/preferences'){
-    providerCreates++;const payload=JSON.parse(init.body);assert.equal(payload.external_reference,ref);assert.equal(payload.items[0].unit_price,2000);assert.equal(payload.items[0].currency_id,'ARS');
+    providerCreates++;const payload=JSON.parse(init.body);
+    if(realDb&&ref===null){assert.match(payload.external_reference,new RegExp('^'+uid+':COMPLETO:[0-9]+$'));ref=payload.external_reference;}
+    assert.equal(payload.external_reference,ref);assert.equal(payload.items[0].unit_price,2000);assert.equal(payload.items[0].currency_id,'ARS');
     return response({id:prefId,init_point:checkoutUrl});
    }
    if(method==='GET'&&url.pathname==='/checkout/preferences/search'){
@@ -123,7 +134,7 @@ export async function verifyCommercialFullModule(source){
   const audit=await call('/api/admin/usuarios?include_qa=1',{auth:'admin'});assert.equal(audit.status,200);assert.equal(audit.data.items.length,3);assert.equal(audit.data.total,1);
  });
  const plan=async()=>{const r=await call('/api/mi-plan?user_id='+other,{auth:true});assert.equal(r.status,200);assert.equal(r.data.user_id,uid);assert.equal(r.data.access_active,true);return r.data.subscription.plan_code;};
- await check('bearer ownership and trial expiry',async()=>{assert.equal(await plan(),'TRIAL_14D');clock+=336*3600000;assert.equal(await plan(),'FREE');});
+ await check('bearer ownership and trial expiry',async()=>{assert.equal(await plan(),'TRIAL_14D');if(realDb){realDb.expireTrial();clock=Date.now();}else clock+=336*3600000;assert.equal(await plan(),'FREE');});
  const buy=()=>call('/api/mercadopago/create-checkout-link',{method:'POST',auth:true,body:{plan_code:'COMPLETO',price_ars:1}});
  await check('checkout failure recovers same preference and does not charge twice',async()=>{
   failFinalize=true;assert.equal((await buy()).status,503);
@@ -135,7 +146,7 @@ export async function verifyCommercialFullModule(source){
   return call('/api/mercadopago/webhook?data.id=700',{method:'POST',body:{type:'payment',action:'payment.updated',data:{id:'700'}},headers:{'x-request-id':requestId,'x-signature':'ts='+ts+',v1='+(signed?signature:'0'.repeat(64))}});
  };
  await check('pause new admission without invalidating outstanding checkout',async()=>{
-  enrollment=false;
+  enrollment=false;if(realDb)realDb.pause();
   const r=await call('/api/planes');assert.equal(r.status,200);assert.equal(r.data.commercial_enrollment_open,false);
   const denied=await buy();assert.equal(denied.status,409);assert.equal(denied.data.reason,'release_paused');
   assert.equal(await plan(),'FREE');assert.equal(providerCreates,1);
@@ -145,12 +156,13 @@ export async function verifyCommercialFullModule(source){
   assert.equal((await notify(false)).status,401);
   failPayment=true;assert.equal((await notify()).status,503);
   assert.equal((await notify()).status,200);assert.equal(await plan(),'COMPLETO');
-  assert.equal((await notify()).data.sync.duplicate,true);assert.equal(rows.filter(r=>r.plan_code==='COMPLETO').length,1);
+  assert.equal((await notify()).data.sync.duplicate,true);assert.equal(realDb?realDb.paidCount():rows.filter(r=>r.plan_code==='COMPLETO').length,1);
  });
  await check('reversal restores free without duplicate activation',async()=>{
   payment={...payment,status:'refunded',transaction_amount_refunded:2000};assert.equal((await notify()).status,200);assert.equal(await plan(),'FREE');
   payment={...payment,status:'approved',transaction_amount_refunded:0};assert.equal((await notify()).status,200);assert.equal(await plan(),'FREE');
  });
  assert.equal(unexpected,0);
- return {passed:true,fullModuleExecuted:true,scenarios:checks,syntheticProviderCreates:providerCreates,syntheticDatabaseWrites:dbMutations,syntheticWebhookEvents:webhookEvents,productionWrites:0,cronExecuted:false,externalNetwork:false};
+ if(realDb)realDb.verifyFinalState();
+ return {passed:true,fullModuleExecuted:true,realPostgreSQL:!!realDb,realPostgREST:!!realDb,scenarios:checks,syntheticProviderCreates:providerCreates,...(realDb?{isolatedDatabaseWriteRequests:dbMutations}:{syntheticDatabaseWrites:dbMutations}),syntheticWebhookEvents:webhookEvents,productionWrites:0,cronExecuted:false,externalNetwork:false};
 }

@@ -16,6 +16,8 @@ on:
       - 'scripts/test-apd-commercial-stored-alerts.mjs'
       - 'scripts/apd-commercial-runtime-qa.mjs'
       - 'scripts/apd-commercial-full-module-qa.mjs'
+      - 'scripts/apd-commercial-pg-qa.mjs'
+      - 'scripts/apd-commercial-full-pg-fixture.sql'
       - 'scripts/apd-commercial-sandbox-payment-probe.mjs'
       - 'scripts/test-apd-commercial-sandbox-payment-probe.mjs'
       - 'scripts/test-apd-commercial-runtime-qa.mjs'
@@ -54,7 +56,16 @@ jobs:
   preflight:
     if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 334 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/commercial-consolidation-20261125'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_full_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,8 +74,42 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/test-apd-commercial-live-preflight.mjs scripts/test-apd-commercial-trial-adapter.mjs scripts/test-apd-commercial-access.mjs scripts/test-apd-commercial-stage-tools.mjs scripts/test-apd-commercial-payment-adapter.mjs scripts/test-apd-commercial-stage-checkout.mjs scripts/test-apd-commercial-checkout.mjs scripts/test-apd-commercial-effective-preferences.mjs scripts/test-apd-commercial-preserve-preferences.mjs scripts/test-apd-commercial-persist-preferences.mjs scripts/test-apd-commercial-runtime-qa.mjs scripts/test-apd-commercial-webhook-retry.mjs scripts/test-apd-commercial-stored-alerts.mjs scripts/test-apd-commercial-pid-channels.mjs scripts/test-apd-commercial-recover-checkout.mjs scripts/test-apd-commercial-pid-enrichment.mjs scripts/test-apd-commercial-qa-stats.mjs scripts/test-apd-commercial-legacy-billing.mjs scripts/test-apd-commercial-sandbox-payment-probe.mjs
+      - name: Set up isolated PostgreSQL and PostgREST for full-module integration
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: apd_commercial_full_qa
+          PGUSER: postgres
+          PGPASSWORD: fixture_only
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-payment-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DELETE FROM public.mercadopago_checkout_sessions; INSERT INTO public.users(id) VALUES('00000000-0000-4000-8000-000000000005');"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-full-pg-fixture.sql
+          docker run -d --rm --name apd-commercial-postgrest --network host \
+            -e PGRST_DB_URI=postgres://postgres:fixture_only@127.0.0.1:5432/apd_commercial_full_qa \
+            -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=service_role \
+            -e PGRST_SERVER_HOST=127.0.0.1 -e PGRST_SERVER_PORT=3300 \
+            -e PGRST_DB_CHANNEL_ENABLED=false postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
       - name: Inspect active production metadata and anonymous contracts without mutation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_COMMERCIAL_REAL_PG_QA: '1'
         run: node --experimental-vm-modules scripts/apd-commercial-live-preflight.mjs
+      - name: Stop disposable PostgREST
+        if: always()
+        run: docker rm -f apd-commercial-postgrest || true
