@@ -391,7 +391,7 @@ document.addEventListener('DOMContentLoaded',function(){
    catch(_){comparison.hidden=true;}
   }else if((offers.length||document.getElementById('apd-perfil-horarios')||accountDiaryClient)&&!loading){
    loading=true;
-   import('./apd_comparador_panel.mjs?v=20261124-tools2')
+   import('./apd_comparador_panel.mjs?v=20261126-commercial1')
     .then(()=>{loading=false;sync();if(offers.length)window.APD_setAlertScheduleFilter?.(false);})
     .catch(()=>{loading=false;comparison.hidden=true;});
   }
