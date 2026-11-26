@@ -1,0 +1,26 @@
+name: APD owner legacy checkout reconciliation (GET only)
+on:
+  pull_request:
+    types: [opened,synchronize]
+    paths:
+      - 'scripts/apd-commercial-owner-reconcile-readonly.mjs'
+      - '.github/workflows/apd-commercial-owner-reconcile-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/owner-payment-reconciliation-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/apd-commercial-owner-reconcile-readonly.mjs
+      - run: node scripts/apd-commercial-owner-reconcile-readonly.mjs
+        env:
+          APD_SUPABASE_DB_URL: ${{ secrets.APD_SUPABASE_DB_URL }}
+          MERCADOPAGO_ACCESS_TOKEN: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
