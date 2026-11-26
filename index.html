@@ -50,6 +50,10 @@
   <link rel="stylesheet" href="public-landing-v3.css?v=20261103" />
   <link rel="stylesheet" href="apd_email_panel_theme_20261119.css?v=1">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="manifest" href="./apd-app.webmanifest">
+  <meta name="theme-color" content="#082c43">
+  <link rel="apple-touch-icon" href="./icons/apd-app-192.png">
+  <script src="./apd-pwa-install.js" defer></script>
 </head>
 <body>
   <header class="header">
@@ -98,6 +102,8 @@
             <div class="hero-actions apd-v3-actions">
               <button type="button" class="btn btn-primary apd-v3-cta" onclick="if (typeof obtenerToken === 'function' &amp;&amp; obtenerToken()) { cargarDashboard(); } else { mostrarSeccion('login'); }">Ingresar a mi panel <span aria-hidden="true">→</span></button>
               <button type="button" class="btn btn-outline apd-v3-cta-secondary" onclick="mostrarSeccion('registro')">Crear una cuenta</button>
+              <button type="button" class="btn btn-outline" id="apd-pwa-install">Instalar app web</button>
+              <p id="apd-pwa-note" role="status" aria-live="polite" hidden></p>
             </div>
             <a class="apd-v3-secondary-link" href="./herramientas.html">Explorar herramientas gratuitas <span aria-hidden="true">↗</span></a>
             <p class="apd-v3-trust"><span class="apd-v3-trust-symbol" aria-hidden="true">i</span><span>Servicio independiente de la DGCyE. La información se consulta según las funciones habilitadas en tu plan; verificá siempre la vigencia y la postulación en ABC.</span></p>
