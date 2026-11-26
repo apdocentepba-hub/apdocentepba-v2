@@ -25,3 +25,16 @@ test("no payload for revoked device, inactive plan, unverified source, tampered 
  }
 });
 test("clock delay after checks blocks stale dispatch",async()=>{const f=fixture();let i=0;f.clock=()=>now+(i++?6000:0);assert.equal((await run(f)).action,"retry");});
+
+test("recipient cryptographically bound to stored digest and ownership",async()=>{
+ const {protectMobilePushToken,openBoundMobilePushRecipient}=await import("../../scripts/mobile-push-token-crypto-lab.mjs");
+ const encryptionKey=Buffer.alloc(32,1).toString("base64url"),hmacKey=Buffer.alloc(32,2).toString("base64url");
+ const token="ExpoPushToken[synthetic_fixture_123]";
+ const protectedToken=await protectMobilePushToken({token,encryptionKey,hmacKey});
+ const row={id:device,user_id:user,platform:"android",transport:"expo",enabled:true,opted_in:true,revoked_at:null,...protectedToken};
+ const args={row,userId:user,deviceId:device,encryptionKey,hmacKey};
+ assert.deepEqual(await openBoundMobilePushRecipient(args),{userId:user,deviceId:device,token,tokenHash:protectedToken.token_hash});
+ for(const changed of [{token_hash:"0".repeat(64)},{user_id:device},{revoked_at:iso(now)},{enabled:false},{token_ciphertext:"X".repeat(80)}]){
+  await assert.rejects(openBoundMobilePushRecipient({...args,row:{...row,...changed}}),/recipient_unverified/);
+ }
+});
