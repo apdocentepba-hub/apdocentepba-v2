@@ -30,6 +30,12 @@ assert.ok(/^\d+$/.test(String(me.id))&&me.site_id==='MLA','Credential seller/sit
 const merchant=String(me.id);
 const prefixes=[...new Set(data.rows.filter(r=>r.status==='ready').map(r=>/^([0-9]+)-/.exec(String(r.preference))?.[1]||''))];
 console.log('APD_OWNER_PROVIDER_AUTHENTICATED '+JSON.stringify({site:'MLA',authenticatedSellerSuffix:merchant.slice(-4),historicalPreferencePrefixSuffixes:prefixes.filter(Boolean).map(x=>x.slice(-4)),preferencePrefixMatch:prefixes.length===1&&prefixes[0]===merchant}));
+// Historical preference IDs share a seller prefix; fail closed before querying
+// payment details when the authenticated identity differs. Never alter records.
+if(prefixes.length!==1||!prefixes[0]||prefixes[0]!==merchant){
+ console.log('APD_OWNER_RECONCILIATION_BLOCKED seller identity mismatch; zero payment/preference lookups; zero writes');
+ process.exit(1);
+}
 const known=data.rows.find(x=>x.status==='approved');
 let historicalPaymentVerified=false;
 let historicalLookup='unverified';
