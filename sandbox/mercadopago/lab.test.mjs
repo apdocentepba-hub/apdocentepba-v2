@@ -38,3 +38,13 @@ test('operator routes reject missing auth and browser cross-origin mutation befo
  assert.equal((await h(new Request('https://lab.example/checkout',{method:'POST'}))).status,401);
  assert.equal((await h(new Request('https://lab.example/checkout',{method:'POST',headers:{authorization:'Bearer '+'x'.repeat(48),origin:'https://foreign.example'}}))).status,403);
 });
+test('native login forms retain a same-origin Origin and still reject opaque or foreign requests',async()=>{
+ const key='x'.repeat(48),origin='https://lab.example';
+ const h=m.createLabHandler({db:{},provider:async()=>assert.fail('provider call'),operatorKey:key,webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:origin});
+ const page=await h(new Request(origin+'/'));
+ assert.equal(page.headers.get('referrer-policy'),'same-origin','no-referrer turns Origin into null on native form POSTs');
+ const login=()=>new URLSearchParams({key});
+ const accepted=await h(new Request(origin+'/session',{method:'POST',headers:{origin},body:login()}));
+ assert.equal(accepted.status,303);assert.match(accepted.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Strict/);
+ for(const other of ['null','https://foreign.example'])assert.equal((await h(new Request(origin+'/session',{method:'POST',headers:{origin:other},body:login()}))).status,403);
+});
