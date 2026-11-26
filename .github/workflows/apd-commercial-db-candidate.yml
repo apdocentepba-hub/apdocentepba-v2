@@ -11,6 +11,7 @@ on:
       - 'scripts/test-apd-commercial-payment.sql'
       - 'scripts/test-apd-commercial-payment-review.sql'
       - 'scripts/test-apd-commercial-lifecycle.sql'
+      - 'scripts/test-apd-commercial-pilot-lifecycle.sql'
       - 'docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql'
       - 'scripts/test-apd-commercial-checkout.sql'
       - 'docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql'
@@ -148,6 +149,13 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-release-freeze.sql
           echo 'PASS commercial admission freeze: new claims blocked, pending payment settled, legacy and paid rights preserved'
+
+      - name: Reproduce scoped pilot lifecycle on disposable database
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-pilot-lifecycle.sql
 
       - name: Verify explicit grants override actual Supabase default ACL
         run: |
