@@ -71,3 +71,13 @@ assert.equal(fctx.transitionPolicy({...plan,commercial_checkout_resume:true},pi)
 assert.equal(fctx.transitionPolicy({...plan,commercial_checkout_resume:true},{...pi,subscription:{plan_code:'INSIGNE'},plan:{code:'INSIGNE'}}).allowed,false);
 assert.equal(fctx.transitionPolicy({...plan,commercial_enrollment_open:true},pi).allowed,true);
 console.log('APD_SCOPED_UI_CANDIDATE_PASS '+JSON.stringify({sha256:createHash('sha256').update(candidate).digest('hex'),bytes:Buffer.byteLength(candidate),serverCases:8,frontendCases:4,productionWrites:0,providerCalls:0,globalAdmissionChanged:false}));
+
+if(process.argv.includes('--stage')){
+ const sha=createHash('sha256').update(candidate).digest('hex');
+ assert.equal(sha,'a8591683e867542d504c2e91243b036b3b0c886f9bb361fc23c1dd79ebf22c85');
+ const cfg=fs.readFileSync('wrangler.toml','utf8');assert.ok(cfg.includes('PRODUCTION_SOURCE_GUARD_V1'));
+ const candidateConfig=once(cfg,'main = "worker-live/worker_hotfix.js"','main = "worker-diary-candidate.js"');
+ const configSha256=createHash('sha256').update(candidateConfig).digest('hex');
+ const {stageZeroTraffic}=await import('./apd-commercial-scoped-ui-stage.mjs');
+ await stageZeroTraffic({candidate,envelope:{candidateConfig,receipt:{candidateSha256:sha,configSha256,baseVersion:version,rollbackVersion:version}},details:d,account,worker,get,root,activeVersion,inspectCrons});
+}

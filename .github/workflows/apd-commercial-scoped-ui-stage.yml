@@ -1,0 +1,29 @@
+name: APD stage scoped checkout UI (zero traffic)
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-commercial-scoped-ui-stage.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apd-scoped-ui-stage
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 345 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/owner-checkout-ui-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - run: node scripts/apd-commercial-scoped-checkout-ui.mjs --stage
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APD_STAGE_SCOPED_UI: '1'
