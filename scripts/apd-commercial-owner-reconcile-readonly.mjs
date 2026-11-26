@@ -155,8 +155,8 @@ if(process.argv.includes('--record-owner-expiry')){
  assert.equal(new Set(rows.map(x=>x.id)).size,25);
  assert.ok(rows.every(x=>/^[0-9a-f-]{36}$/i.test(x.id)));
  // Only verified exact rows. SQL is passed on stdin, never printed.
- const snapshot=JSON.stringify(rows.map(x=>({id:x.id,reference:x.reference,preference:x.preference})));
- const quoted="'"+snapshot.replaceAll("'","''")+"'";
+ const snapshot=Buffer.from(JSON.stringify(rows.map(x=>({id:x.id,reference:x.reference,preference:x.preference}))), 'utf8').toString('base64');
+ const quoted="convert_from(decode('"+snapshot+"','base64'),'UTF8')";
  const update=`BEGIN;
  SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='20s';
  SELECT pg_advisory_xact_lock(170394,20261125);

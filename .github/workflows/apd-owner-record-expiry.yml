@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: apd-owner-expiry-pilot
+  group: apd-owner-record-expiry
   cancel-in-progress: false
 jobs:
   record:
