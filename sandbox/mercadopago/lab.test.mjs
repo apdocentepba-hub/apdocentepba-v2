@@ -55,3 +55,23 @@ test('authenticated buyer lookup returns only the fixed test nickname after sell
  assert.equal((await h(new Request('https://lab.example/buyer'))).status,401);assert.equal(calls.length,0);
  const r=await h(new Request('https://lab.example/buyer',{headers:{authorization:'Bearer '+key}}));assert.equal(r.status,200);assert.deepEqual(await r.json(),{ok:true,nickname:'TESTUSER123456789'});assert.deepEqual(calls,['/users/me','/users/3298351140']);
 });
+test('payment diagnostics require operator authentication before any access',async()=>{
+ const h=m.createLabHandler({db:{reference:async()=>assert.fail('database access')},provider:async()=>assert.fail('provider access'),operatorKey:'x'.repeat(48),webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:'https://lab.example'});
+ assert.equal((await h(new Request('https://lab.example/diagnose?payment_id=123'))).status,401);
+});
+test('payment diagnostics expose only predicates and never mutate the disposable database',async()=>{
+ const key='x'.repeat(48),calls=[];
+ const h=m.createLabHandler({db:{reference:async()=>ref,rpc:async()=>assert.fail('write forbidden')},provider:async(path,method='GET')=>{calls.push([path,method]);return path==='/users/me'?{id:456,site_id:'MLA',tags:['test_user']}:{...p,live_mode:true,payer:{email:'private@example.invalid'},access_token:'do-not-return'};},operatorKey:key,webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:'https://lab.example'});
+ const r=await h(new Request('https://lab.example/diagnose?payment_id=123',{headers:{authorization:'Bearer '+key}}));assert.equal(r.status,200);
+ const data=await r.json();assert.equal(data.ok,true);assert.equal(data.eligible,false);assert.equal(data.checks.testMode,false);assert.equal(data.checks.referenceMatches,true);assert.equal(data.checks.amountMatches,true);
+ assert.deepEqual(Object.keys(data).sort(),['checks','eligible','ok','paymentStatus']);assert.equal(JSON.stringify(data).includes('private@example.invalid'),false);assert.equal(JSON.stringify(data).includes('do-not-return'),false);
+ assert.deepEqual(calls,[['/users/me','GET'],['/v1/payments/123','GET']]);
+});
+test('payment diagnostics reject invalid IDs before provider access',async()=>{
+ const key='x'.repeat(48);const h=m.createLabHandler({db:{},provider:async()=>assert.fail('provider access'),operatorKey:key,webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:'https://lab.example'});
+ assert.equal((await h(new Request('https://lab.example/diagnose?payment_id=invalid',{headers:{authorization:'Bearer '+key}}))).status,400);
+});
+test('payment diagnostics report a safe failure stage without provider details',async()=>{
+ const key='x'.repeat(48);const h=m.createLabHandler({db:{},provider:async path=>{if(path==='/users/me')return {id:456,site_id:'MLA',tags:['test_user']};throw Error('private token and payload');},operatorKey:key,webhookSecret:'fixture-secret',sellerId:'456',publicOrigin:'https://lab.example'});
+ const r=await h(new Request('https://lab.example/diagnose?payment_id=123',{headers:{authorization:'Bearer '+key}}));assert.equal(r.status,503);assert.deepEqual(await r.json(),{ok:false,reason:'sandbox_diagnostics_unconfirmed',stage:'payment_read'});
+});
