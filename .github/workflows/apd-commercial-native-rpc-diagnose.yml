@@ -18,7 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund miniflare@4.20260515.0
+      - run: node -e "const p=require('miniflare/package.json'); if(p.version!=='4.20260515.0') process.exit(1); console.log('Pinned Miniflare '+p.version)"
       - run: node --check scripts/apd-commercial-native-rpc-diagnose.mjs
       - run: node scripts/apd-commercial-native-rpc-diagnose.mjs
         env:
