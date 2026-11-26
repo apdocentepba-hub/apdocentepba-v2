@@ -18,3 +18,11 @@ test('uncertain provider or persistence fails closed',async()=>{
  for(const transport of [async()=>{throw Error('network')},async()=>new Response('',{status:503})])assert.equal((await recover({env,userId,reference,preferenceId,transport,finalize:async()=>assert.fail('must not write')})).ok,false);
  assert.equal((await recover({env,userId,reference,preferenceId,transport:async()=>reply(valid),finalize:async()=>({ok:false})})).ok,false);
 });
+
+test('recover by unique external reference, verify full provider details before finalizing',async()=>{
+ let count=0;
+ const legacy='https://www.mercadopago.com/mla/checkout/start?pref_id=fixture';
+ const r=await recover({env,userId,reference,transport:async(url,req)=>{count++;assert.equal(req.method,'GET');if(count===1){assert.equal(url.pathname,'/checkout/preferences/search');assert.equal(url.searchParams.get('external_reference'),reference);assert.equal(url.searchParams.get('site_id'),'MLA');return reply({total:1,elements:[{id:preferenceId}]});}return reply({...valid,init_point:legacy});},finalize:async(...args)=>{assert.equal(args[2],legacy);return {ok:true};}});
+ assert.equal(r.checkout_url,legacy);assert.equal(count,2);
+ for(const listing of [{total:0,elements:[]},{total:2,elements:[{id:preferenceId}]},{total:1,elements:[{id:'bad/segment'}]}])assert.equal((await recover({env,userId,reference,transport:async()=>reply(listing),finalize:async()=>assert.fail('unsafe finalization')})).ok,false);
+});

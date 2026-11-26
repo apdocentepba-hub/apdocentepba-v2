@@ -27,7 +27,7 @@ BEGIN
   IF s.status='ready' AND s.checkout_url IS NOT NULL THEN
    RETURN jsonb_build_object('ok',true,'mode','reuse','reference',s.external_reference,'checkout_url',s.checkout_url);
   END IF;
-  RETURN jsonb_build_object('ok',false,'reason','checkout_in_progress');
+  RETURN jsonb_build_object('ok',false,'reason','checkout_in_progress','reference',s.external_reference);
  END IF;
  v_ref=p_user_id::text||':COMPLETO:'||floor(extract(epoch FROM v_now)*1000)::bigint::text;
  INSERT INTO public.mercadopago_checkout_sessions(user_id,plan_code,status,provider,external_reference,provider_payload)
@@ -38,7 +38,7 @@ CREATE FUNCTION public.apd_finalize_complete_checkout(p_user_id uuid,p_reference
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $f$
 DECLARE s public.mercadopago_checkout_sessions%ROWTYPE;
 BEGIN
- IF p_url IS NULL OR length(p_url)>2000 OR p_url !~ '^https://(www\.)?mercadopago\.com\.ar/checkout/' OR p_preference_id IS NULL OR length(p_preference_id) NOT BETWEEN 1 AND 180
+ IF p_url IS NULL OR length(p_url)>2000 OR p_url !~ '^https://((www\.)?mercadopago\.com\.ar/checkout/|www\.mercadopago\.com/mla/checkout/start([?]|$))' OR p_preference_id IS NULL OR length(p_preference_id) NOT BETWEEN 1 AND 180
  THEN RETURN jsonb_build_object('ok',false,'reason','invalid_provider_response'); END IF;
  PERFORM 1 FROM public.users WHERE id=p_user_id AND activo IS TRUE FOR UPDATE;
  IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'reason','account_unavailable'); END IF;

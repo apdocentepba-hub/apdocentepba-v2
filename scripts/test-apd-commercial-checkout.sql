@@ -18,8 +18,9 @@ DO $$ DECLARE r jsonb; ref text; uid uuid:='00000000-0000-4000-8000-000000000005
  IF public.apd_reserve_complete_checkout('00000000-0000-4000-8000-000000000003')->>'reason'<>'account_unavailable' THEN RAISE EXCEPTION 'disabled account'; END IF;
  r=public.apd_reserve_complete_checkout(uid); ref=r->>'reference';
  IF r->>'mode'<>'create' OR ref IS NULL THEN RAISE EXCEPTION 'reservation failed'; END IF;
- IF public.apd_reserve_complete_checkout(uid)->>'reason'<>'checkout_in_progress' THEN RAISE EXCEPTION 'duplicate provider call'; END IF;
+ IF public.apd_reserve_complete_checkout(uid)->>'reason'<>'checkout_in_progress' OR public.apd_reserve_complete_checkout(uid)->>'reference' IS DISTINCT FROM ref THEN RAISE EXCEPTION 'duplicate provider call'; END IF;
  IF public.apd_finalize_complete_checkout(uid,ref,'https://example.invalid/checkout/','fixture')->>'reason'<>'invalid_provider_response' THEN RAISE EXCEPTION 'unsafe URL'; END IF;
+ u:='https://www.mercadopago.com/mla/checkout/start?pref_id=fixture';
  IF public.apd_finalize_complete_checkout(uid,ref,u,'fixture')->>'ok'<>'true' THEN RAISE EXCEPTION 'finalize failed'; END IF;
  IF public.apd_finalize_complete_checkout(uid,ref,u,'fixture')->>'duplicate'<>'true' THEN RAISE EXCEPTION 'finalize duplicate'; END IF;
  r=public.apd_reserve_complete_checkout(uid);

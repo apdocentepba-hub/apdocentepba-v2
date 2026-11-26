@@ -571,7 +571,7 @@
       if (String(planCode || '').trim().toUpperCase()==='COMPLETO') {
         let url;
         try { url=new URL(data.checkout_url); } catch { throw Error('Enlace de pago no verificado'); }
-        if (data.ok!==true || url.protocol!=='https:' || !['mercadopago.com.ar','www.mercadopago.com.ar'].includes(url.hostname) || url.port || url.username || url.password || !url.pathname.startsWith('/checkout/')) throw Error('Enlace de pago no verificado');
+        if (data.ok!==true || url.protocol!=='https:' || url.port || url.username || url.password || !((['mercadopago.com.ar','www.mercadopago.com.ar'].includes(url.hostname)&&url.pathname.startsWith('/checkout/'))||(url.hostname==='www.mercadopago.com'&&url.pathname==='/mla/checkout/start'))) throw Error('Enlace de pago no verificado');
       }
       const opened = window.open(data.checkout_url, '_blank', 'noopener');
       const successMsg = data?.message || 'Mercado Pago se abrió en una pestaña nueva.';

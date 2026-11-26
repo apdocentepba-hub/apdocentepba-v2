@@ -7,3 +7,14 @@ test('server chooses fixed price, persists before exposing link',async()=>{const
 test('unauthenticated, cross-account, wrong target and disabled catalog rejected before reserve',async()=>{for(const o of [{user:null},{body:{user_id:'other',plan_code:'COMPLETO'}},{body:{plan_code:'PLUS'}},{catalogReady:false}]){const r=await run({...fixture(),...o,reserve:async()=>assert.fail('reserve forbidden')});assert.equal(r.body.ok,false);}});
 test('reuse existing verified URL, never duplicate provider request',async()=>{const r=await run({...fixture(),reserve:async()=>({ok:true,mode:'reuse',reference:ref,checkout_url:url}),createPreference:async()=>assert.fail('provider forbidden')});assert.equal(r.body.reused,true);});
 test('unknown ownership, uncertain provider and unsafe link fail closed',async()=>{for(const o of [{reserve:async()=>({ok:true,mode:'create',reference:'other:COMPLETO:123'})},{reserve:async()=>({ok:false,reason:'checkout_in_progress'})},{createPreference:async()=>{throw Error('uncertain');}},{createPreference:async()=>({checkout_url:'https://www.mercadopago.com.ar.evil.invalid/checkout/',preference_id:'x'})},{finalize:async()=>({ok:false})}]){const r=await run({...fixture(),...o});assert.equal(r.body.ok,false);assert.equal(r.body.checkout_url,undefined);}});
+
+test('Argentina legacy init_point and recovery of reserved checkout; no duplicate POST',async()=>{
+ const legacy='https://www.mercadopago.com/mla/checkout/start?pref_id=fixture';
+ const r=await run({...fixture(),createPreference:async()=>({checkout_url:legacy,preference_id:'fixture'}),finalize:async(_u,_r,u)=>{assert.equal(u,legacy);return {ok:true};}});
+ assert.equal(r.body.checkout_url,legacy);
+ const recovered=await run({...fixture(),reserve:async()=>({ok:false,reason:'checkout_in_progress',reference:ref}),recoverPreference:async(u,r)=>{assert.equal(u,user.id);assert.equal(r,ref);return {ok:true,checkout_url:legacy};},createPreference:async()=>assert.fail('duplicate provider POST')});
+ assert.equal(recovered.body.recovered,true);
+ for(const unsafe of ['https://www.mercadopago.com/mlm/checkout/start','https://www.mercadopago.com/mla/checkout/start/evil','https://www.mercadopago.com.evil.invalid/mla/checkout/start']){
+  const a=await run({...fixture(),createPreference:async()=>({checkout_url:unsafe,preference_id:'fixture'})});assert.equal(a.body.ok,false);
+ }
+});

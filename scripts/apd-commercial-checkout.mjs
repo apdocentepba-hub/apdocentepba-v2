@@ -1,16 +1,22 @@
 // Server-only checkout orchestration. Production stays disabled until reconciliation and QA gates pass.
-export async function completeCheckout({user,body,catalogReady,reserve,finalize,createPreference,webhookUrl}){
+export async function completeCheckout({user,body,catalogReady,reserve,finalize,createPreference,webhookUrl,recoverPreference}){
  const fail=(status,reason)=>({status,body:{ok:false,reason,message:'No se pudo confirmar la contratación. Revisá el estado antes de reintentar.'}});
  if(!user?.id||user.activo!==true)return fail(401,'unauthenticated');
  if(body?.user_id&&body.user_id!==user.id)return fail(403,'identity_mismatch');
  if(String(body?.plan_code||'').trim().toUpperCase()!=='COMPLETO'||catalogReady!==true)return fail(409,'offer_unavailable');
  const validUrl=v=>{
-  try{const u=new URL(v);return u.protocol==='https:'&&['www.mercadopago.com.ar','mercadopago.com.ar'].includes(u.hostname)&&!u.port&&!u.username&&!u.password&&u.pathname.startsWith('/checkout/');}catch{return false;}
+  try{const u=new URL(v);return u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&((['www.mercadopago.com.ar','mercadopago.com.ar'].includes(u.hostname)&&u.pathname.startsWith('/checkout/'))||(u.hostname==='www.mercadopago.com'&&u.pathname==='/mla/checkout/start'));}catch{return false;}
  };
  const validRef=v=>typeof v==='string'&&v.startsWith(user.id+':COMPLETO:')&&/^[0-9]{1,20}$/.test(v.slice((user.id+':COMPLETO:').length));
  try{
   const r=await reserve(user.id);
-  if(r?.ok!==true)return fail(409,r?.reason||'reservation_unverified');
+  if(r?.ok!==true){
+   if(r?.reason==='checkout_in_progress'&&validRef(r.reference)&&typeof recoverPreference==='function'){
+    const recovered=await recoverPreference(user.id,r.reference);
+    if(recovered?.ok===true&&validUrl(recovered.checkout_url))return {status:200,body:{ok:true,checkout_url:recovered.checkout_url,plan_code:'COMPLETO',price_ars:2000,reused:true,recovered:true}};
+   }
+   return fail(409,r?.reason||'reservation_unverified');
+  }
   if(!validRef(r.reference))return fail(503,'reservation_unverified');
   if(r.mode==='reuse'&&validUrl(r.checkout_url))return {status:200,body:{ok:true,checkout_url:r.checkout_url,plan_code:'COMPLETO',price_ars:2000,reused:true}};
   if(r.mode!=='create')return fail(503,'reservation_unverified');
