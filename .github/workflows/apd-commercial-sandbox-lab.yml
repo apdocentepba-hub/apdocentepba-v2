@@ -1,7 +1,7 @@
 name: APD isolated sandbox laboratory (no production)
 on:
   push:
-    branches: ['lab/mercadopago-isolated-20261126']
+    branches: ['lab/mercadopago-isolated-20261126', 'qa/mp-payment-diagnosis-work-20261126']
     paths:
       - 'sandbox/mercadopago/**'
       - '.github/workflows/apd-commercial-sandbox-lab.yml'
