@@ -24,25 +24,36 @@ async function get(path,params={}){
  if(!res.ok)throw Error('Provider read returned HTTP '+res.status);
  return res.json();
 }
+// Identify authenticated seller independently of the historical local payment ID.
+const me=await get('/users/me');
+assert.ok(/^\d+$/.test(String(me.id))&&me.site_id==='MLA','Credential seller/site not verified');
+const merchant=String(me.id);
+console.log('APD_OWNER_PROVIDER_AUTHENTICATED '+JSON.stringify({site:'MLA'}));
 const known=data.rows.find(x=>x.status==='approved');
-if(!/^[0-9]{1,30}$/.test(String(known.payment)))throw Error('Missing historical payment identity');
-const payment=await get('/v1/payments/'+encodeURIComponent(known.payment));
-assert.ok(String(payment.id)===String(known.payment)&&payment.external_reference===known.reference&&payment.live_mode===true,'Production merchant/payment not verified');
-const merchant=payment.collector_id;
-assert.ok(merchant,'Collector not verified');
+let historicalPaymentVerified=false;
+let historicalLookup='unverified';
+try{
+ if(!/^[0-9]{1,30}$/.test(String(known.payment)))throw Error('missing local payment identity');
+ const payment=await get('/v1/payments/'+encodeURIComponent(known.payment));
+ historicalPaymentVerified=String(payment.id)===String(known.payment)&&payment.external_reference===known.reference&&payment.live_mode===true&&String(payment.collector_id)===merchant;
+ historicalLookup=historicalPaymentVerified?'verified':'identity_mismatch';
+}catch(e){historicalLookup=/HTTP \d{3}$/.exec(String(e.message))?.[0]||'unverified';}
+console.log('APD_OWNER_HISTORICAL_PAYMENT_LOOKUP '+JSON.stringify({historicalLookup,historicalPaymentVerified}));
 const counts={expiredNoPayments:0,openNoPayments:0,hasPayments:0,unverified:0};
 const statuses={};
+const failures={};let matchedSellerPreferences=0;
 for(const row of data.rows.filter(x=>x.status==='ready')){
  try{
   if(typeof row.reference!=='string'||!row.reference||!/^[A-Za-z0-9_-]{1,180}$/.test(row.preference))throw Error('identity');
-  const pref=await get('/checkout/preferences/'+encodeURIComponent(row.preference));
-  if(pref.id!==row.preference||pref.external_reference!==row.reference||String(pref.collector_id)!==String(merchant))throw Error('preference identity');
-  const search=await get('/v1/payments/search',{external_reference:row.reference,sort:'date_created',criteria:'desc',range:'date_created',begin_date:new Date(Date.parse(row.created_at)-86400000).toISOString(),end_date:new Date().toISOString(),limit:'50',offset:'0'});
+  let pref;try{pref=await get('/checkout/preferences/'+encodeURIComponent(row.preference));}catch(e){throw Error('preference '+(/HTTP \d{3}$/.exec(String(e.message))?.[0]||'lookup_failed'));}
+  if(pref.id!==row.preference||pref.external_reference!==row.reference||String(pref.collector_id)!==merchant)throw Error('preference identity');
+  matchedSellerPreferences++;
+  const search=await get('/v1/payments/search',{external_reference:row.reference,sort:'date_created',criteria:'desc',limit:'50',offset:'0'});
   if(!Number.isInteger(search.paging?.total)||!Array.isArray(search.results)||search.results.length!==search.paging.total||search.results.some(p=>p.external_reference!==row.reference||String(p.collector_id)!==String(merchant)||p.live_mode!==true))throw Error('incomplete search');
   if(search.results.length){counts.hasPayments++;for(const pay of search.results){const k=['approved','pending','in_process','rejected','cancelled','refunded','charged_back','authorized'].includes(pay.status)?pay.status:'other';statuses[k]=(statuses[k]||0)+1;}}
   else if(pref.expires===true&&Number.isFinite(Date.parse(pref.expiration_date_to))&&Date.parse(pref.expiration_date_to)<=Date.now())counts.expiredNoPayments++;
   else counts.openNoPayments++;
- }catch{counts.unverified++;}
+ }catch(e){counts.unverified++;const msg=String(e.message);const k=/^(?:preference (?:HTTP \d{3}|lookup_failed|identity)|identity|incomplete search|Provider read returned HTTP \d{3})$/.test(msg)?msg:'other';failures[k]=(failures[k]||0)+1;}
 }
-console.log('APD_OWNER_RECONCILIATION_READONLY '+JSON.stringify({legacyReady:25,historicalPaymentVerified:true,...counts,paymentStatuses:statuses,productionWrites:0,providerWrites:0}));
-if(counts.unverified)process.exitCode=1;
+console.log('APD_OWNER_RECONCILIATION_READONLY '+JSON.stringify({legacyReady:25,historicalPaymentVerified,historicalLookup,matchedSellerPreferences,...counts,paymentStatuses:statuses,failures,productionWrites:0,providerWrites:0}));
+if(counts.unverified||!historicalPaymentVerified)process.exitCode=1;
