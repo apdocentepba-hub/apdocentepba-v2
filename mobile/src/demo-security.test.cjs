@@ -63,3 +63,29 @@ test("the app never imports a real user credential or push registration path",()
  assert.match(app,/Sin vínculo con ABC/);
  assert.match(app,/push remoto/); // UI explicitly disclaims actual delivery.
 });
+// Real account access stays in the system browser, outside the offline demo.
+function webAction(){
+ const body=app.match(/const openOfficialWeb=async\(\)=>\{([\s\S]*?)\n \};/);
+ assert.ok(body,"Explicit official web action is missing");
+ return new (Object.getPrototypeOf(async function(){}).constructor)("Linking","setWebAccessNote",body[1]);
+}
+test("official web access opens only the fixed HTTPS website after a tap",async()=>{
+ const calls=[],notes=[];
+ await webAction()({openURL:async url=>{calls.push(url);}},note=>notes.push(note));
+ assert.deepEqual(calls,["https://alertasapd.com.ar/"]);
+ assert.equal(notes.at(-1),"La cuenta real se abre en tu navegador. La app no recibe tu sesión.");
+ assert.match(app,/onPress=\{openOfficialWeb\}/);
+});
+test("browser launch failure is handled without exposing private errors or retrying",async()=>{
+ let calls=0;const notes=[];
+ await webAction()({openURL:async()=>{calls++;throw Error("private-session-secret");}},note=>notes.push(note));
+ assert.equal(calls,1);
+ assert.equal(notes.at(-1),"No se pudo abrir el navegador. Entrá a alertasapd.com.ar desde Chrome.");
+ assert.ok(!notes.join(" ").includes("private-session-secret"));
+});
+test("native UI keeps real browser access distinct from fictional offers",()=>{
+ assert.match(app,/Abrir mi cuenta en el navegador/);
+ assert.match(app,/Acceso a la web real/);
+ assert.match(app,/MODO DEMOSTRACIÓN/);
+ assert.doesNotMatch(app,/WebView|injectedJavaScript|access_token|refresh_token/);
+});
