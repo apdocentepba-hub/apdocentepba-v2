@@ -15,6 +15,8 @@ on:
       - 'scripts/test-apd-gha-backup-restore-sql.sh'
       - 'scripts/test-apd-gha-consistent-pg17.sh'
       - 'scripts/apd_gha_public_inventory.sh'
+      - 'scripts/apd_gha_prepare_public_dump.py'
+      - 'scripts/apd_gha_restore_diagnostic.py'
 
 permissions:
   contents: read
