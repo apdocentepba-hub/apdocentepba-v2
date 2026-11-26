@@ -40,7 +40,8 @@ export function createMobilePushDeviceHandlerLab({
    if(!actor)return json({ok:false,error:"unauthenticated"},401);
    const nested=url.pathname.startsWith(root+"/");
    if(request.method==="GET"&&!nested){
-    const rows=registry.listForUser({actor});
+    const rows=await registry.listForUser({actor});
+    if(!Array.isArray(rows))throw Error("invalid_registry_response");
     return json({ok:true,devices:rows.map(noTokenFields)});
    }
    if(request.method==="POST"&&!nested){
@@ -50,17 +51,26 @@ export function createMobilePushDeviceHandlerLab({
     const contentLength=Number(request.headers.get("content-length")??0);
     if(!Number.isFinite(contentLength)||contentLength>4096||contentLength<0)
      return json({ok:false,error:"invalid_payload"},413);
-    const text=await request.text();
-    if(new TextEncoder().encode(text).length>4096)
-     return json({ok:false,error:"invalid_payload"},413);
+    if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type")||""))
+     return json({ok:false,error:"invalid_payload"},415);
+    const reader=request.body?.getReader();
+    if(!reader)return json({ok:false,error:"invalid_payload"},400);
+    const decoder=new TextDecoder("utf-8",{fatal:true});let text="",size=0;
+    try{
+     while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;
+      if(size>4096){await reader.cancel();return json({ok:false,error:"invalid_payload"},413);}
+      text+=decoder.decode(chunk.value,{stream:true});
+     }text+=decoder.decode();
+    }catch{return json({ok:false,error:"invalid_payload"},400);}
     let body;
     try{body=JSON.parse(text);}catch{return json({ok:false,error:"invalid_json"},400);}
     if(!body||typeof body!=="object"||Array.isArray(body))
      return json({ok:false,error:"invalid_payload"},400);
-    if("user_id" in body&&body.user_id!==actor.userId)
+    if(Object.keys(body).some(k=>!["device_id","platform","transport","push_token","opted_in"].includes(k)))
      return json({ok:false,error:"invalid_payload"},400);
     try{
-     const device=registry.register({actor,request:body});
+     const device=await registry.register({actor,request:body});
+     if(!device||device.id!==body.device_id||device.enabled!==true||device.opted_in!==true)throw Error("registration_unconfirmed");
      return json({ok:true,device:noTokenFields(device)},201);
     }catch{
      return json({ok:false,error:"invalid_device"},400);
@@ -72,10 +82,10 @@ export function createMobilePushDeviceHandlerLab({
      return json({ok:false,error:"not_found"},404);
     // Revoke only owned device; do not reveal presence of foreign IDs.
     if(typeof registry.getForUser!=="function"||
-       !registry.getForUser({actor,deviceId:id}))
+       !(await registry.getForUser({actor,deviceId:id})))
      return json({ok:false,error:"not_found"},404);
     try{
-     registry.revoke({actor,deviceId:id});
+     if(await registry.revoke({actor,deviceId:id})!==true)throw Error("revocation_unconfirmed");
      return json({ok:true,revoked:true});
     }catch{
      return json({ok:false,error:"not_found"},404);
