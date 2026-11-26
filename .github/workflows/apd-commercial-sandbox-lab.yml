@@ -1,0 +1,39 @@
+name: APD isolated sandbox laboratory (no production)
+on:
+  push:
+    branches: ['lab/mercadopago-isolated-20261126']
+    paths: ['sandbox/mercadopago/**', '.github/workflows/apd-commercial-sandbox-lab.yml']
+permissions:
+  contents: read
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test sandbox/mercadopago/lab.test.mjs
+      - name: Build isolated PostgreSQL 17 and Node 22 container
+        run: docker build -f sandbox/mercadopago/Dockerfile -t apd-mp-lab .
+      - name: Verify real database lifecycle with simulated provider
+        run: |
+          set -euo pipefail
+          docker run -d --name apd-mp-lab -p 127.0.0.1:10000:10000 -e APD_LAB_PUBLIC_ORIGIN=https://lab.example apd-mp-lab
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:10000/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:10000/health
+          docker exec apd-mp-lab node sandbox/mercadopago/integration.mjs
+      - name: Container diagnostics
+        if: failure()
+        run: |
+          docker logs apd-mp-lab || true
+          docker exec apd-mp-lab tail -n 30 /tmp/apd-postgres.log || true
+      - name: Remove disposable laboratory
+        if: always()
+        run: docker rm -f apd-mp-lab || true

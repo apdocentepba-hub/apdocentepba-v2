@@ -1,0 +1,17 @@
+**
+!sandbox/
+!sandbox/mercadopago/
+!sandbox/mercadopago/**
+!scripts/
+!scripts/apd-commercial-checkout.mjs
+!scripts/apd-commercial-db-fixture.sql
+!scripts/apd-commercial-payment-fixture.sql
+!scripts/apd-commercial-preferences-fixture.sql
+!scripts/apd-commercial-full-pg-fixture.sql
+!docs/
+!docs/sql/
+!docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+!docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+!docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+!docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+!docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
