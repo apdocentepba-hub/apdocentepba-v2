@@ -12,7 +12,7 @@ function fixture(){
 }
 async function run(f){const {buildAndroidExpoPayload}=await import("../../scripts/mobile-push-android-payload-lab.mjs");return buildAndroidExpoPayload(f);}
 test("physical pilot payload parameters and minimal data",async()=>{
- const r=await run(fixture());assert.equal(r.action,"ready");assert.equal(r.payload.priority,"high");assert.equal(r.payload.channelId,"apd-alertas");assert.equal(r.payload.sound,"default");assert.equal(r.payload.ttl,120);assert.deepEqual(r.payload.data,{type:"apd_offer",offerKey:offer});assert.ok(!JSON.stringify(r.payload.data).includes(user));
+ const r=await run(fixture());assert.equal(r.action,"ready");assert.equal(r.payload.priority,"high");assert.equal(r.payload.channelId,"apd-alertas");assert.equal(r.payload.sound,"default");assert.equal(r.payload.ttl,120);assert.deepEqual(r.payload.data,{type:"apd_refresh"});assert.ok(!JSON.stringify(r.payload).includes(offer));assert.ok(!JSON.stringify(r.payload.data).includes(user));
 });
 test("TTL clipped before closing and near-expiry blocked",async()=>{
  const f=fixture();f.context.offer.expires_at=iso(now+30000);assert.equal((await run(f)).payload.ttl,25);
