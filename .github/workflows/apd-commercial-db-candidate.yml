@@ -17,6 +17,7 @@ on:
       - 'scripts/apd-commercial-preferences-fixture.sql'
       - 'scripts/test-apd-commercial-preferences.sql'
       - 'scripts/test-apd-commercial-db.sql'
+      - 'scripts/build-apd-commercial-atomic-install.mjs'
       - '.github/workflows/apd-commercial-db-candidate.yml'
 permissions:
   contents: read
@@ -155,3 +156,56 @@ jobs:
           test "$PGDATABASE" = apd_commercial_qa
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-commercial-default-acl.sql
           echo 'PASS least privilege under Supabase default grants'
+
+  atomic-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_atomic_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: apd_commercial_atomic_qa
+      PGUSER: postgres
+      PGPASSWORD: fixture_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify atomic install and rollback on disposable database
+        run: |
+          set -euo pipefail
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = apd_commercial_atomic_qa
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text; INSERT INTO public.users(id) VALUES('00000000-0000-4000-8000-000000000005'); ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role;"
+          # Create pre-existing checkout schema, not its new-plan test records.
+          awk '/^INSERT INTO public.mercadopago_checkout_sessions/{exit} {print}' scripts/apd-commercial-payment-fixture.sql > /tmp/apd-existing-checkout.sql
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-existing-checkout.sql
+          psql -X -v ON_ERROR_STOP=1 -c "GRANT UPDATE ON public.user_subscriptions TO service_role; INSERT INTO public.mercadopago_checkout_sessions(user_id,plan_code,status,external_reference) VALUES('00000000-0000-4000-8000-000000000002','INSIGNE','ready','legacy-fixture');"
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          node scripts/build-apd-commercial-atomic-install.mjs > /tmp/apd-atomic-install.sql
+          # Failure after all four migrations but before commit must leave no commercial objects.
+          sed '$d' /tmp/apd-atomic-install.sql > /tmp/apd-atomic-failure.sql
+          printf '\nSELECT 1/0;\nCOMMIT;\n' >> /tmp/apd-atomic-failure.sql
+          if psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-failure.sql; then echo 'Expected injected failure'; exit 1; fi
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 2
+          test "$(psql -X -Atq -c "SELECT to_regclass('public.apd_commercial_release_control') IS NULL")" = t
+          test "$(psql -X -Atq -c "SELECT to_regprocedure('public.apd_save_free_preferences(uuid,jsonb,jsonb)') IS NULL")" = t
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-install.sql
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 5
+          test "$(psql -X -Atq -c "SELECT public.apd_commercial_enrollment_open()")" = f
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.user_subscriptions")" = 1
+          if psql -X -v ON_ERROR_STOP=1 -f /tmp/apd-atomic-install.sql; then echo 'Unexpected install replay'; exit 1; fi
+          test "$(psql -X -Atq -c "SELECT count(*) FROM public.subscription_plans")" = 5
+          echo 'APD_ATOMIC_INSTALL_PASS: failure rollback, inactive catalog, exact legacy rows, ACL and replay guard'
