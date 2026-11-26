@@ -44,3 +44,34 @@ El helper `recoverCompletePreference` consulta únicamente por ID de preferencia
 - Base 9878ec8: 106/106 pruebas comerciales; 22 controles generales exitosos; PID 3 canales y lectores 5; runtime de funciones extraídas aprobado.
 - Recuperación por referencia: GET de búsqueda (MLA, resultado único), GET detalle, validación estricta y finalización del mismo checkout. Sin respuesta concluyente se conserva reserva. Soporte de init_point argentino legado /mla/checkout/start y actual /checkout/. No se libera una reserva por ausencia de búsqueda. Fuente: https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/get-preference/get y https://www.mercadopago.com.ar/developers/en/reference/online-payments/checkout-pro-preferences/search-preferences/get.
 - QA módulo completo: vm.SourceTextModule sin importaciones externas y transporte sintético obligatorio; prueba router, identidad, expiración, recuperación, firma HMAC, reintentos, pago y revocación. Aún no ejecutado en la nueva revisión. No sustituye PostgreSQL real ni runtime Cloudflare ni sandbox del proveedor. No cron, no env de producción, no publicación.
+
+## Estado operativo actualizado — 26/11/2026
+
+Esta sección reemplaza los estados históricos de publicación y admisión anteriores; las evidencias antiguas conservan su fecha y alcance.
+
+### Pedido vigente
+
+El usuario confirmó continuar todo el plan competitivo y sumar una APK Android. Reutilizar las ramas y contratos existentes; no reconstruir el cobro ni confundir la demo móvil con una cuenta nativa operativa. Mantener los proyectos ajenos separados y evitar servicios pagos.
+
+### Realizado y comprobado
+
+- Web: Gratis y Completo, ARS 2.000 por 30 días; botón Contratar por $2.000 habilitado y comprobado en navegador.
+- Supabase: control existente apd_commercial_release_control.enrollment_open cambió false→true bajo advisory lock (170394,20261125), con verificación previa del catálogo FREE/COMPLETO/TRIAL_14D y lectura final effective_open=true. No se alteraron suscripciones ni preferencias existentes.
+- Textos públicos: suscripciones.html actualizado en e8154642faa81d21b696c2461d691ae383a6165b; como-funciona.html también publicado y comprobado con precio, período, prueba de 14 días y condiciones.
+- Compra ficticia anterior 190691514735: aprobación observada en cuenta vendedora de prueba. Activación automática, webhook real y devolución NO comprobados. El usuario dio por concluido ese ensayo; no repetir la compra.
+- Laboratorio Render alertasapd-mercadopago-lab suspendido; comprobado por disponibilidad de Resume Web Service. No es el frontend ni el Worker público.
+- Android: PR #239 conserva Expo y APK autónoma DEMO anterior verificada por Actions 45478302454. En 3358a90 se agregó acceso explícito a https://alertasapd.com.ar/ mediante navegador del sistema, con aviso de separación y manejo seguro de errores. No inicia sesión dentro de la app ni transmite tokens. Pruebas primero: 3e6ecf2 falló por función ausente; validación y APK de 3358a90 deben consultarse en Actions 45891435667 y 45891435551 antes de afirmar aprobación.
+
+### Cola de implementación y aceptación
+
+| Orden | Línea | Próximo cierre verificable |
+|---|---|---|
+| 1 | APK Android, PR #239 | Suite móvil + bundle + APK autónoma del cambio; después instalación física. La app conserva ejemplos ficticios hasta integración nativa autenticada. |
+| 2 | PWA y push | Contrastar webpush_subscriptions y contratos móviles existentes; habilitación consentida, revocación y recepción real antes de anunciar push. |
+| 3 | Compartir ofertas | Solo información pública y enlace oficial; excluir datos de cuenta, domicilio y preferencias. |
+| 4 | PID, históricos | Reutilizar fuentes/índices y candidatos; verificar cobertura, vigencia y límites antes de mostrar conclusiones. |
+| 5 | Comunicados SAD y calendario | Publicaciones oficiales con fuente, fecha, distrito y deduplicación; sin inventar eventos. |
+| 6 | Referidos | Crédito ligado a pago verificado y antifraude; preparar reglas sin aplicar beneficios financieros no probados. |
+| 7 | Carrera/postulaciones/favoritos | Revisar candidatos #330, #322/#325 y #320 contra main; no asumir que una PR abierta implica función ausente ni fusionarla completa sin comparar. |
+
+Los elementos de la cola son pendientes, no avances declarados. No sustituir implementación con acumulación de simulaciones o conteos de pruebas.
