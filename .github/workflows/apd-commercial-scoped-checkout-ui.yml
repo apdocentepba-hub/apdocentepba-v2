@@ -1,0 +1,26 @@
+name: APD authenticated checkout resume UI candidate
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-commercial-scoped-checkout-ui.mjs'
+      - '.github/workflows/apd-commercial-scoped-checkout-ui.yml'
+      - 'plan_checkout_patch.js'
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/owner-checkout-ui-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check plan_checkout_patch.js && node --check scripts/apd-commercial-scoped-checkout-ui.mjs
+      - run: node scripts/apd-commercial-scoped-checkout-ui.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
