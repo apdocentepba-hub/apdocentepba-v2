@@ -5,6 +5,8 @@ on:
       - 'scripts/apd-mobile-abc-exact-lookup-readonly-lab.mjs'
       - 'scripts/test-apd-mobile-abc-exact-lookup-readonly-lab.mjs'
       - 'scripts/run-apd-mobile-abc-exact-lookup-readonly.mjs'
+      - 'mobile/src/native-connection-probe.js'
+      - 'scripts/run-apd-native-connection-readonly.cjs'
       - '.github/workflows/apd-mobile-abc-live-readonly-lab.yml'
   workflow_dispatch:
 permissions:
@@ -30,6 +32,8 @@ jobs:
         env:
           CI: '1'
         run: node scripts/run-apd-mobile-abc-exact-lookup-readonly.mjs
+      - name: Verify live account endpoint access controls without credentials
+        run: node scripts/run-apd-native-connection-readonly.cjs
       - name: Prevent any edits to the deployed Worker and web files
         run: |
           git diff --exit-code -- worker.js index.html app_v2.js auth_session_patch.js
