@@ -2,6 +2,7 @@ name: APD ABC expiry audit (offline only)
 on:
   pull_request:
     paths:
+      - 'scripts/test-apd-digest-pg17-concurrency.sh'
       - 'scripts/apd-channel-entitlement-audit-stage.mjs'
       - 'scripts/test-apd-channel-entitlement-audit.mjs'
       - 'scripts/apd-channel-query-audit-stage.mjs'
@@ -27,3 +28,22 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/test-apd-abc-expiry-audit.mjs scripts/test-apd-email-delivery-audit.mjs scripts/test-apd-channel-query-audit.mjs scripts/test-apd-channel-entitlement-audit.mjs
+  digest-concurrency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: apd_fixture_only
+          POSTGRES_DB: apd_delivery_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 3s --health-timeout 3s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/test-apd-digest-pg17-concurrency.sh
