@@ -42,7 +42,11 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
   // Only the server-created one-time migration grant supersedes finite legacy access.
   // An indefinite or recurring legacy right is never shortened or replaced here.
   if(courtesy.length>1)throw Error('Duplicate legacy transition grant');
-  if(courtesy.length===1&&(!old||!legacyActive({subscription:old})||(!old.mercadopago_preapproval_id&&Number.isFinite(Date.parse(old.current_period_ends_at||old.trial_ends_at))&&Date.parse(old.current_period_ends_at||old.trial_ends_at)<=Date.parse(courtesy[0].current_period_ends_at))))return courtesy[0];
+  if(courtesy.length===1&&(!old||!legacyActive({subscription:old})||(!old.mercadopago_preapproval_id&&Number.isFinite(Date.parse(old.current_period_ends_at||old.trial_ends_at))&&Date.parse(old.current_period_ends_at||old.trial_ends_at)<=Date.parse(courtesy[0].current_period_ends_at)))){
+   // A later, already-started paid period must not be masked by a courtesy grant.
+   const longerPaid=paid.filter(row=>Number.isFinite(Date.parse(row.started_at))&&Date.parse(row.started_at)<=now&&Date.parse(row.current_period_ends_at)>Date.parse(courtesy[0].current_period_ends_at)).sort((a,b)=>Date.parse(b.current_period_ends_at)-Date.parse(a.current_period_ends_at));
+   return longerPaid[0]||courtesy[0];
+  }
   if(old&&legacyActive({subscription:old}))return old;
   // A confirmed paid period takes precedence over a free trial.
   return paid[0]||trial[0]||null;
