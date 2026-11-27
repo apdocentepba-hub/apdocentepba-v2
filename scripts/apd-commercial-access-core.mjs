@@ -20,6 +20,13 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
  function state(row,now){
   return resolveAccess({authenticated:true,historyVerified:true,subscription:row,now});
  }
+ function intervalStart(row,now){
+  const raw=row?.started_at;
+  if(typeof raw!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(raw))return 'invalid';
+  const start=Date.parse(raw),end=Date.parse(norm(row.plan_code)==='TRIAL_14D'?row.trial_ends_at:row.current_period_ends_at);
+  if(!Number.isFinite(now)||!Number.isFinite(start)||!Number.isFinite(end)||start>=end)return 'invalid';
+  return start<=now?'started':'future';
+ }
  function choose(rows,now){
   if(!Array.isArray(rows)||!Number.isFinite(now))throw Error('Unverified subscription history');
   for(const row of rows)if(!row||!newCodes.has(norm(row.plan_code))&&!legacyCodes.has(norm(row.plan_code)))throw Error('Unknown subscription code');
@@ -32,6 +39,9 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
    const result=state(row,now);
    if(result.tier==='UNVERIFIED')throw Error('Unverified subscription expiry');
    if(result.complete){
+    const interval=intervalStart(row,now);
+    if(interval==='invalid')throw Error('Unverified subscription start');
+    if(interval==='future')continue;
     if(norm(row.plan_code)==='COMPLETO'&&row.source==='legacy_transition_30d'){
      const start=Date.parse(row.started_at),end=Date.parse(row.current_period_ends_at);
      if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)throw Error('Unverified courtesy period');
@@ -49,6 +59,9 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
   }
   if(old&&legacyActive({subscription:old}))return old;
   // A confirmed paid period takes precedence over a free trial.
+  // Row order is not entitlement priority; prefer the longest currently started period.
+  paid.sort((a,b)=>Date.parse(b.current_period_ends_at)-Date.parse(a.current_period_ends_at));
+  trial.sort((a,b)=>Date.parse(b.trial_ends_at)-Date.parse(a.trial_ends_at));
   return paid[0]||trial[0]||null;
  }
  function ready(catalog){
@@ -85,7 +98,7 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
   const planCode=norm(resolved?.plan?.code||code);
   if(planCode!==code)return false;
   if(code==='FREE')return sub.source==='apd_free_verified'&&norm(sub.status)==='ACTIVE'&&!!sub.user_id;
-  if(sub.source==='legacy_transition_30d'&&(!Number.isFinite(Date.parse(sub.started_at))||Date.parse(sub.started_at)>now))return false;
+  if(intervalStart(sub,now)!=='started')return false;
   return state(sub,now).complete===true;
  }
  function completeAccess(resolved,now){
