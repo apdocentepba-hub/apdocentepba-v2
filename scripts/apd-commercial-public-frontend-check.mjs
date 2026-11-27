@@ -20,9 +20,9 @@ const current=refs(n=>read(n));
 assert.deepEqual(current,['plan_checkout_patch.js?v=7','apd_comparador_panel.mjs?v=20261127-career3','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
 console.log('APD_FRONTEND_CACHE_CHAIN_CONTRACT_PASS');
 const baseline=process.argv.includes('--baseline');
-const ref=baseline?'0c9bddd5a4193e487b85c2c824f388683974ed2e':null;
+const ref=baseline?'origin/main':null;
 const expected=refs(n=>read(n,ref));
-const revision=baseline?'baseline0c9bddd5':String(process.env.GITHUB_SHA||'').slice(0,12);
+const revision=baseline?'baseline'+execFileSync('git',['rev-parse','--short=12',ref],{encoding:'utf8'}).trim():String(process.env.GITHUB_SHA||'').slice(0,12);
 async function get(url){
  const r=await fetch(url,{method:'GET',redirect:'error',cache:'no-store',headers:{'Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
  if(r.status!==200)throw Error('HTTP '+r.status+' at '+new URL(url).pathname);
@@ -44,13 +44,13 @@ async function verify(){
  assert.equal(data.ok,true);
  assert.equal(data.commercial_model,'free_complete_v1');
  assert.equal(data.trial_days,14);
- assert.equal(data.commercial_enrollment_open,false,'Admission opened');
+ assert.equal(data.commercial_enrollment_open,true,'Commercial admission unexpectedly closed');
  assert.notEqual(data.commercial_checkout_resume,true,'Anonymous checkout resume leaked');
  if(!baseline)assert.equal(data.commercial_checkout_resume,false,'Anonymous resume flag missing');
  assert.ok(Array.isArray(data.planes)&&data.planes.length===2,'Unexpected commercial catalog');
  const plans=data.planes.map(p=>[String(p.code),Number(p.price_ars),Number(p.max_distritos),Number(p.max_cargos)]).sort((a,b)=>a[0].localeCompare(b[0]));
  assert.deepEqual(plans,[['COMPLETO',2000,5,10],['FREE',0,1,1]]);
- console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,commercialPlans:2,admissionOpen:false,anonymousResume:false,requests:'GET only'}));
+ console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,commercialPlans:2,admissionOpen:true,anonymousResume:false,requests:'GET only'}));
 }
 let last;
 for(let i=0;i<(baseline?2:12);i++){
