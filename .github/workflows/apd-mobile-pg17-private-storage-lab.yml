@@ -2,6 +2,8 @@ name: APD mobile push PostgreSQL 17 storage lab (never deploy)
 on:
   pull_request:
     paths:
+      - 'sql/apd_mobile_logout_session_lab_20261126.sql'
+      - 'scripts/test-apd-mobile-logout-session-pg17.sql'
       - 'sql/apd_mobile_expo_consumed_reconciliation_lab_20261126.sql'
       - 'scripts/test-apd-mobile-expo-consumed-reconciliation-pg17.sql'
       - 'sql/apd_mobile_consume_dispatch_lab_20261126.sql'
@@ -77,6 +79,7 @@ jobs:
           node scripts/test-apd-mobile-inbox-concurrency-pg17.mjs
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-consume-dispatch-pg17.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-expo-consumed-reconciliation-pg17.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/test-apd-mobile-logout-session-pg17.sql
       - name: Prove no production file changes
         run: |
           git diff --exit-code origin/main -- worker.js app_v2.js index.html auth_session_patch.js
