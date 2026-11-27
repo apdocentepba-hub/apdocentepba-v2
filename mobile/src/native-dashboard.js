@@ -1,7 +1,8 @@
 /** UI coordinator for the native client. No secrets in UI snapshots.
  * The current APK uses a fixture transport; real pilot must supply its own.
  */
-function createNativeDashboard({client,push=null,now=Date.now}={}){
+function createNativeDashboard({client,push=null,requireRemoteLogout=false,now=Date.now}={}){
+ if(requireRemoteLogout&&typeof client?.logoutRemote!=="function")throw Error("remote_logout_required");
  if(!client||typeof client.login!=="function")throw Error("missing_client");
  let revision=0,busy=false,disposed=false;
  let state={account:null,offers:[],preferences:null,excluded:0,loading:false,error:null,pushState:"unknown",updatedAt:null};
@@ -41,7 +42,9 @@ function createNativeDashboard({client,push=null,now=Date.now}={}){
     if(current.state==="registered"){const result=await push.disable();valid();if(result.state!=="revoked")throw Error("revocation_unconfirmed");}
     else if(current.state!=="not_registered")throw Error("push_status_unknown");
    }
-   client.logoutLocal();clear();
+   if(requireRemoteLogout){const result=await client.logoutRemote();valid();if(result?.revoked!==true)throw Error("logout_unconfirmed");}
+   else client.logoutLocal();
+   clear();
   }),
   dispose(){disposed=true;revision++;client.logoutLocal();clear();}
  });
