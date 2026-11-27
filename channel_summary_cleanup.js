@@ -230,17 +230,15 @@ function formStatus(label){
   if(/Conectado y activo/i.test(t)) return 'Conectado y activo';
   if(/^Conectado$/i.test(t)) return 'Conectado';
   if(/Pendiente/i.test(t)) return 'Pendiente de conexión';
-  if(/Disponible/i.test(t)) return 'Disponible';
+  if(/^Disponible$/i.test(t)) return 'Disponible';
+  if(/^(Según plan|No incluido|Sin verificar)$/i.test(t)) return t;
   return '';
 }
 
-function isInsigne(){
-  const txt = [byId('panel-plan')&&byId('panel-plan').textContent, byId('panel-datos-docente')&&byId('panel-datos-docente').textContent, byId('panel-preferencias-resumen')&&byId('panel-preferencias-resumen').textContent, byId('panel-canales')&&byId('panel-canales').textContent].join(' ');
-  return /INSIGNE|Plan\s+Insigne/i.test(txt);
-}
+function isInsigne(){ return false; }
 
 function wanted(label){
-  return formStatus(label) || prefStatus(label) || (isInsigne() ? 'Incluido en Insigne' : 'Según plan');
+  return formStatus(label) || 'Según plan';
 }
 
 function cleanupSummary(){
@@ -262,18 +260,7 @@ function cleanupSummary(){
   resumen.appendChild(p2);
 }
 
-function cleanCanales(){
-  if(!isInsigne()) return;
-  const canales = byId('panel-canales');
-  if(!canales) return;
-  canales.querySelectorAll('*').forEach(function(el){
-    if(el.children.length) return;
-    const t = String(el.textContent||'').trim();
-    if(/^(No incluido|Solo disponible en Insigne|En preparación|Según plan)$/i.test(t)) el.textContent = 'Incluido en Insigne';
-    if(/Telegram aún no disponible|Telegram no está habilitado/i.test(t)) el.textContent = 'Telegram incluido en tu plan Insigne. Abrí el bot desde Preferencias para conectarlo.';
-    if(/WhatsApp en preparación|WhatsApp no está habilitado|WhatsApp queda reservado/i.test(t)) el.textContent = 'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.';
-  });
-}
+function cleanCanales(){ /* Channel card is rendered by verified plan state. */ }
 
 function styleFooterSupportButton(){
   const footer = document.querySelector('.footer-inner');
@@ -303,7 +290,7 @@ function publicCopy(){
   const reset = byId('btn-provincia-reset');
   if(reset && reset.textContent.trim()==='Reset') reset.textContent = 'Reiniciar';
   const pidHint = byId('panel-listados-pid-card') && byId('panel-listados-pid-card').querySelector('.prefs-hint');
-  if(pidHint && !/Insigne/i.test(pidHint.textContent || '')) pidHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función disponible según tu plan; el acceso completo corresponde al plan Insigne.';
+  if(pidHint && !/Insigne/i.test(pidHint.textContent || '')) pidHint.textContent = 'Consulta de puntaje por DNI, listado y año. Función disponible según tu plan; el acceso completo corresponde a Completo, prueba vigente o derechos anteriores.';
   document.querySelectorAll('a[href="./soporte-beta.html"]').forEach(function(a){ a.setAttribute('href','./soporte.html'); });
   styleFooterSupportButton();
 }
