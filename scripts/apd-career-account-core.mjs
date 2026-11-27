@@ -28,7 +28,7 @@ export async function careerAccountRequest(request,deps){
    const record=validateCareerRecord(await deps.read(actor.id));
    return reply(200,{ok:true,career:record});
   }
-  if(!(await deps.entitled(actor.id)))return reply(403,{ok:false,message:'Disponible con Insigne activo'});
+  if(await deps.entitled(actor.id)!==true)return reply(403,{ok:false,message:'Disponible con Completo o su prueba vigente'});
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('content-type')||''))return reply(415,{ok:false,message:'Se requiere JSON'});
   let data,profile;
   try{
@@ -39,6 +39,10 @@ export async function careerAccountRequest(request,deps){
    if(!exact(data,['profile','revision'])||!Number.isSafeInteger(data.revision)||data.revision<0||data.revision>=MAX_REV)throw Error('Revisión inválida');
    profile=cleanCareer(data.profile);
   }catch{return reply(400,{ok:false,message:'Perfil o revisión inválidos'});}
+  // A slow request must not cross expiry or revocation while decoding the body.
+  const current=await deps.authenticate(request);
+  if(current?.id!==actor.id)return reply(401,{ok:false,message:'La sesión cambió'});
+  if(await deps.entitled(actor.id)!==true)return reply(403,{ok:false,message:'Disponible con Completo o su prueba vigente'});
   const saved=await deps.compareAndSet(actor.id,{profile,revision:data.revision});
   if(saved===null)return reply(409,{ok:false,message:'Tu carrera cambió en otro dispositivo. Recuperá la versión actual.'});
   const record=validateCareerRecord(saved);
