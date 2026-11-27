@@ -44,13 +44,13 @@ async function verify(){
  assert.equal(data.ok,true);
  assert.equal(data.commercial_model,'free_complete_v1');
  assert.equal(data.trial_days,14);
- assert.equal(data.commercial_enrollment_open,false,'Admission opened');
+ assert.equal(data.commercial_enrollment_open,true,'Commercial admission unexpectedly closed');
  assert.notEqual(data.commercial_checkout_resume,true,'Anonymous checkout resume leaked');
  if(!baseline)assert.equal(data.commercial_checkout_resume,false,'Anonymous resume flag missing');
  assert.ok(Array.isArray(data.planes)&&data.planes.length===2,'Unexpected commercial catalog');
  const plans=data.planes.map(p=>[String(p.code),Number(p.price_ars),Number(p.max_distritos),Number(p.max_cargos)]).sort((a,b)=>a[0].localeCompare(b[0]));
  assert.deepEqual(plans,[['COMPLETO',2000,5,10],['FREE',0,1,1]]);
- console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,commercialPlans:2,admissionOpen:false,anonymousResume:false,requests:'GET only'}));
+ console.log('APD_PUBLIC_FRONTEND_VERIFIED '+JSON.stringify({baseline,checks,commercialPlans:2,admissionOpen:true,anonymousResume:false,requests:'GET only'}));
 }
 let last;
 for(let i=0;i<(baseline?2:12);i++){
