@@ -7,7 +7,7 @@ import {assessComparatorCriterion} from './scripts/apd-comparador-datos-evaluaci
 import {checkScheduleOverlap,compareSelectedOfferSchedules} from './scripts/apd-mi-jornada-comparador.mjs?v=20261124-modulos';
 import {simulateWeek,intervalText} from './scripts/apd-week-simulator.mjs?v=20261124-simulator1';
 import {createOfferEconomics} from './scripts/apd-offer-economics-ui.mjs?v=20261124-calendar1';
-import {marginalPay} from './scripts/apd-career-profile-core.mjs?v=20261124-career1';
+import {marginalPay,mergeConfirmedCareerPlanner} from './scripts/apd-career-profile-core.mjs?v=20261127-career3';
 import {createFavoriteOffers} from './scripts/apd-favorite-offers.mjs?v=20261124-favorites1';
 import {createWeekOptimizerSection} from './scripts/apd-week-optimizer-ui.mjs?v=20261124-optimizer1';
 import {createApplicationDiarySection} from './scripts/apd-application-diary-ui.mjs?v=20261124-diary2';
@@ -16,7 +16,7 @@ import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=2026
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
 import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
-import {createPrivatePlannerForm,loadPrivatePlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
+import {createPrivatePlannerForm,loadPrivatePlanner as loadLegacyPlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
 import {
  fetchSelectedSchools,pairSchoolDistances,verifiedSchoolKey,workToOfferSchoolDistances
 } from './scripts/apd-school-geodistance.mjs?v=20261111-workgeo1';
@@ -33,6 +33,17 @@ const root=document.getElementById('apd-comparador-panel');
 const max=5;
 let disposePersonalHistory=null;
 let profileScheduleClient=null,profileScheduleRequired=true;
+let confirmedCareerContext=null;
+function loadPrivatePlanner(){
+ const base=loadLegacyPlanner();
+ if(!confirmedCareerContext)return base;
+ const unavailable=()=>({...base,jobs:[...(base.jobs||[]),{school:'Carrera sin confirmar',days:[],start:'',end:''}]});
+ try{
+  if(!confirmedCareerContext.isCurrent())return unavailable();
+  const record=confirmedCareerContext.getRecord();
+  return record?mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey:verifiedSchoolKey}):unavailable();
+ }catch{return unavailable();}
+}
 function clearPersonalHistory(){disposePersonalHistory?.();disposePersonalHistory=null;}
 const favorites=createFavoriteOffers();
 const emptyDiary=(client=null)=>({client,record:{entries:[],revision:0},titles:new Map(),open:false,loaded:false,busy:false,message:''});
@@ -1064,8 +1075,9 @@ function render(){
   'Orientativo. Las distancias son en línea recta entre escuelas verificadas por ABC; no son tiempo de viaje. Verificá condiciones y postulación en ABC. No se usa la ubicación del celular.'));
  maybeAutoVerifySchools();
 }
-function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null,diaryClient=null}={}) {
+function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=null,favoriteMode=false,favoriteClient=null,diaryClient=null,careerContext=null}={}) {
  const entitled=hasInsignePlannerAccess(planInfo);
+ confirmedCareerContext=entitled&&enabled&&careerContext?.enabled?careerContext:null;
  // A downgrade, expiration or unverified subscription wipes previous personal
  // information from this browser tab before any new DOM can read it.
  if(!entitled)clearPrivatePlanner();
@@ -1111,6 +1123,7 @@ function refresh({offers=[],index=0,enabled=false,planInfo=null,historyContext=n
  render();
 }
 function reset() {
+ confirmedCareerContext=null;
  resetDiary();
  clearAccountFavorites();
  profileScheduleClient=null;
@@ -1147,6 +1160,7 @@ window.addEventListener('APD_accountHomeUpdated',()=>{
 });
 window.APD_comparatorRefresh=refresh;
 window.APD_comparatorReset=reset;
+window.APD_refreshConfirmedCareer=()=>{if(state.enabled&&state.privatePlannerAllowed&&confirmedCareerContext){refreshAlertSchedule();render();}};
 // Core app may have rendered before module import was completed.
 if(root){root.hidden=true;}
 
@@ -1236,5 +1250,6 @@ function mountProfileSchedule(host){
  host.appendChild(createWeeklyScheduleForm({accountClient:profileScheduleClient,accountRequired:profileScheduleRequired,onChanged:()=>{
   refreshAlertSchedule();
   render();
+   window.dispatchEvent(new Event('APD_accountScheduleUpdated'));
  }}));
 }

@@ -5,6 +5,10 @@ on:
       - 'scripts/apd-career-*.mjs'
       - 'scripts/test-apd-career-account.mjs'
       - 'scripts/test-apd-career-editor-browser.mjs'
+      - 'scripts/test-apd-career-panel-integration.mjs'
+      - 'index.html'
+      - 'apd_comparador_panel.mjs'
+      - 'apd_comparador_panel.css'
       - 'scripts/build-apd-career-worker-candidate.mjs'
       - 'docs/sql/APD_CAREER_PROFILE_CANDIDATE.sql'
       - 'tests/sql/apd_career_profile_assert.sql'
@@ -33,7 +37,7 @@ jobs:
         with:
           node-version: '22'
       - name: Unit and actual gate source regressions
-        run: node --test scripts/test-apd-career-account.mjs
+        run: node --test scripts/test-apd-career-account.mjs scripts/test-apd-career-panel-integration.mjs scripts/test-apd-comparador-ui-contract.mjs
       - name: Disposable database ACL and CAS
         env:
           PGHOST: 127.0.0.1
@@ -59,5 +63,5 @@ jobs:
           echo APD_CAREER_CURRENT_MAIN_CAS_PASS
       - name: Chromium isolated editor (synthetic accounts and school)
         run: node scripts/test-apd-career-editor-browser.mjs
-      - name: Preserve public entry point and backend
-        run: git diff --exit-code origin/main -- index.html app_v2.js apd_comparador_panel.mjs apd_comparador_panel.css worker-live worker.js auth_session_patch.js
+      - name: Preserve backend and commercial app
+        run: git diff --exit-code origin/main -- app_v2.js worker-live worker.js auth_session_patch.js

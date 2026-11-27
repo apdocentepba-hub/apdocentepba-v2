@@ -822,3 +822,20 @@ body.apd-dark #panel-datos-docente,body.apd-dark #apd-perfil-horarios{
 #apd-career-tools-host .apd-application-diary form:not([hidden]){display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 #apd-career-tools-host .apd-application-diary label{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%}
 #apd-career-tools-host .apd-application-diary select{max-width:100%;min-width:0;padding:8px}
+
+/* Gated career profile: separate from existing module timetable. */
+#apd-perfil-carrera[hidden]{display:none!important}
+#apd-perfil-carrera{margin-top:14px;min-width:0}
+.apd-career-editor{border:1px solid #cbd9e8;background:#f8fbff;border-radius:13px;padding:12px;min-width:0;color:#173454}
+.apd-career-editor h3{font-size:16px;margin:0 0 8px}
+.apd-career-editor form{display:flex;flex-direction:column;gap:10px;min-width:0}
+.apd-career-editor fieldset{min-width:0;margin:8px 0;padding:10px}
+.apd-career-editor .apd-work-input{box-sizing:border-box;width:100%;min-width:0}
+.apd-career-clock-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px;border-bottom:1px solid #dce6f0;padding:7px 0}
+.apd-career-module-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:8px 0}
+.apd-career-module-choices label{display:flex;align-items:center;gap:5px;font-size:11px;overflow-wrap:anywhere}
+.apd-career-module-choices input[type=checkbox]{width:auto;flex-shrink:0}
+.apd-career-grid{max-width:100%;overflow-x:auto}
+.apd-career-grid td{font-size:11px;text-align:center;padding:6px;white-space:nowrap}
+.apd-career-legend{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px}
+.apd-career-editor [role=status]{font-size:12px;line-height:1.5}
