@@ -4,7 +4,7 @@
  */
 const ORIGIN="https://ancient-wildflower-cd37.apdocentepba.workers.dev";
 const permitted=(method,path)=>
- (method==="POST"&&path==="/api/login")||
+ (method==="POST"&&["/api/login","/api/account/logout"].includes(path))||
  (method==="GET"&&["/api/account/profile","/api/account/preferences","/api/mis-alertas","/api/mobile/devices"].includes(path))||
  (method==="POST"&&path==="/api/mobile/devices")||
  (method==="DELETE"&&/^\/api\/mobile\/devices\/[0-9a-f-]{36}$/i.test(path));
