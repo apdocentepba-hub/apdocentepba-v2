@@ -13,6 +13,7 @@ import {createCareerPanelCoordinator} from '/scripts/apd-career-panel-coordinato
 import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
 import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
 import {createSchoolCatalog} from '/scripts/apd-career-school-catalog.mjs';
+import {mountOwnScheduleRecovery} from '/scripts/apd-career-schedule-readonly.mjs';
 const check=(v,m)=>{if(!v)throw Error(m);};
 const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('timeout');};
 const rows=new Map();let token='A',lost=false,puts=0;
@@ -73,6 +74,23 @@ try{
  check(rows.get('A').profile.positions[0].school===school.name,'canonical school name saved');
  check(!Object.hasOwn(rows.get('A').profile.positions[0],'classification'),'classification not stored as personal data or legal confirmation');
  coordinator.reset();
+ // Recovery UI: explicit own-account GET, no premium gate or write path.
+ let reads=0,owner='A',resolveRead;
+ const recovery=()=>mountOwnScheduleRecovery(host,{captureSession:()=>{const captured=owner;return ()=>owner===captured;},isCurrent:()=>true,readOwn:()=>{reads++;return new Promise(resolve=>{resolveRead=resolve;});}});
+ host.hidden=false;let reader=recovery();
+ check(reads===0,'recovery does not auto read');
+ check(host.querySelectorAll('button').length===1&&!host.querySelector('form,input'),'read-only controls');
+ host.querySelector('button').click();resolveRead({revision:1,modules:['M1-2','T0-1']});
+ await until(()=>host.textContent.includes('2 módulos recuperados'));
+ check(host.textContent.includes('Martes · Mañana · Módulo 1'),'recovered own timetable');
+ check(host.textContent.includes('Lunes · Tarde · Prehora'),'module labels');
+ owner='B';reader.refresh();check(!host.firstElementChild,'account change clears read-only data');
+ reader=recovery();host.querySelector('button').click();owner='A';resolveRead({revision:1,modules:['T5-7']});
+ await until(()=>!host.firstElementChild);check(!host.textContent.includes('Domingo'),'late old-account response discarded');
+ reader=recovery();host.querySelector('button').click();resolveRead({revision:0,modules:['M1-1']});
+ await until(()=>host.textContent.includes('No se pudieron recuperar'));
+ check(!host.querySelector('li'),'invalid data rejected');reader.dispose();
+ check(puts===3&&reads===3,'recovery did not write');
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
 }catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}
 await fetch('/__career_result',{method:'POST',body:document.querySelector('#result').textContent});
