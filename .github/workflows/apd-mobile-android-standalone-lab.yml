@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
+      # Only the explicit, credential-free connection probe; no login or remote push.
+      EXPO_PUBLIC_APD_CONNECTION_PROBE: '1'
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       CI: '1'
@@ -95,7 +97,7 @@ jobs:
       - name: Upload expiring standalone LAB APK — no stores, no user installations
         uses: actions/upload-artifact@v4
         with:
-          name: APDocentePBA-Android-Standalone-DEMO-debugkey
+          name: APDocentePBA-Android-Connection-Diagnostic-debugkey
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 7
           if-no-files-found: error
