@@ -2,6 +2,7 @@ name: APD ABC expiry audit (offline only)
 on:
   pull_request:
     paths:
+      - 'scripts/apd-audit-active-compatibility.mjs'
       - 'scripts/test-apd-digest-pg17-concurrency.sh'
       - 'scripts/apd-channel-entitlement-audit-stage.mjs'
       - 'scripts/test-apd-channel-entitlement-audit.mjs'
@@ -28,6 +29,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/test-apd-abc-expiry-audit.mjs scripts/test-apd-email-delivery-audit.mjs scripts/test-apd-channel-query-audit.mjs scripts/test-apd-channel-entitlement-audit.mjs
+      - run: node scripts/apd-audit-active-compatibility.mjs --snapshot-only
   digest-concurrency:
     runs-on: ubuntu-latest
     timeout-minutes: 5
