@@ -2,6 +2,8 @@ name: APD legacy transition courtesy (offline only)
 on:
   pull_request:
     paths:
+      - 'docs/sql/APD_LEGACY_CATALOG_HIDE_CANDIDATE_20261127.sql'
+      - 'docs/sql/APD_LEGACY_CATALOG_EMERGENCY_REVERT_20261127.sql'
       - 'docs/sql/APD_LEGACY_TRANSITION_CANDIDATE_20261127.sql'
       - 'tests/sql/apd_legacy_transition_pg17.sql'
       - 'scripts/apd-commercial-access-core.mjs'
