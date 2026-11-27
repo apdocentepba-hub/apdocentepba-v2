@@ -334,6 +334,19 @@ function renderCanalesUI(plan, subscription) {
 
   const code = planCodeUI(plan, subscription);
 
+  if (["FREE","COMPLETO","TRIAL_14D"].includes(code)) {
+    const full = code !== "FREE";
+    setHTML("panel-canales", `
+      <div class="plan-stack">
+        <div class="plan-pill-row"><span class="plan-pill">📧 Email</span><span class="plan-pill plan-pill-neutral">Incluido</span></div>
+        <p class="plan-note">Alertas por email según tus preferencias activas.</p>
+        <div class="plan-pill-row"><span class="plan-pill">📨 Telegram</span><span class="plan-pill plan-pill-neutral">Incluido en tu plan</span></div>
+        <p class="plan-note">Consulta por Telegram. Verificá la vinculación en Preferencias.</p>
+        <div class="plan-pill-row"><span class="plan-pill">💬 WhatsApp</span><span class="plan-pill plan-pill-neutral">${full ? "Incluido en tu plan" : "Solo Completo"}</span></div>
+        <p class="plan-note">${full ? "Consulta manual escribiendo ALERTAS. Verificá la vinculación en Preferencias." : "Disponible con Completo o su prueba vigente."}</p>
+      </div>`);
+    return;
+  }
   const emailText = "Alertas por email para todos los planes.";
   const telegramText = flags.telegram_coming_soon
     ? "Telegram: próximamente disponible en este plan."
