@@ -2,6 +2,8 @@ name: APD session admin security (offline only)
 on:
   pull_request:
     paths:
+      - 'docs/sql/APD_SESSION_EXPIRY_CANDIDATE_20261127.sql'
+      - 'tests/sql/apd_session_expiry_pg17.sql'
       - 'scripts/apd-session-admin-audit-stage.mjs'
       - 'scripts/test-apd-session-admin-audit.mjs'
       - '.github/workflows/apd-session-admin-audit.yml'
@@ -13,9 +15,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node --test scripts/test-apd-session-admin-audit.mjs
+      - name: Disposable PostgreSQL only
+        env:
+          PGPASSWORD: fixture-only
+        run: psql -h localhost -U postgres -d fixture -X -v ON_ERROR_STOP=1 -f tests/sql/apd_session_expiry_pg17.sql
