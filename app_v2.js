@@ -689,6 +689,25 @@ function adaptarPreferencias(prefRaw) {
     turnos_arr: turnos,
     alertas_activas: !!prefRaw.alertas_activas,
     alertas_email: !!prefRaw.alertas_email,
+    // Preserve explicit server channel decisions through the dashboard adapter.
+    // Missing status is not authorization, and a connected channel is not necessarily enabled.
+    alertas_telegram: prefRaw.alertas_telegram === true,
+    telegram_allowed_by_plan: prefRaw.telegram_allowed_by_plan === true,
+    whatsapp_allowed_by_plan: prefRaw.whatsapp_allowed_by_plan === true,
+    telegram_connected: prefRaw.telegram_connected === true,
+    whatsapp_connected: prefRaw.whatsapp_connected === true,
+    telegram_plan_name: prefRaw.telegram_plan_name || "",
+    telegram_plan_code: prefRaw.telegram_plan_code || "",
+    telegram_bot_link: prefRaw.telegram_bot_link || "",
+    telegram_bot_username: prefRaw.telegram_bot_username || "",
+    telegram_chat_id_masked: prefRaw.telegram_chat_id_masked || "",
+    telegram_username: prefRaw.telegram_username || "",
+    whatsapp_plan_name: prefRaw.whatsapp_plan_name || "",
+    whatsapp_plan_code: prefRaw.whatsapp_plan_code || "",
+    whatsapp_phone_masked: prefRaw.whatsapp_phone_masked || "",
+    whatsapp_connect_hint: prefRaw.whatsapp_connect_hint || "",
+    whatsapp_bot_link: prefRaw.whatsapp_bot_link || "",
+    whatsapp_bot_phone: prefRaw.whatsapp_bot_phone || "",
     alertas_whatsapp: !!prefRaw.alertas_whatsapp
   };
 }
