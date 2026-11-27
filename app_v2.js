@@ -1955,6 +1955,41 @@ async function cargarDashboard() {
   }
 }
 
+// Presentation only: mirror the commercial projection without modifying saved preferences.
+function summarizeDashboardPreferences(pref, planInfo) {
+  const unique = values => {
+    const seen = new Set();
+    return values.filter(value => {
+      if (typeof value !== "string" || !value.trim()) return false;
+      const key = value.trim().toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const arr = value => Array.isArray(value) ? value : [];
+  const districts = unique([pref.distrito_principal, ...arr(pref.otros_distritos_arr)]);
+  const combined = [...arr(pref.cargos_arr), ...arr(pref.materias_arr)];
+  const roles = unique(combined.length ? combined : String(pref.cargos_csv || pref.materias_csv || "").split(","));
+  const code = String(planInfo?.subscription?.plan_code || "").trim().toUpperCase();
+  const planCode = String(planInfo?.plan?.code || "").trim().toUpperCase();
+  const verified = planInfo?.ok === true && planInfo.access_active === true &&
+    String(planInfo.subscription?.source || "").toLowerCase() !== "fallback_frontend" && !!code && code === planCode;
+  const commercial = ["FREE", "TRIAL_14D", "COMPLETO"].includes(code);
+  const maxDistricts = code === "FREE" ? 1 : 5;
+  const maxRoles = code === "FREE" ? 1 : 10;
+  const projected = verified && commercial && Number(planInfo.plan.max_distritos) === maxDistricts &&
+    Number(planInfo.plan.max_cargos) === maxRoles;
+  return {
+    districts: projected ? districts.slice(0, maxDistricts) : districts,
+    roles: projected ? roles.slice(0, maxRoles) : roles,
+    extraDistricts: projected ? Math.max(0, districts.length - maxDistricts) : 0,
+    extraRoles: projected ? Math.max(0, roles.length - maxRoles) : 0,
+    projected,
+    verified
+  };
+}
+
 function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
@@ -1963,16 +1998,9 @@ function renderDashboard(data) {
   const subscription = planInfo.subscription || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
-
-  const cargosLista = [
-    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
-    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
-  ].filter(Boolean);
-
-  const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
+  const summaryPrefs = summarizeDashboardPreferences(pref, planInfo);
+  const distritos = summaryPrefs.districts.join(" / ") || "(sin filtro)";
+  const cargos = summaryPrefs.roles.join(", ") || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
   const planNombre = planNombreHumano(plan, subscription);
@@ -1991,8 +2019,10 @@ function renderDashboard(data) {
   window.APD_renderProfileSchedule?.(planInfo);
 
   setHTML("panel-preferencias-resumen", `
-    <p><strong>Distritos:</strong> ${esc(distritos)}</p>
-    <p><strong>Cargos/Materias:</strong> ${esc(cargos)}</p>
+    <p><strong>${summaryPrefs.projected ? "Distritos activos según plan" : "Distritos guardados"}:</strong> ${esc(distritos)}</p>
+    <p><strong>${summaryPrefs.projected ? "Cargos/Materias activos según plan" : "Cargos/Materias guardados"}:</strong> ${esc(cargos)}</p>
+    ${summaryPrefs.extraDistricts || summaryPrefs.extraRoles ? `<p class="ph">Preferencias adicionales conservadas: ${summaryPrefs.extraDistricts} distrito(s) y ${summaryPrefs.extraRoles} cargo(s)/materia(s). No se incluyen en los límites actuales.</p>` : ""}
+    ${!summaryPrefs.projected && !summaryPrefs.verified ? '<p class="ph">No se pudo verificar qué preferencias están activas. Se muestran únicamente las guardadas.</p>' : ""}
     <p><strong>Nivel:</strong> ${esc(niveles)}</p>
     <p><strong>Turno:</strong> ${esc(turnos)}</p>
     <p><strong>Plan:</strong> ${esc(planNombre)}</p>
