@@ -17,7 +17,7 @@ function refs(readFile){
  return [plan[0].match(/src="([^"]+)"/)[1],comp[0].match(/'\.\/([^']+)'/)[1],ent[0].match(/'\.\/([^']+)'/)[1]];
 }
 const current=refs(n=>read(n));
-assert.deepEqual(current,['plan_checkout_patch.js?v=7','apd_comparador_panel.mjs?v=20261126-commercial1','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
+assert.deepEqual(current,['plan_checkout_patch.js?v=7','apd_comparador_panel.mjs?v=20261127-career3','scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1']);
 console.log('APD_FRONTEND_CACHE_CHAIN_CONTRACT_PASS');
 const baseline=process.argv.includes('--baseline');
 const ref=baseline?'0c9bddd5a4193e487b85c2c824f388683974ed2e':null;

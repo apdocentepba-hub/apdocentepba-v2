@@ -204,7 +204,9 @@ test('permanent favorites enabled after authenticated live QA',()=>{
 
 test('account clients use the secure session bearer rather than the user ID',()=>{
  assert.match(html,/window\.obtenerAuthBearer\(\)/);
- assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,2);
+ assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,3);
+ assert.match(html,/getToken:\(\)=>epoch===careerEpoch&&careerCurrent\(\)\?bearer:null/);
+ assert.match(html,/const getToken=\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&readBearer\(\)===bearer&&planActual\?\.access_active===true\?bearer:null/);
  assert.doesNotMatch(html,/getToken:\(\)=>[^\n]*\?obtenerToken\(\):null/);
 });
 

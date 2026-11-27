@@ -320,9 +320,9 @@ document.addEventListener('DOMContentLoaded',function(){
  const accountScheduleReleaseEnabled=true;
  let accountScheduleClient=null,scheduleLoading=false;
  const accountCareerReleaseEnabled=false;
- let careerClient=null,careerCoordinator=null,careerPending=false,careerEpoch=0;
+ let careerClient=null,careerCoordinator=null,careerAccess=null,careerPending=false,careerEpoch=0;
  const resetCareer=()=>{
-  careerEpoch++;careerPending=false;careerCoordinator?.reset();careerCoordinator=null;careerClient=null;
+  careerEpoch++;careerPending=false;careerCoordinator?.reset();careerCoordinator=null;careerClient=null;careerAccess=null;
   const host=document.getElementById('apd-perfil-carrera');if(host){host.hidden=true;host.replaceChildren();}
  };
  const accountFavoritesReleaseEnabled=true;
@@ -382,13 +382,16 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{diaryLoading=false;});
   }
-  const careerCurrent=()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true;
+  const careerScope=()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true;
+  const careerCurrent=()=>careerScope()&&careerAccess?.(planActual)===true;
   if(accountCareerReleaseEnabled&&!careerClient&&!careerPending){
    const epoch=careerEpoch;careerPending=true;
-   Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261127-career3'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261127-career3')]).then(([{createCareerClient},{createCareerPanelCoordinator}])=>{
+   Promise.all([import('./scripts/apd-career-account-client.mjs?v=20261127-career3'),import('./scripts/apd-career-panel-coordinator.mjs?v=20261127-career3')]).then(([{createCareerClient},{createCareerPanelCoordinator,hasCareerPanelAccess}])=>{
     if(epoch!==careerEpoch)return;
     careerPending=false;
-    if(!careerCurrent()){sync();return;}
+    if(!careerScope()){sync();return;}
+    careerAccess=hasCareerPanelAccess;
+    if(!careerCurrent())return;
     careerClient=createCareerClient({base:API_URL,fetcher:(url,options)=>window.fetch(url,options),getToken:()=>epoch===careerEpoch&&careerCurrent()?bearer:null});
     careerCoordinator=createCareerPanelCoordinator();sync();
    }).catch(()=>{if(epoch===careerEpoch)careerPending=false;});

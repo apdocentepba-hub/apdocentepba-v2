@@ -13,6 +13,8 @@ test('career host unique and gated, other features retained',()=>{
  assert.match(html,/const accountFavoritesReleaseEnabled=true;/);
  assert.match(html,/epoch!==careerEpoch/);
  assert.match(html,/epoch===careerEpoch&&careerCurrent\(\)\?bearer:null/);
+ assert.match(html,/const careerCurrent=\(\)=>careerScope\(\)&&careerAccess\?\.\(planActual\)===true/);
+ assert.match(html,/careerAccess=hasCareerPanelAccess/);
  assert.match(html,/APD_accountScheduleUpdated/);
  assert.match(panel,/window\.dispatchEvent\(new Event\('APD_accountScheduleUpdated'\)\)/);
  let parsed=0;
