@@ -30,3 +30,23 @@ test('unknown or fallback plan never claims selections are active',()=>{
 test('unexpected plan limits do not present a fabricated active projection',()=>{
  const p=snapshot('FREE');p.plan.max_cargos=2;assert.equal(summarize(pref,p).projected,false);
 });
+
+test('channel permission helpers never promote an unverified or denied plan',()=>{
+ for(const [file,fn] of [['telegram_feature_patch.js','safeAllowed'],['telegram_live_refresh_patch.js','allowedByPlan']]){
+  const src=readFileSync(new URL('../'+file,import.meta.url),'utf8');
+  const match=src.match(new RegExp('function '+fn+'\\(status, channel\\) \\{[\\s\\S]*?\\n  \\}'));
+  assert.ok(match,file);
+  const c=vm.createContext({});vm.runInContext(match[0],c);
+  for(const channel of ['telegram','whatsapp']){
+   for(const status of [null,{}, {plan_code:'INSIGNE',allowed_by_plan:false},{plan_code:'COMPLETO'}])assert.equal(c[fn](status,channel),false);
+   assert.equal(c[fn]({plan_code:'FREE',allowed_by_plan:true},channel),true);
+  }
+ }
+});
+test('commercial catalog payload is never rewritten by the legacy Telegram patch',()=>{
+ const src=readFileSync(new URL('../telegram_feature_patch.js',import.meta.url),'utf8');
+ const match=src.match(/function patchPlanesPayload\(data\) \{[\s\S]*?\n  \}/);
+ assert.ok(match);const c=vm.createContext({});vm.runInContext(match[0],c);
+ const catalog={planes:[{code:'COMPLETO',feature_flags:{whatsapp:true}},{code:'FREE',feature_flags:{whatsapp:false}}]};
+ assert.equal(c.patchPlanesPayload(catalog),catalog);
+});
