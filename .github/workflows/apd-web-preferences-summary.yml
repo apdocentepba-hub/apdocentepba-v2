@@ -1,0 +1,22 @@
+name: APD web preference summary regression (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'app_v2.js'
+      - 'scripts/test-apd-web-preferences-summary.mjs'
+      - '.github/workflows/apd-web-preferences-summary.yml'
+  push:
+    branches: ['fix/web-commercial-preferences-summary-20261127']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check app_v2.js
+      - run: node --test scripts/test-apd-web-preferences-summary.mjs scripts/test-apd-commercial-effective-preferences.mjs

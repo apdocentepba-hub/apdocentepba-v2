@@ -27,6 +27,9 @@
   function planDisplayName(raw) {
     const key = planCode(raw);
     if (!key) return 'tu plan';
+    if (key === 'FREE') return 'Gratis';
+    if (key === 'COMPLETO') return 'Completo';
+    if (key === 'TRIAL_14D') return 'Prueba de Completo';
     if (key === 'TRIAL_7D') return 'Prueba 7 días';
     if (key === 'PLUS') return 'Plus';
     if (key === 'PREMIUM' || key === 'PRO') return 'Premium';
@@ -35,11 +38,7 @@
   }
 
   function safeAllowed(status, channel) {
-    const code = planCode(status?.plan_code || status?.plan_name || '');
-    if (code === 'INSIGNE') return true;
-    if (channel === 'telegram') return status?.allowed_by_plan !== false;
-    if (typeof status?.allowed_by_plan === 'boolean') return status.allowed_by_plan;
-    return true;
+    return status?.allowed_by_plan === true;
   }
 
   function normalizePhone(raw) {
@@ -63,21 +62,8 @@
   }
 
   function patchPlanesPayload(data) {
-    const copy = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data;
-    const planes = Array.isArray(copy?.planes) ? copy.planes : [];
-
-    planes.forEach((plan) => {
-      const code = planCode(plan?.code || plan?.display_code || '');
-      const flags = (plan && typeof plan.feature_flags === 'object' && plan.feature_flags) ? plan.feature_flags : {};
-      flags.email = true;
-      flags.telegram = true;
-      flags.telegram_coming_soon = false;
-      flags.whatsapp = code === 'INSIGNE';
-      flags.whatsapp_coming_soon = false;
-      plan.feature_flags = flags;
-    });
-
-    return copy;
+    // Catalog flags are authoritative; do not rewrite commercial entitlements.
+    return data;
   }
 
   function patchWorkerFetchJson() {
@@ -302,7 +288,7 @@
 
     if (!allowedByPlan) {
       setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
-      note.textContent = 'WhatsApp se habilita según el plan activo. En Insigne debe figurar disponible.';
+      note.textContent = 'WhatsApp depende del acceso confirmado por el servidor.';
       actions.innerHTML = botButton;
       mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       return;
@@ -334,7 +320,7 @@
 
   function renderChannelSummary(pref) {
     const tgCode = pref.telegram_plan_code || pref.telegram_plan_name || '';
-    const telegramAllowed = isInsigne(tgCode) || pref.telegram_allowed_by_plan !== false;
+    const telegramAllowed = pref.telegram_allowed_by_plan === true;
     const telegramRequested = !!pref.alertas_telegram;
     const telegramLabel = !telegramAllowed
       ? 'Según plan'
@@ -343,7 +329,7 @@
         : (telegramRequested ? 'Pendiente de conexión' : 'Disponible');
 
     const waCode = pref.whatsapp_plan_code || pref.whatsapp_plan_name || '';
-    const whatsappAllowed = isInsigne(waCode) || pref.whatsapp_allowed_by_plan !== false;
+    const whatsappAllowed = pref.whatsapp_allowed_by_plan === true;
     const whatsappRequested = !!pref.alertas_whatsapp;
     const whatsappLabel = !whatsappAllowed
       ? 'Según plan'
@@ -412,7 +398,7 @@
           pref.telegram_chat_id_masked = tg.chat_id_masked || '';
           pref.telegram_username = tg.username || '';
         } else {
-          pref.telegram_allowed_by_plan = true;
+          pref.telegram_allowed_by_plan = false;
         }
 
         if (wa) {
@@ -448,7 +434,7 @@
 
         lastTelegramStatus = {
           connected: !!pref.telegram_connected,
-          allowed_by_plan: pref.telegram_allowed_by_plan !== false,
+          allowed_by_plan: pref.telegram_allowed_by_plan === true,
           plan_name: pref.telegram_plan_name || '',
           plan_code: pref.telegram_plan_code || '',
           bot_link: pref.telegram_bot_link || '',
@@ -459,7 +445,7 @@
 
         lastWhatsAppStatus = {
           connected: !!pref.whatsapp_connected,
-          allowed_by_plan: pref.whatsapp_allowed_by_plan !== false,
+          allowed_by_plan: pref.whatsapp_allowed_by_plan === true,
           plan_name: pref.whatsapp_plan_name || '',
           plan_code: pref.whatsapp_plan_code || '',
           phone_masked: pref.whatsapp_phone_masked || '',
@@ -484,9 +470,9 @@
     box.addEventListener('change', () => {
       const requested = !!box.checked;
       if (type === 'telegram') {
-        renderTelegramStatus(lastTelegramStatus || { allowed_by_plan: true }, requested);
+        renderTelegramStatus(lastTelegramStatus || { allowed_by_plan: false }, requested);
       } else {
-        renderWhatsAppStatus(lastWhatsAppStatus || { allowed_by_plan: true }, requested);
+        renderWhatsAppStatus(lastWhatsAppStatus || { allowed_by_plan: false }, requested);
       }
     });
     box.dataset.channelsBound = '1';

@@ -12,6 +12,9 @@
   function planDisplayName(raw) {
     const key = planCode(raw);
     if (!key) return 'tu plan';
+    if (key === 'FREE') return 'Gratis';
+    if (key === 'COMPLETO') return 'Completo';
+    if (key === 'TRIAL_14D') return 'Prueba de Completo';
     if (key === 'TRIAL_7D') return 'Prueba 7 días';
     if (key === 'PLUS') return 'Plus';
     if (key === 'PREMIUM' || key === 'PRO') return 'Premium';
@@ -29,11 +32,7 @@
   }
 
   function allowedByPlan(status, channel) {
-    const planText = [status?.plan_code, status?.plan_name, currentPlanText()].join(' ');
-    if (isInsigne(planText)) return true;
-    if (channel === 'telegram') return status?.allowed_by_plan !== false;
-    if (typeof status?.allowed_by_plan === 'boolean') return status.allowed_by_plan;
-    return true;
+    return status?.allowed_by_plan === true;
   }
 
   function setPill(pill, text, bg, color, border) {
@@ -94,29 +93,7 @@
   }
 
   function cleanInicioChannels() {
-    const insigne = isInsigne(currentPlanText());
-    const resumen = byId('panel-preferencias-resumen');
-    const canales = byId('panel-canales');
-
     dedupeSummary();
-
-    if (insigne && resumen) {
-      const current = String(resumen.textContent || '');
-      const tgConnected = /Telegram:\s*(Conectado|Conectado y activo)/i.test(current);
-      const waConnected = /WhatsApp:\s*(Conectado|Conectado y activo)/i.test(current);
-      setSummaryLine('Telegram', tgConnected ? 'Conectado y activo' : 'Incluido en Insigne');
-      setSummaryLine('WhatsApp', waConnected ? 'Conectado y activo' : 'Incluido en Insigne');
-    }
-
-    if (insigne && canales) {
-      canales.querySelectorAll('*').forEach(el => {
-        if (el.children.length) return;
-        const txt = String(el.textContent || '').trim();
-        if (/^(No incluido|Solo disponible en Insigne|En preparación|Según plan)$/i.test(txt)) el.textContent = 'Incluido en Insigne';
-        if (/Telegram aún no disponible|Telegram no está habilitado/i.test(txt)) el.textContent = 'Telegram incluido en tu plan Insigne. Abrí el bot desde Preferencias para conectarlo.';
-        if (/WhatsApp en preparación|WhatsApp no está habilitado|WhatsApp queda reservado/i.test(txt)) el.textContent = 'WhatsApp incluido en tu plan Insigne. Funciona por consulta manual: escribí ALERTAS en el bot.';
-      });
-    }
   }
 
   function renderTelegramCard(status, requested) {
@@ -141,7 +118,7 @@
     if (!allowed) {
       checkbox.checked = false;
       setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
-      note.textContent = `Telegram depende del plan activo. Si tu cuenta es Insigne, recargá el panel.`;
+      note.textContent = `Telegram: acceso no confirmado para tu plan.`;
       actions.innerHTML = '';
       mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       cleanInicioChannels();
@@ -164,7 +141,7 @@
     note.textContent = botUser ? `Abrí el bot @${botUser}, tocá Iniciar y después ya vas a poder recibir alertas en Telegram.` : 'Telegram está disponible. Abrí el bot y tocá Iniciar para vincular el chat.';
     actions.innerHTML = botLink ? `<a class="btn btn-primary" href="${esc(botLink)}" target="_blank" rel="noopener noreferrer">Conectar Telegram</a>` : '';
     mini.textContent = `Incluido en ${planName || 'tu plan'}.`;
-    setSummaryLine('Telegram', 'Incluido en Insigne');
+    setSummaryLine('Telegram', isRequested ? 'Pendiente de conexión' : 'Disponible');
     cleanInicioChannels();
   }
 
@@ -189,7 +166,7 @@
     if (!allowed) {
       checkbox.checked = false;
       setPill(pill, 'Según plan', '#f8fafc', '#475569', '#cbd5e1');
-      note.textContent = 'WhatsApp se habilita según el plan activo. En Insigne debe figurar disponible.';
+      note.textContent = 'WhatsApp: acceso no confirmado para tu plan.';
       actions.innerHTML = botUrl ? `<a class="btn btn-primary" href="${esc(botUrl)}" target="_blank" rel="noopener noreferrer">Abrir bot de WhatsApp</a>` : '';
       mini.textContent = planName ? `Plan detectado: ${planName}` : '';
       cleanInicioChannels();
@@ -212,7 +189,7 @@
     note.textContent = connectHint || 'WhatsApp está incluido en tu plan. Funciona por consulta manual: escribí ALERTAS en el bot.';
     actions.innerHTML = botUrl ? `<a class="btn btn-primary" href="${esc(botUrl)}" target="_blank" rel="noopener noreferrer">Abrir bot de WhatsApp</a>` : '';
     mini.textContent = planName ? `Incluido en ${planName}.` : '';
-    setSummaryLine('WhatsApp', 'Incluido en Insigne');
+    setSummaryLine('WhatsApp', isRequested ? 'Pendiente de conexión' : 'Disponible');
     cleanInicioChannels();
   }
 
@@ -234,11 +211,12 @@
         window.workerFetchJson(`/api/whatsapp/status?user_id=${encodeURIComponent(userId)}`).catch(() => null)
       ]);
 
+      if (String(window.obtenerToken() || '').trim() !== userId) return;
       const tgCheck = byId('pref-alertas-telegram');
       const waCheck = byId('pref-alertas-whatsapp');
 
-      if (tg) renderTelegramCard(tg, tgCheck ? !!tgCheck.checked : !!tg.alerts_requested);
-      if (wa) renderWhatsAppCard(wa, waCheck ? !!waCheck.checked : !!wa.alerts_requested);
+      renderTelegramCard(tg, tg?.alerts_requested === true);
+      renderWhatsAppCard(wa, wa?.alerts_requested === true);
       cleanInicioChannels();
     } catch (err) {
       console.error('APD telegram live refresh error:', err);

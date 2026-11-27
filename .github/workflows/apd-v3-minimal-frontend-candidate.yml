@@ -49,5 +49,12 @@ jobs:
           node --test scripts/test-apd-v3-public-release-readonly.mjs
       - name: Reject changes to Worker, auth source, panel logic or database
         run: |
-          git diff --exit-code origin/main -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql
-          test -z "$(git status --porcelain -- worker-live worker.js app_v2.js auth_session_patch.js supabase sql)"
+          git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js supabase sql
+          # APD-008: permit only the reviewed preference/channel patch, not arbitrary app changes.
+          if ! git diff --quiet origin/main -- app_v2.js; then
+            test "$(git rev-parse origin/main:app_v2.js)" = "1ca9c6c02d7cb784716d2f7f654a292233e3c597"
+            test "$(git rev-parse HEAD:app_v2.js)" = "2374f29f219b72367faf64ca14d9e64503595e06"
+            test "$(git hash-object app_v2.js)" = "2374f29f219b72367faf64ca14d9e64503595e06"
+          fi
+          test -z "$(git status --porcelain -- app_v2.js)"
+          test -z "$(git status --porcelain -- worker-live worker.js auth_session_patch.js supabase sql)"

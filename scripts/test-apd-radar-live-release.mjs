@@ -65,7 +65,17 @@ function assertExistingRadarUnchanged(oldHtml,newHtml){
  const newDirect='<script src="plan_checkout_patch.js?v=7"></script>';
  const directTransition=oldScripts.includes(oldDirect)&&proposed.includes(newDirect);
  if(directTransition)assert.equal(proposed.filter(tag=>tag===newDirect).length,1);
- const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:planTransition&&tag===oldPlan?newPlan:resumeTransition&&tag===oldResume?newResume:directTransition&&tag===oldDirect?newDirect:tag);
+
+ // APD-008: allow only these four exact cache transitions as one reviewed group.
+ const commercialPairs=[["<script src=\"app_v2.js?v=20&rev=20261124-perfil\"></script>","<script src=\"app_v2.js?v=20&rev=20261127-commercialqa\"></script>"],["<script src=\"telegram_feature_patch.js?v=4\"></script>","<script src=\"telegram_feature_patch.js?v=20261127-commercialqa\"></script>"],["<script src=\"telegram_live_refresh_patch.js?v=1\"></script>","<script src=\"telegram_live_refresh_patch.js?v=20261127-commercialqa\"></script>"],["<script src=\"channel_summary_cleanup.js?v=3\"></script>","<script src=\"channel_summary_cleanup.js?v=20261127-commercialqa\"></script>"]];
+ const commercialTransition=commercialPairs.some(([oldTag,newTag])=>oldScripts.includes(oldTag)&&proposed.includes(newTag));
+ if(commercialTransition){
+  for(const [oldTag,newTag] of commercialPairs){
+   assert.equal(oldScripts.filter(t=>t===oldTag).length,1,'commercial baseline changed');
+   assert.equal(proposed.filter(t=>t===newTag).length,1,'commercial cache group incomplete or duplicated');
+  }
+ }
+ const expected=oldScripts.map(tag=>approvedTransition&&tag===oldApp?newApp:accountTransition&&tag===oldAccount?newAccount:tabsTransition&&tag===oldTabs?newTabs:planTransition&&tag===oldPlan?newPlan:resumeTransition&&tag===oldResume?newResume:directTransition&&tag===oldDirect?newDirect:commercialTransition?(commercialPairs.find(([oldTag])=>tag===oldTag)?.[1]||tag):tag);
  assert.deepEqual(proposed.filter(tag=>tag!==added),expected.filter(tag=>tag!==added),
    "A non-radar change must not alter any already loaded script tags/order");
  if(count===1){
@@ -94,8 +104,9 @@ test("radar release transition OR unchanged already-live radar on public redesig
  }
  assert.equal(source.split(NEW).length-1,1,"Exactly one v2 radar script required");
  assert.equal(source.split(OLD).length-1,0,"Legacy radar script must not load");
- assert.ok(source.indexOf("app_v2.js?v=20&rev=20261114-compact1")<
-   source.indexOf(NEW),"Canonical API must load before radar");
+ const appRefs=scriptReferences(source).filter(tag=>/^<script src="app_v2\.js\?v=20&rev=(?:20261102-unverified-plan|20261114-compact1|20261124-perfil|20261127-commercialqa)"><\/script>$/.test(tag));
+ assert.equal(appRefs.length,1,"Exactly one known app runtime");
+ assert.ok(source.indexOf(appRefs[0])<source.indexOf(NEW),"Canonical API must load before radar");
  assert.equal(source.split('id="panel-radar-provincia"').length-1,1);
  assert.equal(source.split('id="btn-refresh-provincia"').length-1,1);
 });
@@ -116,6 +127,11 @@ test("a visual redesign cannot change radar code, script order or radar card",()
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace(/(<script src="plan_checkout_patch\.js[^"]+"><\/script>)/,'$1$1')),
    /script tags\/order|Expected values/);
+  if(source.includes("20261127-commercialqa")){
+   assert.throws(()=>assertExistingRadarUnchanged(prior,source.replace("telegram_feature_patch.js?v=20261127-commercialqa","telegram_feature_patch.js?v=unreviewed")),/commercial cache group|script tags\/order/);
+   assert.throws(()=>assertExistingRadarUnchanged(prior,source.replace("channel_summary_cleanup.js?v=20261127-commercialqa","channel_summary_cleanup.js?v=3")),/commercial cache group|script tags\/order/);
+   assert.throws(()=>assertExistingRadarUnchanged(prior,source.replace(/(<script src="telegram_live_refresh_patch\.js[^"]+"><\/script>)/,"$1$1")),/commercial cache group|script tags\/order/);
+  }
   // A cache bump is permitted only for the exact reviewed revision.
   assert.throws(()=>assertExistingRadarUnchanged(prior,
    source.replace(/panel_tabs_patch\.js\?v=finalvisual[23]/,'panel_tabs_patch.js?v=unreviewed')),
