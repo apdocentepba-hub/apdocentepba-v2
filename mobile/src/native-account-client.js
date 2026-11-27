@@ -66,6 +66,17 @@ function createNativeAccountClient({request,now=Date.now}={}){
    }finally{loginBusy=false;}
   },
   logoutLocal(){reset();},
+  async logoutRemote(){
+   const s=capture();
+   // A generic 401 cannot prove a successful revocation. Keep the session
+   // on ambiguous failures so the user may explicitly retry the idempotent RPC.
+   let response;
+   try{response=await request({path:"/api/account/logout",method:"POST",body:{},bearer:s.token});}
+   catch{throw Error("logout_unconfirmed");}
+   if(s.epoch!==generation)throw Error("session_changed");
+   if(response?.status!==200||response.data?.ok!==true||response.data?.revoked!==true)throw Error("logout_unconfirmed");
+   reset();return {revoked:true};
+  },
   async alerts(){
    const s=capture(),data=await call("/api/mis-alertas",s);
    const timestamp=now();if(!Number.isFinite(timestamp))throw Error("invalid_clock");
