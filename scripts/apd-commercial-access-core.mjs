@@ -24,15 +24,25 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
   if(!Array.isArray(rows)||!Number.isFinite(now))throw Error('Unverified subscription history');
   for(const row of rows)if(!row||!newCodes.has(norm(row.plan_code))&&!legacyCodes.has(norm(row.plan_code)))throw Error('Unknown subscription code');
   const old=legacyChoose(rows.filter(r=>legacyCodes.has(norm(r.plan_code))));
-  const paid=[],trial=[];
+  const paid=[],trial=[],courtesy=[];
   for(const row of rows.filter(r=>['COMPLETO','TRIAL_14D'].includes(norm(r.plan_code)))){
    const status=norm(row.status);
    // Pending checkout never masks the previous valid trial/contract.
    if(!validStatuses.has(status))continue;
    const result=state(row,now);
    if(result.tier==='UNVERIFIED')throw Error('Unverified subscription expiry');
-   if(result.complete)(result.trial?trial:paid).push(row);
+   if(result.complete){
+    if(norm(row.plan_code)==='COMPLETO'&&row.source==='legacy_transition_30d'){
+     const start=Date.parse(row.started_at),end=Date.parse(row.current_period_ends_at);
+     if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)throw Error('Unverified courtesy period');
+     if(start<=now)courtesy.push(row);
+    }else (result.trial?trial:paid).push(row);
+   }
   }
+  // Only the server-created one-time migration grant supersedes finite legacy access.
+  // An indefinite or recurring legacy right is never shortened or replaced here.
+  if(courtesy.length>1)throw Error('Duplicate legacy transition grant');
+  if(courtesy.length===1&&(!old||!legacyActive({subscription:old})||(!old.mercadopago_preapproval_id&&Number.isFinite(Date.parse(old.current_period_ends_at||old.trial_ends_at))&&Date.parse(old.current_period_ends_at||old.trial_ends_at)<=Date.parse(courtesy[0].current_period_ends_at))))return courtesy[0];
   if(old&&legacyActive({subscription:old}))return old;
   // A confirmed paid period takes precedence over a free trial.
   return paid[0]||trial[0]||null;
@@ -71,6 +81,7 @@ export function commercialAccessCore({resolveAccess,offer,legacyChoose,legacyAct
   const planCode=norm(resolved?.plan?.code||code);
   if(planCode!==code)return false;
   if(code==='FREE')return sub.source==='apd_free_verified'&&norm(sub.status)==='ACTIVE'&&!!sub.user_id;
+  if(sub.source==='legacy_transition_30d'&&(!Number.isFinite(Date.parse(sub.started_at))||Date.parse(sub.started_at)>now))return false;
   return state(sub,now).complete===true;
  }
  function completeAccess(resolved,now){
