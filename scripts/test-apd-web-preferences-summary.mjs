@@ -60,3 +60,18 @@ test('dashboard adapter retains verified channel fields without inventing author
  const absent=c.adaptarPreferencias({});assert.equal(absent.telegram_allowed_by_plan,false);assert.equal(absent.whatsapp_allowed_by_plan,false);
  assert.equal(c.adaptarPreferencias({telegram_allowed_by_plan:'true'}).telegram_allowed_by_plan,false);
 });
+
+test('preference save never replaces authoritative plan from a partial response and ignores switched session',async()=>{
+ const a=source.indexOf('async function guardarPreferencias(e)'),b=source.indexOf('function buildPreferenciasPayload()',a);
+ assert.ok(a>=0&&b>a);
+ for(const scenario of ['verified','unverified','switched']){
+  const plan={ok:true,access_active:scenario!=='unverified',subscription:{source:'verified',plan_code:'FREE'},plan:{code:'FREE'}};
+  let user='fixture',bearer='fixture-session',saves=0,reloads=0;const messages=[];
+  const c=vm.createContext({planActual:plan,window:{obtenerSessionToken:()=>bearer},obtenerToken:()=>user,btnLoad:()=>{},btnRestore:()=>{},showMsg:(...v)=>messages.push(v),buildPreferenciasPayload:()=>({}),guardarPreferenciasServidor:async()=>{saves++;if(scenario==='switched')bearer='different';return {plan:{code:'COMPLETO'}};},cargarDashboard:async()=>{reloads++;},console});
+  vm.runInContext(source.slice(a,b),c);
+  await c.guardarPreferencias({preventDefault:()=>{},submitter:{}});
+  assert.equal(c.planActual,plan);
+  assert.equal(saves,scenario==='unverified'?0:1);assert.equal(reloads,scenario==='verified'?1:0);
+  if(scenario==='switched')assert.equal(messages.some(m=>m[2]==='ok'),false);
+ }
+});
