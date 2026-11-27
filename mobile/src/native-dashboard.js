@@ -34,10 +34,33 @@ function createNativeDashboard({client,push=null,requireRemoteLogout=false,now=D
   snapshot,
   login:(email,password)=>run(async valid=>{const account=await client.login(email,password);valid();state.account=account;await load(valid);}),
   refresh:()=>run(load),
-  enablePush:()=>run(async valid=>{if(!push||!client.account())throw Error("push_unavailable");const r=await push.enable({consent:true});valid();state.pushState=r.state;}),
-  disablePush:()=>run(async valid=>{if(!push||!client.account())throw Error("push_unavailable");const r=await push.disable();valid();state.pushState=r.state;}),
+  refreshPushStatus:()=>run(async valid=>{
+   if(!push||!client.account())throw Error("push_unavailable");
+   state.pushState="unknown";
+   const r=await push.status();valid();
+   if(!["registered","not_registered"].includes(r.state))throw Error("push_status_unknown");
+   state.pushState=r.state;
+  }),
+  enablePush:()=>run(async valid=>{
+   if(!push||!client.account())throw Error("push_unavailable");
+   // A lost acknowledgement might mean the previous write succeeded.
+   // Always reconcile with the server before repeating registration.
+   state.pushState="unknown";
+   const current=await push.status();valid();
+   if(current.state==="registered"){state.pushState="registered";return;}
+   if(current.state!=="not_registered")throw Error("push_status_unknown");
+   const r=await push.enable({consent:true});valid();state.pushState=r.state;
+  }),
+  disablePush:()=>run(async valid=>{
+   if(!push||!client.account())throw Error("push_unavailable");
+   state.pushState="unknown";
+   const r=await push.disable();valid();
+   if(r.state!=="revoked")throw Error("revocation_unconfirmed");
+   state.pushState="revoked";
+  }),
   logout:()=>run(async valid=>{
    if(push&&client.account()){
+    state.pushState="unknown";
     const current=await push.status();valid();
     if(current.state==="registered"){const result=await push.disable();valid();if(result.state!=="revoked")throw Error("revocation_unconfirmed");}
     else if(current.state!=="not_registered")throw Error("push_status_unknown");
