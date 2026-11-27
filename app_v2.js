@@ -2223,7 +2223,11 @@ async function guardarPreferencias(e) {
   }
   // Un plan no confirmado no puede determinar qué campos se pueden guardar.
   // Evita truncar preferencias existentes o presumir cuotas de pago.
-  if (planActual?.ok !== true || planActual?.access_active !== true || planActual?.subscription?.source === "fallback_frontend") {
+  if (planActual?.subscription?.source === "fallback_frontend") {
+    showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
+    return;
+  }
+  if (planActual?.ok !== true || planActual?.access_active !== true) {
     showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
     return;
   }
