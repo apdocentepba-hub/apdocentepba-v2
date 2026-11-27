@@ -33,7 +33,8 @@ async function hasAccountCareerAccessV1(env,id){
  if(['COMPLETO','TRIAL_14D'].includes(code)){
   const sub=p.subscription;
   const end=code==='TRIAL_14D'?sub.trial_ends_at:sub.current_period_ends_at;
-  return sub.user_id===id&&String(sub.source||'').toUpperCase()!=='FALLBACK_FRONTEND'&&planCode===code&&typeof end==='string'&&Number.isFinite(Date.parse(end))&&Date.parse(end)>Date.now();
+  const start=Date.parse(sub.started_at),expiry=Date.parse(end),now=Date.now();
+  return sub.user_id===id&&String(sub.source||'').toUpperCase()!=='FALLBACK_FRONTEND'&&planCode===code&&typeof sub.started_at==='string'&&typeof end==='string'&&Number.isFinite(start)&&Number.isFinite(expiry)&&start<=now&&now<expiry;
  }
  const legacy=['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'];
  return legacy.includes(code)&&(!planCode||legacy.includes(planCode));
