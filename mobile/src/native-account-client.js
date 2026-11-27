@@ -21,6 +21,9 @@ function abcClosingTime(raw){
  return wall.getTime()+3*3600000;
 }
 function normalizeAlerts(data,now){
+ // The pinned live Worker returns items:[] for expired subscription, not resultados.
+ // Never interpret an unexpected non-empty items array as active offers.
+ if(data?.ok===true&&data.resultados===undefined&&Array.isArray(data.items)&&data.items.length===0&&typeof data.message==="string"&&data.message.startsWith("Tu plan está vencido.")&&Object.hasOwn(data,"plan")&&Object.hasOwn(data,"subscription"))return {items:[],excluded:0,accessRestricted:true};
  if(!Array.isArray(data?.resultados)||data.resultados.length>10000)throw Error("alerts_unverified");
  const items=[],keys=new Set();let excluded=0;
  for(const row of data.resultados){
