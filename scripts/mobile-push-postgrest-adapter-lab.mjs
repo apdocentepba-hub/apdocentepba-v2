@@ -435,6 +435,12 @@ export function createMobilePushPostgrestAdapterLab({
    if(typeof value!=='boolean')throw Error('invalid_dispatch_consumption_response');
    return value;
   },
+  async revokeSession({token}={}){
+   if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))throw Error('invalid_session_reference');
+   const value=await request('rpc/apd_mobile_logout_session_lab',{method:'POST',body:{p_token:token}});
+   if(typeof value!=='boolean')throw Error('invalid_revocation_response');
+   return value;
+  },
   async prepareDispatch({eventKey,leaseId}={}){
    validIds(eventKey,leaseId);
    const ticket=await request('rpc/apd_mobile_prepare_dispatch',{
