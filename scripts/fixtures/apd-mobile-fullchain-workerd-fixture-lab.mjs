@@ -163,7 +163,7 @@ export default {
          target.searchParams.get('order')!=='created_at.desc'||
          target.searchParams.get('limit')!=='6'||
          target.searchParams.get('select')!==
-           'id,user_id,plan_code,status,created_at,trial_ends_at,current_period_ends_at')
+           'id,user_id,plan_code,status,created_at,started_at,trial_ends_at,current_period_ends_at')
        throw Error('unscoped_subscription_lookup');
       const trial=mode==='plan-trial-valid'||mode==='plan-trial-expired';
       const subscription={
