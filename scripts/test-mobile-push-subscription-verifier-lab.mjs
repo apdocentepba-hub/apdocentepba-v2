@@ -39,7 +39,7 @@ function fixture({account={user_id:USER,active:true},
   async readCatalogPlan({planCode}){
    calls.catalog++;
    if(throwCatalog)throw Error('SECRET_CATALOG_NETWORK_FAILURE');
-   assert.ok(['PLUS','PREMIUM','INSIGNE','TRIAL_7D'].includes(planCode));
+   assert.ok(['PLUS','PREMIUM','INSIGNE','TRIAL_7D','COMPLETO','TRIAL_14D'].includes(planCode));
    return catalog?.code===planCode?catalog:null;
   }
  };
@@ -175,7 +175,7 @@ test('PostgREST private subscription reads expose only narrow projections and ke
    assert.equal(u.searchParams.get('order'),'created_at.desc');
    assert.equal(u.searchParams.get('limit'),'6');
    assert.equal(u.searchParams.get('select'),
-    'id,user_id,plan_code,status,created_at,trial_ends_at,current_period_ends_at');
+    'id,user_id,plan_code,status,created_at,started_at,trial_ends_at,current_period_ends_at');
    return reply([{...candidate(),payer_email:'PRIVATE_EMAIL'}]);
   }
   if(u.pathname.endsWith('/subscription_plans')){
@@ -208,4 +208,19 @@ test('malformed and unbounded PostgREST subscription result is not trusted',asyn
   await assert.rejects(()=>db.readSubscriptionCandidates({userId:USER}),
    /postgrest_subscription_set_ambiguous|postgrest_invalid_subscription/);
  }
+});
+
+test('current paid and trial codes with approved status and verified start/end',async()=>{
+ for(const code of ['COMPLETO','TRIAL_14D']){
+  const row={...candidate(),plan_code:code,status:'APPROVED',started_at:ISO(NOW-3600000),trial_ends_at:code==='TRIAL_14D'?ISO(NOW+3600000):null,current_period_ends_at:code==='COMPLETO'?ISO(NOW+3600000):null};
+  const catalog={code,is_active:true};
+  assert.equal((await fixture({subscriptions:[row],catalog}).verifier.verify({userId:USER})).access_active,true);
+  for(const bad of [{...row,started_at:ISO(NOW+1000)},{...row,started_at:null},{...row,status:'PENDING'},{...row,status:'CANCELLED'},{...row,trial_ends_at:ISO(NOW-1),current_period_ends_at:ISO(NOW-1)}]){
+   assert.equal((await fixture({subscriptions:[bad],catalog}).verifier.verify({userId:USER})).access_active,false);
+  }
+ }
+});
+test('free plan is not silently authorized for mobile push',async()=>{
+ const f=fixture({subscriptions:[{...candidate(),plan_code:'FREE'}]});
+ assert.equal((await f.verifier.verify({userId:USER})).access_active,false);
 });
