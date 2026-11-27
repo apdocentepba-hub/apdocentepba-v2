@@ -34,3 +34,11 @@ test("snapshot filters expired offers and dispose rejects a late response",async
  const g=setup({hold:true});const pending=g.d.login("fixture","fixture");while(!g.hasRelease())await new Promise(r=>setImmediate(r));
  g.d.dispose();g.release();await assert.rejects(pending,/operation_unconfirmed/);assert.equal(g.d.snapshot().account,null);assert.deepEqual(g.d.snapshot().offers,[]);
 });
+
+test("mounted offline account fixture uses complete controller with simulated notification state",async()=>{
+ const {dashboard,loginDemo}=createOfflineDashboard();await loginDemo();
+ assert.equal((await dashboard.refreshPushStatus()).pushState,"not_registered");
+ assert.equal((await dashboard.enablePush()).pushState,"registered");
+ assert.equal((await dashboard.disablePush()).pushState,"revoked");
+ await dashboard.enablePush();assert.equal((await dashboard.logout()).account,null);
+});
