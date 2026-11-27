@@ -9,8 +9,8 @@ const legacyActive=r=>r.subscription?.status==='ACTIVE'&&r.subscription?.source=
 const legacyChoose=rows=>rows.find(r=>legacyActive({subscription:r}));
 const core=commercialAccessCore({resolveAccess:resolveCommercialAccess,offer:APD_OFFER,legacyChoose,legacyActive,normalizePlan:p=>p,normalizeSub:r=>r,legacyFallback:c=>({code:c})});
 const catalog=['FREE','TRIAL_14D','COMPLETO'].map(c=>core.preset(c));
-const trial={user_id:user.id,plan_code:'TRIAL_14D',status:'ACTIVE',trial_ends_at:'2026-12-09T19:00:00Z'};
-const paid={user_id:user.id,plan_code:'COMPLETO',status:'ACTIVE',current_period_ends_at:'2026-12-25T19:00:00Z'};
+const trial={user_id:user.id,plan_code:'TRIAL_14D',status:'ACTIVE',started_at:'2026-11-25T18:00:00Z',trial_ends_at:'2026-12-09T19:00:00Z'};
+const paid={user_id:user.id,plan_code:'COMPLETO',status:'ACTIVE',started_at:'2026-11-25T18:00:00Z',current_period_ends_at:'2026-12-25T19:00:00Z'};
 const legacy={user_id:user.id,plan_code:'INSIGNE',status:'ACTIVE',source:'legacy_valid'};
 const resolve=(rows,over={})=>core.resolve({catalog,rows,account:user,now,...over});
 test('inactive staged catalog delegates, partial activation fails closed',()=>{assert.equal(resolve([],{catalog:catalog.map(p=>({...p,is_active:false}))}).delegateLegacy,true);assert.throws(()=>resolve([],{catalog:catalog.slice(1)}));assert.throws(()=>resolve([],{catalog:catalog.map((p,i)=>({...p,is_active:i!==0}))}));});
@@ -49,4 +49,19 @@ test('courtesy transitions finite legacy rights without rewriting history',()=>{
  assert.throws(()=>resolve([grant,grant]));
  const laterPaid={...paid,started_at:new Date(now-1000).toISOString(),current_period_ends_at:new Date(now+90*86400000).toISOString(),source:'mercadopago_checkout'};
  assert.equal(resolve([grant,laterPaid]).subscription.source,'mercadopago_checkout');
+});
+
+test('scheduled paid renewal cannot mask current trial or paid period, starts at exact boundary',()=>{
+ const future={...paid,started_at:new Date(now+1000).toISOString(),current_period_ends_at:new Date(now+60*86400000).toISOString(),source:'mercadopago_checkout'};
+ assert.equal(resolve([future]).subscription.plan_code,'FREE');
+ assert.equal(resolve([future,trial]).subscription.plan_code,'TRIAL_14D');
+ assert.equal(resolve([future,paid]).subscription.started_at,paid.started_at);
+ assert.equal(core.completeAccess({plan:{code:'COMPLETO'},subscription:future},now),false);
+ assert.equal(resolve([paid,future],{now:now+1000}).subscription.started_at,future.started_at);
+ const longer={...paid,current_period_ends_at:new Date(now+50*86400000).toISOString()};
+ assert.equal(resolve([paid,longer]).subscription.current_period_ends_at,longer.current_period_ends_at);
+ assert.equal(resolve([longer,paid]).subscription.current_period_ends_at,longer.current_period_ends_at);
+ for(const bad of [null,'bad',paid.current_period_ends_at]){
+  const row={...paid,started_at:bad};assert.throws(()=>resolve([row]));assert.equal(core.isActive({plan:{code:'COMPLETO'},subscription:row},now),false);
+ }
 });
