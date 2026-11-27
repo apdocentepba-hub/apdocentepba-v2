@@ -1,0 +1,21 @@
+name: APD session admin security (offline only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-session-admin-audit-stage.mjs'
+      - 'scripts/test-apd-session-admin-audit.mjs'
+      - '.github/workflows/apd-session-admin-audit.yml'
+  push:
+    branches: ['fix/apd-session-admin-audit-20261127']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-session-admin-audit.mjs
