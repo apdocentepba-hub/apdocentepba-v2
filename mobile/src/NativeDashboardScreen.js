@@ -40,7 +40,12 @@ export default function NativeDashboardScreen(){
     <Text style={s.help}>Cierre de ejemplo: {o.cierre}</Text>
    </View>)}
    {!busy&&!offers.length?<Text style={s.help}>No hay ofertas de ejemplo verificables para esta búsqueda.</Text>:null}
-   <View style={s.info}><Text style={s.strong}>Notificaciones push</Text><Text style={s.help}>Pendiente de conexión con el proveedor real. No se registran dispositivos desde esta simulación.</Text></View>
+   <View style={s.info}><Text style={s.strong}>Notificaciones push · simulación</Text>
+    <Text style={s.help}>Estado de prueba: {({unknown:"Sin confirmar",registered:"Activadas (simulado)",not_registered:"Desactivadas (simulado)",revoked:"Revocadas (simulado)",permission_denied:"Permiso denegado"})[view.pushState]||"Sin confirmar"}. No registra dispositivos reales ni pide permisos.</Text>
+    <Action label="Consultar estado de prueba" secondary disabled={busy} onPress={()=>run(harness.dashboard.refreshPushStatus)}/>
+    <Action label="Activar alertas de prueba" disabled={busy||view.pushState==="registered"} onPress={()=>run(harness.dashboard.enablePush)}/>
+    <Action label="Desactivar alertas de prueba" secondary disabled={busy||view.pushState==="revoked"||view.pushState==="not_registered"} onPress={()=>run(harness.dashboard.disablePush)}/>
+   </View>
    <Action label="Cerrar sesión de prueba" secondary disabled={busy} onPress={()=>{setQuery("");run(harness.dashboard.logout);}}/>
   </>}
  </View>;
