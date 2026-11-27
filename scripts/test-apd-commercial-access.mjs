@@ -34,3 +34,19 @@ test('access and trial stage compose in dependency order without duplicate-stage
  verifyTrialCandidateSyntax(b.candidate);
  assert.throws(()=>stageCommercialAccess(b.candidate));
 });
+
+test('courtesy transitions finite legacy rights without rewriting history',()=>{
+ const grant={...paid,source:'legacy_transition_30d',started_at:new Date(now).toISOString(),current_period_ends_at:new Date(now+60*86400000).toISOString()};
+ const finite={...legacy,current_period_ends_at:new Date(now+30*86400000).toISOString()};
+ const before=JSON.stringify([finite,grant]);
+ assert.equal(resolve([finite,grant]).subscription.source,'legacy_transition_30d');
+ assert.equal(core.completeAccess(resolve([finite,grant]),now),true);
+ assert.equal(JSON.stringify([finite,grant]),before);
+ assert.equal(resolve([legacy,grant]).subscription.plan_code,'INSIGNE');
+ assert.equal(resolve([{...finite,mercadopago_preapproval_id:'fixture'},grant]).subscription.plan_code,'INSIGNE');
+ assert.equal(resolve([grant],{now:Date.parse(grant.current_period_ends_at)}).subscription.plan_code,'FREE');
+ assert.equal(resolve([{...grant,started_at:new Date(now+1000).toISOString()}]).subscription.plan_code,'FREE');
+ assert.throws(()=>resolve([grant,grant]));
+ const laterPaid={...paid,started_at:new Date(now-1000).toISOString(),current_period_ends_at:new Date(now+90*86400000).toISOString(),source:'mercadopago_checkout'};
+ assert.equal(resolve([grant,laterPaid]).subscription.source,'mercadopago_checkout');
+});
