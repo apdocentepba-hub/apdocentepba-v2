@@ -2223,11 +2223,13 @@ async function guardarPreferencias(e) {
   }
   // Un plan no confirmado no puede determinar qué campos se pueden guardar.
   // Evita truncar preferencias existentes o presumir cuotas de pago.
-  if (planActual?.subscription?.source === "fallback_frontend") {
+  if (planActual?.ok !== true || planActual?.access_active !== true || planActual?.subscription?.source === "fallback_frontend") {
     showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
     return;
   }
 
+  const bearer = typeof window.obtenerSessionToken === "function" ? window.obtenerSessionToken() : null;
+  const current = () => obtenerToken() === token && (typeof window.obtenerSessionToken !== "function" || window.obtenerSessionToken() === bearer);
   const btn = e.submitter || document.querySelector("#form-preferencias button[type='submit']");
   btnLoad(btn, "Guardando...");
   showMsg("preferencias-msg", "Guardando preferencias...", "info");
@@ -2236,17 +2238,13 @@ async function guardarPreferencias(e) {
 
   try {
     const data = await guardarPreferenciasServidor(token, payload);
-    if (data?.plan || data?.subscription) {
-      planActual = {
-        ok: true,
-        plan: data.plan || planActual.plan,
-        subscription: data.subscription || planActual.subscription
-      };
-      renderPlanUI(planActual);
-    }
+    if (!current()) return;
+    // Save response is not the authoritative /api/mi-plan snapshot.
+    // Never replace verified access_active with a partial response.
     showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");
     await cargarDashboard();
   } catch (err) {
+    if (!current()) return;
     console.error("ERROR GUARDANDO PREFERENCIAS:", err);
     showMsg("preferencias-msg", err?.message || "Error guardando preferencias", "error");
   } finally {
