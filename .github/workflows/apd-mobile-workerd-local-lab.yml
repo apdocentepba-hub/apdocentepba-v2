@@ -1,0 +1,95 @@
+name: APD mobile workerd native runtime contract (local only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/mobile-push-worker-webcrypto-lab.mjs'
+      - 'scripts/mobile-push-authorize-only-worker-lab.mjs'
+      - 'scripts/mobile-push-provider-response-replay-lab.mjs'
+      - 'scripts/mobile-push-expo-receipt-journal-lab.mjs'
+      - 'scripts/mobile-push-expo-expiry-reconciler-lab.mjs'
+      - 'scripts/mobile-push-expo-retention-lab.mjs'
+      - 'scripts/test-mobile-push-expo-retention-lab.mjs'
+      - 'scripts/test-mobile-push-expo-expiry-reconciler-lab.mjs'
+      - 'scripts/test-mobile-push-expo-receipt-journal-lab.mjs'
+      - 'scripts/test-mobile-push-provider-response-replay-lab.mjs'
+      - 'scripts/mobile-push-server-repository-lab.mjs'
+      - 'scripts/mobile-inbox-event-log-lab.mjs'
+      - 'scripts/mobile-inbox-sync-endpoint-lab.mjs'
+      - 'scripts/mobile-inbox-postgrest-repository-lab.mjs'
+      - 'scripts/test-mobile-inbox-postgrest-repository-lab.mjs'
+      - 'scripts/test-mobile-inbox-sync-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs'
+      - 'scripts/mobile-push-postgrest-adapter-lab.mjs'
+      - 'scripts/mobile-push-subscription-verifier-lab.mjs'
+      - 'scripts/test-mobile-push-subscription-verifier-lab.mjs'
+      - 'scripts/mobile-push-abc-current-offer-lab.mjs'
+      - 'scripts/apd-mobile-worker-matcher-readonly-lab.mjs'
+      - 'scripts/build-apd-mobile-matcher-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-worker-matcher-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-actual-matcher-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-fullchain-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-fullchain-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-abc-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-postgrest-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-repository-runtime-lab.mjs'
+      - 'scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs'
+      - 'scripts/test-mobile-workerd-runtime-lab.mjs'
+      - '.github/workflows/apd-mobile-workerd-local-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workerd-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned stable local workerd simulator only
+        run: npm install --no-save --no-audit --no-fund --package-lock=false miniflare@4.20260730.0
+      - name: Run Cloudflare workerd HMAC and scheduled-job fixtures (no bindings)
+        env:
+          CI: '1'
+        run: |
+          node --check scripts/mobile-push-worker-webcrypto-lab.mjs
+          node --check scripts/mobile-push-authorize-only-worker-lab.mjs
+          node --check scripts/mobile-push-provider-response-replay-lab.mjs
+          node --check scripts/mobile-push-expo-receipt-journal-lab.mjs
+          node --check scripts/mobile-push-expo-expiry-reconciler-lab.mjs
+          node --check scripts/mobile-push-expo-retention-lab.mjs
+          node --check scripts/fixtures/apd-mobile-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-runtime-lab.mjs
+          node --check scripts/mobile-push-server-repository-lab.mjs
+          node --check scripts/fixtures/apd-mobile-repository-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-repository-runtime-lab.mjs
+          node --check scripts/mobile-push-postgrest-adapter-lab.mjs
+          node --check scripts/mobile-push-subscription-verifier-lab.mjs
+          node --check scripts/fixtures/apd-mobile-postgrest-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-postgrest-runtime-lab.mjs
+          node --check scripts/mobile-push-abc-current-offer-lab.mjs
+          node --check scripts/fixtures/apd-mobile-abc-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-abc-runtime-lab.mjs
+          node --check scripts/apd-mobile-worker-matcher-readonly-lab.mjs
+          node --check scripts/build-apd-mobile-matcher-runtime-lab.mjs
+          node scripts/build-apd-mobile-matcher-runtime-lab.mjs
+          node --check scripts/fixtures/generated-apd-matcher-lab.mjs
+          node --test scripts/test-mobile-workerd-actual-matcher-runtime-lab.mjs
+          node --check scripts/fixtures/apd-mobile-fullchain-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-fullchain-runtime-lab.mjs
+          node --check scripts/mobile-inbox-event-log-lab.mjs
+          node --check scripts/mobile-inbox-sync-endpoint-lab.mjs
+          node --check scripts/mobile-inbox-postgrest-repository-lab.mjs
+          node --check scripts/fixtures/apd-mobile-inbox-sync-workerd-fixture-lab.mjs
+          node --test scripts/test-mobile-workerd-inbox-sync-runtime-lab.mjs
+      - name: Ensure no application or Worker production files changed
+        run: |
+          git diff --exit-code origin/main -- worker.js index.html app_v2.js auth_session_patch.js safe_dashboard_ui_patch.js

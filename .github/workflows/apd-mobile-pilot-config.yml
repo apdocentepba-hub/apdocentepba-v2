@@ -1,0 +1,27 @@
+name: APD push pilot config checks (no provider calls)
+on:
+  pull_request:
+    paths:
+      - 'mobile-pilot/**'
+      - 'scripts/mobile-firebase-pilot-preflight.mjs'
+      - '.github/workflows/apd-mobile-pilot-config.yml'
+permissions:
+  contents: read
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check exact project and package; no credential values
+        run: |
+          node scripts/mobile-firebase-pilot-preflight.mjs --self-test
+          node --check mobile-pilot/app.config.js
+          node --test mobile-pilot/config.test.cjs
+          git check-ignore mobile-pilot/google-services.json mobile-pilot/fixture-firebase-adminsdk-key.json
+          test ! -f mobile-pilot/google-services.json
