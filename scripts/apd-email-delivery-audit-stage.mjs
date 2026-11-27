@@ -21,7 +21,7 @@ export function storedAbcOfferOpen(item,now=Date.now(),check=abcOfferDeadlineAud
  return states.length>0&&states.every(s=>s==='PUBLICADA')&&deadlines.length>0&&deadlines.every(d=>check({estado:'PUBLICADA',finoferta:d},now));
 }
 export function digestReservationConfirmed(key,reservation){
- return typeof key==='string'&&!!key.trim()&&reservation?.ok===true&&reservation?.reserved===true&&reservation?.duplicate===false&&reservation?.dedupe_key===key&&typeof reservation?.id==='string'&&!!reservation.id.trim();
+ return typeof key==='string'&&!!key.trim()&&reservation?.ok===true&&reservation?.reserved===true&&reservation?.duplicate===false&&reservation?.dedupe_key===key&&(Number.isSafeInteger(reservation?.id)&&reservation.id>0||typeof reservation?.id==='string'&&/^[1-9]\d{0,18}$/.test(reservation.id)&&BigInt(reservation.id)<=9223372036854775807n);
 }
 export function stageEmailDeliveryAudit(source){
  const first=stageAbcExpiryAudit(source);
