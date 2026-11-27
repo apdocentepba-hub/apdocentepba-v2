@@ -8,6 +8,7 @@ import React, {useEffect, useMemo, useState} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import NativeDashboardScreen from "./src/NativeDashboardScreen.js";
+import NativeConnectionProbe from "./src/NativeConnectionProbe.js";
 import {
  View, Text, TextInput, Pressable, ScrollView, StyleSheet,
  StatusBar, Platform, Linking
@@ -373,6 +374,7 @@ export default function App(){
      <>
       <OfficialWebAccess note={webAccessNote} openOfficialWeb={openOfficialWeb}/>
       <NativeDashboardScreen/>
+      {process.env.EXPO_PUBLIC_APD_CONNECTION_PROBE==="1"?<NativeConnectionProbe/>:null}
       <SectionHeading title="Cuenta y notificaciones"
        sub="La autenticación segura y los avisos reales todavía no están activados."/>
       <View style={styles.statusCard}>
