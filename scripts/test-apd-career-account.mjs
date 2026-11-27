@@ -193,3 +193,14 @@ test('switch during write confirmation prevents readback under another account',
  assert.equal(reads,1);assert.equal(client.peek(),null);
  assert.ok(calls.every(([url,,auth])=>url==='https://fixture.invalid/api/account/career'&&auth==='Bearer A'));
 });
+
+test('career revocation during body processing denies persistence while own read remains available',async()=>{
+ for(const mode of ['session','plan']){
+  const {deps,rows,call}=fixture();
+  let auth=0,rights=0;
+  deps.authenticate=async()=>mode==='session'&&++auth>1?null:{id:'A'};
+  deps.entitled=async()=>mode==='plan'?++rights===1:true;
+  const r=await call('PUT','BearerA',{profile,revision:0});
+  assert.equal(r.status,mode==='session'?401:403);assert.equal(rows.size,0);
+ }
+});
