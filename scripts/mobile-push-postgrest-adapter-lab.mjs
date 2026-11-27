@@ -253,7 +253,7 @@ export function createMobilePushPostgrestAdapterLab({
   async readSubscriptionCandidates({userId}={}){
    if(!UUID.test(userId||''))throw Error('invalid_subscription_reference');
    const rows=await request('user_subscriptions',{query:{
-    select:'id,user_id,plan_code,status,created_at,trial_ends_at,current_period_ends_at',
+    select:'id,user_id,plan_code,status,created_at,started_at,trial_ends_at,current_period_ends_at',
     user_id:'eq.'+userId,order:'created_at.desc',limit:6
    }});
    if(!Array.isArray(rows)||rows.length>=6)
@@ -266,21 +266,21 @@ export function createMobilePushPostgrestAdapterLab({
        typeof row.status!=='string'||row.status.length<1||
        row.status.length>40||typeof row.created_at!=='string'||
        row.created_at.length>60||
-       ![row.trial_ends_at,row.current_period_ends_at]
+       ![row.started_at??null,row.trial_ends_at,row.current_period_ends_at]
         .every(v=>v===null||typeof v==='string'&&v.length<=60))
      throw Error('postgrest_invalid_subscription');
     uuids.add(row.id);
     return Object.freeze({
      id:row.id,user_id:userId,
      plan_code:row.plan_code,status:row.status,
-     created_at:row.created_at,trial_ends_at:row.trial_ends_at,
+     created_at:row.created_at,started_at:row.started_at??null,trial_ends_at:row.trial_ends_at,
      current_period_ends_at:row.current_period_ends_at
     });
    }));
   },
   async readCatalogPlan({planCode}={}){
    if(typeof planCode!=='string'||
-      !['TRIAL_7D','PLUS','PREMIUM','INSIGNE'].includes(planCode))
+      !['TRIAL_7D','PLUS','PREMIUM','INSIGNE','COMPLETO','TRIAL_14D'].includes(planCode))
     throw Error('invalid_catalog_plan_reference');
    const rows=await request('subscription_plans',{query:{
     select:'code,is_active',code:'eq.'+planCode,limit:2
