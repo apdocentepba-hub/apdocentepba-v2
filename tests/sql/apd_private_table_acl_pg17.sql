@@ -17,6 +17,7 @@ INSERT INTO public.subscription_plans VALUES(1);
 ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
 CREATE POLICY public_catalog ON public.subscription_plans FOR SELECT TO anon, authenticated USING(true);
 GRANT SELECT ON public.subscription_plans TO anon, authenticated;
+CREATE TEMP TABLE before_acl AS SELECT c.relname,a.grantee,a.grantor,a.privilege_type,a.is_grantable FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='public' AND c.relname IN ('alert_history','alert_notifications','mercadopago_checkout_sessions','mercadopago_webhook_events','sessions','user_identity_profile','webpush_subscriptions');
 \ir ../../docs/sql/APD_PRIVATE_TABLE_ACL_CANDIDATE_20261127.sql
 DO $verify$
 DECLARE t text; n integer;
@@ -47,3 +48,14 @@ DO $backend$ BEGIN IF (SELECT count(*) FROM public.sessions WHERE value='verifie
 DELETE FROM public.sessions WHERE id=2;
 RESET ROLE;
 SELECT 'APD_PRIVATE_TABLE_ACL_PG17_PASS' AS result;
+
+\ir ../../docs/sql/APD_PRIVATE_TABLE_ACL_EMERGENCY_REVERT_20261127.sql
+DO $compare$
+BEGIN
+ IF EXISTS(SELECT * FROM before_acl EXCEPT SELECT c.relname,a.grantee,a.grantor,a.privilege_type,a.is_grantable FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='public' AND c.relname IN (SELECT relname FROM before_acl))
+ OR EXISTS(SELECT c.relname,a.grantee,a.grantor,a.privilege_type,a.is_grantable FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='public' AND c.relname IN (SELECT relname FROM before_acl) EXCEPT SELECT * FROM before_acl)
+ THEN RAISE EXCEPTION 'ACL roundtrip mismatch'; END IF;
+END $compare$;
+SELECT 'APD_PRIVATE_ACL_EMERGENCY_REVERT_PG17_PASS' AS result;
+-- Finish the fixture hardened, not in insecure restored state.
+\ir ../../docs/sql/APD_PRIVATE_TABLE_ACL_CANDIDATE_20261127.sql
