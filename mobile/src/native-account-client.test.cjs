@@ -36,3 +36,10 @@ test("ABC closing time uses Argentina wall clock, excludes invalid and date-only
  assert.equal(abcClosingTime("26/11/2026, 18:00"),Date.parse("2026-11-26T21:00:00Z"));
  for(const x of ["2026-02-30T18:00:00Z","2026-11-26","9999-12-31T00:00:00Z","not a date"])assert.equal(abcClosingTime(x),null);
 });
+
+test("expired plan exact live response is distinct from malformed offers",()=>{
+ const {normalizeAlerts}=require("./native-account-client.js");
+ const restricted={ok:true,items:[],message:"Tu plan está vencido. Activá una suscripción para volver a ver alertas.",plan:null,subscription:null};
+ assert.deepEqual(normalizeAlerts(restricted,NOW),{items:[],excluded:0,accessRestricted:true});
+ for(const bad of [{...restricted,items:[{}]},{...restricted,message:"unknown"},{...restricted,subscription:undefined,resultados:null}])assert.throws(()=>normalizeAlerts(bad,NOW),/alerts_unverified/);
+});
