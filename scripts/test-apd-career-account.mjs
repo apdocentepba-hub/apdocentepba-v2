@@ -174,3 +174,22 @@ test('career Worker and UI agree for verified new plans, reject expired and cont
  const free={plan:{code:'FREE'},subscription:{plan_code:'FREE',status:'ACTIVE'}};
  for(const [p,expected] of [[legacy,true],[free,false]])assert.equal(await careerVm(fragment+'\n hasAccountCareerAccessV1({}, "A")',{resolverPlanUsuario:async()=>p,isPlanActivo:()=>true,Date}),expected);
 });
+
+test('career API rejects ambiguous or insecure base before transmitting credentials',()=>{
+ for(const base of ['http://fixture.invalid','https://user:pass@fixture.invalid','https://fixture.invalid/path','https://fixture.invalid?x=1','https://fixture.invalid/#fragment']){
+  assert.throws(()=>createCareerClient({base,getToken:()=> 'secret-fixture',fetcher:()=>{throw Error('unexpected network');}}),/API inválida/);
+ }
+});
+test('switch during write confirmation prevents readback under another account',async()=>{
+ let token='A',reads=0;const calls=[];
+ const client=createCareerClient({base:'https://fixture.invalid/',getToken:()=>token,fetcher:async(url,opts)=>{
+  calls.push([url,opts.method,opts.headers.Authorization]);
+  if(opts.method==='GET'){reads++;return new Response(JSON.stringify({ok:true,career:{profile:null,revision:0}}));}
+  const response={ok:true,json:async()=>{token='B';return {ok:true,career:{profile,revision:1}};}};
+  return response;
+ }});
+ await client.reload();
+ await assert.rejects(client.persist(profile),/sesión cambió/);
+ assert.equal(reads,1);assert.equal(client.peek(),null);
+ assert.ok(calls.every(([url,,auth])=>url==='https://fixture.invalid/api/account/career'&&auth==='Bearer A'));
+});
