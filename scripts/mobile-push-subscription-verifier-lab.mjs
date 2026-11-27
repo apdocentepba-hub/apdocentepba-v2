@@ -15,7 +15,9 @@ import {parseWorkerPushInstant}
  from './mobile-push-worker-webcrypto-lab.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const PLAN=new Set(['TRIAL_7D','PLUS','PREMIUM','INSIGNE']);
+const PLAN=new Set(['TRIAL_7D','PLUS','PREMIUM','INSIGNE','COMPLETO','TRIAL_14D']);
+const NEW_PLAN=new Set(['COMPLETO','TRIAL_14D']);
+const COMMERCIAL_STATUS=new Set(['ACTIVE','AUTHORIZED','APPROVED']);
 const STATUS_PAID=new Set(['ACTIVE','AUTHORIZED']);
 const STATUS_TRIAL=new Set(['ACTIVE','TRIALING']);
 function canonicalCode(value){
@@ -67,9 +69,16 @@ export function createMobilePushSubscriptionVerifierLab({
    const status=typeof latest.status==='string'?
     latest.status.trim().toUpperCase():'';
    if(!PLAN.has(code))return inactive(userId,Number(now()));
-   const allowed=(code==='TRIAL_7D'?STATUS_TRIAL:STATUS_PAID);
+   // The current commercial policy explicitly recognizes ACTIVE/AUTHORIZED/APPROVED.
+   // FREE has no verified mobile-push entitlement yet: never grant it by inference.
+   const allowed=NEW_PLAN.has(code)?COMMERCIAL_STATUS:(code==='TRIAL_7D'?STATUS_TRIAL:STATUS_PAID);
    if(!allowed.has(status))return inactive(userId,Number(now()));
-   const close=validStamp(code==='TRIAL_7D'?
+   // Purchased extensions can start in the future. Do not authorize early.
+   if(NEW_PLAN.has(code)){
+    const begin=validStamp(latest.started_at);
+    if(begin===null||begin>Number(now()))return inactive(userId,Number(now()));
+   }
+   const close=validStamp(['TRIAL_7D','TRIAL_14D'].includes(code)?
     latest.trial_ends_at:latest.current_period_ends_at);
    // Explicit finite expiry is mandatory even when the legacy site might
    // treat ACTIVE paid subscriptions lacking a period-end as indefinite.
