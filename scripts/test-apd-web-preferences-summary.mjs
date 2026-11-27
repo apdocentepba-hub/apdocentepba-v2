@@ -50,3 +50,13 @@ test('commercial catalog payload is never rewritten by the legacy Telegram patch
  const catalog={planes:[{code:'COMPLETO',feature_flags:{whatsapp:true}},{code:'FREE',feature_flags:{whatsapp:false}}]};
  assert.equal(c.patchPlanesPayload(catalog),catalog);
 });
+
+test('dashboard adapter retains verified channel fields without inventing authorization',()=>{
+ const a=source.indexOf('function adaptarPreferencias(prefRaw)'),b=source.indexOf('function setPanelLoading',a);
+ assert.ok(a>=0&&b>a);const c=vm.createContext({formatNivelesResumen:()=>''});vm.runInContext(source.slice(a,b),c);
+ const out=c.adaptarPreferencias({cargos:['MAT'],alertas_telegram:true,telegram_allowed_by_plan:true,telegram_connected:true,whatsapp_allowed_by_plan:false,whatsapp_connected:true,whatsapp_plan_code:'FREE',telegram_plan_code:'FREE'});
+ assert.equal(out.alertas_telegram,true);assert.equal(out.telegram_allowed_by_plan,true);assert.equal(out.whatsapp_allowed_by_plan,false);
+ assert.equal(out.whatsapp_connected,true);assert.equal(out.whatsapp_plan_code,'FREE');
+ const absent=c.adaptarPreferencias({});assert.equal(absent.telegram_allowed_by_plan,false);assert.equal(absent.whatsapp_allowed_by_plan,false);
+ assert.equal(c.adaptarPreferencias({telegram_allowed_by_plan:'true'}).telegram_allowed_by_plan,false);
+});
