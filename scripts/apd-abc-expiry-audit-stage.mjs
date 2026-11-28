@@ -31,7 +31,8 @@ export function abcOfferDeadlineAudit(offer,now=Date.now()){
 export function stageAbcExpiryAudit(source){
  const names=['ofertaVigente','ofertaEsVisibleParaAlerta'];
  // The observed 28/11 active source differs from the historical snapshot.
- // Preserve its existing predicate, do not replace it blindly. Only admit these exact byte identities.
+ // Only admit these exact observed byte identities for the alternative predicate shape.
+ // The previous conjunctive patch failed four contract cases: use the reviewed raw-ABC predicate as a replacement, not a second conflicting deadline check.
  const activeGuard=['a8591683e867542d504c2e91243b036b3b0c886f9bb361fc23c1dd79ebf22c85','7cbdc0824d8d798a4890f7debefaf80162ac345f9e86ec16b6ee96338707ac17'].includes(createHash('sha256').update(source).digest('hex'));
  assert.ok(!source.includes('apdAbcOfferDeadlineAuditV1'),'Already staged');
  const parts=names.map(name=>{
@@ -42,7 +43,8 @@ export function stageAbcExpiryAudit(source){
   const old=source.slice(from,to);assert.ok(old.endsWith('\n}'),name);
   if(activeGuard){
    assert.ok(old.length<4000,'Unexpected active predicate length');
-   return {old,next:anchor+'\n  if (!apdAbcOfferDeadlineAuditV1(oferta,Date.now())) return false;'+old.slice(anchor.length)};
+   assert.ok(!/\b(?:fetch|await|eval|require|supabaseSelect|supabaseInsert|supabaseUpdate|env)\b/.test(old),'Unexpected side-effect dependency in active predicate');
+   return {old,next:anchor+'\n  return apdAbcOfferDeadlineAuditV1(oferta,Date.now());\n}'};
   }
   assert.match(old,/ANULADA/);
   return {old,next:anchor+'\n  return apdAbcOfferDeadlineAuditV1(oferta,Date.now());\n}'};
