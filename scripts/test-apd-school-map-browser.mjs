@@ -7,6 +7,7 @@ import {existsSync,mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {once} from 'node:events';
 
 const chromeCmd=['google-chrome','google-chrome-stable','chromium','chromium-browser']
  .find(c=>spawnSync('which',[c],{stdio:'ignore'}).status===0);
@@ -60,15 +61,34 @@ const chrome=spawn(chromeCmd,['--headless=new','--no-sandbox','--disable-gpu',
  '--remote-debugging-port=0','--user-data-dir='+root+'/profile','about:blank'],
  {stdio:['ignore','ignore','pipe']});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Drain stderr to avoid backpressure; keep bounded diagnostics on startup failure.
+let stderr='',spawnError=null;
+chrome.stderr.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-2500);});
+chrome.on('error',err=>{spawnError=err;});
+const closed=once(chrome,'close').catch(()=>[]);
 let socket,seq=0;const pending=new Map();
-async function port(){
- for(let n=0;n<120;n++){
-  const p=path.join(root,'profile','DevToolsActivePort');
-  if(existsSync(p))return Number(readFileSync(p,'utf8').split('\n')[0]);
-  if(chrome.exitCode!==null)throw Error('Chrome exited');
-  await sleep(100);
+async function debuggerTarget(){
+ const deadline=Date.now()+45000;
+ while(Date.now()<deadline){
+  if(spawnError||chrome.exitCode!==null||chrome.signalCode!==null)throw Error('Chrome exited during startup: '+(spawnError?.code||chrome.exitCode||chrome.signalCode)+' '+stderr);
+  const file=path.join(root,'profile','DevToolsActivePort');
+  if(existsSync(file)){
+   // Chrome can create the port file before the first write or endpoint is ready.
+   try{
+    const p=Number(readFileSync(file,'utf8').split('\n')[0]);
+    if(Number.isInteger(p)&&p>0&&p<=65535){
+     const response=await fetch('http://127.0.0.1:'+p+'/json/list',{signal:AbortSignal.timeout(1000),redirect:'error'});
+     if(response.ok){
+      const tabs=await response.json();
+      const target=Array.isArray(tabs)?tabs.find(x=>x.type==='page'&&typeof x.webSocketDebuggerUrl==='string'):null;
+      if(target){const url=new URL(target.webSocketDebuggerUrl);if(url.protocol==='ws:'&&url.hostname==='127.0.0.1'&&Number(url.port)===p)return url.href;}
+     }
+    }
+   }catch{/* Retry only debugger readiness, never failed map assertions. */}
+  }
+  await sleep(150);
  }
- throw Error('Chrome debug port unavailable');
+ throw Error('Chrome debug endpoint unavailable after 45s: '+stderr);
 }
 function cdp(method,params={}){
  const id=++seq;
@@ -108,9 +128,7 @@ async function shot(name){
 }
 const results=[];
 try{
- const p=await port();
- const tabs=await(await fetch('http://127.0.0.1:'+p+'/json/list')).json();
- socket=new WebSocket(tabs.find(x=>x.type==='page').webSocketDebuggerUrl);
+ socket=new WebSocket(await debuggerTarget());
  socket.addEventListener('message',ev=>{
   const msg=JSON.parse(ev.data);
   if(!msg.id)return;
@@ -120,8 +138,9 @@ try{
   msg.error?state.reject(Error(JSON.stringify(msg.error))):state.resolve(msg.result||{});
  });
  await new Promise((resolve,reject)=>{
-  socket.addEventListener('open',resolve,{once:true});
-  socket.addEventListener('error',reject,{once:true});
+  const timer=setTimeout(()=>reject(Error('CDP websocket startup timed out')),10000);
+  socket.addEventListener('open',()=>{clearTimeout(timer);resolve();},{once:true});
+  socket.addEventListener('error',()=>{clearTimeout(timer);reject(Error('CDP websocket startup failed'));},{once:true});
  });
  await cdp('Page.enable');await cdp('Runtime.enable');
  for(const width of [390,1280]){
@@ -182,5 +201,7 @@ try{
  for(const state of pending.values()){clearTimeout(state.timeout);state.reject(Error('closing Chrome'));}
  pending.clear();
  socket?.close();chrome.kill('SIGTERM');
- await sleep(200);rmSync(root,{recursive:true,force:true});
+ await Promise.race([closed,sleep(2000)]);
+ if(chrome.exitCode===null&&chrome.signalCode===null){chrome.kill('SIGKILL');await closed;}
+ rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:200});
 }
