@@ -8,13 +8,13 @@ permissions:
   contents: read
 jobs:
   observation:
-    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '3a73753df0f6bc9efe7c5360996c4c040fed6758'
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '2a59443cf1ba441960bc1edf70b210c702e94992'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 87f2cd0fbc158144e2c11af19cacb55a21a255ec
+          ref: 58954fdd4da4d50e4a005a70dc5fa1cbdd66f668
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -22,7 +22,7 @@ jobs:
       - name: Pin reviewed code and private temporary directory
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 87f2cd0fbc158144e2c11af19cacb55a21a255ec
+          test "$(git rev-parse HEAD)" = 58954fdd4da4d50e4a005a70dc5fa1cbdd66f668
           umask 077
           mkdir -m 700 "$RUNNER_TEMP/apd-live-observation"
       - name: Observe active Worker using existing credential (GET only)
@@ -86,11 +86,12 @@ jobs:
           import {readFileSync} from 'node:fs';
           import {join} from 'node:path';
           import {randomBytes,createHash} from 'node:crypto';
+          import vm from 'node:vm';
           import {verifyTemporaryRecovery,verifyRouteInventory} from './scripts/apd-worker-active-preflight.mjs';
           import {encryptModule,decryptModule} from './scripts/apd-worker-private-backup.mjs';
           import {stageSessionAdminAudit} from './scripts/apd-session-admin-audit-stage.mjs';
           import {stageChannelEntitlementAudit} from './scripts/apd-channel-entitlement-audit-stage.mjs';
-          import {stageAbcExpiryAudit} from './scripts/apd-abc-expiry-audit-stage.mjs';
+          import {stageAbcExpiryAudit,abcOfferDeadlineAudit} from './scripts/apd-abc-expiry-audit-stage.mjs';
           import {stageEmailDeliveryAudit} from './scripts/apd-email-delivery-audit-stage.mjs';
           import {stageChannelQueryAudit} from './scripts/apd-channel-query-audit-stage.mjs';
           import {stageScheduleEntitlementAudit} from './scripts/apd-schedule-entitlement-audit-stage.mjs';
@@ -135,10 +136,57 @@ jobs:
               try{const r=stage(source);verifyTrialCandidateSyntax(r.candidate);probes[key]=true;}catch{probes[key]=false;}
             }
             console.log('APD_AUTHORIZED_FOCAL_COMPATIBILITY '+JSON.stringify({version:report.version,sha256:report.sha256,counts,probes,sourceExported:false,remoteWrites:0}));
+            // Run only narrowly extracted pure expiry predicates in a credential-free VM.
+            const fn=(s,name)=>{
+              const hits=[...s.matchAll(new RegExp('^function '+name+'\\([^\\n]*\\) \\{','gm'))];
+              if(hits.length!==1)return null;
+              const at=hits[0].index,end=s.indexOf('\n__name('+name+',',at);
+              if(end<=at||end-at>16000||!s.slice(at,end).endsWith('\n}'))return null;
+              return s.slice(at,end);
+            };
+            const expiryCases=[
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00Z'},true],
+              [{estado:'Publicada',finoferta:'2026-11-27T13:30:00Z'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27T13:30:00.001Z'},true],
+              [{estado:'Publicada',finoferta:'27/11/2026 14:00'},true],
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00+00:00'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00-03:00'},true],
+              [{estado:'Publicada',finoferta:'invalid'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27'},false],
+              [{estado:'Cerrada',finoferta:'2026-11-27T14:00:00Z'},false],
+              [{estado:'Publicada',estado_actual:'Cerrada',finoferta:'2026-11-27T14:00:00Z'},false]
+            ];
+            const expiryContract=(s,staged)=>{
+              const allowed=['norm','norm2','parseFechaFlexible','parseFechaFlexible2','estadoOfertaEsPublicada','ofertaVigente','ofertaEsVisibleParaAlerta'];
+              const parts=allowed.map(n=>fn(s,n)).filter(Boolean);
+              if(!fn(s,'ofertaVigente')||!fn(s,'ofertaEsVisibleParaAlerta'))return {passed:0,total:20,available:false};
+              // No host functions or data objects cross the VM boundary.
+              const ctx=vm.createContext(Object.create(null),{codeGeneration:{strings:false,wasm:false}});
+              const prefix=staged?abcOfferDeadlineAudit.toString().replace('function abcOfferDeadlineAudit(','function apdAbcOfferDeadlineAuditV1('):'';
+              try{
+                vm.runInContext('Date.now=()=>Date.parse("2026-11-27T16:30:00Z");\n'+prefix+'\n'+parts.join('\n'),ctx,{timeout:1000});
+                let passed=0;
+                for(const name of ['ofertaVigente','ofertaEsVisibleParaAlerta'])for(const [row,expected] of expiryCases){
+                  try{if(vm.runInContext(name+'('+JSON.stringify(row)+')',ctx,{timeout:100})===expected)passed++;}catch{}
+                }
+                return {passed,total:20,available:true};
+              }catch{return {passed:0,total:20,available:false};}
+            };
+            let stagedExpiry={passed:0,total:20,available:false};
+            try{const exp=stageAbcExpiryAudit(source);verifyTrialCandidateSyntax(exp.candidate);stagedExpiry=expiryContract(exp.candidate,true);}catch{}
+            console.log('APD_AUTHORIZED_EXPIRY_CONTRACT '+JSON.stringify({original:expiryContract(source,false),candidate:stagedExpiry,sourceExported:false,remoteWrites:0}));
+            // Independently compose the two compatible stages without claiming full release.
+            try{
+              const first=stageSessionAdminAudit(source);
+              const career=buildCareerWorkerCandidate(first.candidate);
+              verifyTrialCandidateSyntax(career.candidate);
+              console.log('APD_AUTHORIZED_PARTIAL_TWO_STAGES_PASS '+JSON.stringify({stages:2,total:4,sha256:sha(career.candidate),approvedForDeploy:false,sourceExported:false,remoteWrites:0}));
+            }catch{console.log('APD_AUTHORIZED_PARTIAL_TWO_STAGES_BLOCKED');}
             let candidate=source;
             const stages=[['session_admin',stageSessionAdminAudit],['expiry_email_channels',stageChannelEntitlementAudit],['schedule_entitlement',stageScheduleEntitlementAudit],['career_routes',buildCareerWorkerCandidate]];
             for(const [name,stage] of stages){
               phase=name;
+              if(name==='expiry_email_channels'&&stagedExpiry.passed!==stagedExpiry.total)throw Error('Expiry behavior not verified');
               const r=stage(candidate);
               if(r.unrelatedBytesPreserved!==true||r.deployable!==false||r.candidate===candidate)throw Error('Stage contract');
               verifyTrialCandidateSyntax(r.candidate);
