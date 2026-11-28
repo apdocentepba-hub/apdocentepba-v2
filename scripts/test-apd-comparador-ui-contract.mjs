@@ -12,7 +12,7 @@ test('comparator remains inside the existing authenticated alert card',()=>{
  assert.match(html,/id="apd-comparador-panel"[^>]*hidden/);
  assert.match(html,/apd_comparador_panel\.css/);
  assert.doesNotMatch(html,/<script type="module" src="apd_comparador_panel\.mjs/);
- assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-favorite-sync1|20261124-optimizer1|20261124-calendar1|20261124-schedulefix1|20261124-filterux1|20261124-career1|20261124-diary2|20261124-tools1|20261124-tools2|20261126-commercial1)'\)/);
+ assert.match(html,/import\('\.\/apd_comparador_panel\.mjs\?v=(?:20261109-(?:decision1|mi-jornada1|mi-jornada2|mi-jornada3|mi-jornada4|mi-jornada5)|20261110-home[1234]|20261111-workgeo1|20261111-qa2|20261112-dothour1|20261112-account-home1|20261112-georef-safe1|20261112-schoolref1|20261112-mobility1|20261112-mobility2|20261113-auto1|20261114-signals1|20261124-jornada|20261124-grilla|20261124-modulos|20261124-simulator1|20261124-economics1|20261124-favorites1|20261124-recommend1|20261124-history1|20261124-vacancy1|20261124-account-sync1|20261124-favorite-sync1|20261124-optimizer1|20261124-calendar1|20261124-schedulefix1|20261124-filterux1|20261124-career1|20261124-diary2|20261124-tools1|20261124-tools2|20261126-commercial1|20261127-career3|20261128-schedule1)'\)/);
  assert.match(html,/new MutationObserver\(sync\)/);
  assert.match(html,/observer\.observe\(panel,\{childList:true,subtree:false\}\)/);
 });
@@ -162,10 +162,10 @@ test('filtro horario conserva solo ofertas verificables que encajan con toda la 
 });
 
 test('la grilla semanal se monta en Mi cuenta aunque no haya ofertas',()=>{
-  assert.match(html,/<div class="panel-card span-4"><div class="card-lbl">[^<]*Mi cuenta<\/div><div id="panel-datos-docente">[\s\S]*?<\/div><div id="apd-perfil-horarios"><\/div><\/div>/);
+  assert.match(html,/<div class="panel-card span-4"><div class="card-lbl">[^<]*Mi cuenta<\/div><div id="panel-datos-docente">[\s\S]*?<\/div><div id="apd-perfil-horarios"><\/div><div id="apd-perfil-horarios-recuperacion" hidden><\/div><\/div>/);
   assert.equal((html.match(/id="apd-perfil-horarios"/g)||[]).length,1);
   assert.doesNotMatch(app,/<div id="apd-perfil-horarios"/);
-  assert.match(html,/app_v2\.js\?v=20&rev=20261124-perfil/);
+  assert.match(html,/app_v2\.js\?v=20&rev=20261127-commercialqa"/);
  assert.match(app,/APD_renderProfileSchedule\?\.\(planInfo\)/);
  assert.match(html,/offers\.length\|\|document\.getElementById\('apd-perfil-horarios'\)/);
  assert.match(ui,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*profileScheduleClient=null;\s*host\.replaceChildren/);
@@ -204,7 +204,9 @@ test('permanent favorites enabled after authenticated live QA',()=>{
 
 test('account clients use the secure session bearer rather than the user ID',()=>{
  assert.match(html,/window\.obtenerAuthBearer\(\)/);
- assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,2);
+ assert.equal((html.match(/getToken:\(\)=>[^\n]*\?bearer:null/g)||[]).length,3);
+ assert.match(html,/getToken:\(\)=>epoch===careerEpoch&&careerCurrent\(\)\?bearer:null/);
+ assert.match(html,/const getToken=\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&readBearer\(\)===bearer&&planActual\?\.access_active===true\?bearer:null/);
  assert.doesNotMatch(html,/getToken:\(\)=>[^\n]*\?obtenerToken\(\):null/);
 });
 

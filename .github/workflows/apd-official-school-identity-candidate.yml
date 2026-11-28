@@ -32,4 +32,10 @@ jobs:
       - name: Guard protected files and delivery channels
         run: |
           git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js supabase sql
-          git diff --exit-code origin/main -- app_v2.js
+          # APD-008: permit only the reviewed preference/channel patch, not arbitrary app changes.
+          if ! git diff --quiet origin/main -- app_v2.js; then
+            test "$(git rev-parse origin/main:app_v2.js)" = "1ca9c6c02d7cb784716d2f7f654a292233e3c597"
+            test "$(git rev-parse HEAD:app_v2.js)" = "2374f29f219b72367faf64ca14d9e64503595e06"
+            test "$(git hash-object app_v2.js)" = "2374f29f219b72367faf64ca14d9e64503595e06"
+          fi
+          test -z "$(git status --porcelain -- app_v2.js)"

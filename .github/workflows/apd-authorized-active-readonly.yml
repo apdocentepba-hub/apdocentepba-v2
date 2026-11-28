@@ -1,0 +1,266 @@
+name: APD authorized active Worker inspection (GET only)
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-authorized-active-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  observation:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '6b5b7dab577f3487f509917fc4e33c56f70650da'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_full_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2429d6e6527d3b89d57ddcfce78e25a028d40543
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin reviewed code and private temporary directory
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 2429d6e6527d3b89d57ddcfce78e25a028d40543
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/apd-live-observation"
+      - name: Observe active Worker using existing credential (GET only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {createHash} from 'node:crypto';
+          import {activeVersion,inspectVersion,inspectCrons} from './scripts/apd-commercial-live-preflight.mjs';
+          const worker='ancient-wildflower-cd37';
+          const dir=join(process.env.RUNNER_TEMP,'apd-live-observation');
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          let phase='credential',http=null,gets=0;
+          try{
+            const token=process.env.CLOUDFLARE_API_TOKEN;
+            if(!token)throw Error('Credential absent');
+            const get=async endpoint=>{
+              const r=await fetch('https://api.cloudflare.com/client/v4'+endpoint,{method:'GET',redirect:'error',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(20000)});
+              gets++;http=r.status;
+              if(!r.ok)throw Error('GET denied');
+              const j=await r.json();if(j.success!==true)throw Error('API denied');return j.result;
+            };
+            phase='account';
+            const accounts=await get('/accounts?per_page=50');
+            const id=process.env.CLOUDFLARE_ACCOUNT_ID||(Array.isArray(accounts)&&accounts.length===1?accounts[0].id:'');
+            if(!id||!Array.isArray(accounts)||!accounts.some(a=>a.id===id))throw Error('Account not verified');
+            const root='/accounts/'+encodeURIComponent(id)+'/workers/';
+            const deployment=root+'scripts/'+worker+'/deployments',schedule=root+'scripts/'+worker+'/schedules';
+            phase='active_version';
+            const version=activeVersion(await get(deployment));
+            phase='module';
+            const details=await get(root+'workers/'+worker+'/versions/'+encodeURIComponent(version)+'?include=modules');
+            const manifest=JSON.parse(readFileSync('worker-live/manifest.json','utf8'));
+            if(manifest.worker_name!==worker)throw Error('Worker mismatch');
+            const info=inspectVersion(details,version,manifest);
+            const bytes=Buffer.from(details.modules[0].content_base64,'base64');
+            if(!Buffer.from(bytes.toString('utf8'),'utf8').equals(bytes)||sha(bytes)!==info.sha256)throw Error('Encoding mismatch');
+            phase='schedules';
+            const crons=inspectCrons(await get(schedule));
+            phase='stable_observation';
+            if(activeVersion(await get(deployment))!==version||JSON.stringify(inspectCrons(await get(schedule)))!==JSON.stringify(crons))throw Error('Active version or schedule drift');
+            const report={version,sha256:info.sha256,bytes:info.bytes,bindings:info.binding_count,cronCount:crons.length,canonicalMatch:info.canonical_match,gets,remoteWrites:0,sourceExported:false,approvedForDeploy:false};
+            writeFileSync(join(dir,'source.mjs'),bytes,{mode:0o600,flag:'wx'});
+            writeFileSync(join(dir,'observation.json'),JSON.stringify(report),{mode:0o600,flag:'wx'});
+            console.log('APD_AUTHORIZED_ACTIVE_READ_PASS '+JSON.stringify(report));
+          }catch{
+            console.error('APD_AUTHORIZED_ACTIVE_READ_BLOCKED '+JSON.stringify({phase,http,gets,remoteWrites:0,sourceExported:false}));
+            process.exitCode=1;
+          }
+          NODE
+      - name: Set up isolated PostgreSQL and PostgREST for full-module integration
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: apd_commercial_full_qa
+          PGUSER: postgres
+          PGPASSWORD: fixture_only
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-payment-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DELETE FROM public.mercadopago_checkout_sessions; INSERT INTO public.users(id) VALUES('00000000-0000-4000-8000-000000000005');"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-full-pg-fixture.sql
+          docker run -d --rm --name apd-commercial-postgrest --network host \
+            -e PGRST_DB_URI=postgres://postgres:fixture_only@127.0.0.1:5432/apd_commercial_full_qa \
+            -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=service_role \
+            -e PGRST_SERVER_HOST=127.0.0.1 -e PGRST_SERVER_PORT=3300 \
+            -e PGRST_DB_CHANNEL_ENABLED=false postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
+      - name: Restore and compose in isolation without Cloudflare credentials
+        run: |
+          set -euo pipefail
+          umask 077
+          node --experimental-vm-modules --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {randomBytes,createHash} from 'node:crypto';
+          import vm from 'node:vm';
+          import {verifyCommercialFullModule} from './scripts/apd-commercial-full-module-qa.mjs';
+          import {createCommercialPgQa} from './scripts/apd-commercial-pg-qa.mjs';
+          import {verifyTemporaryRecovery,verifyRouteInventory} from './scripts/apd-worker-active-preflight.mjs';
+          import {encryptModule,decryptModule} from './scripts/apd-worker-private-backup.mjs';
+          import {stageSessionAdminAudit} from './scripts/apd-session-admin-audit-stage.mjs';
+          import {stageChannelEntitlementAudit} from './scripts/apd-channel-entitlement-audit-stage.mjs';
+          import {stageAbcExpiryAudit,abcOfferDeadlineAudit} from './scripts/apd-abc-expiry-audit-stage.mjs';
+          import {stageEmailDeliveryAudit} from './scripts/apd-email-delivery-audit-stage.mjs';
+          import {stageChannelQueryAudit} from './scripts/apd-channel-query-audit-stage.mjs';
+          import {stageScheduleEntitlementAudit} from './scripts/apd-schedule-entitlement-audit-stage.mjs';
+          import {buildCareerWorkerCandidate} from './scripts/build-apd-career-worker-candidate.mjs';
+          import {composeWorkerSnapshot} from './scripts/apd-worker-composition.mjs';
+          import {verifyTrialCandidateSyntax} from './scripts/apd-commercial-stage-trial.mjs';
+          const dir=join(process.env.RUNNER_TEMP,'apd-live-observation');
+          const report=JSON.parse(readFileSync(join(dir,'observation.json'),'utf8'));
+          const bytes=readFileSync(join(dir,'source.mjs'));
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          let phase='temporary_restore';
+          try{
+            if(sha(bytes)!==report.sha256)throw Error('Capture drift');
+            const restored=verifyTemporaryRecovery(bytes,report.sha256);
+            const key=randomBytes(32).toString('hex');
+            const encrypted=encryptModule(bytes,{version:report.version,sha256:report.sha256},key);
+            if(!decryptModule(encrypted,key).equals(bytes))throw Error('Encrypted restoration mismatch');
+            console.log('APD_AUTHORIZED_ACTIVE_RESTORE_PASS '+JSON.stringify({...restored,encryptedRoundtrip:true,persistentModuleBackup:false,databaseBackedUp:false}));
+            const source=bytes.toString('utf8');
+            // Only counts and booleans for reviewed anchors; no live code or errors exported.
+            const anchors=[
+              ['expiry_vigente','function ofertaVigente(oferta) {'],['expiry_visible','function ofertaEsVisibleParaAlerta(oferta) {'],
+              ['email_stored','const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);'],
+              ['email_count','if (!shownCount) {'],['email_reservation','    let reservation = null;\n    if (digestDedupeKey) {'],
+              ['email_ok','if (!reservation?.ok) {'],['email_send','    let send = null;\n    try {\n      send = await enviarMailBrevo('],
+              ['wa_identity','return candidates.find((row) => {\n    const variants = whatsappTestDestinations(row?.celular || "");\n    return variants.includes(digits) || variants.includes(whatsappAllowedListVariant(digits));\n  }) || null;'],
+              ['tg_stored','alerts = await loadTelegramStoredAlerts(env, user.id, safeLimit);'],
+              ['tg_live','alerts = await loadTelegramLiveAlertsWithTimeout(env, user.id, 12e3);'],
+              ['tg_reply','const reply = buildTelegramQueryDigest(visibleAlertsForRender);'],
+              ['wa_stored','const storedAlerts = await waLoadStoredAlerts(env, user.id, 50);'],
+              ['wa_visible','if (!visibleAlertsForRender.length) {'],
+              ['wa_loop','for (let i = 0; i < visibleAlertsForRender.length; i++) {'],
+              ['wa_success','if (sendResult?.ok !== false) {'],
+              ['wa_legacy_copy','WhatsApp queda reservado para el plan Insigne.'],
+              ['wa_legacy_gate','allowed: !!(flags?.whatsapp || planCode === "INSIGNE"),'],
+              ['schedule_legacy_gate',"return isPlanActivo(resolved)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(resolved?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(resolved?.subscription?.status||'').toUpperCase());"],
+              ['commercial_core','apdCommercialCoreV1'],['commercial_access','apdCommercialAccessV1']
+            ];
+            const counts=Object.fromEntries(anchors.map(([key,anchor])=>[key,source.split(anchor).length-1]));
+            const probes={};
+            for(const [key,stage] of [['abc_expiry',stageAbcExpiryAudit],['email_delivery',stageEmailDeliveryAudit],['channel_query',stageChannelQueryAudit],['channel_entitlement',stageChannelEntitlementAudit],['schedule',stageScheduleEntitlementAudit],['career',buildCareerWorkerCandidate]]){
+              try{const r=stage(source);verifyTrialCandidateSyntax(r.candidate);probes[key]=true;}catch{probes[key]=false;}
+            }
+            console.log('APD_AUTHORIZED_FOCAL_COMPATIBILITY '+JSON.stringify({version:report.version,sha256:report.sha256,counts,probes,sourceExported:false,remoteWrites:0}));
+            // Run only narrowly extracted pure expiry predicates in a credential-free VM.
+            const fn=(s,name)=>{
+              const hits=[...s.matchAll(new RegExp('^function '+name+'\\([^\\n]*\\) \\{','gm'))];
+              if(hits.length!==1)return null;
+              const at=hits[0].index,end=s.indexOf('\n__name('+name+',',at);
+              if(end<=at||end-at>16000||!s.slice(at,end).endsWith('\n}'))return null;
+              return s.slice(at,end);
+            };
+            const expiryCases=[
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00Z'},true],
+              [{estado:'Publicada',finoferta:'2026-11-27T13:30:00Z'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27T13:30:00.001Z'},true],
+              [{estado:'Publicada',finoferta:'27/11/2026 14:00'},true],
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00+00:00'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27T14:00:00-03:00'},true],
+              [{estado:'Publicada',finoferta:'invalid'},false],
+              [{estado:'Publicada',finoferta:'2026-11-27'},false],
+              [{estado:'Cerrada',finoferta:'2026-11-27T14:00:00Z'},false],
+              [{estado:'Publicada',estado_actual:'Cerrada',finoferta:'2026-11-27T14:00:00Z'},false]
+            ];
+            const expiryContract=(s,staged)=>{
+              const allowed=['norm','norm2','parseFechaFlexible','parseFechaFlexible2','estadoOfertaEsPublicada','ofertaVigente','ofertaEsVisibleParaAlerta'];
+              const parts=allowed.map(n=>fn(s,n)).filter(Boolean);
+              if(!fn(s,'ofertaVigente')||!fn(s,'ofertaEsVisibleParaAlerta'))return {passed:0,total:20,available:false};
+              // No host functions or data objects cross the VM boundary.
+              const ctx=vm.createContext(Object.create(null),{codeGeneration:{strings:false,wasm:false}});
+              const prefix=staged?abcOfferDeadlineAudit.toString().replace('function abcOfferDeadlineAudit(','function apdAbcOfferDeadlineAuditV1('):'';
+              try{
+                vm.runInContext('Date.now=()=>Date.parse("2026-11-27T16:30:00Z");\n'+prefix+'\n'+parts.join('\n'),ctx,{timeout:1000});
+                let passed=0;const failed=[];
+                for(const name of ['ofertaVigente','ofertaEsVisibleParaAlerta'])for(const [index,[row,expected]] of expiryCases.entries()){
+                  try{if(vm.runInContext(name+'('+JSON.stringify(row)+')',ctx,{timeout:100})===expected)passed++;else failed.push({name,index,kind:'mismatch'});}catch{failed.push({name,index,kind:'execution_error'});}
+                }
+                return {passed,total:20,available:true,failed};
+              }catch{return {passed:0,total:20,available:false};}
+            };
+            let stagedExpiry={passed:0,total:20,available:false};
+            try{const exp=stageAbcExpiryAudit(source);verifyTrialCandidateSyntax(exp.candidate);stagedExpiry=expiryContract(exp.candidate,true);}catch{}
+            console.log('APD_AUTHORIZED_EXPIRY_CONTRACT '+JSON.stringify({original:expiryContract(source,false),candidate:stagedExpiry,sourceExported:false,remoteWrites:0}));
+            // Independently compose the two compatible stages without claiming full release.
+            try{
+              const first=stageSessionAdminAudit(source);
+              const career=buildCareerWorkerCandidate(first.candidate);
+              verifyTrialCandidateSyntax(career.candidate);
+              console.log('APD_AUTHORIZED_PARTIAL_TWO_STAGES_PASS '+JSON.stringify({stages:2,total:4,sha256:sha(career.candidate),approvedForDeploy:false,sourceExported:false,remoteWrites:0}));
+            }catch{console.log('APD_AUTHORIZED_PARTIAL_TWO_STAGES_BLOCKED');}
+            let candidate=source;
+            const stages=[['session_admin',stageSessionAdminAudit],['expiry_email_channels',stageChannelEntitlementAudit],['schedule_entitlement',stageScheduleEntitlementAudit],['career_routes',buildCareerWorkerCandidate]];
+            for(const [name,stage] of stages){
+              phase=name;
+              if(name==='expiry_email_channels'&&stagedExpiry.passed!==stagedExpiry.total)throw Error('Expiry behavior not verified');
+              const r=stage(candidate);
+              if(r.unrelatedBytesPreserved!==true||r.deployable!==false||r.candidate===candidate)throw Error('Stage contract');
+              verifyTrialCandidateSyntax(r.candidate);
+              candidate=r.candidate;
+              console.log('APD_AUTHORIZED_STAGE_PASS '+JSON.stringify({stage:name,sha256:sha(candidate)}));
+            }
+            phase='route_inventory';
+            const routes=verifyRouteInventory(source,candidate);
+            phase='composition_crosscheck';
+            const r=composeWorkerSnapshot(source);
+            if(r.candidate!==candidate||r.missing.length||r.approvedForDeploy!==false)throw Error('Composition mismatch');
+            console.log('APD_AUTHORIZED_ACTIVE_COMPOSITION_PASS '+JSON.stringify({version:report.version,sourceSha256:report.sha256,candidateSha256:sha(candidate),routes,approvedForDeploy:false,remoteWrites:0,sourceExported:false}));
+            phase='commercial_full_module_fixture';
+            // Same reviewed synthetic-only harness used for prior commercial release checks.
+            // No real credentials, no real providers, no invocation of scheduled jobs.
+            const full=await verifyCommercialFullModule(candidate);
+            if(full.passed!==true)throw Error('Commercial regression');
+            console.log('APD_AUTHORIZED_COMPOSED_COMMERCIAL_FIXTURE_PASS '+JSON.stringify({passed:true,remoteWrites:0,sourceExported:false,approvedForDeploy:false}));
+            phase='commercial_postgres17_fixture';
+            // Repeat the entire exact module contract against the disposable PostgreSQL service.
+            // Provider remains synthetic, all DB requests are confined to loopback.
+            if(sha(candidate)!=='db9c2146f822369acde822f80cbb9246a698e4296202e951620dfe96ded2739c')throw Error('Candidate fingerprint drift');
+            const integrated=await verifyCommercialFullModule(candidate,createCommercialPgQa());
+            if(integrated.passed!==true||integrated.realPostgreSQL!==true||integrated.realPostgREST!==true||integrated.productionWrites!==0)throw Error('Integrated contract not confirmed');
+            console.log('APD_AUTHORIZED_COMPOSED_COMMERCIAL_PG17_PASS '+JSON.stringify(integrated));
+          }catch{
+            console.error('APD_AUTHORIZED_ACTIVE_COMPOSITION_BLOCKED '+JSON.stringify({phase,remoteWrites:0,sourceExported:false,approvedForDeploy:false}));
+            process.exitCode=1;
+          }
+          NODE
+      - name: Stop disposable PostgREST
+        if: always()
+        run: docker rm -f apd-commercial-postgrest || true
+      - name: Remove private temporary files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/apd-live-observation"

@@ -23,6 +23,9 @@ export function hasInsignePlannerAccess(snapshot,now=Date.now()){
  if(['COMPLETO','TRIAL_14D'].includes(code)){
   if(snapshot.ok!==true||normalized(snapshot.plan?.code)!==code||!Number.isFinite(now))return false;
   if(!['ACTIVE','AUTHORIZED','APPROVED'].includes(normalized(subscription.status)))return false;
+  if(!normalized(subscription.source))return false;
+  const start=subscription.started_at;
+  if(typeof start!=='string'||!Number.isFinite(Date.parse(start))||Date.parse(start)>now)return false;
   const end=code==='TRIAL_14D'?subscription.trial_ends_at:subscription.current_period_ends_at;
   if(typeof end!=='string'||!Number.isFinite(Date.parse(end))||Date.parse(end)<=now)return false;
   return true;

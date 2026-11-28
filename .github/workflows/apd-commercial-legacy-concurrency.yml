@@ -1,0 +1,37 @@
+name: APD courtesy and checkout concurrency (disposable PG17)
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_COMMERCIAL_*CANDIDATE.sql'
+      - 'docs/sql/APD_LEGACY_TRANSITION_CANDIDATE_20261127.sql'
+      - 'scripts/apd-commercial-db-fixture.sql'
+      - 'scripts/apd-commercial-payment-fixture.sql'
+      - 'scripts/test-apd-commercial-legacy-concurrency.sh'
+      - 'tests/sql/apd_commercial_legacy_concurrency_fixture.sql'
+      - '.github/workflows/apd-commercial-legacy-concurrency.yml'
+permissions:
+  contents: read
+jobs:
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: apd_commercial_race_fixture
+          POSTGRES_PASSWORD: fixture_only
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/test-apd-commercial-legacy-concurrency.sh
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: apd_commercial_race_fixture
+          PGUSER: postgres
+          PGPASSWORD: fixture_only
+          APD_FIXTURE_ACK: DISPOSABLE_COMMERCIAL_CONCURRENCY

@@ -1,0 +1,51 @@
+name: APD ABC expiry audit (offline only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/apd-audit-active-compatibility.mjs'
+      - 'scripts/test-apd-digest-pg17-concurrency.sh'
+      - 'scripts/apd-channel-entitlement-audit-stage.mjs'
+      - 'scripts/test-apd-channel-entitlement-audit.mjs'
+      - 'scripts/apd-channel-query-audit-stage.mjs'
+      - 'scripts/test-apd-channel-query-audit.mjs'
+      - 'scripts/apd-email-delivery-audit-stage.mjs'
+      - 'scripts/test-apd-email-delivery-audit.mjs'
+      - 'scripts/apd-abc-expiry-audit-stage.mjs'
+      - 'scripts/test-apd-abc-expiry-audit.mjs'
+      - '.github/workflows/apd-abc-expiry-audit.yml'
+  push:
+    branches: ['fix/apd-abc-expiry-audit-20261127']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/test-apd-abc-expiry-audit.mjs scripts/test-apd-email-delivery-audit.mjs scripts/test-apd-channel-query-audit.mjs scripts/test-apd-channel-entitlement-audit.mjs
+      - run: node scripts/apd-audit-active-compatibility.mjs --snapshot-only
+  digest-concurrency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: apd_fixture_only
+          POSTGRES_DB: apd_delivery_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 3s --health-timeout 3s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash scripts/test-apd-digest-pg17-concurrency.sh

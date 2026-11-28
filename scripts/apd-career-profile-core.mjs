@@ -46,3 +46,22 @@ export function marginalPay(before,after){
  if(before.period!==after.period||before.source!==after.source)throw Error('Compará el mismo período y método');
  return {currentCentavos:before.netCentavos,combinedCentavos:after.netCentavos,deltaCentavos:after.netCentavos-before.netCentavos,period:before.period,source:before.source};
 }
+
+/** Confirmed career supplements the legacy timetable in memory, never replaces it on disk.
+ * Retain every old occupancy marker until its exact mapping has been independently resolved.
+ */
+export function mergeConfirmedCareerPlanner(base,record,{normalizeSchoolKey=()=>null}={}){
+ if(!record||record.revision===0&&record.profile===null)return base;
+ if(!Number.isSafeInteger(record.revision)||record.revision<1)throw Error('Revisión inválida');
+ const projection=projectCareerSchedule(record.profile,base.moduleSchedule||[]);
+ const jobs=[],seen=new Set();
+ for(const job of [...(base.jobs||[]),...projection.jobs]){
+  const key=normalizeSchoolKey(job.schoolKey),clean={...job};
+  if(key)clean.schoolKey=key;else delete clean.schoolKey;
+  const sig=JSON.stringify([clean.schoolKey||clean.school,clean.days,clean.start,clean.end]);
+  if(!seen.has(sig)){seen.add(sig);jobs.push(clean);}
+ }
+ // Existing work-profile validation rejects >42 blocks; do not truncate and
+ // accidentally treat an occupied period as free.
+ return {...base,jobs,moduleSchedule:projection.modules};
+}

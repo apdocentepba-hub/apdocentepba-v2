@@ -1,0 +1,28 @@
+name: APD payment review FK index (disposable PG17)
+on:
+  pull_request:
+    paths:
+      - 'docs/sql/APD_PAYMENT_REVIEW_INDEX_*'
+      - 'tests/sql/apd_payment_review_index_pg17.sql'
+      - '.github/workflows/apd-payment-review-index.yml'
+permissions:
+  contents: read
+jobs:
+  index-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: apd_index_fixture
+          POSTGRES_PASSWORD: fixture_only
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d apd_index_fixture -f tests/sql/apd_payment_review_index_pg17.sql
+        env:
+          PGPASSWORD: fixture_only
