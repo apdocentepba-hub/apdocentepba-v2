@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {inspectVersion,inspectCrons,activeVersion} from './apd-commercial-live-preflight.mjs';
+import {persistEncryptedModule} from './apd-worker-private-backup.mjs';
 import {composeWorkerSnapshot} from './apd-worker-composition.mjs';
 import {verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
 const sha=b=>createHash('sha256').update(b).digest('hex');
@@ -56,7 +57,7 @@ export function verifyTemporaryRecovery(bytes,expectedSha){
   return {temporaryReadback:true,localRestore:true,persistentBackup:false,remoteRollbackTested:false};
  }finally{rmSync(dir,{recursive:true,force:true});}
 }
-export async function inspectActiveComposition({get,manifest,accountId,compose=composeWorkerSnapshot}){
+export async function inspectActiveComposition({get,manifest,accountId,compose=composeWorkerSnapshot,backup=null}){
  const worker='ancient-wildflower-cd37';
  if(manifest.worker_name!==worker)throw Error('Wrong Worker');
  const accounts=await get('/accounts?per_page=50');
@@ -79,7 +80,8 @@ export async function inspectActiveComposition({get,manifest,accountId,compose=c
  const recovery=verifyTemporaryRecovery(bytes,info.sha256);
  if(activeVersion(await get(route))!==version)throw Error('Version changed during inspection');
  if(JSON.stringify(inspectCrons(await get(scheduleRoute)))!==JSON.stringify(crons))throw Error('Cron drift during inspection');
- return {version,rollbackVersion:version,sourceSha256:info.sha256,candidateSha256:r.candidateSha256,bindings:info.binding_count,cronCount:crons.length,routeInventory:routes,...recovery,sourceExported:false,approvedForDeploy:false,writes:0};
+ const custody=backup?persistEncryptedModule({bytes,meta:{version,sha256:info.sha256},...backup}):{};
+ return {version,rollbackVersion:version,sourceSha256:info.sha256,candidateSha256:r.candidateSha256,bindings:info.binding_count,cronCount:crons.length,routeInventory:routes,...recovery,...custody,sourceExported:false,approvedForDeploy:false,writes:0};
 }
 async function main(){
  if(process.argv.length!==3||process.argv[2]!=='--live-get-only'||process.env.APD_AUDIT_READ_ACK!=='READ_ACTIVE_APD_NO_WRITE')throw Error('Explicit operator acknowledgement required');
@@ -90,7 +92,11 @@ async function main(){
   if(!response.ok)throw Error('Cloudflare GET rejected');
   const j=await response.json();if(j.success!==true)throw Error('Cloudflare response rejected');return j.result;
  };
- const report=await inspectActiveComposition({get,manifest:JSON.parse(readFileSync('worker-live/manifest.json','utf8')),accountId:process.env.CLOUDFLARE_ACCOUNT_ID});
+ // Optional, explicit local encrypted module backup. Never export plaintext or a key.
+ const directory=process.env.APD_PRIVATE_BACKUP_DIR,secret=process.env.APD_PRIVATE_BACKUP_SECRET;
+ if((directory||secret)&&(!directory||!secret||process.env.APD_PRIVATE_BACKUP_ACK!=='LOCAL_ENCRYPTED_MODULE_ONLY'))throw Error('Explicit backup acknowledgement required');
+ const backup=directory&&secret?{directory,secret}:null;
+ const report=await inspectActiveComposition({get,manifest:JSON.parse(readFileSync('worker-live/manifest.json','utf8')),accountId:process.env.CLOUDFLARE_ACCOUNT_ID,backup});
  console.log('APD_ACTIVE_COMPOSITION_PREFLIGHT '+JSON.stringify(report));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(()=>{console.error('APD_ACTIVE_COMPOSITION_BLOCKED (sanitized)');process.exitCode=1;});
