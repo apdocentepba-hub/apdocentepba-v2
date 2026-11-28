@@ -13,18 +13,25 @@ export function apdScheduleAllowedAuditV1(resolved,id,active,now){
  return legacy.includes(code)&&(!plan||legacy.includes(plan))&&norm(sub.source)!=='FALLBACK_FRONTEND'&&(sub.user_id==null||sub.user_id===id);
 }
 export function stageScheduleEntitlementAudit(source){
- const marker='async function handleAccountScheduleSecureV1(request,env){';
+ const markers=[...source.matchAll(/^async function handleAccountScheduleSecureV1\(request,\s*env\)\s*\{/gm)];
+ assert.equal(markers.length,1,'Unknown schedule handler');
+ const marker=markers[0][0];
  const route='if (path === API_URL_PREFIX3 + "/account/schedule") {';
  const old="return isPlanActivo(resolved)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(resolved?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(resolved?.subscription?.status||'').toUpperCase());";
  const replacement='return apdScheduleAllowedAuditV1(resolved,id,isPlanActivo(resolved),Date.now());';
  assert.ok(!source.includes('apdScheduleAllowedAuditV1'),'Already staged');
  assert.equal(source.split(marker).length,2,'Unknown schedule handler');
  assert.equal(source.split(route).length,2,'Unknown schedule route');
- assert.equal(source.split(old).length,2,'Unknown schedule entitlement');
  const start=source.indexOf(marker),stop=source.indexOf('\n}',start);
- assert.ok(stop>start&&source.indexOf(old)>start&&source.indexOf(old)<stop,'Entitlement outside reviewed handler');
+ assert.ok(stop>start,'Unknown schedule boundary');
+ const fn=source.slice(start,stop);
+ // Match the precise commercial extension emitted by stageCommercialTools; no arbitrary broadening.
+ const commercial=/return\s+\(isPlanActivo\(resolved\)\s*&&\s*\[\s*["']INSIGNE["']\s*,\s*["']INSIGNE_ANUAL["']\s*,\s*["']SIGNATURE["']\s*,\s*["']SIGNATURE_ANUAL["']\s*\]\.includes\(String\(resolved\?\.subscription\?\.plan_code\s*\|\|\s*["']["']\)\.toUpperCase\(\)\)\s*&&\s*\[\s*["']ACTIVE["']\s*,\s*["']AUTHORIZED["']\s*,\s*["']APPROVED["']\s*\]\.includes\(String\(resolved\?\.subscription\?\.status\s*\|\|\s*["']["']\)\.toUpperCase\(\)\)\s*\|\|\s*apdCommercialNewToolsV1\(resolved\)\);/g;
+ const matches=[...fn.matchAll(commercial)];
+ const reviewed=fn.includes(old)?old:(matches.length===1?matches[0][0]:null);
+ assert.ok(reviewed&&source.split(reviewed).length===2,'Unknown schedule entitlement');
  const prefix=apdScheduleAllowedAuditV1.toString()+'\n';
- const candidate=prefix+source.replace(old,replacement);
- assert.equal(candidate.slice(prefix.length).replace(replacement,old),source);
+ const candidate=prefix+source.replace(reviewed,replacement);
+ assert.equal(candidate.slice(prefix.length).replace(replacement,reviewed),source);
  return {candidate,unrelatedBytesPreserved:true,deployable:false};
 }

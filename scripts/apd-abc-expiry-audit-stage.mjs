@@ -1,5 +1,6 @@
 // APD-012 candidate: raw ABC offers only, not generic dates or historical views.
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 export function abcOfferDeadlineAudit(offer,now=Date.now()){
  if(!Number.isFinite(now)||!offer||typeof offer!=='object')return false;
  const states=['estado','estado_oferta','estado_actual'].map(k=>String(offer[k]??'').trim().toUpperCase()).filter(Boolean);
@@ -29,6 +30,9 @@ export function abcOfferDeadlineAudit(offer,now=Date.now()){
 }
 export function stageAbcExpiryAudit(source){
  const names=['ofertaVigente','ofertaEsVisibleParaAlerta'];
+ // The observed 28/11 active source differs from the historical snapshot.
+ // Preserve its existing predicate, do not replace it blindly. Only admit these exact byte identities.
+ const activeGuard=['a8591683e867542d504c2e91243b036b3b0c886f9bb361fc23c1dd79ebf22c85','7cbdc0824d8d798a4890f7debefaf80162ac345f9e86ec16b6ee96338707ac17'].includes(createHash('sha256').update(source).digest('hex'));
  assert.ok(!source.includes('apdAbcOfferDeadlineAuditV1'),'Already staged');
  const parts=names.map(name=>{
   const anchor='function '+name+'(oferta) {';
@@ -36,6 +40,10 @@ export function stageAbcExpiryAudit(source){
   const from=source.indexOf(anchor),to=source.indexOf('\n__name('+name+',',from);
   assert.ok(to>from,name);
   const old=source.slice(from,to);assert.ok(old.endsWith('\n}'),name);
+  if(activeGuard){
+   assert.ok(old.length<4000,'Unexpected active predicate length');
+   return {old,next:anchor+'\n  if (!apdAbcOfferDeadlineAuditV1(oferta,Date.now())) return false;'+old.slice(anchor.length)};
+  }
   assert.match(old,/ANULADA/);
   return {old,next:anchor+'\n  return apdAbcOfferDeadlineAuditV1(oferta,Date.now());\n}'};
  });

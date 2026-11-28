@@ -42,3 +42,13 @@ test('execute entitlement callback from patched handler with synthetic resolver'
   assert.equal(result,expected,code);
  }
 });
+
+test('commercial generator extension is recognized without trusting arbitrary alternate gates',()=>{
+ const legacy=source.match(/return isPlanActivo\(resolved\).*?;/)?.[0];
+ assert.ok(legacy);
+ const commercial=source.replace(legacy,'return ('+legacy.slice(7,-1)+' || apdCommercialNewToolsV1(resolved));');
+ const r=stageScheduleEntitlementAudit(commercial);
+ assert.equal(r.unrelatedBytesPreserved,true);
+ assert.ok(r.candidate.includes('return apdScheduleAllowedAuditV1(resolved,id,isPlanActivo(resolved),Date.now());'));
+ assert.throws(()=>stageScheduleEntitlementAudit(commercial.replace('apdCommercialNewToolsV1(resolved)','unknownGate(resolved)')));
+});
