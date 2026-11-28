@@ -14,7 +14,7 @@ import {createApplicationDiarySection} from './scripts/apd-application-diary-ui.
 import {recommendOffers} from './scripts/apd-offer-recommendations.mjs?v=20261124-recommend1';
 import {mountPersonalHistory} from './scripts/apd-personal-history-ui.mjs?v=20261124-tools2';
 import {straightLineHomeSchoolKm} from './scripts/apd-home-georef.mjs?v=20261110-home4';
-import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs?v=20261126-commercial1';
+import {hasInsignePlannerAccess} from './scripts/apd-insigne-planner-entitlement.mjs?v=20261128-schedule1';
 import {createMobilitySection} from './scripts/apd-mobility-ui.mjs?v=20261113-auto1';
 import {createPrivatePlannerForm,loadPrivatePlanner as loadLegacyPlanner,clearPrivatePlanner,createWeeklyScheduleForm} from './scripts/apd-mi-jornada-ui.mjs?v=20261124-schedulefix1';
 import {
