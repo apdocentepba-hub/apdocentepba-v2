@@ -6,13 +6,15 @@ on:
       - 'docs/sql/APD_PAYMENT_REVIEW_INDEX_REVERT_20261128.sql'
       - 'tests/sql/apd_consolidated_migrations_pg17.sql'
       - 'tests/sql/apd_career_profile_assert.sql'
+      - 'tests/sql/apd_consolidated_restore_assert.sql'
+      - 'scripts/test-apd-consolidated-backup-restore.sh'
       - '.github/workflows/apd-consolidated-migrations.yml'
 permissions:
   contents: read
 jobs:
   combined:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     services:
       postgres:
         image: postgres:17
@@ -28,3 +30,7 @@ jobs:
       - run: psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d apd_consolidated_fixture -f tests/sql/apd_consolidated_migrations_pg17.sql
         env:
           PGPASSWORD: fixture_only
+      - name: Dump and restore to independent disposable database
+        run: bash scripts/test-apd-consolidated-backup-restore.sh "${{ job.services.postgres.id }}"
+        env:
+          APD_FIXTURE_RESTORE_ACK: DISPOSABLE_PG17_ONLY
