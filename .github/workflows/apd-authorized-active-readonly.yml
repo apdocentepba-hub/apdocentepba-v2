@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   observation:
-    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '87f2cd0fbc158144e2c11af19cacb55a21a255ec'
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '3a73753df0f6bc9efe7c5360996c4c040fed6758'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -90,6 +90,9 @@ jobs:
           import {encryptModule,decryptModule} from './scripts/apd-worker-private-backup.mjs';
           import {stageSessionAdminAudit} from './scripts/apd-session-admin-audit-stage.mjs';
           import {stageChannelEntitlementAudit} from './scripts/apd-channel-entitlement-audit-stage.mjs';
+          import {stageAbcExpiryAudit} from './scripts/apd-abc-expiry-audit-stage.mjs';
+          import {stageEmailDeliveryAudit} from './scripts/apd-email-delivery-audit-stage.mjs';
+          import {stageChannelQueryAudit} from './scripts/apd-channel-query-audit-stage.mjs';
           import {stageScheduleEntitlementAudit} from './scripts/apd-schedule-entitlement-audit-stage.mjs';
           import {buildCareerWorkerCandidate} from './scripts/build-apd-career-worker-candidate.mjs';
           import {composeWorkerSnapshot} from './scripts/apd-worker-composition.mjs';
@@ -107,6 +110,31 @@ jobs:
             if(!decryptModule(encrypted,key).equals(bytes))throw Error('Encrypted restoration mismatch');
             console.log('APD_AUTHORIZED_ACTIVE_RESTORE_PASS '+JSON.stringify({...restored,encryptedRoundtrip:true,persistentModuleBackup:false,databaseBackedUp:false}));
             const source=bytes.toString('utf8');
+            // Only counts and booleans for reviewed anchors; no live code or errors exported.
+            const anchors=[
+              ['expiry_vigente','function ofertaVigente(oferta) {'],['expiry_visible','function ofertaEsVisibleParaAlerta(oferta) {'],
+              ['email_stored','const storedAlerts = await loadStoredEmailAlerts(env, userId, 80);'],
+              ['email_count','if (!shownCount) {'],['email_reservation','    let reservation = null;\n    if (digestDedupeKey) {'],
+              ['email_ok','if (!reservation?.ok) {'],['email_send','    let send = null;\n    try {\n      send = await enviarMailBrevo('],
+              ['wa_identity','return candidates.find((row) => {\n    const variants = whatsappTestDestinations(row?.celular || "");\n    return variants.includes(digits) || variants.includes(whatsappAllowedListVariant(digits));\n  }) || null;'],
+              ['tg_stored','alerts = await loadTelegramStoredAlerts(env, user.id, safeLimit);'],
+              ['tg_live','alerts = await loadTelegramLiveAlertsWithTimeout(env, user.id, 12e3);'],
+              ['tg_reply','const reply = buildTelegramQueryDigest(visibleAlertsForRender);'],
+              ['wa_stored','const storedAlerts = await waLoadStoredAlerts(env, user.id, 50);'],
+              ['wa_visible','if (!visibleAlertsForRender.length) {'],
+              ['wa_loop','for (let i = 0; i < visibleAlertsForRender.length; i++) {'],
+              ['wa_success','if (sendResult?.ok !== false) {'],
+              ['wa_legacy_copy','WhatsApp queda reservado para el plan Insigne.'],
+              ['wa_legacy_gate','allowed: !!(flags?.whatsapp || planCode === "INSIGNE"),'],
+              ['schedule_legacy_gate',"return isPlanActivo(resolved)&&['INSIGNE','INSIGNE_ANUAL','SIGNATURE','SIGNATURE_ANUAL'].includes(String(resolved?.subscription?.plan_code||'').toUpperCase())&&['ACTIVE','AUTHORIZED','APPROVED'].includes(String(resolved?.subscription?.status||'').toUpperCase());"],
+              ['commercial_core','apdCommercialCoreV1'],['commercial_access','apdCommercialAccessV1']
+            ];
+            const counts=Object.fromEntries(anchors.map(([key,anchor])=>[key,source.split(anchor).length-1]));
+            const probes={};
+            for(const [key,stage] of [['abc_expiry',stageAbcExpiryAudit],['email_delivery',stageEmailDeliveryAudit],['channel_query',stageChannelQueryAudit],['channel_entitlement',stageChannelEntitlementAudit],['schedule',stageScheduleEntitlementAudit],['career',buildCareerWorkerCandidate]]){
+              try{const r=stage(source);verifyTrialCandidateSyntax(r.candidate);probes[key]=true;}catch{probes[key]=false;}
+            }
+            console.log('APD_AUTHORIZED_FOCAL_COMPATIBILITY '+JSON.stringify({version:report.version,sha256:report.sha256,counts,probes,sourceExported:false,remoteWrites:0}));
             let candidate=source;
             const stages=[['session_admin',stageSessionAdminAudit],['expiry_email_channels',stageChannelEntitlementAudit],['schedule_entitlement',stageScheduleEntitlementAudit],['career_routes',buildCareerWorkerCandidate]];
             for(const [name,stage] of stages){
