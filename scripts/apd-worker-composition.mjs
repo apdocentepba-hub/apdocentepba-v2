@@ -5,11 +5,14 @@ import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {stageSessionAdminAudit} from './apd-session-admin-audit-stage.mjs';
 import {stageChannelEntitlementAudit} from './apd-channel-entitlement-audit-stage.mjs';
+import {stageScheduleEntitlementAudit} from './apd-schedule-entitlement-audit-stage.mjs';
 import {buildCareerWorkerCandidate} from './build-apd-career-worker-candidate.mjs';
 import {verifyTrialCandidateSyntax} from './apd-commercial-stage-trial.mjs';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 export function composeWorkerSnapshot(source){
  const stages=[['session_admin',stageSessionAdminAudit],['expiry_email_channels',stageChannelEntitlementAudit],['career_routes',buildCareerWorkerCandidate]];
+ // Active schedule variants must match the reviewed handler before admitting composition.
+ if(source.includes('/account/schedule'))stages.splice(2,0,['schedule_entitlement',stageScheduleEntitlementAudit]);
  let candidate=source;const report=[];
  for(const [name,stage] of stages){
   const result=stage(candidate);
