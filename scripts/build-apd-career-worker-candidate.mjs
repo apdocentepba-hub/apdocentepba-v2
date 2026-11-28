@@ -1,11 +1,9 @@
 /** Offline builder: preserve baseline byte for byte except explicit route additions. */
 import fs from 'node:fs';
 import path from 'node:path';
-const dir=path.resolve('tmp/apd-career');
-const base=path.resolve(process.env.APD_CAREER_LIVE_SOURCE||'worker-live/worker_hotfix.js');
-if(process.env.APD_CAREER_LIVE_SOURCE&&!base.startsWith(dir+path.sep))throw Error('Untrusted baseline path');
-const source=fs.readFileSync(base,'utf8');
-const strip=p=>fs.readFileSync('scripts/'+p,'utf8').replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'');
+import {pathToFileURL} from 'node:url';
+export function buildCareerWorkerCandidate(source,readModule=p=>fs.readFileSync('scripts/'+p,'utf8')){
+const strip=p=>readModule(p).replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'');
 const bundle=[
  'const {validateModuleSchedule}=(()=>{'+strip('apd-account-schedule-core.mjs')+'\nreturn {validateModuleSchedule};})();',
  'const {validateCareerProfile,projectCareerSchedule}=(()=>{'+strip('apd-career-profile-core.mjs')+'\nreturn {validateCareerProfile,projectCareerSchedule};})();',
@@ -66,9 +64,18 @@ const addedRoute=candidatePaths.map(path=>
 ).join('');
 const optionsRoute='\n    if (request.method === "OPTIONS" && '+JSON.stringify(candidatePaths.map(path=>'/api'+path))+
  '.includes(new URL(request.url).pathname)) return apdCareerCorsV1(request);\n';
-if(diaryRouteExists)console.log('APD_EXISTING_DIARY_ROUTE_PRESERVED');
+
 const at=fetchPosition+fetchMark.length;
 const candidate=(source.slice(0,at)+optionsRoute+source.slice(at)).replace(mark,()=>handler+mark).replace(route,addedRoute+route);
 if(candidate.replace(handler,'').replace(addedRoute,'').replace(optionsRoute,'')!==source)throw Error('Unrelated drift');
-fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'worker-career-candidate.mjs'),candidate);
+return {candidate,paths:candidatePaths,diaryRouteExists,unrelatedBytesPreserved:true,deployable:false};
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ const dir=path.resolve('tmp/apd-career');
+ const base=path.resolve(process.env.APD_CAREER_LIVE_SOURCE||'worker-live/worker_hotfix.js');
+ if(process.env.APD_CAREER_LIVE_SOURCE&&!base.startsWith(dir+path.sep))throw Error('Untrusted baseline path');
+ const {candidate,diaryRouteExists}=buildCareerWorkerCandidate(fs.readFileSync(base,'utf8'));
+ if(diaryRouteExists)console.log('APD_EXISTING_DIARY_ROUTE_PRESERVED');
+ fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'worker-career-candidate.mjs'),candidate);
 console.log('APD_CAREER_WORKER_BUILD_PASS baseline preserved; offline only');
+}
