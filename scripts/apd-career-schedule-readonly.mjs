@@ -37,3 +37,27 @@ export function mountOwnScheduleRecovery(host,{readOwn,captureSession,isCurrent}
  host.replaceChildren(root);
  return Object.freeze({dispose,refresh(){if(!current())dispose();}});
 }
+
+/** Presentation eligibility only; GET still authenticates owner on the server. */
+export function canRecoverOwnSchedule(plan){
+ const sub=plan?.subscription;
+ return plan?.ok===true&&plan.access_active===true&&plan.plan?.code==='FREE'&&
+  sub?.plan_code==='FREE'&&typeof sub.source==='string'&&sub.source.trim()!==''&&
+  sub.source.trim().toLowerCase()!=='fallback_frontend'&&String(sub.status||'').toUpperCase()==='ACTIVE';
+}
+export function createOwnScheduleRecoveryCoordinator(){
+ let mounted=null;
+ function reset(){if(mounted){mounted.view.dispose();mounted.host.hidden=true;mounted=null;}}
+ function sync({host,client,plan,getPlan=()=>plan,isCurrent}){
+  if(!host||!client||!canRecoverOwnSchedule(plan)||isCurrent()!==true){reset();if(host){host.hidden=true;host.replaceChildren();}return;}
+  if(mounted&&(mounted.host!==host||mounted.client!==client||!mounted.valid()||!host.firstElementChild))reset();
+  if(mounted){mounted.view.refresh();return;}
+  const session=client.captureSession();
+  const valid=()=>session()&&isCurrent()===true&&canRecoverOwnSchedule(getPlan());
+  if(!valid()){host.hidden=true;host.replaceChildren();return;}
+  host.hidden=false;
+  const view=mountOwnScheduleRecovery(host,{readOwn:()=>client.reload(),captureSession:()=>session,isCurrent:valid});
+  mounted={host,client,view,valid};
+ }
+ return Object.freeze({sync,reset});
+}

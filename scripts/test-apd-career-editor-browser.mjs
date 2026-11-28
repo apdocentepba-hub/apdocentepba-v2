@@ -13,7 +13,7 @@ import {createCareerPanelCoordinator} from '/scripts/apd-career-panel-coordinato
 import {createCareerClient} from '/scripts/apd-career-account-client.mjs';
 import {careerAccountRequest} from '/scripts/apd-career-account-core.mjs';
 import {createSchoolCatalog} from '/scripts/apd-career-school-catalog.mjs';
-import {mountOwnScheduleRecovery} from '/scripts/apd-career-schedule-readonly.mjs';
+import {mountOwnScheduleRecovery,createOwnScheduleRecoveryCoordinator,canRecoverOwnSchedule} from '/scripts/apd-career-schedule-readonly.mjs';
 const check=(v,m)=>{if(!v)throw Error(m);};
 const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('timeout');};
 const rows=new Map();let token='A',lost=false,puts=0;
@@ -91,6 +91,19 @@ try{
  await until(()=>host.textContent.includes('No se pudieron recuperar'));
  check(!host.querySelector('li'),'invalid data rejected');reader.dispose();
  check(puts===3&&reads===3,'recovery did not write');
+ const free={ok:true,access_active:true,plan:{code:'FREE'},subscription:{plan_code:'FREE',status:'ACTIVE',source:'apd_free_verified'}};
+ for(const invalid of [{...free,ok:false},{...free,access_active:false},{...free,subscription:{...free.subscription,source:'fallback_frontend'}},{...free,subscription:{...free.subscription,plan_code:'COMPLETO'}},{...free,subscription:{...free.subscription,status:'CANCELLED'}}])check(!canRecoverOwnSchedule(invalid),'invalid plan denied');
+ const recoveryCoordinator=createOwnScheduleRecoveryCoordinator();
+ let activePlan=free,activeOwner='A',coordinatorReads=0;
+ const ownClient={captureSession:()=>{const captured=activeOwner;return ()=>captured===activeOwner;},reload:async()=>{coordinatorReads++;return {revision:1,modules:['M2-3']};}};
+ const syncRecovery=()=>recoveryCoordinator.sync({host,client:ownClient,plan:activePlan,getPlan:()=>activePlan,isCurrent:()=>true});
+ syncRecovery();check(!host.hidden&&coordinatorReads===0,'free mounted without GET');
+ const same=host.firstElementChild;syncRecovery();check(host.firstElementChild===same,'same session retained');
+ host.querySelector('button').click();await until(()=>host.textContent.includes('1 módulos recuperados'));
+ activePlan=plan;syncRecovery();check(host.hidden&&!host.firstElementChild,'complete plan removes recovery');
+ activePlan=free;syncRecovery();activeOwner='B';syncRecovery();check(!host.textContent.includes('Miércoles'),'account scope removes old data');
+ recoveryCoordinator.reset();check(host.hidden&&!host.firstElementChild,'logout reset clears');
+ check(coordinatorReads===1,'explicit GET only');
  document.querySelector('#result').textContent='APD_CAREER_CHROMIUM_PASS';
 }catch(e){document.querySelector('#result').textContent='FAIL: '+e.message;}
 await fetch('/__career_result',{method:'POST',body:document.querySelector('#result').textContent});

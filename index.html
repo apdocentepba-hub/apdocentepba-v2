@@ -246,7 +246,7 @@
         <div class="panel-header"><div><h2 id="panel-bienvenida">Bienvenido/a</h2><p id="panel-subtitulo" class="panel-sub">Cargando...</p></div><div class="panel-actions"><a class="btn btn-primary" href="./herramientas-docentes.html">🧰 Herramientas</a><a class="btn btn-secondary" href="./licencias-docentes.html">🧾 Licencias</a><button id="btn-recargar-panel" class="btn btn-secondary" type="button">↻ Recargar</button><button id="btn-logout" class="btn btn-danger" type="button">Cerrar sesión</button></div></div>
         <div id="panel-loading" class="panel-loading hidden"><div class="spinner"></div><span>Cargando panel...</span></div>
         <div id="panel-content" class="cards-grid">
-          <div class="panel-card span-4"><div class="card-lbl">👤 Mi cuenta</div><div id="panel-datos-docente"><p class="ph">Cargando...</p></div><div id="apd-perfil-horarios"></div></div>
+          <div class="panel-card span-4"><div class="card-lbl">👤 Mi cuenta</div><div id="panel-datos-docente"><p class="ph">Cargando...</p></div><div id="apd-perfil-horarios"></div><div id="apd-perfil-horarios-recuperacion" hidden></div></div>
           <div class="panel-card span-4"><div class="card-lbl">⚙️ Mis preferencias</div><div id="panel-preferencias-resumen"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-4"><div class="card-lbl">📊 Estadísticas</div><div id="panel-estadisticas"><p class="ph">Cargando...</p></div></div>
           <div class="panel-card span-12" id="apd-general-tools-card"><div class="card-lbl-row"><span class="card-lbl">🧰 Recursos y trámites docentes</span></div><p class="prefs-hint">Funciones rápidas para docentes PBA: licencias, PID, recursos y nuevas utilidades.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary" href="./licencias-docentes.html">Asistente de Licencias</a><a class="btn btn-secondary" href="./herramientas.html">Ver herramientas</a><a class="btn btn-secondary" href="./buscar-herramientas.html">Buscar herramienta</a></div></div>
@@ -319,6 +319,15 @@ document.addEventListener('DOMContentLoaded',function(){
  // Release gate: enable only after authenticated QA and Worker promotion.
  const accountScheduleReleaseEnabled=true;
  let accountScheduleClient=null,scheduleLoading=false;
+ // Candidate recovery is isolated from the paid planner, no additional bearer client.
+ const accountScheduleRecoveryEnabled=true;
+ let recoveryCoordinator=null,recoveryLoading=false,recoveryEpoch=0;
+ const resetRecovery=()=>{
+  recoveryEpoch++;recoveryLoading=false;recoveryCoordinator?.reset();recoveryCoordinator=null;
+  const host=document.getElementById('apd-perfil-horarios-recuperacion');if(host){host.hidden=true;host.replaceChildren();}
+ };
+ document.getElementById('btn-logout')?.addEventListener('click',resetRecovery,true);
+ window.addEventListener('pagehide',resetRecovery);
  const accountCareerReleaseEnabled=false;
  let careerClient=null,careerCoordinator=null,careerAccess=null,careerPending=false,careerEpoch=0;
  const resetCareer=()=>{
@@ -335,7 +344,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const bearer=readBearer();
   if(owner!==previousOwner||bearer!==previousBearer){
    previousOwner=owner;previousBearer=bearer;
-   resetCareer();accountScheduleClient=null;
+   resetRecovery();resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
    accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
@@ -343,7 +352,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const allowed=!!owner&&!!bearer&&typeof obtenerToken==='function'&&obtenerToken()===owner&&
    typeof planActual!=='undefined'&&planActual?.access_active===true;
   if(!allowed){
-   resetCareer();accountScheduleClient=null;
+   resetRecovery();resetCareer();accountScheduleClient=null;
    accountFavoriteClient?.reset();accountFavoriteClient=null;
    accountDiaryClient?.reset();accountDiaryClient=null;
    try{window.APD_comparatorReset?.();window.APD_offerSchoolMapReset?.();}catch(_){}
@@ -382,6 +391,20 @@ document.addEventListener('DOMContentLoaded',function(){
     sync();
    }).catch(()=>{diaryLoading=false;});
   }
+  const recoveryCurrent=()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true;
+  if(accountScheduleRecoveryEnabled&&accountScheduleClient&&recoveryCurrent()){
+   if(recoveryCoordinator){
+    recoveryCoordinator.sync({host:document.getElementById('apd-perfil-horarios-recuperacion'),client:accountScheduleClient,plan:planActual,getPlan:()=>planActual,isCurrent:recoveryCurrent});
+   }else if(!recoveryLoading&&planActual?.plan?.code==='FREE'){
+    const epoch=recoveryEpoch;recoveryLoading=true;
+    import('./scripts/apd-career-schedule-readonly.mjs?v=20261127-recovery1').then(({createOwnScheduleRecoveryCoordinator})=>{
+     if(epoch!==recoveryEpoch)return;
+     recoveryLoading=false;
+     if(!recoveryCurrent())return;
+     recoveryCoordinator=createOwnScheduleRecoveryCoordinator();sync();
+    }).catch(()=>{if(epoch===recoveryEpoch)recoveryLoading=false;});
+   }
+  }else if(recoveryCoordinator||recoveryLoading)resetRecovery();
   const careerScope=()=>dashboardLoadedOwner===owner&&obtenerToken()===owner&&readBearer()===bearer&&planActual?.access_active===true;
   const careerCurrent=()=>careerScope()&&careerAccess?.(planActual)===true;
   if(accountCareerReleaseEnabled&&!careerClient&&!careerPending){

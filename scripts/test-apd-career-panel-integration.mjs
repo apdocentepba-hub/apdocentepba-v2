@@ -37,3 +37,15 @@ test('confirmed career projection remains disabled or conservative',()=>{
  context={isCurrent:()=>true,getRecord:()=>({revision:1})};assert.equal(run().revision,1);
  assert.equal(merges,1);assert.equal(base.jobs.length,0);
 });
+
+test('free recovery is separate, authenticated and reset on logout',()=>{
+ assert.equal((html.match(/id="apd-perfil-horarios-recuperacion"/g)||[]).length,1);
+ assert.match(html,/id="apd-perfil-horarios-recuperacion" hidden/);
+ assert.match(html,/const accountScheduleRecoveryEnabled=true;/);
+ assert.match(html,/if\(accountScheduleRecoveryEnabled&&accountScheduleClient&&recoveryCurrent\(\)\)/);
+ assert.match(html,/const recoveryCurrent=\(\)=>dashboardLoadedOwner===owner&&obtenerToken\(\)===owner&&readBearer\(\)===bearer&&planActual\?\.access_active===true/);
+ assert.match(html,/addEventListener\('click',resetRecovery,true\)/);
+ assert.match(html,/resetRecovery\(\);resetCareer\(\);accountScheduleClient=null/);
+ assert.match(html,/recoveryCoordinator\.sync\(\{host:document\.getElementById\('apd-perfil-horarios-recuperacion'\),client:accountScheduleClient/);
+ assert.match(panel,/if\(!hasInsignePlannerAccess\(planInfo\)\)\{\s*profileScheduleClient=null;\s*host\.replaceChildren/);
+});
