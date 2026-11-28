@@ -79,3 +79,28 @@ DO $$ BEGIN
  IF to_regclass('public.apd_payment_review_checkout_idx') IS NOT NULL OR NOT EXISTS(SELECT 1 FROM public.user_career_profile WHERE revision=2) OR (SELECT count(*) FROM public.apd_complete_payment_review)<>1 THEN RAISE EXCEPTION 'Index rollback disturbed other changes'; END IF;
 END $$;
 SELECT 'APD_CONSOLIDATED_MIGRATIONS_PG17_PASS' AS result;
+
+-- Operational rollback: stop new changes, never delete issued rights or old sessions.
+CREATE TEMP TABLE before_suspend_subs AS SELECT * FROM public.user_subscriptions;
+CREATE TEMP TABLE before_suspend_sessions AS SELECT * FROM public.sessions;
+SET apd.rpc_control_ack='SUSPEND_REVIEWED_RPC';
+\ir ../../docs/sql/APD_NEW_RPC_SUSPEND_CANDIDATE_20261128.sql
+SET ROLE service_role;
+DO $$ BEGIN
+ BEGIN PERFORM public.apd_expire_sessions_batch(100); RAISE EXCEPTION 'Suspended maintenance allowed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN PERFORM public.apd_grant_legacy_complete_30d('11111111-1111-4111-8111-111111111111'); RAISE EXCEPTION 'Suspended grant allowed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ IF NOT EXISTS(SELECT 1 FROM public.user_career_profile WHERE revision=2) THEN RAISE EXCEPTION 'Career lost'; END IF;
+END $$;
+RESET ROLE;
+SET apd.rpc_control_ack='RESUME_REVIEWED_RPC';
+\ir ../../docs/sql/APD_NEW_RPC_RESUME_CANDIDATE_20261128.sql
+SET ROLE service_role;
+DO $$ BEGIN
+ IF public.apd_expire_sessions_batch(100)<>0 THEN RAISE EXCEPTION 'Unexpected new expiry'; END IF;
+ IF public.apd_grant_legacy_complete_30d('11111111-1111-4111-8111-111111111111')->>'duplicate' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Issued courtesy not preserved'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+ IF EXISTS(SELECT * FROM before_suspend_subs EXCEPT ALL SELECT * FROM public.user_subscriptions) OR EXISTS(SELECT * FROM public.user_subscriptions EXCEPT ALL SELECT * FROM before_suspend_subs) OR EXISTS(SELECT * FROM before_suspend_sessions EXCEPT ALL SELECT * FROM public.sessions) OR EXISTS(SELECT * FROM public.sessions EXCEPT ALL SELECT * FROM before_suspend_sessions) THEN RAISE EXCEPTION 'Data changed during suspension roundtrip'; END IF;
+END $$;
+SELECT 'APD_NEW_RPC_SUSPEND_RESUME_PG17_PASS' AS result;
