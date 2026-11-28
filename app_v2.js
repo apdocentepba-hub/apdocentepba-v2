@@ -334,6 +334,19 @@ function renderCanalesUI(plan, subscription) {
 
   const code = planCodeUI(plan, subscription);
 
+  if (["FREE","COMPLETO","TRIAL_14D"].includes(code)) {
+    const full = code !== "FREE";
+    setHTML("panel-canales", `
+      <div class="plan-stack">
+        <div class="plan-pill-row"><span class="plan-pill">📧 Email</span><span class="plan-pill plan-pill-neutral">Incluido</span></div>
+        <p class="plan-note">Alertas por email según tus preferencias activas.</p>
+        <div class="plan-pill-row"><span class="plan-pill">📨 Telegram</span><span class="plan-pill plan-pill-neutral">Incluido en tu plan</span></div>
+        <p class="plan-note">Consulta por Telegram. Verificá la vinculación en Preferencias.</p>
+        <div class="plan-pill-row"><span class="plan-pill">💬 WhatsApp</span><span class="plan-pill plan-pill-neutral">${full ? "Incluido en tu plan" : "Solo Completo"}</span></div>
+        <p class="plan-note">${full ? "Consulta manual escribiendo ALERTAS. Verificá la vinculación en Preferencias." : "Disponible con Completo o su prueba vigente."}</p>
+      </div>`);
+    return;
+  }
   const emailText = "Alertas por email para todos los planes.";
   const telegramText = flags.telegram_coming_soon
     ? "Telegram: próximamente disponible en este plan."
@@ -676,6 +689,25 @@ function adaptarPreferencias(prefRaw) {
     turnos_arr: turnos,
     alertas_activas: !!prefRaw.alertas_activas,
     alertas_email: !!prefRaw.alertas_email,
+    // Preserve explicit server channel decisions through the dashboard adapter.
+    // Missing status is not authorization, and a connected channel is not necessarily enabled.
+    alertas_telegram: prefRaw.alertas_telegram === true,
+    telegram_allowed_by_plan: prefRaw.telegram_allowed_by_plan === true,
+    whatsapp_allowed_by_plan: prefRaw.whatsapp_allowed_by_plan === true,
+    telegram_connected: prefRaw.telegram_connected === true,
+    whatsapp_connected: prefRaw.whatsapp_connected === true,
+    telegram_plan_name: prefRaw.telegram_plan_name || "",
+    telegram_plan_code: prefRaw.telegram_plan_code || "",
+    telegram_bot_link: prefRaw.telegram_bot_link || "",
+    telegram_bot_username: prefRaw.telegram_bot_username || "",
+    telegram_chat_id_masked: prefRaw.telegram_chat_id_masked || "",
+    telegram_username: prefRaw.telegram_username || "",
+    whatsapp_plan_name: prefRaw.whatsapp_plan_name || "",
+    whatsapp_plan_code: prefRaw.whatsapp_plan_code || "",
+    whatsapp_phone_masked: prefRaw.whatsapp_phone_masked || "",
+    whatsapp_connect_hint: prefRaw.whatsapp_connect_hint || "",
+    whatsapp_bot_link: prefRaw.whatsapp_bot_link || "",
+    whatsapp_bot_phone: prefRaw.whatsapp_bot_phone || "",
     alertas_whatsapp: !!prefRaw.alertas_whatsapp
   };
 }
@@ -1955,6 +1987,41 @@ async function cargarDashboard() {
   }
 }
 
+// Presentation only: mirror the commercial projection without modifying saved preferences.
+function summarizeDashboardPreferences(pref, planInfo) {
+  const unique = values => {
+    const seen = new Set();
+    return values.filter(value => {
+      if (typeof value !== "string" || !value.trim()) return false;
+      const key = value.trim().toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const arr = value => Array.isArray(value) ? value : [];
+  const districts = unique([pref.distrito_principal, ...arr(pref.otros_distritos_arr)]);
+  const combined = [...arr(pref.cargos_arr), ...arr(pref.materias_arr)];
+  const roles = unique(combined.length ? combined : String(pref.cargos_csv || pref.materias_csv || "").split(","));
+  const code = String(planInfo?.subscription?.plan_code || "").trim().toUpperCase();
+  const planCode = String(planInfo?.plan?.code || "").trim().toUpperCase();
+  const verified = planInfo?.ok === true && planInfo.access_active === true &&
+    String(planInfo.subscription?.source || "").toLowerCase() !== "fallback_frontend" && !!code && code === planCode;
+  const commercial = ["FREE", "TRIAL_14D", "COMPLETO"].includes(code);
+  const maxDistricts = code === "FREE" ? 1 : 5;
+  const maxRoles = code === "FREE" ? 1 : 10;
+  const projected = verified && commercial && Number(planInfo.plan.max_distritos) === maxDistricts &&
+    Number(planInfo.plan.max_cargos) === maxRoles;
+  return {
+    districts: projected ? districts.slice(0, maxDistricts) : districts,
+    roles: projected ? roles.slice(0, maxRoles) : roles,
+    extraDistricts: projected ? Math.max(0, districts.length - maxDistricts) : 0,
+    extraRoles: projected ? Math.max(0, roles.length - maxRoles) : 0,
+    projected,
+    verified
+  };
+}
+
 function renderDashboard(data) {
   const doc = data.docente || {};
   const pref = data.preferencias || {};
@@ -1963,16 +2030,9 @@ function renderDashboard(data) {
   const subscription = planInfo.subscription || {};
   const nombre = `${doc.nombre || ""} ${doc.apellido || ""}`.trim();
 
-  const distritos = [pref.distrito_principal, ...(pref.otros_distritos_arr || [])]
-    .filter(Boolean)
-    .join(" / ") || "(sin filtro)";
-
-  const cargosLista = [
-    ...(Array.isArray(pref.cargos_arr) ? pref.cargos_arr : []),
-    ...(Array.isArray(pref.materias_arr) ? pref.materias_arr : [])
-  ].filter(Boolean);
-
-  const cargos = cargosLista.join(", ") || pref.cargos_csv || pref.materias_csv || "(sin filtro)";
+  const summaryPrefs = summarizeDashboardPreferences(pref, planInfo);
+  const distritos = summaryPrefs.districts.join(" / ") || "(sin filtro)";
+  const cargos = summaryPrefs.roles.join(", ") || "(sin filtro)";
   const niveles = pref.nivel_modalidad || "(cualquiera)";
   const turnos = turnoTexto(pref.turnos_csv) || "(cualquiera)";
   const planNombre = planNombreHumano(plan, subscription);
@@ -1991,8 +2051,10 @@ function renderDashboard(data) {
   window.APD_renderProfileSchedule?.(planInfo);
 
   setHTML("panel-preferencias-resumen", `
-    <p><strong>Distritos:</strong> ${esc(distritos)}</p>
-    <p><strong>Cargos/Materias:</strong> ${esc(cargos)}</p>
+    <p><strong>${summaryPrefs.projected ? "Distritos activos según plan" : "Distritos guardados"}:</strong> ${esc(distritos)}</p>
+    <p><strong>${summaryPrefs.projected ? "Cargos/Materias activos según plan" : "Cargos/Materias guardados"}:</strong> ${esc(cargos)}</p>
+    ${summaryPrefs.extraDistricts || summaryPrefs.extraRoles ? `<p class="ph">Preferencias adicionales conservadas: ${summaryPrefs.extraDistricts} distrito(s) y ${summaryPrefs.extraRoles} cargo(s)/materia(s). No se incluyen en los límites actuales.</p>` : ""}
+    ${!summaryPrefs.projected && !summaryPrefs.verified ? '<p class="ph">No se pudo verificar qué preferencias están activas. Se muestran únicamente las guardadas.</p>' : ""}
     <p><strong>Nivel:</strong> ${esc(niveles)}</p>
     <p><strong>Turno:</strong> ${esc(turnos)}</p>
     <p><strong>Plan:</strong> ${esc(planNombre)}</p>
@@ -2165,7 +2227,13 @@ async function guardarPreferencias(e) {
     showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
     return;
   }
+  if (planActual?.ok !== true || planActual?.access_active !== true) {
+    showMsg("preferencias-msg", "No pudimos verificar los límites de tu plan. Reintentá cargar el panel antes de guardar.", "error");
+    return;
+  }
 
+  const bearer = typeof window.obtenerSessionToken === "function" ? window.obtenerSessionToken() : null;
+  const current = () => obtenerToken() === token && (typeof window.obtenerSessionToken !== "function" || window.obtenerSessionToken() === bearer);
   const btn = e.submitter || document.querySelector("#form-preferencias button[type='submit']");
   btnLoad(btn, "Guardando...");
   showMsg("preferencias-msg", "Guardando preferencias...", "info");
@@ -2174,17 +2242,13 @@ async function guardarPreferencias(e) {
 
   try {
     const data = await guardarPreferenciasServidor(token, payload);
-    if (data?.plan || data?.subscription) {
-      planActual = {
-        ok: true,
-        plan: data.plan || planActual.plan,
-        subscription: data.subscription || planActual.subscription
-      };
-      renderPlanUI(planActual);
-    }
+    if (!current()) return;
+    // Save response is not the authoritative /api/mi-plan snapshot.
+    // Never replace verified access_active with a partial response.
     showMsg("preferencias-msg", data?.message || "Preferencias guardadas", "ok");
     await cargarDashboard();
   } catch (err) {
+    if (!current()) return;
     console.error("ERROR GUARDANDO PREFERENCIAS:", err);
     showMsg("preferencias-msg", err?.message || "Error guardando preferencias", "error");
   } finally {
