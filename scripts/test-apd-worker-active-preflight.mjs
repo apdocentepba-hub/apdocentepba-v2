@@ -7,8 +7,12 @@ const sha=b=>createHash('sha256').update(b).digest('hex');
 const manifest=JSON.parse(readFileSync('worker-live/manifest.json','utf8'));
 const source=readFileSync('worker-live/worker_hotfix.js','utf8');
 const routes=['/account/profile','/account/preferences','/account/marketing-preferences','/account/schedule','/account/application-diary','/account/favorites','/mi-plan','/mis-alertas','/mercadopago/create-checkout-link'];
-const fixtureSource=source+'\n// fixture route inventory: '+routes.join(' ')+'\n';
-const compose=s=>{const candidate=s+'\n// fixture /account/career\n';return {candidate,sourceSha256:sha(s),candidateSha256:sha(candidate),missing:[],approvedForDeploy:false};};
+const missingRoutes=['/account/schedule','/account/application-diary','/account/favorites'];
+const dispatch=(route,handler)=>'    if (path === API_URL_PREFIX3 + "'+route+'") {\n      return await '+handler+'(request, env);\n    }\n';
+const stub=missingRoutes.map((route,i)=>dispatch(route,'handleFixture'+i)).join('');
+const fixtureSource=source+'\nasync function fixtureDispatch(path,request,env){\n'+stub+'}\n';
+const careerStub='\nasync function fixtureCareer(path,request,env){\n'+dispatch('/account/career','handleAccountCareerSecureV1')+'}\n';
+const compose=s=>{const candidate=s+careerStub;return {candidate,sourceSha256:sha(s),candidateSha256:sha(candidate),missing:[],approvedForDeploy:false};};
 function fixture({drift=false,removeBinding=false,missingRoutes=false}={}){
  let reads=0;const calls=[];const bytes=Buffer.from(missingRoutes?source:fixtureSource);
  const version='fixture-version';const bindings=manifest.bindings.map(b=>({...b}));
@@ -25,7 +29,7 @@ function fixture({drift=false,removeBinding=false,missingRoutes=false}={}){
 }
 test('historical snapshot lacks required routes and cannot be certified',()=>{
  assert.throws(()=>verifyRouteInventory(source,source+'\n// /account/career'),/inventory drift/);
- assert.throws(()=>verifyRouteInventory(fixtureSource,fixtureSource.replaceAll('/account/favorites','/removed')+'\n// /account/career'),/inventory drift/);
+ assert.throws(()=>verifyRouteInventory(fixtureSource,fixtureSource.replaceAll('/account/favorites','/removed')+careerStub),/inventory drift/);
 });
 test('private temporary restore checks actual original bytes, never claims remote rollback',()=>{
  const bytes=Buffer.from(source);const report=verifyTemporaryRecovery(bytes,sha(bytes));
@@ -42,4 +46,13 @@ test('fixture observation pins version, routes, bindings, crons and recovery; no
 });
 test('drift and missing active routes block the operator preflight',async()=>{
  for(const options of [{drift:true},{removeBinding:true},{missingRoutes:true}])await assert.rejects(inspectActiveComposition(fixture(options)));
+});
+
+test('route mentions, block comments and altered handlers do not satisfy dispatch inventory',()=>{
+ const onlyComments=source+'\n// '+routes.join(' ')+'\n/*\n'+stub+'*/\n';
+ assert.throws(()=>verifyRouteInventory(onlyComments,onlyComments+careerStub),/inventory drift/);
+ assert.throws(()=>verifyRouteInventory(fixtureSource,fixtureSource+ '\n// /account/career'),/inventory drift/);
+ assert.throws(()=>verifyRouteInventory(fixtureSource,fixtureSource.replace('return await handleFixture2(', 'return await wrongHandler(')+careerStub),/inventory drift/);
+ assert.throws(()=>verifyRouteInventory(fixtureSource,fixtureSource+careerStub+careerStub),/inventory drift/);
+ assert.equal(verifyRouteInventory(fixtureSource,fixtureSource+careerStub),9);
 });
