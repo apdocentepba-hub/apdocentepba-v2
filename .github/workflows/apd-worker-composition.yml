@@ -5,6 +5,8 @@ on:
       - 'scripts/apd-worker-composition.mjs'
       - 'scripts/test-apd-worker-composition.mjs'
       - 'scripts/test-apd-worker-composition-runtime.mjs'
+      - 'scripts/apd-worker-active-preflight.mjs'
+      - 'scripts/test-apd-worker-active-preflight.mjs'
       - 'scripts/build-apd-career-worker-candidate.mjs'
       - 'scripts/apd-*-audit-stage.mjs'
       - '.github/workflows/apd-worker-composition.yml'
@@ -22,6 +24,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/test-apd-worker-composition.mjs scripts/test-apd-worker-composition-runtime.mjs scripts/test-apd-session-admin-audit.mjs scripts/test-apd-abc-expiry-audit.mjs scripts/test-apd-email-delivery-audit.mjs scripts/test-apd-channel-query-audit.mjs scripts/test-apd-channel-entitlement-audit.mjs scripts/test-apd-career-account.mjs
+      - run: node --test scripts/test-apd-worker-active-preflight.mjs scripts/test-apd-worker-composition.mjs scripts/test-apd-worker-composition-runtime.mjs scripts/test-apd-session-admin-audit.mjs scripts/test-apd-abc-expiry-audit.mjs scripts/test-apd-email-delivery-audit.mjs scripts/test-apd-channel-query-audit.mjs scripts/test-apd-channel-entitlement-audit.mjs scripts/test-apd-career-account.mjs
       - run: node scripts/apd-worker-composition.mjs --snapshot-only
       - run: git diff --exit-code origin/main -- worker-live worker.js auth_session_patch.js
