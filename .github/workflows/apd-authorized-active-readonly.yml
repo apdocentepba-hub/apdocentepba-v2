@@ -1,0 +1,133 @@
+name: APD authorized active Worker inspection (GET only)
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/apd-authorized-active-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  observation:
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '87f2cd0fbc158144e2c11af19cacb55a21a255ec'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 87f2cd0fbc158144e2c11af19cacb55a21a255ec
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin reviewed code and private temporary directory
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 87f2cd0fbc158144e2c11af19cacb55a21a255ec
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/apd-live-observation"
+      - name: Observe active Worker using existing credential (GET only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {createHash} from 'node:crypto';
+          import {activeVersion,inspectVersion,inspectCrons} from './scripts/apd-commercial-live-preflight.mjs';
+          const worker='ancient-wildflower-cd37';
+          const dir=join(process.env.RUNNER_TEMP,'apd-live-observation');
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          let phase='credential',http=null,gets=0;
+          try{
+            const token=process.env.CLOUDFLARE_API_TOKEN;
+            if(!token)throw Error('Credential absent');
+            const get=async endpoint=>{
+              const r=await fetch('https://api.cloudflare.com/client/v4'+endpoint,{method:'GET',redirect:'error',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(20000)});
+              gets++;http=r.status;
+              if(!r.ok)throw Error('GET denied');
+              const j=await r.json();if(j.success!==true)throw Error('API denied');return j.result;
+            };
+            phase='account';
+            const accounts=await get('/accounts?per_page=50');
+            const id=process.env.CLOUDFLARE_ACCOUNT_ID||(Array.isArray(accounts)&&accounts.length===1?accounts[0].id:'');
+            if(!id||!Array.isArray(accounts)||!accounts.some(a=>a.id===id))throw Error('Account not verified');
+            const root='/accounts/'+encodeURIComponent(id)+'/workers/';
+            const deployment=root+'scripts/'+worker+'/deployments',schedule=root+'scripts/'+worker+'/schedules';
+            phase='active_version';
+            const version=activeVersion(await get(deployment));
+            phase='module';
+            const details=await get(root+'workers/'+worker+'/versions/'+encodeURIComponent(version)+'?include=modules');
+            const manifest=JSON.parse(readFileSync('worker-live/manifest.json','utf8'));
+            if(manifest.worker_name!==worker)throw Error('Worker mismatch');
+            const info=inspectVersion(details,version,manifest);
+            const bytes=Buffer.from(details.modules[0].content_base64,'base64');
+            if(!Buffer.from(bytes.toString('utf8'),'utf8').equals(bytes)||sha(bytes)!==info.sha256)throw Error('Encoding mismatch');
+            phase='schedules';
+            const crons=inspectCrons(await get(schedule));
+            phase='stable_observation';
+            if(activeVersion(await get(deployment))!==version||JSON.stringify(inspectCrons(await get(schedule)))!==JSON.stringify(crons))throw Error('Active version or schedule drift');
+            const report={version,sha256:info.sha256,bytes:info.bytes,bindings:info.binding_count,cronCount:crons.length,canonicalMatch:info.canonical_match,gets,remoteWrites:0,sourceExported:false,approvedForDeploy:false};
+            writeFileSync(join(dir,'source.mjs'),bytes,{mode:0o600,flag:'wx'});
+            writeFileSync(join(dir,'observation.json'),JSON.stringify(report),{mode:0o600,flag:'wx'});
+            console.log('APD_AUTHORIZED_ACTIVE_READ_PASS '+JSON.stringify(report));
+          }catch{
+            console.error('APD_AUTHORIZED_ACTIVE_READ_BLOCKED '+JSON.stringify({phase,http,gets,remoteWrites:0,sourceExported:false}));
+            process.exitCode=1;
+          }
+          NODE
+      - name: Restore and compose in isolation without Cloudflare credentials
+        run: |
+          set -euo pipefail
+          umask 077
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {randomBytes,createHash} from 'node:crypto';
+          import {verifyTemporaryRecovery,verifyRouteInventory} from './scripts/apd-worker-active-preflight.mjs';
+          import {encryptModule,decryptModule} from './scripts/apd-worker-private-backup.mjs';
+          import {stageSessionAdminAudit} from './scripts/apd-session-admin-audit-stage.mjs';
+          import {stageChannelEntitlementAudit} from './scripts/apd-channel-entitlement-audit-stage.mjs';
+          import {stageScheduleEntitlementAudit} from './scripts/apd-schedule-entitlement-audit-stage.mjs';
+          import {buildCareerWorkerCandidate} from './scripts/build-apd-career-worker-candidate.mjs';
+          import {composeWorkerSnapshot} from './scripts/apd-worker-composition.mjs';
+          import {verifyTrialCandidateSyntax} from './scripts/apd-commercial-stage-trial.mjs';
+          const dir=join(process.env.RUNNER_TEMP,'apd-live-observation');
+          const report=JSON.parse(readFileSync(join(dir,'observation.json'),'utf8'));
+          const bytes=readFileSync(join(dir,'source.mjs'));
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          let phase='temporary_restore';
+          try{
+            if(sha(bytes)!==report.sha256)throw Error('Capture drift');
+            const restored=verifyTemporaryRecovery(bytes,report.sha256);
+            const key=randomBytes(32).toString('hex');
+            const encrypted=encryptModule(bytes,{version:report.version,sha256:report.sha256},key);
+            if(!decryptModule(encrypted,key).equals(bytes))throw Error('Encrypted restoration mismatch');
+            console.log('APD_AUTHORIZED_ACTIVE_RESTORE_PASS '+JSON.stringify({...restored,encryptedRoundtrip:true,persistentModuleBackup:false,databaseBackedUp:false}));
+            const source=bytes.toString('utf8');
+            let candidate=source;
+            const stages=[['session_admin',stageSessionAdminAudit],['expiry_email_channels',stageChannelEntitlementAudit],['schedule_entitlement',stageScheduleEntitlementAudit],['career_routes',buildCareerWorkerCandidate]];
+            for(const [name,stage] of stages){
+              phase=name;
+              const r=stage(candidate);
+              if(r.unrelatedBytesPreserved!==true||r.deployable!==false||r.candidate===candidate)throw Error('Stage contract');
+              verifyTrialCandidateSyntax(r.candidate);
+              candidate=r.candidate;
+              console.log('APD_AUTHORIZED_STAGE_PASS '+JSON.stringify({stage:name,sha256:sha(candidate)}));
+            }
+            phase='route_inventory';
+            const routes=verifyRouteInventory(source,candidate);
+            phase='composition_crosscheck';
+            const r=composeWorkerSnapshot(source);
+            if(r.candidate!==candidate||r.missing.length||r.approvedForDeploy!==false)throw Error('Composition mismatch');
+            console.log('APD_AUTHORIZED_ACTIVE_COMPOSITION_PASS '+JSON.stringify({version:report.version,sourceSha256:report.sha256,candidateSha256:sha(candidate),routes,approvedForDeploy:false,remoteWrites:0,sourceExported:false}));
+          }catch{
+            console.error('APD_AUTHORIZED_ACTIVE_COMPOSITION_BLOCKED '+JSON.stringify({phase,remoteWrites:0,sourceExported:false,approvedForDeploy:false}));
+            process.exitCode=1;
+          }
+          NODE
+      - name: Remove private temporary files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/apd-live-observation"
