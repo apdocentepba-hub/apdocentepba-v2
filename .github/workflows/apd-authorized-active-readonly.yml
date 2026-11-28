@@ -8,9 +8,18 @@ permissions:
   contents: read
 jobs:
   observation:
-    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == 'c1fed700025c0e96f3cfc698c9cd2ebdc0011655'
+    if: github.repository == 'apdocentepba-hub/apdocentepba-v2' && github.event.pull_request.number == 361 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/apd-stabilization-offline-20261127' && github.event.before == '6b5b7dab577f3487f509917fc4e33c56f70650da'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: apd_commercial_full_qa
+          POSTGRES_PASSWORD: fixture_only
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,6 +87,36 @@ jobs:
             process.exitCode=1;
           }
           NODE
+      - name: Set up isolated PostgreSQL and PostgREST for full-module integration
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: apd_commercial_full_qa
+          PGUSER: postgres
+          PGPASSWORD: fixture_only
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-db-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "ALTER TABLE public.subscription_plans ADD COLUMN mercadopago_plan_id text;"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CONSOLIDATION_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-payment-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -c "DELETE FROM public.mercadopago_checkout_sessions; INSERT INTO public.users(id) VALUES('00000000-0000-4000-8000-000000000005');"
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PAYMENT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_CHECKOUT_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-preferences-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_PREFERENCES_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/sql/APD_COMMERCIAL_ACTIVATE_CATALOG_CANDIDATE.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/apd-commercial-full-pg-fixture.sql
+          docker run -d --rm --name apd-commercial-postgrest --network host \
+            -e PGRST_DB_URI=postgres://postgres:fixture_only@127.0.0.1:5432/apd_commercial_full_qa \
+            -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=service_role \
+            -e PGRST_SERVER_HOST=127.0.0.1 -e PGRST_SERVER_PORT=3300 \
+            -e PGRST_DB_CHANNEL_ENABLED=false postgrest/postgrest:v16.3
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:3300/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:3300/ >/dev/null
       - name: Restore and compose in isolation without Cloudflare credentials
         run: |
           set -euo pipefail
@@ -88,6 +127,7 @@ jobs:
           import {randomBytes,createHash} from 'node:crypto';
           import vm from 'node:vm';
           import {verifyCommercialFullModule} from './scripts/apd-commercial-full-module-qa.mjs';
+          import {createCommercialPgQa} from './scripts/apd-commercial-pg-qa.mjs';
           import {verifyTemporaryRecovery,verifyRouteInventory} from './scripts/apd-worker-active-preflight.mjs';
           import {encryptModule,decryptModule} from './scripts/apd-worker-private-backup.mjs';
           import {stageSessionAdminAudit} from './scripts/apd-session-admin-audit-stage.mjs';
@@ -206,11 +246,21 @@ jobs:
             const full=await verifyCommercialFullModule(candidate);
             if(full.passed!==true)throw Error('Commercial regression');
             console.log('APD_AUTHORIZED_COMPOSED_COMMERCIAL_FIXTURE_PASS '+JSON.stringify({passed:true,remoteWrites:0,sourceExported:false,approvedForDeploy:false}));
+            phase='commercial_postgres17_fixture';
+            // Repeat the entire exact module contract against the disposable PostgreSQL service.
+            // Provider remains synthetic, all DB requests are confined to loopback.
+            if(sha(candidate)!=='db9c2146f822369acde822f80cbb9246a698e4296202e951620dfe96ded2739c')throw Error('Candidate fingerprint drift');
+            const integrated=await verifyCommercialFullModule(candidate,createCommercialPgQa());
+            if(integrated.passed!==true||integrated.realPostgreSQL!==true||integrated.realPostgREST!==true||integrated.productionWrites!==0)throw Error('Integrated contract not confirmed');
+            console.log('APD_AUTHORIZED_COMPOSED_COMMERCIAL_PG17_PASS '+JSON.stringify(integrated));
           }catch{
             console.error('APD_AUTHORIZED_ACTIVE_COMPOSITION_BLOCKED '+JSON.stringify({phase,remoteWrites:0,sourceExported:false,approvedForDeploy:false}));
             process.exitCode=1;
           }
           NODE
+      - name: Stop disposable PostgREST
+        if: always()
+        run: docker rm -f apd-commercial-postgrest || true
       - name: Remove private temporary files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/apd-live-observation"
