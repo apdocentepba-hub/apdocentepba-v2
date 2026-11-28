@@ -8,7 +8,7 @@ export function publicSessionRow(row,now){
  return {user_id:row.user_id,metodo:row.metodo,created_at:row.created_at,expires_at:row.expires_at,activo:sessionIsCurrent(row,now)};
 }
 export function stageSessionAdminAudit(source){
- const names=['getSessionUserByBearer','handleAdminResumen','handleAdminSesiones'];
+ const names=['getSessionUserByBearer','handleAdminResumen','handleAdminSesiones','requireAdmin'];
  const originals=names.map(name=>{
   const matches=[...source.matchAll(new RegExp('^async function '+name+'\\([^\\n]*\\) \\{','gm'))];
   assert.equal(matches.length,1,name);
@@ -19,7 +19,8 @@ export function stageSessionAdminAudit(source){
  });
  assert.ok(!source.includes('apdSessionIsCurrentAuditV1'),'Already staged');
  function once(s,anchor,replacement){assert.equal(s.split(anchor).length,2,'Unexpected anchor: '+anchor);return s.replace(anchor,()=>replacement);}
- const [auth,summary,list]=originals;
+ const [auth,summary,list,admin]=originals;
+ admin.next=once(admin.old,'if (!user.es_admin) {','if (user.es_admin !== true) {');
  auth.next=once(auth.old,'if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {','if (!apdSessionIsCurrentAuditV1(session, Date.now())) {');
  auth.next=once(auth.next,'if (user.activo === false) return null;','if (user.activo !== true) return null;');
  summary.next=once(summary.old,'supabaseSelect(env, "sessions?activo=eq.true&select=token").catch(() => [])','supabaseSelect(env, "sessions?activo=eq.true&expires_at=gt."+encodeURIComponent(new Date().toISOString())+"&select=user_id").catch(() => null)');

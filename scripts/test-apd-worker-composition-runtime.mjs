@@ -47,7 +47,7 @@ function fixture(){
  vm.runInContext(helpers+'\n'+channel+'\n'+['getBearerToken','getSessionUserByBearer','requireAdmin','handleAdminSesiones','resolveTelegramEntitlement','resolveWhatsAppEntitlement'].map(fn).join('\n')+'\n'+bundle+'\nasync function dispatch(request,env){const path=new URL(request.url).pathname;'+routes+'return json2({},404);}',ctx);
  const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-only'};
  const request=(token,path='/api/account/career',method='GET',body)=>new Request('https://fixture.invalid'+path,{method,headers:{Origin:'https://alertasapd.com.ar',...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
- return {ctx,env,request,sessions,profiles,plans,calls,get writes(){return writes},run:(...args)=>ctx.dispatch(request(...args),env)};
+ return {ctx,env,request,sessions,users,profiles,plans,calls,get writes(){return writes},run:(...args)=>ctx.dispatch(request(...args),env)};
 }
 test('composed route authenticates owner, prevents cross-account access and denies expired sessions',async()=>{
  const f=fixture();
@@ -79,4 +79,21 @@ test('composed admin route checks current session and redacts even unexpected to
  assert.equal((await f.ctx.handleAdminSesiones(f.request('A'),f.env)).status,403);
  const r=await f.ctx.handleAdminSesiones(f.request('B'),f.env);assert.equal(r.status,200);assert.ok(!(await r.text()).includes('synthetic-secret'));
  f.sessions.get('B').expires_at='invalid';assert.equal((await f.ctx.handleAdminSesiones(f.request('B'),f.env)).status,401);
+});
+
+test('admin privileges require explicit boolean role and do not grant paid features',async()=>{
+ const f=fixture(),body={profile:{schema:1,seniorityYears:20,positions:[]},revision:1};
+ f.plans.set(B,'FREE');
+ assert.equal((await f.ctx.handleAdminSesiones(f.request('B'),f.env)).status,200);
+ assert.equal((await f.run('B','/api/account/career','PUT',body)).status,403);
+ assert.equal((await f.run('B','/api/account/application-diary')).status,403);
+ assert.equal((await f.ctx.resolveWhatsAppEntitlement(f.env,B)).allowed,false);
+ assert.equal(f.writes,0);
+ for(const invalid of [false,null,undefined,'false','true',1,{}]){
+  f.users.get(B).es_admin=invalid;
+  assert.equal((await f.ctx.handleAdminSesiones(f.request('B'),f.env)).status,403);
+ }
+ f.plans.set(A,'COMPLETO');
+ assert.equal((await f.ctx.handleAdminSesiones(f.request('A'),f.env)).status,403);
+ assert.equal((await f.run('A','/api/account/career','PUT',body)).status,200);
 });
